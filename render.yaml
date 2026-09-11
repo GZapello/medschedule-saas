@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: medschedule-saas
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /data/saas_schedule.db
+    disk:
+      name: medschedule-data
+      mountPath: /data
+      sizeGB: 1

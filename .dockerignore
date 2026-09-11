@@ -1,0 +1,14 @@
+**/node_modules
+**/.git
+**/.gemini
+tools/
+estokei/
+desktop/
+frontend/android/app/build/
+frontend/android/.gradle/
+*.log
+*.sqlite
+saas_schedule.db*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

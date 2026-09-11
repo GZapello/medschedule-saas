@@ -1,0 +1,53 @@
+{
+  "name": "medschedule-desktop",
+  "productName": "MedSchedule",
+  "version": "1.0.0",
+  "description": "MedSchedule - Sistema de Gestão e Agendamento Profissional para Saúde",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "sync:frontend": "node copy-renderer.js",
+    "pack": "node copy-renderer.js && electron-builder --dir",
+    "dist": "node copy-renderer.js && electron-builder",
+    "dist:win": "node copy-renderer.js && electron-builder --win nsis --x64"
+  },
+  "author": "MedSchedule SaaS Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.medschedule.app",
+    "productName": "MedSchedule",
+    "copyright": "Copyright © 2026 MedSchedule",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "assets/**/*",
+      "renderer/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MedSchedule",
+      "uninstallDisplayName": "MedSchedule Gestão Integrada",
+      "runAfterFinish": true
+    }
+  }
+}

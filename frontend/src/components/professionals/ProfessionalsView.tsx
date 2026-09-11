@@ -1,0 +1,430 @@
+import React, { useState, useEffect } from 'react';
+import { ApiClient } from '../../api/client';
+import { useToast } from '../../context/ToastContext';
+import { Professional, Profession, Specialty } from '../../types';
+import {
+  UserCog,
+  Plus,
+  Clock,
+  Calendar,
+  Shield,
+  Ban,
+  X,
+  CheckCircle2,
+  Mail,
+  Phone
+} from 'lucide-react';
+
+export const ProfessionalsView: React.FC = () => {
+  const { showToast } = useToast();
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [professions, setProfessions] = useState<Profession[]>([]);
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Modal Novo Profissional
+  const [showNewModal, setShowNewModal] = useState<boolean>(false);
+  const [name, setName] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('123456');
+  const [phone, setPhone] = useState<string>('');
+  const [professionId, setProfessionId] = useState<string>('');
+  const [specialtyId, setSpecialtyId] = useState<string>('');
+  const [registrationType, setRegistrationType] = useState<string>('CRP');
+  const [registrationNumber, setRegistrationNumber] = useState<string>('');
+  const [bio, setBio] = useState<string>('');
+  const [practiceAreas, setPracticeAreas] = useState<string>('');
+  const [bufferMinutes, setBufferMinutes] = useState<number>(10);
+
+  // Modal Bloqueio de Horário
+  const [showBlockModal, setShowBlockModal] = useState<boolean>(false);
+  const [blockProfId, setBlockProfId] = useState<string>('');
+  const [blockTitle, setBlockTitle] = useState<string>('');
+  const [blockStart, setBlockStart] = useState<string>('');
+  const [blockEnd, setBlockEnd] = useState<string>('');
+  const [blockType, setBlockType] = useState<string>('absence');
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [profs, taxonomyProfs, taxonomySpecs] = await Promise.all([
+        ApiClient.get<Professional[]>('/v1/professionals'),
+        ApiClient.get<Profession[]>('/v1/taxonomy/professions'),
+        ApiClient.get<Specialty[]>('/v1/taxonomy/specialties')
+      ]);
+      setProfessionals(profs);
+      setProfessions(taxonomyProfs);
+      setSpecialties(taxonomySpecs);
+      if (taxonomyProfs.length > 0 && !professionId) {
+        setProfessionId(taxonomyProfs[0].id);
+      }
+    } catch (err: any) {
+      showToast('Erro ao carregar equipe de profissionais', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleCreateProfessional = async () => {
+    if (!name || !email) {
+      showToast('Nome e e-mail são obrigatórios', 'error');
+      return;
+    }
+
+    try {
+      await ApiClient.post('/v1/professionals', {
+        name,
+        email,
+        password,
+        phone,
+        professionId,
+        specialtyId: specialtyId || null,
+        registrationType: registrationType || null,
+        registrationNumber: registrationNumber || null,
+        bio: bio || null,
+        practiceAreas: practiceAreas || null,
+        bufferMinutes: Number(bufferMinutes)
+      });
+
+      showToast('Profissional cadastrado com sucesso!', 'success');
+      setShowNewModal(false);
+      setName('');
+      setEmail('');
+      setPhone('');
+      setRegistrationNumber('');
+      setBio('');
+      setPracticeAreas('');
+      fetchData();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao cadastrar profissional', 'error');
+    }
+  };
+
+  const handleCreateBlock = async () => {
+    if (!blockTitle || !blockStart || !blockEnd) {
+      showToast('Preencha título, início e término do bloqueio', 'error');
+      return;
+    }
+
+    try {
+      await ApiClient.post('/v1/professionals/blocks', {
+        professionalId: blockProfId || null,
+        title: blockTitle,
+        startDatetime: blockStart,
+        endDatetime: blockEnd,
+        type: blockType
+      });
+
+      showToast('Bloqueio de agenda registrado!', 'success');
+      setShowBlockModal(false);
+      setBlockTitle('');
+      setBlockStart('');
+      setBlockEnd('');
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao criar bloqueio', 'error');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Equipe de Profissionais</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Cadastre os profissionais, defina especialidades, horários de atendimento e bloqueios.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setShowBlockModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all border border-amber-200"
+          >
+            <Ban className="w-4 h-4" /> Bloquear Horário / Férias
+          </button>
+          <button
+            onClick={() => setShowNewModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
+          >
+            <Plus className="w-4 h-4" /> Novo Profissional
+          </button>
+        </div>
+      </div>
+
+      {/* Team Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {professionals.map(p => (
+          <div key={p.id} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between space-y-4">
+            <div>
+              <div className="flex items-start justify-between">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-700 font-extrabold text-xl flex items-center justify-center">
+                  {p.name.charAt(0)}
+                </div>
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  Ativo
+                </span>
+              </div>
+
+              <div className="mt-3">
+                <h3 className="font-bold text-slate-900 text-base">{p.name}</h3>
+                <p className="text-xs text-indigo-600 font-semibold">{p.specialty_name || p.profession_name}</p>
+                {p.registration_number && (
+                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                    {p.registration_type}: {p.registration_number}
+                  </p>
+                )}
+              </div>
+
+              {p.bio && (
+                <p className="text-xs text-slate-500 mt-2 line-clamp-3 leading-relaxed">
+                  {p.bio}
+                </p>
+              )}
+
+              {p.practice_areas && (
+                <div className="mt-2 p-2 bg-indigo-50/60 rounded-xl border border-indigo-100 text-[11px] text-slate-700">
+                  <span className="font-bold text-indigo-700 block text-[10px]">Atendimentos e áreas de atuação:</span>
+                  <span className="leading-snug">{p.practice_areas}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <span>Intervalo (buffer): <strong>{p.buffer_minutes} min</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span>Grade semanal: <strong>Seg a Sex (08:00 - 18:00)</strong></span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Modal Novo Profissional */}
+      {showNewModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Cadastrar Profissional</h3>
+              <button onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Nome Completo *</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Ex: Dra. Ana Paula Silveira"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">E-mail de Acesso *</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="dra.ana@clinica.com"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Telefone / WhatsApp</label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    placeholder="(11) 99999-9999"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Profissão</label>
+                  <select
+                    value={professionId}
+                    onChange={e => setProfessionId(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                  >
+                    {professions.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
+                  <select
+                    value={specialtyId}
+                    onChange={e => setSpecialtyId(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                  >
+                    <option value="">Selecione...</option>
+                    {specialties.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tipo de Registro</label>
+                  <input
+                    type="text"
+                    value={registrationType}
+                    onChange={e => setRegistrationType(e.target.value)}
+                    placeholder="Ex: CRP, CRM, OAB"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Número do Registro</label>
+                  <input
+                    type="text"
+                    value={registrationNumber}
+                    onChange={e => setRegistrationNumber(e.target.value)}
+                    placeholder="Ex: 06/12345"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Biografia / Apresentação</label>
+                <textarea
+                  rows={2}
+                  value={bio}
+                  onChange={e => setBio(e.target.value)}
+                  placeholder="Breve currículo exibido na página pública para os clientes..."
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-xs"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Atendimentos e áreas de atuação</label>
+                  <span className="text-[10px] text-slate-400 font-medium">Texto livre</span>
+                </div>
+                <textarea
+                  rows={2}
+                  value={practiceAreas}
+                  onChange={e => setPracticeAreas(e.target.value)}
+                  placeholder="Ex: TEA, TDAH, Ansiedade, Depressão, Orientação de Pais, Avaliação Neuropsicológica..."
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => setShowNewModal(false)}
+                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateProfessional}
+                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
+                >
+                  Cadastrar Profissional
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Bloqueio de Horário */}
+      {showBlockModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Bloquear Agenda / Ausência</h3>
+              <button onClick={() => setShowBlockModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Profissional</label>
+                <select
+                  value={blockProfId}
+                  onChange={e => setBlockProfId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                >
+                  <option value="">Toda a Clínica (Recesso Geral)</option>
+                  {professionals.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Motivo do Bloqueio *</label>
+                <input
+                  type="text"
+                  value={blockTitle}
+                  onChange={e => setBlockTitle(e.target.value)}
+                  placeholder="Ex: Férias, Reunião de Equipe, Consulta Médica"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Início (Data e Hora) *</label>
+                  <input
+                    type="datetime-local"
+                    value={blockStart}
+                    onChange={e => setBlockStart(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Término *</label>
+                  <input
+                    type="datetime-local"
+                    value={blockEnd}
+                    onChange={e => setBlockEnd(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => setShowBlockModal(false)}
+                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateBlock}
+                  className="px-6 py-2 font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs"
+                >
+                  Salvar Bloqueio
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

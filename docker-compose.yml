@@ -1,0 +1,20 @@
+services:
+  medschedule:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: medschedule-saas
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
+      - DATABASE_PATH=/data/saas_schedule.db
+      - JWT_SECRET=medschedule-production-secret-key-2026
+    volumes:
+      - medschedule-data:/data
+
+volumes:
+  medschedule-data:
+    driver: local

@@ -1,0 +1,28 @@
+# Dependências
+**/node_modules/
+.npm
+.yarn
+
+# Ambientes e Ferramentas Locais
+tools/
+estokei/
+.gemini/
+*.log
+*.sqlite
+saas_schedule.db*
+
+# Builds e Temporários
+frontend/dist/
+backend/dist/
+desktop/dist/
+desktop/renderer/
+frontend/android/app/build/
+frontend/android/.gradle/
+.gradle/
+
+# Binários pesados (acima de 50MB)
+*.exe
+
+# Variáveis de ambiente secretas
+.env.local
+.env.*.local
