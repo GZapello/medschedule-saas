@@ -37,6 +37,27 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'manage_settings', label: 'Alterar configurações da clínica' }
 ];
 
+const PERMISSION_PRESETS = [
+  {
+    id: 'receptionist',
+    label: 'Recepcionista',
+    desc: 'Agenda, pacientes, pagamentos e recibos',
+    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'view_financial', 'issue_receipt', 'view_receipts']
+  },
+  {
+    id: 'professional',
+    label: 'Profissional de Saúde',
+    desc: 'Agenda própria e gestão de pacientes',
+    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient']
+  },
+  {
+    id: 'clinic_admin',
+    label: 'Administrador da Clínica',
+    desc: 'Acesso completo a todas as funções',
+    perms: AVAILABLE_PERMISSIONS.map(p => p.id)
+  }
+];
+
 const PROFESSIONS_LIST = [
   'Psicólogo',
   'Psiquiatra',
@@ -665,9 +686,25 @@ export const StaffManagementView: React.FC = () => {
                 />
               </div>
 
-              {/* Permissões Granulares */}
+              {/* Permissões Granulares e Perfis Pré-Programados (Item 18) */}
               <div className="pt-3 border-t border-slate-100 space-y-2">
-                <span className="font-bold text-slate-800 block">Permissões Específicas do Membro</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="font-bold text-slate-800 block">Permissões do Membro</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Modelos Prontos:</span>
+                    {PERMISSION_PRESETS.map(preset => (
+                      <button
+                        type="button"
+                        key={preset.id}
+                        onClick={() => setFormData({ ...formData, selectedPermissions: preset.perms })}
+                        className="px-2 py-0.5 text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg cursor-pointer transition-all"
+                        title={preset.desc}
+                      >
+                        ⚡ {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
                   {AVAILABLE_PERMISSIONS.map(p => {
                     const isChecked = formData.selectedPermissions.includes(p.id);
@@ -818,7 +855,30 @@ export const StaffManagementView: React.FC = () => {
             </div>
 
             <form onSubmit={handleSavePermissions} className="p-6 space-y-4 text-xs">
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {/* Perfis Pré-Programados (Item 18) */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
+                <span className="text-[11px] font-bold text-slate-500 block uppercase">
+                  Modelos Prontos de Permissão (1 clique):
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {PERMISSION_PRESETS.map(preset => (
+                    <button
+                      type="button"
+                      key={preset.id}
+                      onClick={() => setEditingPermissionsUser({
+                        ...editingPermissionsUser,
+                        permissions: preset.perms
+                      })}
+                      className="px-2.5 py-1 text-[11px] font-bold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl cursor-pointer transition-all shadow-2xs"
+                      title={preset.desc}
+                    >
+                      ⚡ {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                 {AVAILABLE_PERMISSIONS.map(p => {
                   const currentPerms = editingPermissionsUser.permissions || [];
                   const isChecked = currentPerms.includes(p.id);

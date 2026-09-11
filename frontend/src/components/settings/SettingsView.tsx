@@ -12,14 +12,21 @@ import {
   Mail,
   Lock,
   Shield,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  CreditCard,
+  Plus,
+  CheckCircle2,
+  Trash2
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
   const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession } = useAuth();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'clinic' | 'profile'>(isClinicAdmin ? 'clinic' : 'profile');
+  const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile'>(
+    isClinicAdmin ? 'clinic' : 'profile'
+  );
 
   // Configurações da Clínica
   const [name, setName] = useState<string>('');
@@ -34,6 +41,22 @@ export const SettingsView: React.FC = () => {
   const [primaryColor, setPrimaryColor] = useState<string>('#4f46e5');
   const [loadingClinic, setLoadingClinic] = useState<boolean>(false);
 
+  // Modelos de Documentos (Item 11)
+  const [selectedDocType, setSelectedDocType] = useState<string>('certificate');
+  const [docTemplate, setDocTemplate] = useState<any>({
+    title: 'Atestado Médico Oficial',
+    headerHtml: '',
+    footerHtml: '',
+    showLogo: true,
+    showClinicAddress: true,
+    showProfessionalRegistration: true
+  });
+
+  // Convênios da Clínica (Item 15)
+  const [clinicInsurances, setClinicInsurances] = useState<any[]>([]);
+  const [showNewInsuranceModal, setShowNewInsuranceModal] = useState<boolean>(false);
+  const [insuranceForm, setInsuranceForm] = useState({ name: '', ansCode: '', phone: '', email: '', notes: '' });
+
   // Configurações Pessoais (Minha Conta)
   const [profileEmail, setProfileEmail] = useState<string>(currentUser?.email || '');
   const [currentPassword, setCurrentPassword] = useState<string>('');
@@ -41,6 +64,54 @@ export const SettingsView: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [loadingProfileEmail, setLoadingProfileEmail] = useState<boolean>(false);
   const [loadingProfilePassword, setLoadingProfilePassword] = useState<boolean>(false);
+
+  const fetchClinicInsurances = async () => {
+    try {
+      const data = await ApiClient.get<any[]>('/v1/insurances/clinic');
+      setClinicInsurances(data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveDocTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await ApiClient.put(`/v1/clinics/document-templates/${selectedDocType}`, {
+        documentType: selectedDocType,
+        ...docTemplate
+      });
+      showToast('Modelo de documento salvo com sucesso!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar modelo', 'error');
+    }
+  };
+
+  const handleSaveInsurance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!insuranceForm.name) return;
+    try {
+      await ApiClient.post('/v1/insurances/clinic', insuranceForm);
+      showToast('Convênio cadastrado com sucesso!', 'success');
+      setShowNewInsuranceModal(false);
+      setInsuranceForm({ name: '', ansCode: '', phone: '', email: '', notes: '' });
+      fetchClinicInsurances();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao cadastrar convênio', 'error');
+    }
+  };
+
+  const handleToggleInsuranceStatus = async (ins: any) => {
+    try {
+      await ApiClient.put(`/v1/insurances/clinic/${ins.id}`, {
+        active: !ins.active
+      });
+      showToast(`Convênio ${!ins.active ? 'ativado' : 'desativado'} com sucesso`, 'info');
+      fetchClinicInsurances();
+    } catch (err: any) {
+      showToast('Erro ao alterar status do convênio', 'error');
+    }
+  };
 
   useEffect(() => {
     if (currentTenant) {
@@ -157,7 +228,7 @@ export const SettingsView: React.FC = () => {
 
         {/* Abas se for gestor/admin */}
         {isClinicAdmin && (
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold w-fit">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
             <button
               type="button"
               onClick={() => setActiveTab('clinic')}
@@ -167,6 +238,29 @@ export const SettingsView: React.FC = () => {
             >
               <Building2 className="w-3.5 h-3.5" />
               Clínica
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('document_templates')}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'document_templates' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Modelos de Documentos
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('insurances');
+                fetchClinicInsurances();
+              }}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'insurances' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              Convênios
             </button>
             <button
               type="button"
@@ -322,7 +416,264 @@ export const SettingsView: React.FC = () => {
         </form>
       )}
 
-      {/* ABA 2: Minha Conta & Segurança (Disponível para TODOS os usuários) */}
+      {/* ABA: MODELOS DE DOCUMENTOS (Item 11) */}
+      {isClinicAdmin && activeTab === 'document_templates' && (
+        <form onSubmit={handleSaveDocTemplate} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6 text-xs">
+          <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <FileText className="w-4 h-4 text-indigo-600" />
+                Personalização de Modelos de Documentos A4
+              </h3>
+              <p className="text-slate-500 text-xs mt-0.5">
+                Defina cabeçalhos, rodapés e visibilidade de dados institucionais nos documentos impressos.
+              </p>
+            </div>
+            <select
+              value={selectedDocType}
+              onChange={e => setSelectedDocType(e.target.value)}
+              className="px-3 py-1.5 border border-slate-200 rounded-xl font-bold bg-slate-50"
+            >
+              <option value="certificate">Atestado Médico</option>
+              <option value="prescription">Receituário</option>
+              <option value="exam_request">Solicitação de Exames</option>
+            </select>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Título do Documento</label>
+              <input
+                type="text"
+                value={docTemplate.title}
+                onChange={e => setDocTemplate({ ...docTemplate, title: e.target.value })}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2"
+              />
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+              <span className="font-bold text-slate-700 block uppercase tracking-wider text-[11px]">
+                Elementos Visíveis na Folha Impressa:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={docTemplate.showLogo}
+                    onChange={e => setDocTemplate({ ...docTemplate, showLogo: e.target.checked })}
+                    className="rounded text-indigo-600"
+                  />
+                  <span>Exibir Logotipo da Clínica</span>
+                </label>
+                <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={docTemplate.showClinicAddress}
+                    onChange={e => setDocTemplate({ ...docTemplate, showClinicAddress: e.target.checked })}
+                    className="rounded text-indigo-600"
+                  />
+                  <span>Exibir CNPJ e Endereço</span>
+                </label>
+                <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={docTemplate.showProfessionalRegistration}
+                    onChange={e => setDocTemplate({ ...docTemplate, showProfessionalRegistration: e.target.checked })}
+                    className="rounded text-indigo-600"
+                  />
+                  <span>Exibir Registro Profissional (CRM)</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Texto Institucional de Cabeçalho (Opcional)</label>
+              <textarea
+                rows={2}
+                value={docTemplate.headerHtml || ''}
+                onChange={e => setDocTemplate({ ...docTemplate, headerHtml: e.target.value })}
+                placeholder="Ex: Unidade Especializada de Saúde e Atendimento Integrado"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Texto de Rodapé / Observações Legais (Opcional)</label>
+              <textarea
+                rows={2}
+                value={docTemplate.footerHtml || ''}
+                onChange={e => setDocTemplate({ ...docTemplate, footerHtml: e.target.value })}
+                placeholder="Ex: Horário de funcionamento, telefone de emergência ou orientações pós-atendimento..."
+                className="w-full border border-slate-200 rounded-xl px-3 py-2"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t border-slate-100">
+            <button
+              type="submit"
+              className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all"
+            >
+              <Save className="w-4 h-4" /> Salvar Modelo de Documento
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* ABA: GESTÃO DE CONVÊNIOS (Item 15) */}
+      {isClinicAdmin && activeTab === 'insurances' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-indigo-600" />
+                  Catálogo de Convênios Aceitos
+                </h3>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  Cadastre as operadoras e planos de saúde aceitos pela clínica.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewInsuranceModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs"
+              >
+                <Plus className="w-4 h-4" /> Cadastrar Convênio
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
+                  <tr>
+                    <th className="px-6 py-3.5">Nome do Convênio</th>
+                    <th className="px-6 py-3.5">Registro ANS</th>
+                    <th className="px-6 py-3.5">Contato / Autorização</th>
+                    <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {clinicInsurances.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-slate-400">
+                        Nenhum convênio cadastrado. Todos os atendimentos serão tratados como Particulares.
+                      </td>
+                    </tr>
+                  ) : (
+                    clinicInsurances.map(ins => (
+                      <tr key={ins.id} className="hover:bg-slate-50/70">
+                        <td className="px-6 py-4 font-bold text-slate-900">{ins.name}</td>
+                        <td className="px-6 py-4 font-mono">{ins.ans_code || '—'}</td>
+                        <td className="px-6 py-4">
+                          <div>{ins.phone || '—'}</div>
+                          <div className="text-slate-400 text-[10px]">{ins.email || ''}</div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            ins.active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {ins.active ? 'Ativo' : 'Inativo'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleInsuranceStatus(ins)}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                          >
+                            {ins.active ? 'Desativar' : 'Ativar'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Modal Cadastrar Convênio */}
+          {showNewInsuranceModal && (
+            <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+              <form onSubmit={handleSaveInsurance} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-base font-bold text-slate-900">Cadastrar Novo Convênio</h3>
+                  <button type="button" onClick={() => setShowNewInsuranceModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Nome da Operadora / Convênio *</label>
+                    <input
+                      type="text"
+                      required
+                      value={insuranceForm.name}
+                      onChange={e => setInsuranceForm({ ...insuranceForm, name: e.target.value })}
+                      placeholder="Ex: Unimed, Bradesco Saúde, Amil"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Código de Registro ANS</label>
+                    <input
+                      type="text"
+                      value={insuranceForm.ansCode}
+                      onChange={e => setInsuranceForm({ ...insuranceForm, ansCode: e.target.value })}
+                      placeholder="Ex: 305146"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 font-mono"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Telefone Autorizações</label>
+                      <input
+                        type="text"
+                        value={insuranceForm.phone}
+                        onChange={e => setInsuranceForm({ ...insuranceForm, phone: e.target.value })}
+                        placeholder="0800..."
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">E-mail</label>
+                      <input
+                        type="email"
+                        value={insuranceForm.email}
+                        onChange={e => setInsuranceForm({ ...insuranceForm, email: e.target.value })}
+                        placeholder="autorizacoes@..."
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Observações Internas</label>
+                    <textarea
+                      rows={2}
+                      value={insuranceForm.notes}
+                      onChange={e => setInsuranceForm({ ...insuranceForm, notes: e.target.value })}
+                      placeholder="Ex: Exige guia autorizada impressa..."
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button type="button" onClick={() => setShowNewInsuranceModal(false)} className="px-3 py-1.5 border rounded-xl text-slate-600">
+                    Cancelar
+                  </button>
+                  <button type="submit" className="px-5 py-1.5 bg-indigo-600 text-white font-bold rounded-xl shadow-xs">
+                    Salvar Convênio
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ABA: Minha Conta & Segurança (Disponível para TODOS os usuários) */}
       {(!isClinicAdmin || activeTab === 'profile') && (
         <div className="space-y-6">
           {/* Card de Alteração de E-mail */}

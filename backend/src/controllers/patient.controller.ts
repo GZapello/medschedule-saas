@@ -50,7 +50,7 @@ export class PatientController {
         SELECT 
           id, tenant_id, full_name, social_name, birth_date, cpf, email, phone, whatsapp,
           address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
-          notes_admin, is_child, pet_metadata_json, active, created_at, updated_at
+          notes_admin, is_child, pet_metadata_json, active, allergies_status, created_at, updated_at
         FROM patients
         WHERE id = ? AND tenant_id = ?
       `);

@@ -18,6 +18,10 @@ import { DashboardController } from '../controllers/dashboard.controller';
 import { ReportController } from '../controllers/report.controller';
 import { AIController } from '../controllers/ai.controller';
 import { AuditController } from '../controllers/audit.controller';
+import { PatientClinicalController } from '../controllers/patient-clinical.controller';
+import { DocumentsController } from '../controllers/documents.controller';
+import { CashRegisterController } from '../controllers/cash-register.controller';
+import { InsuranceController } from '../controllers/insurance.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -233,15 +237,67 @@ api.put('/v1/payments/:id/status', requireTenant, requireRole('clinic_admin', 'r
 // Dashboard
 api.get('/v1/dashboard/metrics', requireTenant, DashboardController.getMetrics);
 
-// Relatórios e Exportação CSV
+// Relatórios e Exportação CSV e DOCX
 api.get('/v1/reports/attendance', requireTenant, requireRole('clinic_admin'), ReportController.getAttendanceReport);
 api.get('/v1/reports/financial', requireTenant, requireRole('clinic_admin'), ReportController.getFinancialReport);
 api.get('/v1/reports/export-csv', requireTenant, requireRole('clinic_admin'), ReportController.exportCsv);
+api.get('/v1/reports/export-docx', requireTenant, requireRole('clinic_admin', 'professional'), ReportController.exportDocx);
+api.get('/v1/reports/insurances', requireTenant, requireRole('clinic_admin'), InsuranceController.getInsuranceReport);
+
+// 360° Linha do Tempo e Prontuário Clínico Integrado
+api.get('/v1/patients/:id/timeline', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.getTimeline);
+api.get('/v1/patients/:id/allergies', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), PatientClinicalController.listAllergies);
+api.put('/v1/patients/:id/allergies-status', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.updateAllergyStatus);
+api.post('/v1/patients/:id/allergies', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.addAllergy);
+api.delete('/v1/patients/:id/allergies/:allergyId', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.deleteAllergy);
+
+api.get('/v1/patients/:id/medications', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.listMedications);
+api.post('/v1/patients/:id/medications', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.addMedication);
+api.put('/v1/patients/:id/medications/:medicationId', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.updateMedication);
+api.delete('/v1/patients/:id/medications/:medicationId', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.deleteMedication);
+
+api.get('/v1/patients/:id/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.listAnamnesis);
+api.get('/v1/patients/:id/anamnesis/:anamnesisId', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.getAnamnesisById);
+api.post('/v1/patients/:id/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.createAnamnesis);
+
+api.get('/v1/patients/:id/exams', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.listExams);
+api.post('/v1/patients/:id/exams', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.uploadExam);
+api.put('/v1/patients/:id/exams/:examId/review', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.reviewExam);
+api.delete('/v1/patients/:id/exams/:examId', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.deleteExam);
+
+api.get('/v1/patients/:id/consents', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.listConsents);
+api.post('/v1/patients/:id/consents', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.createConsent);
+
+// Documentos Clínicos: Atestados, Receituários e Pedidos de Exame
+api.post('/v1/clinical/certificates', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.createCertificate);
+api.get('/v1/clinical/certificates/:id', requireTenant, DocumentsController.getCertificate);
+api.post('/v1/clinical/prescriptions', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.createPrescription);
+api.get('/v1/clinical/prescriptions/:id', requireTenant, DocumentsController.getPrescription);
+api.post('/v1/clinical/exam-requests', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.createExamRequest);
+api.get('/v1/clinical/exam-requests/:id', requireTenant, DocumentsController.getExamRequest);
+api.get('/v1/clinics/document-templates', requireTenant, DocumentsController.listTemplates);
+api.put('/v1/clinics/document-templates/:documentType', requireTenant, requireRole('clinic_admin'), DocumentsController.upsertTemplate);
+api.post('/v1/appointments/:id/finish', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.finishConsultation);
+
+// Gestão de Convênios
+api.get('/v1/insurances/clinic', requireTenant, InsuranceController.listClinicInsurances);
+api.post('/v1/insurances/clinic', requireTenant, requireRole('clinic_admin'), InsuranceController.createClinicInsurance);
+api.put('/v1/insurances/clinic/:id', requireTenant, requireRole('clinic_admin'), InsuranceController.updateClinicInsurance);
+api.get('/v1/patients/:patientId/insurances', requireTenant, InsuranceController.listPatientInsurances);
+api.post('/v1/patients/:patientId/insurances', requireTenant, requireRole('clinic_admin', 'receptionist'), InsuranceController.addPatientInsurance);
+api.delete('/v1/patients/:patientId/insurances/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), InsuranceController.deletePatientInsurance);
+
+// Abertura e Fechamento de Caixa
+api.get('/v1/cash-register/current', requireTenant, CashRegisterController.getCurrent);
+api.post('/v1/cash-register/open', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.openRegister);
+api.post('/v1/cash-register/:id/close', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.closeRegister);
+api.get('/v1/cash-register/history', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.listHistory);
+api.get('/v1/cash-register/:id', requireTenant, CashRegisterController.getById);
 
 // Assistente de Inteligência Artificial Integrado
 api.post('/v1/ai/chat', requireTenant, AIController.chat);
 
-// Trilha de Auditoria (LGPD Compliance)
-api.get('/v1/audit', requireTenant, requireRole('clinic_admin', 'superadmin'), AuditController.list);
+// Trilha de Auditoria (LGPD Compliance) — Exclusivo SuperAdmin do SaaS (Item 20)
+api.get('/v1/audit', requireRole('superadmin'), AuditController.list);
 
 export default api;

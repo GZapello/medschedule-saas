@@ -3,6 +3,7 @@ import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Patient } from '../../types';
+import { PatientProfileModal } from './PatientProfileModal';
 import {
   Users,
   Search,
@@ -27,7 +28,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient }) 
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
   const fetchPatients = async () => {
     try {
@@ -46,13 +47,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient }) 
     fetchPatients();
   }, [searchTerm]);
 
-  const handleOpenDetail = async (patientId: string) => {
-    try {
-      const data = await ApiClient.get<any>(`/v1/patients/${patientId}`);
-      setSelectedPatient(data);
-    } catch (err: any) {
-      showToast('Erro ao carregar detalhes do paciente', 'error');
-    }
+  const handleOpenDetail = (patientId: string) => {
+    setSelectedPatientId(patientId);
   };
 
   return (
@@ -162,84 +158,13 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient }) 
         </div>
       </div>
 
-      {/* Patient Details Drawer / Modal */}
-      {selectedPatient && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <div>
-                <span className="text-xs font-bold text-indigo-600 uppercase">Ficha Cadastral</span>
-                <h3 className="text-xl font-bold text-slate-900">{selectedPatient.patient.full_name}</h3>
-              </div>
-              <button
-                onClick={() => setSelectedPatient(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                <div>
-                  <span className="text-slate-400 font-medium">WhatsApp / Telefone:</span>
-                  <p className="font-bold text-slate-800 mt-0.5">{selectedPatient.patient.phone}</p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">E-mail:</span>
-                  <p className="font-bold text-slate-800 mt-0.5">{selectedPatient.patient.email || 'Não informado'}</p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">Data de Nascimento:</span>
-                  <p className="font-bold text-slate-800 mt-0.5">{selectedPatient.patient.birth_date || 'Não informada'}</p>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">CPF:</span>
-                  <p className="font-bold text-slate-800 mt-0.5">{selectedPatient.patient.cpf || 'Não informado'}</p>
-                </div>
-              </div>
-
-              {/* Responsáveis Legais se Pediátrico */}
-              {selectedPatient.patient.is_child === 1 && (
-                <div className="p-4 bg-pink-50/60 rounded-2xl border border-pink-100 space-y-2">
-                  <h4 className="font-bold text-pink-900 text-xs flex items-center gap-1.5">
-                    <Baby className="w-4 h-4" /> Responsáveis Legais Registrados
-                  </h4>
-                  {(selectedPatient.guardians || []).map((g: any) => (
-                    <div key={g.id} className="bg-white p-2.5 rounded-xl border border-pink-200 text-slate-700">
-                      <div className="font-bold text-slate-900">{g.full_name} ({g.relationship})</div>
-                      <div className="text-slate-500 mt-0.5">Telefone: {g.phone} • CPF: {g.cpf || '—'}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Histórico Recente */}
-              <div>
-                <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-2">
-                  Histórico Recente de Atendimentos
-                </h4>
-                {(selectedPatient.recentAppointments || []).length === 0 ? (
-                  <p className="text-slate-400 italic">Nenhum atendimento anterior registrado.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {selectedPatient.recentAppointments.map((a: any) => (
-                      <div key={a.id} className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
-                        <div>
-                          <div className="font-bold text-slate-900">{a.service_name}</div>
-                          <div className="text-slate-400 text-[11px]">{a.professional_name} • {a.start_time.split('T')[0]}</div>
-                        </div>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                          {a.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Complete 360 Patient Profile Modal */}
+      {selectedPatientId && (
+        <PatientProfileModal
+          patientId={selectedPatientId}
+          onClose={() => setSelectedPatientId(null)}
+          onUpdated={fetchPatients}
+        />
       )}
     </div>
   );

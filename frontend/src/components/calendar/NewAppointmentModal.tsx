@@ -22,10 +22,16 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [patients, setPatients] = useState<Patient[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [insurances, setInsurances] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
 
   const [patientId, setPatientId] = useState<string>('');
   const [professionalId, setProfessionalId] = useState<string>('');
   const [serviceId, setServiceId] = useState<string>('');
+  const [insuranceId, setInsuranceId] = useState<string>('');
+  const [roomId, setRoomId] = useState<string>('');
+  const [conflictError, setConflictError] = useState<string | null>(null);
+
   const [date, setDate] = useState<string>(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -40,14 +46,19 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setConflictError(null);
       Promise.all([
         ApiClient.get<Patient[]>('/v1/patients'),
         ApiClient.get<Professional[]>('/v1/professionals'),
-        ApiClient.get<Service[]>('/v1/services')
-      ]).then(([pats, profs, srvs]) => {
+        ApiClient.get<Service[]>('/v1/services'),
+        ApiClient.get<any[]>('/v1/insurances/clinic'),
+        ApiClient.get<any[]>('/v1/rooms')
+      ]).then(([pats, profs, srvs, ins, rms]) => {
         setPatients(pats);
         setProfessionals(profs);
         setServices(srvs);
+        setInsurances(ins || []);
+        setRooms(rms || []);
         if (pats.length > 0) setPatientId(pats[0].id);
         if (profs.length > 0) setProfessionalId(profs[0].id);
         if (srvs.length > 0) setServiceId(srvs[0].id);
@@ -59,6 +70,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   useEffect(() => {
     if (professionalId && serviceId && date) {
       setLoadingSlots(true);
+      setConflictError(null);
       ApiClient.get<any>(`/v1/slots/available?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}`)
         .then(data => {
           setAvailableSlots(data.slots || []);
@@ -79,10 +91,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
     try {
       setLoading(true);
+      setConflictError(null);
       await ApiClient.post('/v1/appointments', {
         patientId,
         professionalId,
         serviceId,
+        roomId: roomId || null,
+        insuranceId: insuranceId || null,
         startTime: selectedSlot.startTime,
         endTime: selectedSlot.endTime,
         modality,
@@ -93,7 +108,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       onSuccess();
       onClose();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao registrar agendamento', 'error');
+      if (err.conflict) {
+        setConflictError(`${err.message} (${err.conflict.professionalName} - ${err.conflict.serviceName || ''})`);
+      } else {
+        setConflictError(err.message || 'Erro ao registrar agendamento');
+      }
+      showToast(err.message || 'Conflito de horário detectado', 'error');
     } finally {
       setLoading(false);
     }
@@ -156,6 +176,39 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="block font-semibold text-slate-700 mb-1">Convênio</label>
+              <select
+                value={insuranceId}
+                onChange={e => setInsuranceId(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+              >
+                <option value="">Particular (Sem Convênio)</option>
+                {insurances.map(ins => (
+                  <option key={ins.id} value={ins.id}>
+                    {ins.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Sala de Atendimento</label>
+              <select
+                value={roomId}
+                onChange={e => setRoomId(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+              >
+                <option value="">Nenhuma / Sem sala fixa</option>
+                {rooms.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="block font-semibold text-slate-700 mb-1">Data *</label>
               <input
                 type="date"
@@ -177,6 +230,14 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
               </select>
             </div>
           </div>
+
+          {/* Banner de conflito de agendamento */}
+          {conflictError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-start gap-2">
+              <span className="font-bold text-red-800">Conflito Detectado:</span>
+              <span>{conflictError}</span>
+            </div>
+          )}
 
           {/* Horários disponíveis calculados em tempo real */}
           <div>

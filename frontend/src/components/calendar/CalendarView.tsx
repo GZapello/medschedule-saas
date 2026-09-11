@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   RotateCcw
 } from 'lucide-react';
+import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 
 interface CalendarViewProps {
   onOpenNewAppointment: () => void;
@@ -43,6 +44,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [isRescheduling, setIsRescheduling] = useState<boolean>(false);
   const [rescheduleDate, setRescheduleDate] = useState<string>('');
   const [rescheduleTime, setRescheduleTime] = useState<string>('');
+
+  // Modais de Finalização e Cancelamento Estruturado
+  const [finishingAppt, setFinishingAppt] = useState<any | null>(null);
+  const [cancellingAppt, setCancellingAppt] = useState<any | null>(null);
+  const [cancellationCategory, setCancellationCategory] = useState<string>('Desistência do paciente');
+  const [cancellationReason, setCancellationReason] = useState<string>('');
 
   const fetchCalendarData = async () => {
     try {
@@ -87,11 +94,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     setCurrentDate(new Date());
   };
 
-  const handleUpdateStatus = async (apptId: string, status: string) => {
+  const handleUpdateStatus = async (apptId: string, status: string, reason?: string, category?: string) => {
     try {
-      await ApiClient.put(`/v1/appointments/${apptId}/status`, { status });
+      await ApiClient.put(`/v1/appointments/${apptId}/status`, {
+        status,
+        reason: reason || null,
+        cancellationReasonCategory: category || null
+      });
       showToast(`Status atualizado para ${status}`, 'success');
       setSelectedAppt(null);
+      setCancellingAppt(null);
       fetchCalendarData();
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar status', 'error');
@@ -443,10 +455,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       Iniciar
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus(selectedAppt.id, 'completed')}
-                      className="px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg"
+                      onClick={() => {
+                        setFinishingAppt(selectedAppt);
+                        setSelectedAppt(null);
+                      }}
+                      className="px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg shadow-xs"
                     >
-                      Concluir
+                      Concluir Atendimento
                     </button>
                     <button
                       onClick={() => handleUpdateStatus(selectedAppt.id, 'no_show')}
@@ -455,7 +470,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       Marcar Falta
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus(selectedAppt.id, 'cancelled')}
+                      onClick={() => {
+                        setCancellingAppt(selectedAppt);
+                        setCancellationReason('');
+                        setCancellationCategory('Desistência do paciente');
+                      }}
                       className="px-3 py-1.5 text-xs font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg"
                     >
                       Cancelar
@@ -520,6 +539,94 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             )}
           </div>
         </div>
+      )}
+
+      {/* Modal de Cancelamento Estruturado com Motivo Obrigatório (Item 10) */}
+      {cancellingAppt && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-xs font-bold text-rose-600 uppercase">Cancelamento Obrigatório</span>
+                <h3 className="text-base font-bold text-slate-900">Confirmar Cancelamento</h3>
+              </div>
+              <button
+                onClick={() => setCancellingAppt(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              O cancelamento preservará o registro no histórico do paciente e na auditoria do sistema sem excluir os dados.
+            </p>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Categoria do Motivo *</label>
+                <select
+                  value={cancellationCategory}
+                  onChange={e => setCancellationCategory(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 font-medium"
+                >
+                  <option value="Desistência do paciente">Desistência do paciente</option>
+                  <option value="Imprevisto médico">Imprevisto médico</option>
+                  <option value="Problema técnico">Problema técnico</option>
+                  <option value="Erro de agendamento">Erro de agendamento</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Justificativa Detalhada (Opcional)</label>
+                <textarea
+                  rows={3}
+                  value={cancellationReason}
+                  onChange={e => setCancellationReason(e.target.value)}
+                  placeholder="Informe detalhes adicionais sobre o cancelamento..."
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
+              <button
+                onClick={() => setCancellingAppt(null)}
+                className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={() => handleUpdateStatus(cancellingAppt.id, 'cancelled', cancellationReason, cancellationCategory)}
+                className="px-5 py-2 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs"
+              >
+                Confirmar Cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Finalização de Consulta (Item 5) */}
+      {finishingAppt && (
+        <FinishConsultationModal
+          appointment={{
+            id: finishingAppt.id,
+            patient_id: finishingAppt.patient_id,
+            patient_name: finishingAppt.patient_name,
+            professional_id: finishingAppt.professional_id,
+            professional_name: finishingAppt.professional_name,
+            service_id: finishingAppt.service_id,
+            service_name: finishingAppt.service_name,
+            start_time: finishingAppt.start_time
+          }}
+          onClose={() => setFinishingAppt(null)}
+          onFinished={() => {
+            setFinishingAppt(null);
+            fetchCalendarData();
+          }}
+        />
       )}
     </div>
   );

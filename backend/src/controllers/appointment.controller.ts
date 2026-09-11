@@ -134,6 +134,7 @@ export class AppointmentController {
       const {
         tenantSlug, patientId, professionalId, serviceId, roomId,
         startTime, endTime, modality, patientNotes, internalNotes,
+        insuranceId, referredFromAppointmentId, referredByProfessionalId, referralReason,
         // Dados se o paciente for novo (página de agendamento público)
         newPatientData
       } = req.body;
@@ -162,10 +163,12 @@ export class AppointmentController {
           return;
         }
 
-        // Verifica se paciente com esse telefone já existe no tenant
-        const existingPat = db.prepare('SELECT id FROM patients WHERE tenant_id = ? AND phone = ?').get(tenantId, phone) as { id: string } | undefined;
-        if (existingPat) {
-          resolvedPatientId = existingPat.id;
+        const existingPatient = db.prepare(`
+          SELECT id FROM patients WHERE tenant_id = ? AND (phone = ? OR (email IS NOT NULL AND email = ?))
+        `).get(tenantId, phone, email || '') as { id: string } | undefined;
+
+        if (existingPatient) {
+          resolvedPatientId = existingPatient.id;
         } else {
           resolvedPatientId = 'pat-' + uuidv4().slice(0, 8);
           db.prepare(`
@@ -173,7 +176,6 @@ export class AppointmentController {
             VALUES (?, ?, ?, ?, ?, ?, ?, 1)
           `).run(resolvedPatientId, tenantId, fullName, phone, email || null, isChild ? 1 : 0, notes || null);
 
-          // Se for criança e informou responsável
           if (isChild && guardianName) {
             db.prepare(`
               INSERT INTO guardians (id, tenant_id, patient_id, full_name, phone, relationship, is_primary)
@@ -188,18 +190,75 @@ export class AppointmentController {
         return;
       }
 
-      // Verifica concorrência: assegura que o horário ainda está livre para este profissional
-      const conflictStmt = db.prepare(`
+      // 1. Verifica concorrência do PROFISSIONAL
+      const profConflict = db.prepare(`
         SELECT id FROM appointments
         WHERE tenant_id = ?
           AND professional_id = ?
           AND status NOT IN ('cancelled')
           AND start_time < ? AND end_time > ?
-      `);
-      const conflict = conflictStmt.get(tenantId, professionalId, endTime, startTime);
-      if (conflict) {
-        res.status(409).json({ error: 'Este horário acabou de ser reservado por outro cliente. Por favor, escolha outro slot.' });
+      `).get(tenantId, professionalId, endTime, startTime);
+
+      if (profConflict) {
+        res.status(409).json({
+          error: 'Este horário acabou de ser reservado para este profissional. Por favor, escolha outro slot.',
+          code: 'PROFESSIONAL_SLOT_OCCUPIED'
+        });
         return;
+      }
+
+      // 2. Verifica concorrência do PACIENTE em toda a clínica (Regra do Item 9)
+      const patientConflict = db.prepare(`
+        SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
+        FROM appointments a
+        JOIN professionals p ON p.id = a.professional_id
+        JOIN services s ON s.id = a.service_id
+        WHERE a.tenant_id = ?
+          AND a.patient_id = ?
+          AND a.status NOT IN ('cancelled')
+          AND a.start_time < ? AND a.end_time > ?
+      `).get(tenantId, resolvedPatientId, endTime, startTime) as any;
+
+      if (patientConflict) {
+        res.status(409).json({
+          error: 'Este paciente já possui um atendimento neste horário.',
+          code: 'PATIENT_APPOINTMENT_CONFLICT',
+          conflict: {
+            startTime: patientConflict.start_time,
+            endTime: patientConflict.end_time,
+            professionalName: patientConflict.professional_name,
+            serviceName: patientConflict.service_name
+          }
+        });
+        return;
+      }
+
+      // 3. Verifica concorrência da SALA física, se selecionada
+      if (roomId) {
+        const roomConflict = db.prepare(`
+          SELECT a.id, a.start_time, a.end_time, r.name as room_name, p.name as professional_name
+          FROM appointments a
+          JOIN rooms r ON r.id = a.room_id
+          JOIN professionals p ON p.id = a.professional_id
+          WHERE a.tenant_id = ?
+            AND a.room_id = ?
+            AND a.status NOT IN ('cancelled')
+            AND a.start_time < ? AND a.end_time > ?
+        `).get(tenantId, roomId, endTime, startTime) as any;
+
+        if (roomConflict) {
+          res.status(409).json({
+            error: `A sala ${roomConflict.room_name} já está ocupada neste horário por ${roomConflict.professional_name}.`,
+            code: 'ROOM_CONFLICT',
+            conflict: {
+              roomName: roomConflict.room_name,
+              professionalName: roomConflict.professional_name,
+              startTime: roomConflict.start_time,
+              endTime: roomConflict.end_time
+            }
+          });
+          return;
+        }
       }
 
       const appointmentId = 'apt-' + uuidv4().slice(0, 8);
@@ -208,13 +267,15 @@ export class AppointmentController {
       const count = ((countStmt.get(tenantId) as { c: number }).c || 0) + 1;
       const appointmentNumber = `AG-${year}-${count.toString().padStart(4, '0')}`;
 
-      // Insere agendamento
+      // Insere agendamento com os novos campos de convênio e encaminhamento
       const insertAppt = db.prepare(`
         INSERT INTO appointments (
           id, tenant_id, appointment_number, patient_id, professional_id, service_id,
-          room_id, start_time, end_time, status, modality, patient_notes, internal_notes, created_by
+          room_id, start_time, end_time, status, modality, patient_notes, internal_notes,
+          insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
+          created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertAppt.run(
@@ -230,6 +291,10 @@ export class AppointmentController {
         modality || 'presential',
         patientNotes || null,
         internalNotes || null,
+        insuranceId || null,
+        referredFromAppointmentId || null,
+        referredByProfessionalId || null,
+        referralReason || null,
         req.user ? req.user.userId : 'online_booking'
       );
 
@@ -284,7 +349,7 @@ export class AppointmentController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { status, reason } = req.body;
+      const { status, reason, cancellationReasonCategory } = req.body;
 
       const allowedStatuses = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled'];
       if (!allowedStatuses.includes(status)) {
@@ -298,23 +363,41 @@ export class AppointmentController {
         return;
       }
 
+      const cancelledBy = req.user ? `${req.user.name} (${req.user.role})` : 'Usuário';
+
       const updateStmt = db.prepare(`
         UPDATE appointments SET
           status = ?,
           cancellation_reason = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason END,
+          cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END,
+          cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END,
           cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
-      updateStmt.run(status, status, reason || null, status, id, tenantId);
+      updateStmt.run(
+        status,
+        status, reason || null,
+        status, cancellationReasonCategory || (status === 'cancelled' ? 'Outro' : null),
+        status, status === 'cancelled' ? cancelledBy : null,
+        status,
+        id, tenantId
+      );
 
       // Registra histórico
       db.prepare(`
         INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).run(uuidv4(), id, current.status, status, req.user ? req.user.name : 'Sistema', reason || null);
+      `).run(
+        uuidv4(),
+        id,
+        current.status,
+        status,
+        req.user ? req.user.name : 'Sistema',
+        reason ? (cancellationReasonCategory ? `[${cancellationReasonCategory}] ${reason}` : reason) : null
+      );
 
-      logAudit(req, 'UPDATE_APPOINTMENT_STATUS', 'appointments', id, { from: current.status, to: status, reason });
+      logAudit(req, 'UPDATE_APPOINTMENT_STATUS', 'appointments', id, { from: current.status, to: status, reason, cancellationReasonCategory });
       res.json({ message: `Status alterado para ${status}` });
     } catch (err: any) {
       console.error('[AppointmentController.updateStatus] Erro:', err);
@@ -333,13 +416,13 @@ export class AppointmentController {
         return;
       }
 
-      const appt = db.prepare('SELECT professional_id, status FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { professional_id: string; status: string } | undefined;
+      const appt = db.prepare('SELECT patient_id, professional_id, room_id, status FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!appt) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
       }
 
-      // Verifica conflito no novo horário
+      // 1. Conflito de profissional
       const conflict = db.prepare(`
         SELECT id FROM appointments
         WHERE tenant_id = ?
@@ -350,8 +433,60 @@ export class AppointmentController {
       `).get(tenantId, appt.professional_id, id, endTime, startTime);
 
       if (conflict) {
-        res.status(409).json({ error: 'O novo horário escolhido já está ocupado' });
+        res.status(409).json({ error: 'O novo horário escolhido já está ocupado para este profissional' });
         return;
+      }
+
+      // 2. Conflito do paciente
+      if (appt.patient_id) {
+        const patientConflict = db.prepare(`
+          SELECT a.id, a.start_time, a.end_time, p.name as professional_name, s.name as service_name
+          FROM appointments a
+          JOIN professionals p ON p.id = a.professional_id
+          JOIN services s ON s.id = a.service_id
+          WHERE a.tenant_id = ?
+            AND a.patient_id = ?
+            AND a.id != ?
+            AND a.status NOT IN ('cancelled')
+            AND a.start_time < ? AND a.end_time > ?
+        `).get(tenantId, appt.patient_id, id, endTime, startTime) as any;
+
+        if (patientConflict) {
+          res.status(409).json({
+            error: 'Este paciente já possui outro atendimento neste horário.',
+            code: 'PATIENT_APPOINTMENT_CONFLICT',
+            conflict: {
+              startTime: patientConflict.start_time,
+              endTime: patientConflict.end_time,
+              professionalName: patientConflict.professional_name,
+              serviceName: patientConflict.service_name
+            }
+          });
+          return;
+        }
+      }
+
+      // 3. Conflito de sala
+      if (appt.room_id) {
+        const roomConflict = db.prepare(`
+          SELECT a.id, a.start_time, a.end_time, r.name as room_name, p.name as professional_name
+          FROM appointments a
+          JOIN rooms r ON r.id = a.room_id
+          JOIN professionals p ON p.id = a.professional_id
+          WHERE a.tenant_id = ?
+            AND a.room_id = ?
+            AND a.id != ?
+            AND a.status NOT IN ('cancelled')
+            AND a.start_time < ? AND a.end_time > ?
+        `).get(tenantId, appt.room_id, id, endTime, startTime) as any;
+
+        if (roomConflict) {
+          res.status(409).json({
+            error: `A sala ${roomConflict.room_name} já está ocupada neste horário por ${roomConflict.professional_name}.`,
+            code: 'ROOM_CONFLICT'
+          });
+          return;
+        }
       }
 
       db.prepare(`

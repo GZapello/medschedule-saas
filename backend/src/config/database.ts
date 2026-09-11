@@ -116,6 +116,233 @@ export function initializeDatabase(): void {
     addColIfMissing('clinic_users', 'practice_areas', 'TEXT');
     addColIfMissing('professionals', 'practice_areas', 'TEXT');
 
+    // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
+    addColIfMissing('appointments', 'insurance_id', 'TEXT');
+    addColIfMissing('appointments', 'referred_from_appointment_id', 'TEXT');
+    addColIfMissing('appointments', 'referred_by_professional_id', 'TEXT');
+    addColIfMissing('appointments', 'referral_reason', 'TEXT');
+    addColIfMissing('appointments', 'cancellation_reason_category', 'TEXT');
+    addColIfMissing('appointments', 'cancelled_by', 'TEXT');
+
+    // Colunas em pagamentos para vínculo com caixa
+    addColIfMissing('payments', 'cash_register_id', 'TEXT');
+
+    // Colunas em pacientes para status explícito de alergias
+    addColIfMissing('patients', 'allergies_status', "TEXT DEFAULT 'not_informed'");
+
+    // Criação das novas tabelas clínicas, de convênios, documentos e caixa
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS patient_allergies (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        agent TEXT NOT NULL,
+        reaction TEXT,
+        severity TEXT DEFAULT 'moderate',
+        notes TEXT,
+        status TEXT DEFAULT 'active',
+        is_no_known_allergies INTEGER DEFAULT 0,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_allergies_patient ON patient_allergies (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS patient_medications (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        dosage TEXT,
+        frequency TEXT,
+        route TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        status TEXT DEFAULT 'active',
+        notes TEXT,
+        professional_name TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_medications_patient ON patient_medications (tenant_id, patient_id, status);
+
+      CREATE TABLE IF NOT EXISTS clinic_insurances (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        code TEXT,
+        notes TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_clinic_insurances ON clinic_insurances (tenant_id, active);
+
+      CREATE TABLE IF NOT EXISTS patient_insurances (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        insurance_id TEXT NOT NULL,
+        plan_name TEXT,
+        card_number TEXT,
+        validity_date TEXT,
+        notes TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (insurance_id) REFERENCES clinic_insurances(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_patient_insurances ON patient_insurances (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS patient_anamnesis (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        template_type TEXT DEFAULT 'geral',
+        content_json TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        previous_version_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_anamnesis_patient ON patient_anamnesis (tenant_id, patient_id, version);
+
+      CREATE TABLE IF NOT EXISTS clinical_certificates (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        certificate_number TEXT NOT NULL,
+        days_rest INTEGER DEFAULT 0,
+        cid TEXT,
+        content_text TEXT NOT NULL,
+        issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_by TEXT,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_certificates_patient ON clinical_certificates (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS clinical_prescriptions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        prescription_number TEXT NOT NULL,
+        items_json TEXT NOT NULL,
+        instructions TEXT,
+        issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_by TEXT,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_prescriptions_patient ON clinical_prescriptions (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS clinical_exam_requests (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        request_number TEXT NOT NULL,
+        exams_list_json TEXT NOT NULL,
+        clinical_justification TEXT,
+        notes TEXT,
+        issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_by TEXT,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_exam_requests_patient ON clinical_exam_requests (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS patient_exams (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        title TEXT NOT NULL,
+        exam_type TEXT DEFAULT 'laboratorial',
+        exam_date TEXT,
+        file_url TEXT,
+        file_type TEXT,
+        file_size INTEGER,
+        notes TEXT,
+        ai_extracted_summary TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_patient_exams ON patient_exams (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS cash_registers (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        opened_at TEXT NOT NULL DEFAULT (datetime('now')),
+        closed_at TEXT,
+        initial_balance REAL NOT NULL DEFAULT 0.0,
+        closing_balance_expected REAL,
+        closing_balance_actual REAL,
+        difference REAL,
+        status TEXT NOT NULL DEFAULT 'open',
+        notes_open TEXT,
+        notes_close TEXT,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_cash_registers ON cash_registers (tenant_id, status);
+
+      CREATE TABLE IF NOT EXISTS patient_consents (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        consent_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        version TEXT DEFAULT '1.0',
+        content_text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'accepted',
+        accepted_by_name TEXT,
+        accepted_at TEXT,
+        revoked_at TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_patient_consents ON patient_consents (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS clinic_document_templates (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        template_type TEXT NOT NULL,
+        header_text TEXT,
+        footer_text TEXT,
+        show_logo INTEGER DEFAULT 1,
+        show_clinic_address INTEGER DEFAULT 1,
+        show_registry INTEGER DEFAULT 1,
+        custom_notes TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        UNIQUE(tenant_id, template_type)
+      );
+    `);
+
     // Assegura que a lista detalhada de profissões de saúde e administração exista no banco
     const allDetailedProfessions = [
       // Saúde

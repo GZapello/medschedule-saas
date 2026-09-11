@@ -50,7 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'staff', label: 'Equipe & Acessos', icon: UserPlus, visible: isClinicAdmin },
     { id: 'taxonomy', label: 'Profissões & Categorias', icon: Layers, visible: isClinicAdmin },
     { id: 'reports', label: 'Relatórios & Exportação', icon: BarChart3, visible: isClinicAdmin },
-    { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isClinicAdmin },
+    { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isSuperAdmin },
     { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },
     { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: isSuperAdmin },
   ];
