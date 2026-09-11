@@ -52,7 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'reports', label: 'Relatórios & Exportação', icon: BarChart3, visible: isClinicAdmin },
     { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isClinicAdmin },
     { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },
-    { id: 'superadmin', label: 'Painel SaaS Global', icon: Globe, visible: isSuperAdmin },
+    { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: isSuperAdmin },
   ];
 
   return (
@@ -71,11 +71,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
         <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-teal-500 flex items-center justify-center text-slate-900 font-extrabold text-sm">
-              AG
-            </div>
-            <span className="font-bold text-white text-base tracking-tight">SaaS Agendamento</span>
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/brand/zemda-icon.png"
+              alt="Zemda"
+              className="w-7 h-7 object-contain rounded-lg shadow-xs"
+            />
+            <span className="font-bold text-white text-base tracking-tight">Zemda</span>
           </div>
           <button
             onClick={onClose}
@@ -100,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-sm'
+                      ? 'bg-teal-600 text-white shadow-sm'
                       : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -112,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
-          SaaS Universal v1.0 • LGPD Compliant
+          Zemda • LGPD Compliant
         </div>
       </aside>
     </>

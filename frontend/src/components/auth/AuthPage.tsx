@@ -19,22 +19,29 @@ import {
   Server,
   CheckCircle2,
   RefreshCw,
-  X
+  X,
+  ArrowLeft
 } from 'lucide-react';
 
 interface AuthPageProps {
   onOpenPublicBooking?: () => void;
+  onBackToLanding?: () => void;
+  initialAction?: 'login' | 'create-clinic' | 'register-user';
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ onOpenPublicBooking }) => {
+export const AuthPage: React.FC<AuthPageProps> = ({
+  onOpenPublicBooking,
+  onBackToLanding,
+  initialAction
+}) => {
   const { login } = useAuth();
   const { showToast } = useToast();
 
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const [isCreateClinicOpen, setIsCreateClinicOpen] = useState<boolean>(false);
-  const [isRegisterUserOpen, setIsRegisterUserOpen] = useState<boolean>(false);
+  const [isCreateClinicOpen, setIsCreateClinicOpen] = useState<boolean>(initialAction === 'create-clinic');
+  const [isRegisterUserOpen, setIsRegisterUserOpen] = useState<boolean>(initialAction === 'register-user');
   const [loginError, setLoginError] = useState<{ message: string; code?: string } | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ email?: string; password?: string }>({});
 
@@ -57,7 +64,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onOpenPublicBooking }) => {
       clearTimeout(timeoutId);
 
       if (res.ok) {
-        setTestServerFeedback({ success: true, message: 'Conexão estabelecida com sucesso com o servidor SaaS!' });
+        setTestServerFeedback({ success: true, message: 'Conexão estabelecida com sucesso com o servidor Zemda!' });
       } else {
         setTestServerFeedback({ success: false, message: `Servidor alcançado, mas retornou status ${res.status}.` });
       }
@@ -123,18 +130,33 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onOpenPublicBooking }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex flex-col items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="w-full max-w-md space-y-6">
-        {/* Brand Header Institucional Neutro */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-400 to-indigo-500 shadow-lg text-white font-extrabold text-2xl mb-1">
-            AG
+        {/* Botão de Retorno ao Portal Zemda */}
+        {onBackToLanding && (
+          <div className="flex justify-start">
+            <button
+              onClick={onBackToLanding}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700/60 transition-all cursor-pointer shadow-xs"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-teal-400" />
+              <span>Voltar para o portal Zemda</span>
+            </button>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Gestão Integrada
-          </h1>
-          <p className="text-xs text-slate-300 max-w-xs mx-auto">
-            Plataforma multiclínica para profissionais de saúde, consultórios e clínicas especializadas
+        )}
+
+        {/* Brand Header Institucional Zemda */}
+        <div className="text-center space-y-2">
+          <div className="flex items-center justify-center gap-3 mb-1">
+            <img
+              src="/brand/zemda-icon.png"
+              alt="Zemda"
+              className="w-12 h-12 object-contain drop-shadow-lg"
+            />
+            <span className="text-3xl font-black text-white tracking-tight">Zemda</span>
+          </div>
+          <p className="text-xs text-teal-200/90 max-w-xs mx-auto font-medium">
+            Tecnologia que organiza o cuidado em saúde
           </p>
         </div>
 
@@ -290,57 +312,58 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onOpenPublicBooking }) => {
                 setTestServerFeedback(null);
                 setIsServerConfigOpen(true);
               }}
-              className="text-[11px] font-semibold text-slate-500 hover:text-indigo-600 flex items-center gap-1.5 transition-colors cursor-pointer py-1"
-              title="Configurar IP ou endereço do servidor SaaS"
+              className="text-[11px] font-semibold text-slate-500 hover:text-teal-400 flex items-center gap-1.5 transition-colors cursor-pointer py-1"
+              title="Configurar IP ou endereço do servidor Zemda"
             >
-              <Server className="w-3.5 h-3.5 text-indigo-500" />
+              <Server className="w-3.5 h-3.5 text-teal-500" />
               <span>Servidor: <span className="font-mono text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{ApiClient.getBaseUrl()}</span></span>
             </button>
           </div>
 
-          {/* Link para Agendamento Público */}
-          {onOpenPublicBooking && (
-            <div className="pt-1 text-center border-t border-slate-100">
-              <button
-                type="button"
-                onClick={onOpenPublicBooking}
-                className="text-xs font-semibold text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-1.5 mx-auto transition-colors"
-              >
-                <Globe className="w-3.5 h-3.5 text-slate-400" />
-                Portal de Agendamento Online de Pacientes
-              </button>
-            </div>
-          )}
+          {/* Versão e LGPD */}
+          <div className="pt-1 text-center">
+            <p className="text-[10px] text-slate-400">
+              Ambiente Seguro • Criptografia TLS • LGPD Compliant
+            </p>
+          </div>
         </div>
 
-        <p className="text-center text-xs text-slate-400">
-          Plataforma Multi-Clínicas • Ambientes Independentes • LGPD Compliant
-        </p>
+        {/* Link para o Paciente agendar online caso tenha chegado aqui */}
+        {onOpenPublicBooking && (
+          <div className="text-center">
+            <button
+              onClick={onOpenPublicBooking}
+              className="inline-flex items-center gap-1.5 text-xs text-teal-300/80 hover:text-teal-200 transition-colors font-medium cursor-pointer"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>É paciente e deseja agendar uma consulta? Clique aqui</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Modal de Solicitação de Acesso (Novo Usuário) */}
+      {/* Modais de Cadastro */}
       <RegisterUserModal
         isOpen={isRegisterUserOpen}
         onClose={() => setIsRegisterUserOpen(false)}
       />
 
-      {/* Modal de Cadastro de Nova Clínica */}
       <CreateClinicModal
         isOpen={isCreateClinicOpen}
         onClose={() => setIsCreateClinicOpen(false)}
       />
 
-      {/* Modal de Configuração de Servidor SaaS (Ideal para rede local / APK Android) */}
+      {/* Modal de Configuração de Servidor Zemda (Ideal para rede local / APK Android) */}
       {isServerConfigOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                <div className="p-2 bg-teal-50 text-teal-600 rounded-xl">
                   <Server className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Configuração do Servidor SaaS</h3>
+                  <h3 className="text-sm font-bold text-slate-900">Configuração do Servidor Zemda</h3>
                   <p className="text-[11px] text-slate-500">Defina o endereço da API para conectar este aplicativo</p>
                 </div>
               </div>

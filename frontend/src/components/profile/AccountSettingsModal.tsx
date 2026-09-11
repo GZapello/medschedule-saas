@@ -107,7 +107,7 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({ isOp
 
   const getRoleLabel = (role: string) => {
     switch (role) {
-      case 'superadmin': return 'Administrador Global SaaS';
+      case 'superadmin': return 'Administrador da Plataforma';
       case 'clinic_admin': return 'Gestor da Clínica';
       case 'professional': return 'Profissional de Atendimento';
       case 'receptionist': return 'Recepção / Atendimento';

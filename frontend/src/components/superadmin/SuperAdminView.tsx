@@ -84,7 +84,7 @@ export const SuperAdminView: React.FC = () => {
         setProfForm(prev => ({ ...prev, categoryId: catData[0].id }));
       }
     } catch (err: any) {
-      showToast('Erro ao carregar dados administrativos do SaaS', 'error');
+      showToast('Erro ao carregar dados administrativos globais', 'error');
     } finally {
       setLoading(false);
     }
@@ -303,7 +303,7 @@ export const SuperAdminView: React.FC = () => {
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-300 text-[10px] font-black uppercase tracking-wider mb-1">
               Painel de Governança Global
             </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">Administrador do SaaS</h2>
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">Administrador da Plataforma</h2>
             <p className="text-xs text-slate-400 mt-0.5 max-w-xl">
               Gestão multi-clínicas, moderação de estabelecimentos e controle global de profissões e tipos de serviço.
             </p>
@@ -389,7 +389,7 @@ export const SuperAdminView: React.FC = () => {
               </div>
 
               <div className="p-4 bg-white rounded-3xl border border-slate-100 shadow-xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Agendamentos no SaaS</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Agendamentos na Plataforma</span>
                 <p className="text-2xl font-black text-teal-600 mt-1">{metrics.totalAppointments}</p>
                 <span className="text-[11px] text-slate-400 font-medium">Em todas as clínicas</span>
               </div>

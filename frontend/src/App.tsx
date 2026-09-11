@@ -20,6 +20,7 @@ import { SettingsView } from './components/settings/SettingsView';
 import { SuperAdminView } from './components/superadmin/SuperAdminView';
 import { OnboardingWizardView } from './components/onboarding/OnboardingWizardView';
 import { PublicBookingView } from './components/public-booking/PublicBookingView';
+import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { NewAppointmentModal } from './components/calendar/NewAppointmentModal';
 import { NewPatientModal } from './components/patients/NewPatientModal';
 import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
@@ -30,6 +31,8 @@ const AppContent: React.FC = () => {
   const { currentUser, currentTenant, loading, reloadSession } = useAuth();
 
   const [currentView, setCurrentView] = useState<string>('dashboard');
+  const [publicView, setPublicView] = useState<'landing' | 'login'>('landing');
+  const [authInitialAction, setAuthInitialAction] = useState<'login' | 'create-clinic' | 'register-user'>('login');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [isAIOpen, setIsAIOpen] = useState<boolean>(false);
   const [isNewApptOpen, setIsNewApptOpen] = useState<boolean>(false);
@@ -67,7 +70,12 @@ const AppContent: React.FC = () => {
         modalClose.click();
         return;
       }
-      // 3. Se estiver em visualização secundária, retorna ao dashboard
+      // 3. Se estiver na tela de login deslogado, volta para a landing page institucional Zemda
+      if (!currentUser && publicView === 'login') {
+        setPublicView('landing');
+        return;
+      }
+      // 4. Se estiver em visualização secundária, retorna ao dashboard
       if (currentView !== 'dashboard' && currentUser?.role !== 'superadmin') {
         setCurrentView('dashboard');
         return;
@@ -110,14 +118,14 @@ const AppContent: React.FC = () => {
         cleanupCapacitorListener();
       }
     };
-  }, [isNewApptOpen, isNewPatientOpen, isAIOpen, sidebarOpen, currentView, currentUser]);
+  }, [isNewApptOpen, isNewPatientOpen, isAIOpen, sidebarOpen, currentView, currentUser, publicView]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-slate-300 text-sm font-semibold">Carregando sistema SaaS...</p>
+          <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-slate-300 text-sm font-semibold">Carregando Zemda...</p>
         </div>
       </div>
     );
@@ -128,14 +136,47 @@ const AppContent: React.FC = () => {
     return (
       <PublicBookingView
         tenantSlug={currentTenant?.slug || 'clinica-viver-bem'}
-        onBackToApp={currentUser ? () => setCurrentView('dashboard') : undefined}
+        onBackToApp={() => {
+          if (currentUser) {
+            setCurrentView('dashboard');
+          } else {
+            setCurrentView('dashboard');
+            setPublicView('landing');
+          }
+        }}
       />
     );
   }
 
-  // Se não estiver logado, exibe a página de autenticação
+  // Se não estiver logado, exibe primeiro a Landing Page institucional da Zemda
   if (!currentUser) {
-    return <AuthPage onOpenPublicBooking={() => setCurrentView('public_preview')} />;
+    if (publicView === 'landing') {
+      return (
+        <ZemdaLandingPage
+          onLogin={() => {
+            setAuthInitialAction('login');
+            setPublicView('login');
+          }}
+          onRegisterClinic={() => {
+            setAuthInitialAction('create-clinic');
+            setPublicView('login');
+          }}
+          onRegisterUser={() => {
+            setAuthInitialAction('register-user');
+            setPublicView('login');
+          }}
+          onOpenPublicBooking={() => setCurrentView('public_preview')}
+        />
+      );
+    }
+
+    return (
+      <AuthPage
+        onOpenPublicBooking={() => setCurrentView('public_preview')}
+        onBackToLanding={() => setPublicView('landing')}
+        initialAction={authInitialAction}
+      />
+    );
   }
 
   // Se o gestor precisa concluir o Onboarding obrigatório da clínica

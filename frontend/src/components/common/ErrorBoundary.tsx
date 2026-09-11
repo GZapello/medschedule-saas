@@ -95,7 +95,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="space-y-1">
               <h2 className="text-xl font-bold text-white">Falha ao Carregar Interface</h2>
               <p className="text-xs text-slate-300">
-                Ocorreu uma falha inesperada na renderização. Você pode tentar recarregar ou ajustar o endereço do servidor SaaS.
+                Ocorreu uma falha inesperada na renderização. Você pode tentar recarregar ou ajustar o endereço do servidor Zemda.
               </p>
             </div>
 

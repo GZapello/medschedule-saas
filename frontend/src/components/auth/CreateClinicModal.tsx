@@ -131,7 +131,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[11px] font-bold tracking-wider uppercase mb-1">
               <Building2 className="w-3.5 h-3.5 text-teal-400" />
-              SaaS Multi-Clínicas
+              Plataforma Multi-Clínicas Zemda
             </div>
             <h2 className="text-xl font-extrabold tracking-tight">Criar Minha Clínica</h2>
             <p className="text-xs text-indigo-200">
@@ -162,7 +162,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                   Status: Pendente de Aprovação
                 </p>
                 <p>
-                  Sua clínica foi cadastrada no sistema. Por questões de governança, segurança e conformidade, novos cadastros passam por análise da equipe de administração do SaaS.
+                  Sua clínica foi cadastrada no sistema. Por questões de governança, segurança e conformidade, novos cadastros passam por análise da equipe de administração da plataforma Zemda.
                 </p>
                 <p className="font-semibold text-slate-700">
                   Assim que for aprovada, você poderá fazer login com o e-mail cadastrado e será direcionado ao assistente de configuração inicial.
@@ -188,7 +188,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
               <div className="p-3.5 bg-indigo-50 border border-indigo-100 rounded-2xl text-xs text-indigo-900 flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
                 <p>
-                  Cada clínica possui ambiente 100% isolado. Após enviar seus dados, sua solicitação ficará com status <strong>"Pendente de aprovação"</strong> até validação pelo ADM do SaaS.
+                  Cada clínica possui ambiente 100% isolado. Após enviar seus dados, sua solicitação ficará com status <strong>"Pendente de aprovação"</strong> até validação pelo administrador da plataforma.
                 </p>
               </div>
 
@@ -380,7 +380,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                     className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                   />
                   <span>
-                    Declaro que li e concordo com os <strong>Termos de Uso</strong> da plataforma SaaS e que sou autorizado a responder por esta clínica.
+                    Declaro que li e concordo com os <strong>Termos de Uso</strong> da plataforma Zemda e que sou autorizado a responder por esta clínica.
                   </span>
                 </label>
 

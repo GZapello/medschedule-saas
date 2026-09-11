@@ -52,12 +52,12 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
         </button>
 
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => onNavigate('dashboard')}>
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-teal-500 flex items-center justify-center text-white font-bold text-lg shadow-sm">
-            {currentTenant?.name?.charAt(0) || 'S'}
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+            {currentTenant?.name?.charAt(0) || 'Z'}
           </div>
           <div>
             <h1 className="font-bold text-slate-900 text-base leading-tight">
-              {currentTenant?.trade_name || currentTenant?.name || 'SaaS Agendamento'}
+              {currentTenant?.trade_name || currentTenant?.name || 'Zemda'}
             </h1>
             <p className="text-xs text-slate-500 font-medium">
               {isSuperAdmin ? 'Plataforma Multi-Clínicas' : 'Ambiente Profissional'}
