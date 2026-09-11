@@ -374,6 +374,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onOpenPublicBooking }) => {
                   <button
                     type="button"
                     onClick={() => {
+                      setServerUrlInput('https://medschedule-saas-production.up.railway.app/api');
+                      testConnection('https://medschedule-saas-production.up.railway.app/api');
+                    }}
+                    className="text-[11px] py-1 px-2.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors font-mono cursor-pointer"
+                  >
+                    ☁️ Nuvem Railway (Oficial)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
                       setServerUrlInput('http://192.168.0.100:4000/api');
                       testConnection('http://192.168.0.100:4000/api');
                     }}

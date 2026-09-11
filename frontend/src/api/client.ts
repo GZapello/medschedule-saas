@@ -30,8 +30,8 @@ export const getApiBaseUrl = (): string => {
       window.location.protocol === 'capacitor:';
 
     if (isCapacitor) {
-      // No Android físico conectado à rede local da clínica, o IP padrão do servidor é o IP da máquina host
-      return 'http://192.168.0.100:4000/api';
+      // No aplicativo Android, conecta por padrão diretamente ao servidor oficial na nuvem (Railway)
+      return 'https://medschedule-saas-production.up.railway.app/api';
     }
   }
 
