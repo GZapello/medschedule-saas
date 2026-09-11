@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
 title MedSchedule - Preparar Repositório Git para Deploy
+cd /d "%~dp0"
 
 echo =====================================================================
 echo       MEDSCHEDULE - PREPARAR REPOSITÓRIO GIT PARA HOSPEDAGEM

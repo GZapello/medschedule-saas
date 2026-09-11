@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
 title MedSchedule - Conectar e Enviar para o GitHub
+cd /d "%~dp0"
 
 echo =====================================================================
 echo       MEDSCHEDULE - ENVIAR PROJETO PARA O GITHUB
