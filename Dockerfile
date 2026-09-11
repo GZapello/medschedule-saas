@@ -45,6 +45,5 @@ COPY backend/public ./public
 RUN mkdir -p /data
 
 EXPOSE 4000
-VOLUME ["/data"]
 
 CMD ["node", "dist/server.js"]
