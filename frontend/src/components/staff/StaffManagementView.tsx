@@ -19,6 +19,7 @@ import {
   AlertCircle,
   FileText
 } from 'lucide-react';
+import { formatDoctorName } from '../../utils/formatters';
 
 const AVAILABLE_PERMISSIONS = [
   { id: 'view_schedule', label: 'Visualizar agenda da clínica' },
@@ -112,9 +113,10 @@ export const StaffManagementView: React.FC = () => {
     practiceAreas: ''
   });
 
-  // Formulário de novo funcionário
+  // Formulário de novo funcionário (Item 9: Sexo e Dr./Dra.)
   const [formData, setFormData] = useState({
     name: '',
+    gender: 'M' as 'M' | 'F',
     email: '',
     phone: '',
     password: '',
@@ -160,13 +162,17 @@ export const StaffManagementView: React.FC = () => {
       showToast(`Solicitação de ${name} recusada.`, 'success');
       loadStaff();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao recusar funcionário', 'error');
+      showToast(err.message || 'Erro ao recusar solicitação', 'error');
     }
   };
 
-  const handleToggleStatus = async (userId: string) => {
+  const handleToggleStatus = async (userId: string, currentStatus: string = 'active') => {
+    const action = currentStatus === 'active' ? 'block' : 'unblock';
+    const actionLabel = currentStatus === 'active' ? 'bloquear' : 'desbloquear';
+    if (!window.confirm(`Deseja realmente ${actionLabel} este usuário?`)) return;
+
     try {
-      const res = await ApiClient.put<any>(`/v1/staff/${userId}/toggle-status`, {});
+      const res = await ApiClient.put<{ message: string }>(`/v1/staff/${userId}/status`, { action });
       showToast(res.message || 'Status alterado com sucesso', 'success');
       loadStaff();
     } catch (err: any) {
@@ -185,6 +191,7 @@ export const StaffManagementView: React.FC = () => {
     try {
       await ApiClient.post('/v1/staff/invite', {
         name: formData.name,
+        gender: formData.gender,
         email: formData.email,
         phone: formData.phone,
         password: formData.password || '123456',
@@ -200,6 +207,7 @@ export const StaffManagementView: React.FC = () => {
       setIsAddModalOpen(false);
       setFormData({
         name: '',
+        gender: 'M',
         email: '',
         phone: '',
         password: '',
@@ -416,7 +424,9 @@ export const StaffManagementView: React.FC = () => {
                     {member.name.slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800 text-sm leading-snug">{member.name}</h3>
+                    <h3 className="font-bold text-slate-800 text-sm leading-snug">
+                      {member.role === 'professional' ? formatDoctorName(member.name, member.gender) : member.name}
+                    </h3>
                     <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                       {getRoleLabel(member.role)}
                     </span>
@@ -532,7 +542,7 @@ export const StaffManagementView: React.FC = () => {
 
                   {/* Bloquear / Desbloquear / Reativar */}
                   <button
-                    onClick={() => handleToggleStatus(member.id)}
+                    onClick={() => handleToggleStatus(member.id, member.status)}
                     className={`px-2.5 py-1.5 font-bold text-[11px] rounded-xl flex items-center gap-1 cursor-pointer transition-colors ${
                       member.status === 'active'
                         ? 'bg-rose-50 hover:bg-rose-100 text-rose-700'
@@ -584,16 +594,29 @@ export const StaffManagementView: React.FC = () => {
 
             <form onSubmit={handleCreateStaff} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Nome Completo *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Ex: Ana Paula Ribeiro"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-slate-700 mb-1">Nome Completo *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.name}
+                      onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="Ex: Ana Paula Ribeiro"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Sexo / Prefixo</label>
+                    <select
+                      value={formData.gender || 'M'}
+                      onChange={e => setFormData({ ...formData, gender: e.target.value as 'M' | 'F' })}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
+                    >
+                      <option value="M">Masculino (Dr.)</option>
+                      <option value="F">Feminino (Dra.)</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>

@@ -99,7 +99,7 @@ export class ProfessionalController {
 
       const {
         name, email, password, phone, professionId, specialtyId,
-        registrationType, registrationNumber, bio, practiceAreas, bufferMinutes, photoUrl
+        registrationType, registrationNumber, bio, practiceAreas, bufferMinutes, photoUrl, gender
       } = req.body;
 
       if (!name || !email) {
@@ -107,8 +107,8 @@ export class ProfessionalController {
         return;
       }
 
-      // Cria ou associa conta de usuário
-      let userId: string | null = null;
+      // Verifica ou cria usuário
+      let userId: string;
       const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim().toLowerCase()) as { id: string } | undefined;
 
       if (existingUser) {
@@ -127,9 +127,9 @@ export class ProfessionalController {
       const insertProf = db.prepare(`
         INSERT INTO professionals (
           id, tenant_id, user_id, name, photo_url, profession_id, specialty_id,
-          registration_type, registration_number, bio, practice_areas, buffer_minutes, active
+          registration_type, registration_number, bio, practice_areas, buffer_minutes, gender, active
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `);
 
       insertProf.run(
@@ -144,7 +144,8 @@ export class ProfessionalController {
         registrationNumber || null,
         bio || null,
         practiceAreas || null,
-        bufferMinutes || 10
+        bufferMinutes || 10,
+        gender === 'F' ? 'F' : 'M'
       );
 
       // Cria grade de horários padrão de segunda a sexta
@@ -170,7 +171,7 @@ export class ProfessionalController {
       const tenantId = req.tenantId;
       const {
         name, professionId, specialtyId, registrationType, registrationNumber,
-        bio, practiceAreas, bufferMinutes, photoUrl, active
+        bio, practiceAreas, bufferMinutes, photoUrl, gender, active
       } = req.body;
 
       const updateStmt = db.prepare(`
@@ -184,6 +185,7 @@ export class ProfessionalController {
           practice_areas = COALESCE(?, practice_areas),
           buffer_minutes = COALESCE(?, buffer_minutes),
           photo_url = COALESCE(?, photo_url),
+          gender = COALESCE(?, gender),
           active = COALESCE(?, active),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
@@ -197,8 +199,9 @@ export class ProfessionalController {
         registrationNumber || null,
         bio || null,
         practiceAreas || null,
-        bufferMinutes !== undefined ? bufferMinutes : null,
+        bufferMinutes !== undefined ? Number(bufferMinutes) : null,
         photoUrl || null,
+        gender || null,
         active !== undefined ? (active ? 1 : 0) : null,
         id,
         tenantId

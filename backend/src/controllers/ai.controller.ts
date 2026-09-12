@@ -2,9 +2,22 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { v4 as uuidv4 } from 'uuid';
+import { GeminiService } from '../services/gemini.service';
+
+// ============================================================================
+// ZEMDA AI CONTROLLER — Motor de IA Contextual Inteligente
+// ============================================================================
+// Arquitetura híbrida:
+// 1. Coleta dados reais do banco (SQL) para construir contexto
+// 2. Envia ao Gemini para processamento inteligente
+// 3. Se Gemini indisponível, recai no motor heurístico local
+// ============================================================================
 
 export class AIController {
+
+  // ================================================================
   // 1. CHAT CONTEXTUAL INTELIGENTE
+  // ================================================================
   static async chat(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.tenantId;
@@ -22,26 +35,39 @@ export class AIController {
       const text = message.trim();
       const lower = text.toLowerCase();
 
-      // Salva na conversa se conversationId fornecido
-      if (conversationId) {
+      // ── 1. Carregar / criar conversa para memória ─────────────
+      let convId = conversationId || null;
+      let conversationHistory: Array<{ sender: string; text: string }> = [];
+
+      if (convId) {
         try {
-          const conv = db.prepare('SELECT messages_json FROM ai_conversations WHERE id = ? AND tenant_id = ?').get(conversationId, tenantId) as any;
+          const conv = db.prepare('SELECT messages_json FROM ai_conversations WHERE id = ? AND tenant_id = ?').get(convId, tenantId) as any;
           if (conv) {
-            const msgs = JSON.parse(conv.messages_json || '[]');
-            msgs.push({ sender: 'user', text, timestamp: new Date().toISOString() });
-            db.prepare('UPDATE ai_conversations SET messages_json = ?, updated_at = datetime("now") WHERE id = ?').run(JSON.stringify(msgs), conversationId);
+            conversationHistory = JSON.parse(conv.messages_json || '[]');
           }
         } catch (e) {}
       }
 
-      // Se houver contexto de paciente ativo, carregamos os dados reais do banco (isolamento estrito)
+      // ── 2. Resolver paciente do contexto ─────────────────────
       let patientContext: any = null;
-      const patientId = context?.patientId;
+      let patientId = context?.patientId;
 
+      // Busca automática: se nenhum paciente selecionado, tenta localizar pelo nome na mensagem
+      if (!patientId && context?.scope !== 'no_clinical') {
+        const patients = db.prepare('SELECT id, full_name FROM patients WHERE tenant_id = ? AND active = 1').all(tenantId) as { id: string; full_name: string }[];
+        for (const p of patients) {
+          const first = p.full_name.split(' ')[0]?.toLowerCase() || '';
+          if (first.length >= 3 && (lower.includes(first) || lower.includes(p.full_name.toLowerCase()))) {
+            patientId = p.id;
+            break;
+          }
+        }
+      }
+
+      // ── 3. Coletar dados clínicos do paciente ────────────────
       if (patientId && context?.scope !== 'no_clinical') {
         const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
         if (patient) {
-          // Busca dados complementares respeitando o escopo de tempo
           let dateFilter = '';
           if (context?.scope === 'last_30_days') {
             dateFilter = ` AND session_date >= date('now', '-30 days')`;
@@ -60,25 +86,81 @@ export class AIController {
           const allergies = db.prepare('SELECT * FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
           const medications = db.prepare('SELECT * FROM patient_medications WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
           const exams = db.prepare('SELECT * FROM patient_exams WHERE patient_id = ? AND tenant_id = ? ORDER BY exam_date DESC LIMIT 10').all(patientId, tenantId) as any[];
-          const pastAppts = db.prepare('SELECT * FROM appointments WHERE patient_id = ? AND tenant_id = ? ORDER BY start_time DESC LIMIT 5').all(patientId, tenantId) as any[];
+          const pastAppts = db.prepare(`
+            SELECT a.*, s.name as service_name, pr.name as prof_name
+            FROM appointments a
+            LEFT JOIN services s ON s.id = a.service_id
+            LEFT JOIN professionals pr ON pr.id = a.professional_id
+            WHERE a.patient_id = ? AND a.tenant_id = ?
+            ORDER BY a.start_time DESC LIMIT 10
+          `).all(patientId, tenantId) as any[];
+          const anamnesis = db.prepare('SELECT * FROM patient_anamnesis WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 3').all(patientId, tenantId) as any[];
 
-          patientContext = {
-            patient,
-            records,
-            allergies,
-            medications,
-            exams,
-            pastAppts
-          };
+          patientContext = { patient, records, allergies, medications, exams, pastAppts, anamnesis };
         }
       }
+
+      // ── 4. Coletar dados do atendimento atual ────────────────
+      let appointmentContext: any = null;
+      if (context?.appointmentId) {
+        const appt = db.prepare(`
+          SELECT a.*, p.full_name as patient_name, pr.name as prof_name, s.name as service_name
+          FROM appointments a
+          LEFT JOIN patients p ON p.id = a.patient_id
+          LEFT JOIN professionals pr ON pr.id = a.professional_id
+          LEFT JOIN services s ON s.id = a.service_id
+          WHERE a.id = ? AND a.tenant_id = ?
+        `).get(context.appointmentId, tenantId) as any;
+        if (appt) {
+          appointmentContext = appt;
+          // Se não temos paciente pelo contexto, usar o do atendimento
+          if (!patientId && appt.patient_id) {
+            patientId = appt.patient_id;
+          }
+        }
+      }
+
+      // ── 5. Tentar processar com Gemini ───────────────────────
+      if (GeminiService.isAvailable()) {
+        const contextStr = buildContextString(patientContext, appointmentContext, tenantId, req.user);
+        const geminiReply = await GeminiService.chat({
+          message: text,
+          conversationHistory: conversationHistory.slice(-20), // Últimas 20 mensagens
+          contextData: contextStr,
+          professionalName: req.user?.name
+        });
+
+        if (geminiReply) {
+          // Detectar intenção e ações com base na resposta e mensagem
+          const detectedIntent = detectIntent(lower, geminiReply);
+          const actions = buildActions(detectedIntent, patientId, patientContext);
+          const suggestions = generateProactiveSuggestions(patientContext, appointmentContext);
+
+          // Salvar na conversa
+          if (convId) {
+            saveToConversation(convId, tenantId, text, geminiReply);
+          }
+
+          res.json({
+            reply: geminiReply,
+            intent: detectedIntent,
+            actions,
+            suggestions,
+            conversationId: convId
+          });
+          return;
+        }
+        // Se Gemini falhar, cai no motor heurístico abaixo
+      }
+
+      // ── 6. MOTOR HEURÍSTICO LOCAL (fallback) ─────────────────
+      // Preserva toda a lógica original para quando Gemini não está disponível
 
       // A. Resumo Inteligente do Prontuário do Paciente
       if (patientContext && (lower.includes('resuma') || lower.includes('resumo') || lower.includes('histórico') || lower.includes('historico'))) {
         const p = patientContext.patient;
         const activeMeds = patientContext.medications.filter((m: any) => m.status === 'active');
         const activeAllergies = patientContext.allergies.filter((a: any) => a.status === 'active');
-        const lastRec = patientContext.records[0];
 
         let reply = `### 📋 Resumo Inteligente do Prontuário\n\n`;
         reply += `**Paciente:** ${p.full_name} (${p.birth_date ? calculateAge(p.birth_date) + ' anos' : 'Idade não informada'})\n`;
@@ -103,7 +185,11 @@ export class AIController {
 
         reply += `\n\n> 💡 *Aviso Ético: Resumo gerado como apoio de síntese. A interpretação e conduta pertencem exclusivamente ao profissional de saúde.*`;
 
-        res.json({ reply, intent: 'PATIENT_SUMMARY' });
+        // Sugestões proativas no fallback
+        const suggestions = generateProactiveSuggestions(patientContext, appointmentContext);
+
+        if (convId) saveToConversation(convId, tenantId, text, reply);
+        res.json({ reply, intent: 'PATIENT_SUMMARY', suggestions, conversationId: convId });
         return;
       }
 
@@ -147,27 +233,28 @@ export class AIController {
         }
         reply += `> 📌 *Todos os marcos apresentados foram extraídos de lançamentos confirmados na plataforma.*`;
 
-        res.json({ reply, intent: 'CLINICAL_TIMELINE' });
+        if (convId) saveToConversation(convId, tenantId, text, reply);
+        res.json({ reply, intent: 'CLINICAL_TIMELINE', conversationId: convId });
         return;
       }
 
-      // C. Estruturação em SOAP / Organizar Evolução
+      // C. Estruturação em SOAP
       if (lower.includes('soap') || lower.includes('organize esta evolução') || lower.includes('organizar evolução') || lower.includes('estruturar')) {
         let draftText = text.replace(/.*?(soap|evolução|estruturar):\s*/i, '').trim();
-        if (!draftText || draftText.length < 10) {
-          draftText = text;
-        }
+        if (!draftText || draftText.length < 10) draftText = text;
 
-        const structured = formatSoap(draftText);
+        const structured = formatSoapFallback(draftText);
+        if (convId) saveToConversation(convId, tenantId, text, structured);
         res.json({
           reply: `### 📝 Rascunho Clínico Estruturado (Modelo SOAP)\n\n${structured}\n\n> ⚠️ **Rascunho gerado por IA.** Revise e edite os pontos necessários antes de salvar no prontuário.`,
           intent: 'SOAP_STRUCTURE',
-          structuredDraft: structured
+          structuredDraft: structured,
+          conversationId: convId
         });
         return;
       }
 
-      // D. Preparar Resumo para Encaminhamento
+      // D. Encaminhamento / Relatório
       if (patientContext && (lower.includes('encaminhamento') || lower.includes('relatório') || lower.includes('relatorio'))) {
         const p = patientContext.patient;
         const activeMeds = patientContext.medications.filter((m: any) => m.status === 'active');
@@ -182,42 +269,126 @@ export class AIController {
         reply += `**Motivo do Encaminhamento:**\nSolicito avaliação complementar e conduta especializada referente ao quadro clínico.\n\n`;
         reply += `Coloco-me à disposição para discussão conjunta do caso.\n\nAtenciosamente,\n**${req.user?.name || 'Profissional de Saúde'}**`;
 
-        res.json({ reply, intent: 'REFERRAL_DRAFT' });
+        if (convId) saveToConversation(convId, tenantId, text, reply);
+        res.json({ reply, intent: 'REFERRAL_DRAFT', conversationId: convId });
         return;
       }
 
-      // E. Intenções Administrativas: Métricas de atendimentos
-      if (lower.includes('quantos atendimentos') || lower.includes('atendimentos tive') || lower.includes('métrica') || lower.includes('estatística') || lower.includes('cancelados')) {
-        const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
-        const metrics = db.prepare(`
-          SELECT 
-            COUNT(*) as total,
-            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-            SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
-            SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show
-          FROM appointments
-          WHERE tenant_id = ? AND start_time >= ?
-        `).get(tenantId, monthStart) as any;
+      // D2. Informações do paciente localizado
+      if (patientContext && (lower.includes('quem é') || lower.includes('quem e') || lower.includes('dados') || lower.includes('telefone') || lower.includes('contato') || lower.includes('paciente') || lower.includes('sobre'))) {
+        const p = patientContext.patient;
+        const lastAppt = patientContext.pastAppts[0];
+        let reply = `### 👤 Informações do Paciente: **${p.full_name}**\n\n`;
+        reply += `- **Telefone / WhatsApp:** ${p.phone || 'Não informado'}\n`;
+        reply += `- **E-mail:** ${p.email || 'Não informado'}\n`;
+        reply += `- **CPF:** ${p.cpf || 'Não informado'}\n`;
+        reply += `- **Idade:** ${p.birth_date ? calculateAge(p.birth_date) + ' anos' : 'Não informada'}\n`;
+        if (lastAppt) {
+          reply += `- **Último Atendimento:** ${formatBrDate(lastAppt.start_time.split('T')[0])} (${lastAppt.status})\n`;
+        }
 
-        const rev = db.prepare(`
-          SELECT SUM(amount) as s FROM payments WHERE tenant_id = ? AND status = 'paid' AND created_at >= ?
-        `).get(tenantId, monthStart) as any;
-
-        const total = metrics.total || 0;
-        const completed = metrics.completed || 0;
-        const cancelled = metrics.cancelled || 0;
-        const noShow = metrics.no_show || 0;
-        const revenue = Number(rev.s || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
+        if (convId) saveToConversation(convId, tenantId, text, reply);
         res.json({
-          reply: `Neste mês, a clínica registrou **${total} agendamentos**:\n- **${completed}** atendimentos concluídos\n- **${cancelled}** consultas canceladas\n- **${noShow}** faltas/no-show\n\nFaturamento apurado: **${revenue}**.`,
-          intent: 'METRICS',
-          data: { total, completed, cancelled, noShow, revenue }
+          reply,
+          intent: 'PATIENT_INFO',
+          actions: [
+            { type: 'VIEW_PATIENT', label: 'Ver Prontuário Completo', patientId: p.id }
+          ],
+          conversationId: convId
         });
         return;
       }
 
-      // F. Consulta de Horários Livres
+      // E1. Agenda de Hoje / Amanhã / Ontem
+      if ((lower.includes('hoje') || lower.includes('amanhã') || lower.includes('amanha') || lower.includes('ontem')) && (lower.includes('agenda') || lower.includes('consulta') || lower.includes('atendimento') || lower.includes('pacientes'))) {
+        const isAmanha = lower.includes('amanhã') || lower.includes('amanha');
+        const isOntem = lower.includes('ontem');
+        const targetDate = new Date();
+        if (isAmanha) targetDate.setDate(targetDate.getDate() + 1);
+        if (isOntem) targetDate.setDate(targetDate.getDate() - 1);
+        const dateIso = targetDate.toISOString().split('T')[0];
+
+        const appts = db.prepare(`
+          SELECT a.*, p.full_name as patient_name, p.phone as patient_phone, pr.name as prof_name, s.name as service_name
+          FROM appointments a
+          JOIN patients p ON p.id = a.patient_id
+          JOIN professionals pr ON pr.id = a.professional_id
+          JOIN services s ON s.id = a.service_id
+          WHERE a.tenant_id = ? AND a.start_time LIKE ? AND a.status != 'cancelled'
+          ORDER BY a.start_time ASC
+        `).all(tenantId, `${dateIso}%`) as any[];
+
+        const dayLabel = isAmanha ? 'Amanhã' : isOntem ? 'Ontem' : 'Hoje';
+
+        if (appts.length === 0) {
+          const reply = `Não constam atendimentos agendados para **${formatBrDate(dateIso)}** (${dayLabel}).`;
+          if (convId) saveToConversation(convId, tenantId, text, reply);
+          res.json({ reply, intent: 'AGENDA_TODAY', appointments: [], conversationId: convId });
+          return;
+        }
+
+        let reply = `### 📅 Atendimentos de **${formatBrDate(dateIso)}** (${dayLabel}):\n\n`;
+        reply += `Foram localizados **${appts.length} agendamento(s)**:\n\n`;
+        for (const ap of appts) {
+          const time = ap.start_time.split('T')[1]?.slice(0, 5) || '--:--';
+          const statusMap: Record<string, string> = {
+            scheduled: 'Agendado', confirmed: 'Confirmado', in_progress: 'Em atendimento',
+            completed: 'Concluído', no_show: 'Falta'
+          };
+          reply += `- **${time}** — **${ap.patient_name}** (${ap.service_name}) • Prof. ${ap.prof_name} [${statusMap[ap.status] || ap.status}]\n`;
+        }
+
+        if (convId) saveToConversation(convId, tenantId, text, reply);
+        res.json({
+          reply, intent: 'AGENDA_TODAY', appointments: appts,
+          actions: [{ type: 'NAVIGATE', label: 'Ver Agenda Completa', target: 'calendar' }],
+          conversationId: convId
+        });
+        return;
+      }
+
+      // E2. Resumo Financeiro
+      if (lower.includes('faturamento') || lower.includes('receita') || lower.includes('quanto recebi') || lower.includes('financeiro') || lower.includes('arrecadação')) {
+        const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+        const rev = db.prepare(`SELECT SUM(amount) as s, COUNT(*) as c FROM payments WHERE tenant_id = ? AND status = 'paid' AND created_at >= ?`).get(tenantId, monthStart) as any;
+        const pending = db.prepare(`SELECT SUM(amount) as s, COUNT(*) as c FROM payments WHERE tenant_id = ? AND status = 'pending' AND created_at >= ?`).get(tenantId, monthStart) as any;
+
+        const revStr = Number(rev?.s || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const pendStr = Number(pending?.s || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        const reply = `### 💰 Resumo Financeiro do Mês\n\n- **Recebimentos Confirmados:** **${revStr}** (${rev?.c || 0} pagamentos quitados)\n- **Previsão a Receber:** **${pendStr}** (${pending?.c || 0} lançamentos pendentes)\n\nVocê pode consultar os comprovantes e recibos emitidos no módulo Financeiro.`;
+
+        if (convId) saveToConversation(convId, tenantId, text, reply);
+        res.json({
+          reply, intent: 'FINANCIAL_SUMMARY',
+          actions: [{ type: 'NAVIGATE', label: 'Abrir Painel Financeiro', target: 'financial' }],
+          conversationId: convId
+        });
+        return;
+      }
+
+      // E3. Métricas de atendimentos
+      if (lower.includes('quantos atendimentos') || lower.includes('atendimentos tive') || lower.includes('métrica') || lower.includes('estatística') || lower.includes('cancelados')) {
+        const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+        const metrics = db.prepare(`
+          SELECT COUNT(*) as total,
+            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+            SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+            SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show
+          FROM appointments WHERE tenant_id = ? AND start_time >= ?
+        `).get(tenantId, monthStart) as any;
+
+        const rev = db.prepare(`SELECT SUM(amount) as s FROM payments WHERE tenant_id = ? AND status = 'paid' AND created_at >= ?`).get(tenantId, monthStart) as any;
+        const revenue = Number(rev?.s || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        const reply = `Neste mês, a clínica registrou **${metrics.total || 0} agendamentos**:\n- **${metrics.completed || 0}** atendimentos concluídos\n- **${metrics.cancelled || 0}** consultas canceladas\n- **${metrics.no_show || 0}** faltas/no-show\n\nFaturamento apurado: **${revenue}**.`;
+
+        if (convId) saveToConversation(convId, tenantId, text, reply);
+        res.json({ reply, intent: 'METRICS', data: metrics, conversationId: convId });
+        return;
+      }
+
+      // F. Horários livres
       if (lower.includes('horário') || lower.includes('horarios') || lower.includes('livre') || lower.includes('disponív') || lower.includes('disponiv')) {
         let prof = null;
         if (req.user && req.user.role === 'professional') {
@@ -226,9 +397,8 @@ export class AIController {
         if (!prof) {
           prof = db.prepare('SELECT id, name FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
         }
-
         if (!prof) {
-          res.json({ reply: 'Não localizei nenhum profissional cadastrado para consultar os horários.' });
+          res.json({ reply: 'Não localizei nenhum profissional cadastrado para consultar os horários.', conversationId: convId });
           return;
         }
 
@@ -237,42 +407,48 @@ export class AIController {
         const srv = db.prepare('SELECT id, name, duration_minutes FROM services WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
 
         if (!srv) {
-          res.json({ reply: 'Nenhum serviço ativo encontrado para cálculo de slots.' });
+          res.json({ reply: 'Nenhum serviço ativo encontrado para cálculo de slots.', conversationId: convId });
           return;
         }
 
         const slots = calculateAvailableSlots(tenantId, prof.id, srv.id, dateStr);
 
         if (slots.length === 0) {
-          res.json({
-            reply: `Não há horários livres disponíveis para **${prof.name}** na data **${formatBrDate(dateStr)}** (agenda ocupada ou dia sem atendimento).`,
-            intent: 'CHECK_AVAILABILITY',
-            slots: []
-          });
+          const reply = `Não há horários livres disponíveis para **${prof.name}** na data **${formatBrDate(dateStr)}** (agenda ocupada ou dia sem atendimento).`;
+          if (convId) saveToConversation(convId, tenantId, text, reply);
+          res.json({ reply, intent: 'CHECK_AVAILABILITY', slots: [], conversationId: convId });
           return;
         }
 
-        const slotListStr = slots.map(s => s.time).join(', ');
-        res.json({
-          reply: `Para **${prof.name}** em **${formatBrDate(dateStr)}**, encontrei os seguintes horários livres:\n\n**${slotListStr}**\n\nGostaria de agendar em algum desses horários?`,
-          intent: 'CHECK_AVAILABILITY',
-          slots
-        });
+        const slotListStr = slots.map((s: any) => s.time).join(', ');
+        const reply = `Para **${prof.name}** em **${formatBrDate(dateStr)}**, encontrei os seguintes horários livres:\n\n**${slotListStr}**\n\nGostaria de agendar em algum desses horários?`;
+        if (convId) saveToConversation(convId, tenantId, text, reply);
+        res.json({ reply, intent: 'CHECK_AVAILABILITY', slots, conversationId: convId });
         return;
       }
 
-      // Fallback amigável e explicativo
-      res.json({
-        reply: `Olá! Sou a **Assistente Zemda**. Como posso apoiar o seu trabalho hoje?\n\n- *"Resuma o prontuário deste paciente"*\n- *"Crie uma linha do tempo com os marcos clínicos"*\n- *"Organize este relato no formato SOAP"*\n- *"Prepare um rascunho de encaminhamento"*\n- *"Mostre os horários livres de amanhã"*\n- *"Quantos atendimentos e cancelamentos tivemos este mês?"*`,
-        intent: 'HELP'
-      });
+      // Fallback amigável
+      const fallbackReply = `Olá! Sou a **Assistente Zemda**. Como posso apoiar o seu trabalho hoje?\n\n` +
+        `- *"Resuma o prontuário deste paciente"*\n` +
+        `- *"Crie uma linha do tempo com os marcos clínicos"*\n` +
+        `- *"Organize este relato no formato SOAP"*\n` +
+        `- *"Prepare um rascunho de encaminhamento"*\n` +
+        `- *"Compare as últimas evoluções"*\n` +
+        `- *"Mostre os horários livres de amanhã"*\n` +
+        `- *"Quantos atendimentos e cancelamentos tivemos este mês?"*\n` +
+        `- *"Identifique informações faltantes no prontuário"*`;
+
+      if (convId) saveToConversation(convId, tenantId, text, fallbackReply);
+      res.json({ reply: fallbackReply, intent: 'HELP', conversationId: convId });
     } catch (err: any) {
       console.error('[AIController.chat] Erro:', err);
       res.status(500).json({ error: 'Erro no assistente de inteligência artificial' });
     }
   }
 
-  // 2. FERRAMENTA DE MELHORIA TEXTUAL (ORIGINAL VS IA)
+  // ================================================================
+  // 2. MELHORIA TEXTUAL
+  // ================================================================
   static async improveText(req: Request, res: Response): Promise<void> {
     try {
       const { text, mode } = req.body;
@@ -282,6 +458,22 @@ export class AIController {
       }
 
       const originalText = text.trim();
+
+      // Tenta com Gemini primeiro
+      if (GeminiService.isAvailable()) {
+        const result = await GeminiService.improveText(originalText, mode || 'grammar');
+        if (result) {
+          res.json({
+            originalText,
+            improvedText: result.improvedText,
+            explanation: result.explanation,
+            disclaimer: 'Rascunho gerado por IA — revise antes de salvar.'
+          });
+          return;
+        }
+      }
+
+      // Fallback heurístico
       let improvedText = originalText;
       let explanation = '';
 
@@ -311,7 +503,7 @@ export class AIController {
           explanation = 'Texto convertido para parágrafo corrido e coeso.';
           break;
         case 'soap':
-          improvedText = formatSoap(originalText);
+          improvedText = formatSoapFallback(originalText);
           explanation = 'Estruturado nos eixos Subjetivo, Objetivo, Avaliação e Plano.';
           break;
         default:
@@ -331,7 +523,9 @@ export class AIController {
     }
   }
 
-  // 3. GESTÃO DE CONVERSAS SALVAS
+  // ================================================================
+  // 3. GESTÃO DE CONVERSAS
+  // ================================================================
   static async listConversations(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.tenantId;
@@ -365,24 +559,15 @@ export class AIController {
 
       if (existing) {
         db.prepare(`
-          UPDATE ai_conversations SET
-            title = ?,
-            messages_json = ?,
-            updated_at = datetime('now')
+          UPDATE ai_conversations SET title = ?, messages_json = ?, updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
         `).run(title || 'Conversa com IA', JSON.stringify(messages || []), convId, tenantId);
         res.json({ id: convId, message: 'Conversa atualizada' });
       } else {
         db.prepare(`
-          INSERT INTO ai_conversations (
-            id, tenant_id, user_id, patient_id, title, context_scope, messages_json
-          )
+          INSERT INTO ai_conversations (id, tenant_id, user_id, patient_id, title, context_scope, messages_json)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          convId, tenantId, userId, patientId || null,
-          title || 'Nova Conversa', contextScope || 'general',
-          JSON.stringify(messages || [])
-        );
+        `).run(convId, tenantId, userId, patientId || null, title || 'Nova Conversa', contextScope || 'general', JSON.stringify(messages || []));
         res.status(201).json({ id: convId, message: 'Conversa iniciada' });
       }
     } catch (err: any) {
@@ -401,10 +586,98 @@ export class AIController {
     }
   }
 
-  // 4. FEEDBACK DA IA
+  // ================================================================
+  // 4. TRANSCRIÇÃO E SÍNTESE DE CONSULTA
+  // ================================================================
+  static async summarizeConsultation(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      const { transcript, transcriptText, patientId, appointmentId } = req.body;
+      const rawInput = transcript || transcriptText;
+
+      if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length === 0) {
+        res.status(400).json({ error: 'Nenhum texto de áudio ou transcrição foi fornecido.' });
+        return;
+      }
+
+      const raw = rawInput.trim();
+
+      // Busca contexto do paciente
+      let patientName = 'Paciente';
+      let patientAge = '';
+      if (patientId && tenantId) {
+        const p = db.prepare('SELECT full_name, birth_date FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+        if (p) {
+          patientName = p.full_name;
+          if (p.birth_date) patientAge = `${calculateAge(p.birth_date)} anos`;
+        }
+      }
+
+      // Tenta com Gemini
+      if (GeminiService.isAvailable()) {
+        const result = await GeminiService.synthesizeConsultation(raw, patientName, patientAge);
+        if (result) {
+          res.json({
+            structured: {
+              chiefComplaint: result.chiefComplaint,
+              anamnesis: result.anamnesis,
+              physicalExam: result.clinicalExams,
+              conduct: result.planAndConduct
+            },
+            summary: result,
+            summaryText: result.fullDraft,
+            fullDraft: result.fullDraft,
+            rawTranscript: raw,
+            disclaimer: 'Rascunho gerado a partir do áudio gravado na consulta. Revise antes de salvar.'
+          });
+          return;
+        }
+      }
+
+      // Fallback heurístico
+      const synthesis = buildClinicalSynthesisFallback(raw, patientName, patientAge);
+      const fullDraft = `### 1. Queixa Principal\n${synthesis.chiefComplaint}\n\n### 2. Anamnese & Histórico Clínico\n${synthesis.anamnesis}\n\n### 3. Exame Clínico / Observações\n${synthesis.clinicalExams}\n\n### 4. Hipóteses & Conduta Terapêutica\n${synthesis.planAndConduct}`;
+
+      res.json({
+        structured: {
+          chiefComplaint: synthesis.chiefComplaint,
+          anamnesis: synthesis.anamnesis,
+          physicalExam: synthesis.clinicalExams,
+          conduct: synthesis.planAndConduct
+        },
+        summary: synthesis,
+        summaryText: fullDraft,
+        fullDraft,
+        rawTranscript: raw,
+        disclaimer: 'Rascunho gerado a partir do áudio gravado na consulta. Revise antes de salvar.'
+      });
+    } catch (err: any) {
+      console.error('[AIController.summarizeConsultation] Erro:', err);
+      res.status(500).json({ error: 'Erro ao sintetizar áudio da consulta' });
+    }
+  }
+
+  // ================================================================
+  // 5. FEEDBACK DA IA (agora persiste no banco)
+  // ================================================================
   static async recordFeedback(req: Request, res: Response): Promise<void> {
     try {
-      const { feedback, context } = req.body;
+      const { feedback, context, messageText } = req.body;
+      const tenantId = req.tenantId;
+      const userId = req.user?.userId;
+
+      // Persiste no audit log para rastreamento
+      try {
+        const id = uuidv4();
+        db.prepare(`
+          INSERT INTO audit_logs (id, tenant_id, user_id, action, entity, details_json)
+          VALUES (?, ?, ?, 'ai_feedback', 'ai_assistant', ?)
+        `).run(id, tenantId, userId, JSON.stringify({ feedback, context, messageText, timestamp: new Date().toISOString() }));
+      } catch (e) {
+        // Falha silenciosa no log — não deve bloquear a resposta
+        console.error('[AI Feedback] Erro ao persistir:', e);
+      }
+
       console.log('[AI Feedback]', {
         user: req.user?.email,
         tenant: req.tenantId,
@@ -412,6 +685,7 @@ export class AIController {
         context,
         timestamp: new Date().toISOString()
       });
+
       res.json({ success: true, message: 'Obrigado pelo seu feedback!' });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao registrar feedback' });
@@ -419,24 +693,283 @@ export class AIController {
   }
 }
 
-// Helpers de processamento de texto
+// ============================================================================
+// FUNÇÕES AUXILIARES — CONTEXT BUILDER
+// ============================================================================
+
+function buildContextString(
+  patientCtx: any,
+  appointmentCtx: any,
+  tenantId: string,
+  user: any
+): string {
+  const parts: string[] = [];
+
+  parts.push(`Profissional logado: ${user?.name || 'Não identificado'} (${user?.role || '-'})`);
+  parts.push(`Data/hora atual: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
+
+  if (appointmentCtx) {
+    parts.push(`\n--- ATENDIMENTO ATUAL ---`);
+    parts.push(`Paciente: ${appointmentCtx.patient_name}`);
+    parts.push(`Profissional: ${appointmentCtx.prof_name}`);
+    parts.push(`Serviço: ${appointmentCtx.service_name}`);
+    parts.push(`Horário: ${appointmentCtx.start_time} a ${appointmentCtx.end_time}`);
+    parts.push(`Status: ${appointmentCtx.status}`);
+    if (appointmentCtx.patient_notes) parts.push(`Observações do paciente: ${appointmentCtx.patient_notes}`);
+    if (appointmentCtx.internal_notes) parts.push(`Notas internas: ${appointmentCtx.internal_notes}`);
+  }
+
+  if (patientCtx) {
+    const p = patientCtx.patient;
+    parts.push(`\n--- DADOS DO PACIENTE ---`);
+    parts.push(`Nome: ${p.full_name}`);
+    parts.push(`Idade: ${p.birth_date ? calculateAge(p.birth_date) + ' anos' : 'Não informada'}`);
+    parts.push(`Telefone: ${p.phone || 'Não informado'}`);
+    parts.push(`Email: ${p.email || 'Não informado'}`);
+    parts.push(`CPF: ${p.cpf || 'Não informado'}`);
+    if (p.emergency_contact) parts.push(`Contato de emergência: ${p.emergency_contact} (${p.emergency_phone || '-'})`);
+    if (p.notes_admin) parts.push(`Observações administrativas: ${p.notes_admin}`);
+
+    // Alergias
+    const activeAllergies = patientCtx.allergies.filter((a: any) => a.status === 'active');
+    if (activeAllergies.length > 0) {
+      parts.push(`\nALERGIAS ATIVAS:`);
+      for (const a of activeAllergies) {
+        parts.push(`- ${a.agent} | Reação: ${a.reaction || 'Não descrita'} | Gravidade: ${a.severity || 'Não classificada'}`);
+      }
+    } else if (p.allergies_status === 'none_known') {
+      parts.push(`ALERGIAS: Nenhuma alergia conhecida (NKDA)`);
+    } else {
+      parts.push(`ALERGIAS: Status não informado`);
+    }
+
+    // Medicamentos
+    const activeMeds = patientCtx.medications.filter((m: any) => m.status === 'active');
+    if (activeMeds.length > 0) {
+      parts.push(`\nMEDICAMENTOS EM USO:`);
+      for (const m of activeMeds) {
+        parts.push(`- ${m.name} | Dosagem: ${m.dosage || '-'} | Frequência: ${m.frequency || '-'} | Via: ${m.route || '-'} | Início: ${m.start_date || '-'}`);
+      }
+    } else {
+      parts.push(`MEDICAMENTOS: Nenhum medicamento ativo registrado`);
+    }
+
+    // Evoluções clínicas
+    if (patientCtx.records.length > 0) {
+      parts.push(`\nEVOLUÇÕES CLÍNICAS (${patientCtx.records.length} registros, mais recentes primeiro):`);
+      for (const rec of patientCtx.records) {
+        parts.push(`\n[${rec.session_date}] ${rec.title || 'Consulta'} — Prof. ${rec.prof_name || 'Não identificado'}`);
+        if (rec.clinical_evolution) parts.push(`Evolução: ${rec.clinical_evolution}`);
+        if (rec.technical_notes) parts.push(`Notas técnicas: ${rec.technical_notes}`);
+      }
+    } else {
+      parts.push(`\nEVOLUÇÕES CLÍNICAS: Nenhuma evolução registrada no período.`);
+    }
+
+    // Exames
+    if (patientCtx.exams.length > 0) {
+      parts.push(`\nEXAMES (${patientCtx.exams.length} registrados):`);
+      for (const ex of patientCtx.exams) {
+        parts.push(`- [${ex.exam_date || '-'}] ${ex.title} (${ex.exam_type || 'Tipo não inf.'}) ${ex.notes ? '| Notas: ' + ex.notes : ''}`);
+      }
+    }
+
+    // Consultas anteriores
+    if (patientCtx.pastAppts.length > 0) {
+      parts.push(`\nÚLTIMAS CONSULTAS:`);
+      for (const ap of patientCtx.pastAppts.slice(0, 5)) {
+        const time = ap.start_time?.split('T')[1]?.slice(0, 5) || '--:--';
+        parts.push(`- [${ap.start_time?.split('T')[0] || '-'}] ${time} | ${ap.service_name || 'Serviço'} | Prof. ${ap.prof_name || '-'} | Status: ${ap.status}`);
+      }
+    }
+
+    // Anamneses
+    if (patientCtx.anamnesis && patientCtx.anamnesis.length > 0) {
+      parts.push(`\nANAMNESES REGISTRADAS:`);
+      for (const an of patientCtx.anamnesis) {
+        parts.push(`- ${an.title || 'Anamnese'} (${an.template_type || 'geral'}) — v${an.version || 1}`);
+        if (an.content_json) {
+          try {
+            const content = JSON.parse(an.content_json);
+            if (typeof content === 'object') {
+              for (const [key, value] of Object.entries(content)) {
+                if (value) parts.push(`  ${key}: ${value}`);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    }
+  }
+
+  // Dados administrativos gerais (se sem paciente)
+  if (!patientCtx) {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const todayAppts = db.prepare(`
+        SELECT COUNT(*) as total,
+          SUM(CASE WHEN status = 'scheduled' THEN 1 ELSE 0 END) as scheduled,
+          SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+        FROM appointments WHERE tenant_id = ? AND start_time LIKE ?
+      `).get(tenantId, `${today}%`) as any;
+
+      if (todayAppts) {
+        parts.push(`\n--- RESUMO DO DIA ---`);
+        parts.push(`Agendamentos de hoje: ${todayAppts.total || 0} (${todayAppts.scheduled || 0} agendados, ${todayAppts.confirmed || 0} confirmados, ${todayAppts.completed || 0} concluídos)`);
+      }
+
+      const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+      const monthMetrics = db.prepare(`
+        SELECT COUNT(*) as total,
+          SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+          SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+          SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show
+        FROM appointments WHERE tenant_id = ? AND start_time >= ?
+      `).get(tenantId, monthStart) as any;
+
+      if (monthMetrics) {
+        parts.push(`Métricas do mês: ${monthMetrics.total || 0} agendamentos, ${monthMetrics.completed || 0} concluídos, ${monthMetrics.cancelled || 0} cancelados, ${monthMetrics.no_show || 0} faltas`);
+      }
+
+      const revenue = db.prepare(`SELECT SUM(amount) as s FROM payments WHERE tenant_id = ? AND status = 'paid' AND created_at >= ?`).get(tenantId, monthStart) as any;
+      if (revenue?.s) {
+        parts.push(`Faturamento do mês: R$ ${Number(revenue.s).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+      }
+    } catch (e) {}
+  }
+
+  return parts.join('\n');
+}
+
+// ============================================================================
+// SUGESTÕES PROATIVAS
+// ============================================================================
+
+function generateProactiveSuggestions(patientCtx: any, appointmentCtx: any): string[] {
+  const suggestions: string[] = [];
+  if (!patientCtx) return suggestions;
+
+  const p = patientCtx.patient;
+  const records = patientCtx.records || [];
+  const allergies = patientCtx.allergies || [];
+  const medications = patientCtx.medications || [];
+
+  // Prontuário extenso → sugerir resumo
+  if (records.length > 5) {
+    suggestions.push('📋 Prontuário extenso com ' + records.length + ' evoluções. Deseja que eu faça um resumo?');
+  }
+
+  // Alergias não verificadas
+  if (!p.allergies_status || (p.allergies_status !== 'none_known' && allergies.filter((a: any) => a.status === 'active').length === 0)) {
+    suggestions.push('⚠️ Status de alergias não verificado. Deseja revisar?');
+  }
+
+  // Sem evolução registrada recentemente
+  if (records.length > 0) {
+    const lastRecord = records[0];
+    const lastDate = new Date(lastRecord.session_date || lastRecord.created_at);
+    const daysSince = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSince > 90) {
+      suggestions.push('📝 Última evolução registrada há ' + daysSince + ' dias. Pode ser útil revisar o quadro atual.');
+    }
+  }
+
+  // Atendimento sem evolução
+  if (appointmentCtx && appointmentCtx.status === 'in_progress') {
+    const hasRecord = records.some((r: any) => r.appointment_id === appointmentCtx.id);
+    if (!hasRecord) {
+      suggestions.push('📝 Atendimento em andamento sem evolução registrada. Posso ajudar a estruturar?');
+    }
+  }
+
+  // Medicamentos antigos sem revisão
+  const activeMeds = medications.filter((m: any) => m.status === 'active');
+  if (activeMeds.length > 3) {
+    suggestions.push('💊 Paciente com ' + activeMeds.length + ' medicamentos ativos. Deseja revisar a lista?');
+  }
+
+  return suggestions.slice(0, 3); // Máximo 3 sugestões
+}
+
+// ============================================================================
+// DETECÇÃO DE INTENÇÕES E AÇÕES
+// ============================================================================
+
+function detectIntent(userMessage: string, aiReply: string): string {
+  const lower = userMessage.toLowerCase();
+  const replyLower = aiReply.toLowerCase();
+
+  if (lower.includes('resuma') || lower.includes('resumo') || lower.includes('histórico') || lower.includes('historico')) return 'PATIENT_SUMMARY';
+  if (lower.includes('linha do tempo') || lower.includes('timeline') || lower.includes('marcos')) return 'CLINICAL_TIMELINE';
+  if (lower.includes('soap') || lower.includes('organiz') || lower.includes('estrutur')) return 'SOAP_STRUCTURE';
+  if (lower.includes('encaminhamento') || lower.includes('relatório') || lower.includes('relatorio')) return 'REFERRAL_DRAFT';
+  if (lower.includes('agenda') || lower.includes('consulta') || lower.includes('atendimento')) return 'AGENDA_TODAY';
+  if (lower.includes('faturamento') || lower.includes('financeiro') || lower.includes('receita')) return 'FINANCIAL_SUMMARY';
+  if (lower.includes('horário') || lower.includes('livre') || lower.includes('disponív')) return 'CHECK_AVAILABILITY';
+  if (lower.includes('métrica') || lower.includes('estatística') || lower.includes('cancelados')) return 'METRICS';
+  if (lower.includes('compare') || lower.includes('comparar') || lower.includes('comparação')) return 'COMPARE_EVOLUTIONS';
+  if (lower.includes('faltante') || lower.includes('faltando') || lower.includes('incompleto')) return 'MISSING_INFO';
+  if (lower.includes('pendência') || lower.includes('pendente')) return 'PENDING_TASKS';
+
+  return 'AI_RESPONSE';
+}
+
+function buildActions(intent: string, patientId: string | undefined, patientCtx: any): any[] {
+  const actions: any[] = [];
+
+  if (patientId && patientCtx) {
+    if (intent === 'PATIENT_SUMMARY' || intent === 'CLINICAL_TIMELINE') {
+      actions.push({ type: 'VIEW_PATIENT', label: 'Ver Prontuário Completo', patientId });
+    }
+  }
+
+  if (intent === 'AGENDA_TODAY') {
+    actions.push({ type: 'NAVIGATE', label: 'Ver Agenda Completa', target: 'calendar' });
+  }
+
+  if (intent === 'FINANCIAL_SUMMARY' || intent === 'METRICS') {
+    actions.push({ type: 'NAVIGATE', label: 'Abrir Painel Financeiro', target: 'financial' });
+  }
+
+  return actions;
+}
+
+// ============================================================================
+// PERSISTÊNCIA DE CONVERSA
+// ============================================================================
+
+function saveToConversation(convId: string, tenantId: string, userText: string, aiReply: string): void {
+  try {
+    const conv = db.prepare('SELECT messages_json FROM ai_conversations WHERE id = ? AND tenant_id = ?').get(convId, tenantId) as any;
+    if (conv) {
+      const msgs = JSON.parse(conv.messages_json || '[]');
+      msgs.push({ sender: 'user', text: userText, timestamp: new Date().toISOString() });
+      msgs.push({ sender: 'assistant', text: aiReply, timestamp: new Date().toISOString() });
+      db.prepare('UPDATE ai_conversations SET messages_json = ?, updated_at = datetime("now") WHERE id = ?').run(JSON.stringify(msgs), convId);
+    }
+  } catch (e) {
+    console.error('[AIController.saveToConversation] Erro:', e);
+  }
+}
+
+// ============================================================================
+// HELPERS — MOTOR HEURÍSTICO (fallback quando Gemini indisponível)
+// ============================================================================
+
 function calculateAge(birthDateStr: string): number {
   const birth = new Date(birthDateStr);
   const now = new Date();
   let age = now.getFullYear() - birth.getFullYear();
   const m = now.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
-    age--;
-  }
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
   return age >= 0 ? age : 0;
 }
 
 function cleanGrammar(text: string): string {
   let res = text.trim();
   res = res.charAt(0).toUpperCase() + res.slice(1);
-  if (!res.endsWith('.') && !res.endsWith('!') && !res.endsWith('?')) {
-    res += '.';
-  }
+  if (!res.endsWith('.') && !res.endsWith('!') && !res.endsWith('?')) res += '.';
   return res;
 }
 
@@ -448,7 +981,18 @@ function makeTechnical(text: string): string {
     .replace(/\btontura\b/gi, 'vertigem')
     .replace(/\bcansaço\b/gi, 'fadiga')
     .replace(/\btristeza profunda\b/gi, 'humor depressivo')
-    .replace(/\bmuito ansioso\b/gi, 'quadro de ansiedade exacerbada');
+    .replace(/\bmuito ansioso\b/gi, 'quadro de ansiedade exacerbada')
+    .replace(/\binchaço\b/gi, 'edema')
+    .replace(/\bpressão alta\b/gi, 'hipertensão arterial')
+    .replace(/\baçúcar alto\b/gi, 'hiperglicemia')
+    .replace(/\bdor no peito\b/gi, 'precordialgia')
+    .replace(/\bdor nas costas\b/gi, 'dorsalgia')
+    .replace(/\bdor de barriga\b/gi, 'dor abdominal')
+    .replace(/\bfebre\b/gi, 'estado febril')
+    .replace(/\bvômito\b/gi, 'êmese')
+    .replace(/\bcoceira\b/gi, 'prurido')
+    .replace(/\bvermelhidão\b/gi, 'hiperemia')
+    .replace(/\bformigamento\b/gi, 'parestesia');
   return cleanGrammar(res);
 }
 
@@ -467,19 +1011,14 @@ function formatBullets(text: string): string {
   return parts.map(p => `• ${p}`).join('\n');
 }
 
-function formatSoap(raw: string): string {
+function formatSoapFallback(raw: string): string {
   return `**S (Subjetivo):**\nPaciente relata queixa principal e evolução dos sintomas desde a última sessão: "${raw.slice(0, 150)}..."\n\n**O (Objetivo):**\nExame do estado geral e observações clínicas preservadas. Sinais e postura condizentes com o relato.\n\n**A (Avaliação):**\nQuadro clínico estável. Boa compreensão das orientações e adesão às condutas terapêuticas.\n\n**P (Plano):**\nManutenção da conduta habitual. Orientações preventivas reforçadas. Retorno programado conforme evolução.`;
 }
 
 function parseDateFromText(text: string): Date {
   const d = new Date();
-  if (text.includes('amanhã') || text.includes('amanha')) {
-    d.setDate(d.getDate() + 1);
-    return d;
-  }
-  if (text.includes('hoje')) {
-    return d;
-  }
+  if (text.includes('amanhã') || text.includes('amanha')) { d.setDate(d.getDate() + 1); return d; }
+  if (text.includes('hoje')) return d;
 
   const daysMap: Record<string, number> = {
     'domingo': 0, 'segunda': 1, 'terça': 2, 'terca': 2,
@@ -502,9 +1041,47 @@ function parseDateFromText(text: string): Date {
 
 function formatBrDate(dateStr: string): string {
   const parts = dateStr.split('-');
-  if (parts.length === 3) {
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
-  }
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
   return dateStr;
 }
 
+// Exporta para uso em outros módulos (ex: QuickConsultationModal)
+export function buildClinicalSynthesis(rawText: string, patientName: string = 'Paciente', patientAge: string = ''): {
+  chiefComplaint: string; anamnesis: string; clinicalExams: string;
+  physicalExam: string; planAndConduct: string; conduct: string;
+} {
+  return buildClinicalSynthesisFallback(rawText, patientName, patientAge);
+}
+
+function buildClinicalSynthesisFallback(rawText: string, patientName: string = 'Paciente', patientAge: string = ''): {
+  chiefComplaint: string; anamnesis: string; clinicalExams: string;
+  physicalExam: string; planAndConduct: string; conduct: string;
+} {
+  const clean = rawText.trim();
+  const sentences = clean.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 2);
+
+  const qpKeywords = ['dor', 'sinto', 'sentindo', 'queixa', 'começou', 'veio por', 'incomodando', 'febre', 'mal estar', 'falta de ar', 'cansaço', 'tontura'];
+  const anKeywords = ['histórico', 'dias', 'semanas', 'meses', 'tomo', 'tomando', 'remédio', 'medicamento', 'pressão', 'diabetes', 'alergia', 'cirurgia', 'anterior', 'crônico'];
+  const exKeywords = ['exame', 'pressão', 'fc', 'batimento', 'ausculta', 'temperatura', 'pulmão', 'abdômen', 'garganta', 'olho', 'palpação', 'peso', 'altura', 'sinais'];
+  const cdKeywords = ['prescrevo', 'receita', 'orientação', 'retorno', 'exercício', 'dieta', 'repouso', 'solicito', 'tomar', 'conduta', 'plano', 'acompanhamento'];
+
+  const qpMatches: string[] = [], anMatches: string[] = [], exMatches: string[] = [], cdMatches: string[] = [];
+
+  for (const s of sentences) {
+    const sLower = s.toLowerCase();
+    if (qpKeywords.some(k => sLower.includes(k)) && qpMatches.length < 3) qpMatches.push(cleanGrammar(s));
+    else if (exKeywords.some(k => sLower.includes(k)) && exMatches.length < 3) exMatches.push(cleanGrammar(s));
+    else if (cdKeywords.some(k => sLower.includes(k)) && cdMatches.length < 3) cdMatches.push(cleanGrammar(s));
+    else anMatches.push(cleanGrammar(s));
+  }
+
+  const chiefComplaint = qpMatches.length > 0 ? qpMatches.join(' ') : cleanGrammar(sentences[0] || 'Paciente comparece relatando sintomas para avaliação clínica.');
+  const anamnesis = anMatches.length > 0 ? anMatches.join(' ') : `Paciente ${patientName}${patientAge ? ` (${patientAge})` : ''} refere evolução dos sintomas e histórico clínico recente em acompanhamento.`;
+  const clinicalExams = exMatches.length > 0 ? exMatches.join(' ') : 'Estado geral estável. Avaliação clínica e observações compatíveis com o quadro apresentado.';
+  const planAndConduct = cdMatches.length > 0 ? cdMatches.join(' ') : 'Orientações clínicas transmitidas, conduta terapêutica alinhada e acompanhamento programado conforme evolução.';
+
+  return {
+    chiefComplaint, anamnesis, clinicalExams,
+    physicalExam: clinicalExams, planAndConduct, conduct: planAndConduct
+  };
+}

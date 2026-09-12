@@ -61,6 +61,24 @@ export function calculateAvailableSlots(
   // 4. Obtém o dia da semana (0 = Domingo, 1 = Segunda, ..., 6 = Sábado)
   const dayOfWeek = targetDate.getDay();
 
+  // 4b. Checa horários de funcionamento da clínica (Item 3)
+  const tenantRow = db.prepare('SELECT business_hours_json FROM tenants WHERE id = ?').get(tenantId) as { business_hours_json?: string } | undefined;
+  let clinicDayConfig: { isOpen?: boolean; active?: boolean; startTime?: string; endTime?: string; breakStart?: string; breakEnd?: string } | null = null;
+  if (tenantRow?.business_hours_json) {
+    try {
+      const bhList = JSON.parse(tenantRow.business_hours_json);
+      if (Array.isArray(bhList)) {
+        const found = bhList.find((bh: any) => Number(bh.dayOfWeek) === dayOfWeek);
+        if (found) {
+          clinicDayConfig = found;
+          if (found.isOpen === false || found.active === false) {
+            return []; // Clínica não abre neste dia da semana
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   // 5. Busca a grade de trabalho do profissional para este dia da semana
   const schedStmt = db.prepare(`
     SELECT start_time, end_time, break_start, break_end
@@ -122,13 +140,25 @@ export function calculateAvailableSlots(
   const breakStartMin = schedule.break_start ? timeToMinutes(schedule.break_start) : null;
   const breakEndMin = schedule.break_end ? timeToMinutes(schedule.break_end) : null;
 
+  // Interseção entre o expediente da clínica e a escala do profissional
+  let clinicStartMin = 0;
+  let clinicEndMin = 24 * 60;
+  if (clinicDayConfig?.startTime) clinicStartMin = timeToMinutes(clinicDayConfig.startTime);
+  if (clinicDayConfig?.endTime) clinicEndMin = timeToMinutes(clinicDayConfig.endTime);
+
+  const effectiveStartMin = Math.max(workStartMin, clinicStartMin);
+  const effectiveEndMin = Math.min(workEndMin, clinicEndMin);
+
+  const clinicBreakStartMin = clinicDayConfig?.breakStart ? timeToMinutes(clinicDayConfig.breakStart) : null;
+  const clinicBreakEndMin = clinicDayConfig?.breakEnd ? timeToMinutes(clinicDayConfig.breakEnd) : null;
+
   const slots: AvailableSlot[] = [];
   const minLeadHours = service.min_lead_time_hours || 2;
   const isToday = targetDate.getTime() === todayOnly.getTime();
   const currentTotalMinutes = now.getHours() * 60 + now.getMinutes() + (minLeadHours * 60);
 
   // 8. Itera sobre os minutos de trabalho gerando intervalos
-  for (let current = workStartMin; current + duration <= workEndMin; current += totalSlotDuration) {
+  for (let current = effectiveStartMin; current + duration <= effectiveEndMin; current += totalSlotDuration) {
     const slotEndMin = current + duration;
 
     // Se for hoje, checa a antecedência mínima
@@ -136,13 +166,23 @@ export function calculateAvailableSlots(
       continue;
     }
 
-    // Checa conflito com intervalo de almoço
+    // Checa conflito com intervalo de almoço do profissional
     if (breakStartMin !== null && breakEndMin !== null) {
-      // Se o atendimento começar ou terminar dentro do almoço, ou englobar o almoço
       if (
         (current >= breakStartMin && current < breakEndMin) ||
         (slotEndMin > breakStartMin && slotEndMin <= breakEndMin) ||
         (current <= breakStartMin && slotEndMin >= breakEndMin)
+      ) {
+        continue;
+      }
+    }
+
+    // Checa conflito com intervalo da clínica
+    if (clinicBreakStartMin !== null && clinicBreakEndMin !== null) {
+      if (
+        (current >= clinicBreakStartMin && current < clinicBreakEndMin) ||
+        (slotEndMin > clinicBreakStartMin && slotEndMin <= clinicBreakEndMin) ||
+        (current <= clinicBreakStartMin && slotEndMin >= clinicBreakEndMin)
       ) {
         continue;
       }

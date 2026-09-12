@@ -39,6 +39,32 @@ const AppContent: React.FC = () => {
   const [isNewApptOpen, setIsNewApptOpen] = useState<boolean>(false);
   const [isNewPatientOpen, setIsNewPatientOpen] = useState<boolean>(false);
 
+  // Contexto ativo para a IA — rastreado via eventos de componentes filhos
+  const [aiActivePatientId, setAiActivePatientId] = useState<string | undefined>(undefined);
+  const [aiActiveAppointmentId, setAiActiveAppointmentId] = useState<string | undefined>(undefined);
+
+  // Escuta eventos de contexto disparados por componentes filhos (PatientsView, CalendarView, etc.)
+  useEffect(() => {
+    const handlePatientContext = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.patientId) setAiActivePatientId(detail.patientId);
+      else setAiActivePatientId(undefined);
+    };
+    const handleAppointmentContext = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.appointmentId) setAiActiveAppointmentId(detail.appointmentId);
+      else setAiActiveAppointmentId(undefined);
+      if (detail?.patientId) setAiActivePatientId(detail.patientId);
+    };
+
+    window.addEventListener('zemda-ai-patient-context', handlePatientContext);
+    window.addEventListener('zemda-ai-appointment-context', handleAppointmentContext);
+    return () => {
+      window.removeEventListener('zemda-ai-patient-context', handlePatientContext);
+      window.removeEventListener('zemda-ai-appointment-context', handleAppointmentContext);
+    };
+  }, []);
+
   useEffect(() => {
     if (currentUser?.role === 'superadmin') {
       setCurrentView('superadmin');
@@ -287,6 +313,8 @@ const AppContent: React.FC = () => {
         isOpen={isAIOpen}
         onClose={() => setIsAIOpen(false)}
         onAppointmentCreated={() => setCurrentView('calendar')}
+        activePatientId={aiActivePatientId}
+        activeAppointmentId={aiActiveAppointmentId}
       />
     </div>
   );

@@ -17,40 +17,38 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
 
   const tenantId = req.tenantId;
 
-  // Se gestor/admin da clínica, verificar permissão assistencial
+  // 1. O gerenciador / administrador da clínica tem acesso aos prontuários da própria clínica
   if (req.user.role === 'clinic_admin') {
-    const clinicUser = db.prepare('SELECT permissions_json, is_manager FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
-    if (clinicUser?.permissions_json && (clinicUser.permissions_json.includes('clinical_access_all') || clinicUser.permissions_json.includes('clinical_records_all'))) {
-      return true;
-    }
+    const patientBelongsToClinic = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+    return Boolean(patientBelongsToClinic);
   }
 
-  // Se profissional de saúde
-  const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
-  if (prof) {
+  // 2. Um profissional de saúde só pode visualizar os prontuários e evoluções de um paciente
+  // se tiver consulta agendada com ele, encaminhamento ativo ou histórico de atendimento com ele.
+  if (req.user.role === 'professional') {
+    const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+    if (!prof) {
+      return false;
+    }
     const profId = prof.id;
 
-    // 1. Possui ou possuiu consulta agendada com este paciente
+    // a. Possui ou possuiu consulta agendada com este paciente
     const hasAppt = db.prepare('SELECT 1 FROM appointments WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1').get(tenantId, patientId, profId);
     if (hasAppt) return true;
 
-    // 2. Possui encaminhamento ativo destinado a este profissional (Item 9)
+    // b. Possui encaminhamento ativo destinado a este profissional
     const hasReferral = db.prepare('SELECT 1 FROM patient_referrals WHERE tenant_id = ? AND patient_id = ? AND to_professional_id = ? LIMIT 1').get(tenantId, patientId, profId);
     if (hasReferral) return true;
 
-    // 3. Foi autor de evolução clínica prévia
+    // c. Foi autor de evolução clínica prévia
     const hasRecord = db.prepare('SELECT 1 FROM records WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1').get(tenantId, patientId, profId);
     if (hasRecord) return true;
 
+    // Caso o profissional não tenha nenhum vínculo assistencial com o paciente, os dados clínicos permanecem bloqueados
     return false;
   }
 
-  // Demais perfis administrativos (Recepção / Secretária): sem acesso clínico salvo permissão específica
-  const cu = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
-  if (cu?.permissions_json && cu.permissions_json.includes('clinical_records_all')) {
-    return true;
-  }
-
+  // 3. Outros perfis (recepção, administrativo) não devem ter acesso aos dados clínicos confidenciais
   return false;
 }
 
@@ -203,6 +201,11 @@ export class ClinicalController {
         return;
       }
 
+      if (!hasClinicalAccess(req, record.patient_id)) {
+        res.status(403).json({ error: 'Acesso não autorizado para alteração deste prontuário (Sigilo LGPD)' });
+        return;
+      }
+
       if (record.is_sealed === 1 && !req.body.overrideSealed) {
         res.status(403).json({ error: 'Este prontuário foi lacrado e não pode ser sobrescrito diretamente (integridade legal)' });
         return;
@@ -268,7 +271,7 @@ export class ClinicalController {
       const record = db.prepare(`
         SELECT 
           r.*,
-          p.name as professional_name, p.registration_type, p.registration_number,
+          p.name as professional_name, p.gender as professional_gender, p.registration_type, p.registration_number,
           pat.full_name as patient_name, pat.cpf as patient_cpf, pat.birth_date as patient_birth_date,
           pat.phone as patient_phone, pat.email as patient_email
         FROM records r
@@ -296,6 +299,12 @@ export class ClinicalController {
       // Localidade automática a partir do cadastro da clínica (Item 14)
       const localityText = `${clinicCity}, ${new Date(record.session_date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}`;
 
+      // Formatação de Dr. / Dra. automática (Item 9)
+      const profPrefix = record.professional_gender === 'F' ? 'Dra. ' : 'Dr. ';
+      const formattedProfName = (record.professional_name.startsWith('Dr.') || record.professional_name.startsWith('Dra.'))
+        ? record.professional_name
+        : `${profPrefix}${record.professional_name}`;
+
       const html = `
         <!DOCTYPE html>
         <html lang="pt-BR">
@@ -305,155 +314,199 @@ export class ClinicalController {
           <style>
             @page {
               size: A4;
-              margin: 20mm 15mm 20mm 15mm;
+              margin: 15mm 15mm 15mm 15mm;
+            }
+            * {
+              box-sizing: border-box;
             }
             body {
-              font-family: 'Segoe UI', Arial, sans-serif;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
               color: #1e293b;
               margin: 0;
-              padding: 0;
+              padding: 20px;
               font-size: 11pt;
               line-height: 1.6;
-              background: #fff;
+              background: #f8fafc;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .paper-container {
+              max-width: 210mm;
+              margin: 0 auto;
+              background: #ffffff;
+              padding: 20mm;
+              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+              border-radius: 12px;
             }
             .header-box {
               border-bottom: 2px solid #0d9488;
-              padding-bottom: 12px;
-              margin-bottom: 20px;
+              padding-bottom: 14px;
+              margin-bottom: 24px;
               display: flex;
               align-items: center;
               justify-content: space-between;
+              gap: 16px;
             }
             .clinic-info h2 {
               margin: 0;
               color: #0f172a;
               font-size: 16pt;
-              font-weight: bold;
+              font-weight: 800;
+              letter-spacing: -0.5px;
             }
             .clinic-info p {
-              margin: 2px 0 0 0;
+              margin: 3px 0 0 0;
               font-size: 9pt;
               color: #64748b;
             }
             .clinic-logo {
-              max-height: 55px;
-              max-width: 150px;
-              object-contain: contain;
+              max-height: 60px;
+              max-width: 160px;
+              object-fit: contain;
             }
             .doc-title {
               text-align: center;
               font-size: 14pt;
-              font-weight: bold;
+              font-weight: 800;
               color: #0d9488;
-              margin: 15px 0 20px 0;
+              margin: 20px 0 24px 0;
               text-transform: uppercase;
               letter-spacing: 0.5px;
             }
             .patient-box {
               background-color: #f8fafc;
               border: 1px solid #e2e8f0;
-              border-radius: 8px;
-              padding: 12px 16px;
-              margin-bottom: 20px;
+              border-radius: 10px;
+              padding: 14px 18px;
+              margin-bottom: 24px;
               font-size: 10pt;
             }
             .patient-box p {
               margin: 4px 0;
             }
             .content-section {
-              margin-bottom: 25px;
+              margin-bottom: 24px;
             }
             .section-label {
-              font-weight: bold;
+              font-weight: 700;
               color: #334155;
               font-size: 10.5pt;
               text-transform: uppercase;
               border-bottom: 1px solid #e2e8f0;
               padding-bottom: 4px;
-              margin-bottom: 8px;
+              margin-bottom: 10px;
+              letter-spacing: 0.3px;
             }
             .content-text {
               white-space: pre-wrap;
               font-size: 11pt;
               color: #1e293b;
+              text-align: justify;
             }
             .signature-area {
-              margin-top: 60px;
+              margin-top: 50px;
               text-align: center;
+              page-break-inside: avoid;
+              break-inside: avoid;
             }
             .signature-line {
               width: 280px;
-              border-top: 1px solid #0f172a;
+              border-top: 1.5px solid #0f172a;
               margin: 0 auto 8px auto;
             }
             .prof-name {
-              font-weight: bold;
+              font-weight: 700;
               font-size: 11pt;
+              color: #0f172a;
             }
             .prof-reg {
-              font-size: 9pt;
+              font-size: 9.5pt;
               color: #64748b;
             }
             .locality-date {
               text-align: right;
-              margin-top: 40px;
+              margin-top: 36px;
               font-size: 10pt;
               color: #475569;
             }
             .footer-box {
-              position: fixed;
-              bottom: 0;
-              left: 0;
-              right: 0;
+              margin-top: 40px;
               text-align: center;
               font-size: 8pt;
               color: #94a3b8;
               border-top: 1px solid #e2e8f0;
-              padding-top: 6px;
+              padding-top: 10px;
             }
             @media print {
-              .no-print { display: none !important; }
+              body {
+                background: #fff !important;
+                padding: 0 !important;
+              }
+              .paper-container {
+                box-shadow: none !important;
+                padding: 0 !important;
+                border-radius: 0 !important;
+                max-width: 100% !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+              .patient-box, .content-section, .signature-area {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
             }
           </style>
         </head>
         <body>
-          <div class="header-box">
-            <div class="clinic-info">
-              <h2>${clinicName}</h2>
-              <p>${clinicAddress} | ${clinicCnpj} | Tel: ${clinic?.phone || '-'}</p>
+          <div class="no-print" style="position: sticky; top: 0; background: #0f172a; color: white; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 24px; border-radius: 12px; max-width: 210mm; margin-left: auto; margin-right: auto;">
+            <div style="font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px;">
+              <span>📄 Visualização Oficial do Prontuário Clínico</span>
             </div>
-            ${clinic?.logo_url ? `<img src="${clinic.logo_url}" class="clinic-logo" alt="Logo" />` : ''}
+            <button onclick="window.print()" style="background: #0d9488; color: white; border: none; padding: 8px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(13,148,136,0.4);">
+              🖨️ Imprimir / Salvar em PDF
+            </button>
           </div>
 
-          <div class="doc-title">${record.title}</div>
+          <div class="paper-container">
+            <div class="header-box">
+              <div class="clinic-info">
+                <h2>${clinicName}</h2>
+                <p>${clinicAddress} | ${clinicCnpj} | Tel: ${clinic?.phone || '-'}</p>
+              </div>
+              ${clinic?.logo_url ? `<img src="${clinic.logo_url}" class="clinic-logo" alt="Logo" />` : ''}
+            </div>
 
-          <div class="patient-box">
-            <p><strong>Paciente:</strong> ${record.patient_name} | <strong>CPF:</strong> ${record.patient_cpf || 'Não informado'} | <strong>Nascimento:</strong> ${record.patient_birth_date || '-'}</p>
-            <p><strong>Data do Atendimento:</strong> ${new Date(record.session_date + 'T12:00:00').toLocaleDateString('pt-BR')} | <strong>Profissional:</strong> ${record.professional_name} (${record.registration_type || 'Conselho'} ${record.registration_number || ''})</p>
-          </div>
+            <div class="doc-title">${record.title}</div>
 
-          <div class="content-section">
-            <div class="section-label">Evolução Clínica & Conduta</div>
-            <div class="content-text">${record.clinical_evolution || 'Sem notas clínicas textuais.'}</div>
-          </div>
+            <div class="patient-box">
+              <p><strong>Paciente:</strong> ${record.patient_name} | <strong>CPF:</strong> ${record.patient_cpf || 'Não informado'} | <strong>Nascimento:</strong> ${record.patient_birth_date || '-'}</p>
+              <p><strong>Data do Atendimento:</strong> ${new Date(record.session_date + 'T12:00:00').toLocaleDateString('pt-BR')} | <strong>Profissional:</strong> ${formattedProfName} (${record.registration_type || 'Conselho'} ${record.registration_number || ''})</p>
+            </div>
 
-          ${record.technical_notes ? `
             <div class="content-section">
-              <div class="section-label">Orientações & Anotações Complementares</div>
-              <div class="content-text">${record.technical_notes}</div>
+              <div class="section-label">Evolução Clínica & Conduta</div>
+              <div class="content-text">${record.clinical_evolution || 'Sem notas clínicas textuais.'}</div>
             </div>
-          ` : ''}
 
-          <div class="locality-date">${localityText}</div>
+            ${record.technical_notes ? `
+              <div class="content-section">
+                <div class="section-label">Orientações & Anotações Complementares</div>
+                <div class="content-text">${record.technical_notes}</div>
+              </div>
+            ` : ''}
 
-          <div class="signature-area">
-            <div class="signature-line"></div>
-            <div class="prof-name">${record.professional_name}</div>
-            <div class="prof-reg">${record.registration_type || 'Registro'}: ${record.registration_number || '-'}</div>
-          </div>
+            <div class="locality-date">${localityText}</div>
 
-          <div class="footer-box">
-            Documento emitido eletronicamente pela Plataforma Zemda • Válido como prontuário clínico oficial • Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}
+            <div class="signature-area">
+              <div class="signature-line"></div>
+              <div class="prof-name">${formattedProfName}</div>
+              <div class="prof-reg">${record.registration_type || 'Registro'}: ${record.registration_number || '-'}</div>
+            </div>
+
+            <div class="footer-box">
+              Documento emitido eletronicamente pela Plataforma Zemda • Válido como prontuário clínico oficial • Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}
+            </div>
           </div>
 
           <script>

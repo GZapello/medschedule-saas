@@ -23,8 +23,10 @@ import {
   Phone,
   Mail,
   User,
-  ExternalLink
+  ExternalLink,
+  Printer
 } from 'lucide-react';
+import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 
 interface PatientProfileModalProps {
   patientId: string;
@@ -52,6 +54,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   const [timelineFilter, setTimelineFilter] = useState<string>('all');
   const [timelineSearch, setTimelineSearch] = useState<string>('');
   const [loadingTimeline, setLoadingTimeline] = useState<boolean>(false);
+  const [printDoc, setPrintDoc] = useState<{ type: 'certificate' | 'prescription' | 'exam_request'; id: string } | null>(null);
 
   // Allergies & Meds state
   const [allergiesStatus, setAllergiesStatus] = useState<string>('not_informed');
@@ -685,9 +688,22 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs hover:border-indigo-200 transition-all">
                           <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
                             <span className="text-xs font-bold text-slate-900">{item.title}</span>
-                            <span className="text-[11px] text-slate-400">
-                              {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : 'Data não informada'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-slate-400">
+                                {item.date ? new Date(item.date).toLocaleDateString('pt-BR') : 'Data não informada'}
+                              </span>
+                              {(item.type === 'certificate' || item.type === 'prescription' || item.type === 'exam_request') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPrintDoc({ type: item.type, id: item.id })}
+                                  className="flex items-center gap-1 text-[11px] font-bold text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-2 py-0.5 rounded-lg border border-teal-200 transition-all cursor-pointer"
+                                  title="Visualizar, imprimir ou salvar PDF"
+                                >
+                                  <Printer className="w-3 h-3" />
+                                  Imprimir / PDF
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <p className="text-xs text-slate-600 leading-relaxed">{item.description}</p>
                           <div className="mt-2 text-[11px] text-slate-400 flex items-center gap-3">
@@ -1568,6 +1584,15 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal de Documento A4 (Visualizar / Imprimir / Baixar PDF) */}
+      {printDoc && (
+        <PrintableDocumentModal
+          documentType={printDoc.type}
+          documentId={printDoc.id}
+          onClose={() => setPrintDoc(null)}
+        />
+      )}
     </div>
   );
 };

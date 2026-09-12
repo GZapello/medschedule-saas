@@ -361,6 +361,7 @@ export class TenantController {
           t.address, t.street, t.number, t.complement, t.neighborhood, t.city, t.state, t.zip_code, t.country,
           t.responsible_name, t.responsible_cpf, t.responsible_email, t.responsible_phone, t.responsible_role,
           t.logo_url, t.primary_color, t.client_term_label, t.status,
+          t.business_hours_json,
           t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.created_at,
           p.name as plan_name, p.slug as plan_slug, p.features_json
         FROM tenants t
@@ -409,8 +410,12 @@ export class TenantController {
         professionalBoard, professionalRegistry, email, phone, mobile, whatsapp, website, description,
         street, number, complement, neighborhood, city, state, zipCode, country,
         responsibleName, responsibleCpf, responsibleEmail, responsiblePhone, responsibleRole,
-        logoUrl, primaryColor, clientTermLabel, settings
+        logoUrl, primaryColor, clientTermLabel, businessHoursJson, businessHours, settings
       } = req.body;
+
+      const rawBusinessHours = businessHoursJson 
+        ? (typeof businessHoursJson === 'string' ? businessHoursJson : JSON.stringify(businessHoursJson))
+        : (businessHours ? JSON.stringify(businessHours) : null);
 
       const fullAddress = street && city ? `${street}, ${number || 'S/N'} - ${neighborhood || ''}, ${city}/${state || ''}` : null;
 
@@ -448,6 +453,7 @@ export class TenantController {
           logo_url = COALESCE(?, logo_url),
           primary_color = COALESCE(?, primary_color),
           client_term_label = COALESCE(?, client_term_label),
+          business_hours_json = COALESCE(?, business_hours_json),
           updated_at = datetime('now')
         WHERE id = ?
       `);
@@ -485,6 +491,7 @@ export class TenantController {
         logoUrl || null,
         primaryColor || null,
         clientTermLabel || null,
+        rawBusinessHours,
         req.tenantId
       );
 

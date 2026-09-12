@@ -463,8 +463,16 @@ export class PatientClinicalController {
   // 4. ANAMNESE VERSIONADA
   static listAnamnesis(req: Request, res: Response): void {
     try {
-      const { id: patientId } = req.params;
+      const patientId = req.params.id as string;
       const tenantId = req.tenantId;
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: sem vínculo assistencial ativo com o paciente (Sigilo LGPD).',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
+        return;
+      }
 
       const items = db.prepare(`
         SELECT pa.*, p.name as professional_name
@@ -483,8 +491,14 @@ export class PatientClinicalController {
 
   static getAnamnesisById(req: Request, res: Response): void {
     try {
-      const { id: patientId, anamnesisId } = req.params;
+      const patientId = req.params.id as string;
+      const anamnesisId = req.params.anamnesisId as string;
       const tenantId = req.tenantId;
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (Sigilo LGPD)' });
+        return;
+      }
 
       const item = db.prepare(`
         SELECT pa.*, p.name as professional_name
@@ -507,9 +521,14 @@ export class PatientClinicalController {
 
   static createAnamnesis(req: Request, res: Response): void {
     try {
-      const { id: patientId } = req.params;
+      const patientId = req.params.id as string;
       const tenantId = req.tenantId;
       const { title, questionnaireAnswersJson, professionalId, notes } = req.body;
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (Sigilo LGPD)' });
+        return;
+      }
 
       if (!title || !questionnaireAnswersJson) {
         res.status(400).json({ error: 'Título e questionário respondido são obrigatórios' });
@@ -558,8 +577,13 @@ export class PatientClinicalController {
   // 5. EXAMES E IMAGENS COM EXTRAÇÃO IA EM DRAFT
   static listExams(req: Request, res: Response): void {
     try {
-      const { id: patientId } = req.params;
+      const patientId = req.params.id as string;
       const tenantId = req.tenantId;
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (Sigilo LGPD)' });
+        return;
+      }
 
       const exams = db.prepare(`
         SELECT pe.*, p.name as professional_name
@@ -578,9 +602,14 @@ export class PatientClinicalController {
 
   static uploadExam(req: Request, res: Response): void {
     try {
-      const { id: patientId } = req.params;
+      const patientId = req.params.id as string;
       const tenantId = req.tenantId;
       const { title, examDate, examType, fileName, fileUrl, fileType, rawText, professionalId, notes } = req.body;
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (Sigilo LGPD)' });
+        return;
+      }
 
       if (!title || !fileUrl) {
         res.status(400).json({ error: 'Título do exame e arquivo são obrigatórios' });
@@ -627,9 +656,15 @@ export class PatientClinicalController {
 
   static reviewExam(req: Request, res: Response): void {
     try {
-      const { id: patientId, examId } = req.params;
+      const patientId = req.params.id as string;
+      const examId = req.params.examId as string;
       const tenantId = req.tenantId;
       const { aiExtractedText, notes } = req.body;
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (Sigilo LGPD)' });
+        return;
+      }
 
       db.prepare(`
         UPDATE patient_exams SET

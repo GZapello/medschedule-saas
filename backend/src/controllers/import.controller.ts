@@ -21,7 +21,10 @@ export const TARGET_FIELDS = [
   { field: 'appointment_date', label: 'Data da Consulta / Histórico', required: false, synonyms: ['data consulta', 'data atendimento', 'data da consulta', 'data agendamento', 'data sessao', 'dt consulta', 'dia consulta'] },
   { field: 'appointment_time', label: 'Horário da Consulta', required: false, synonyms: ['horario', 'hora', 'horário', 'hora consulta', 'hora atendimento', 'horario agendamento'] },
   { field: 'professional_name', label: 'Profissional / Médico(a)', required: false, synonyms: ['medico', 'médico', 'profissional', 'doutor', 'dr', 'dra', 'atendente', 'especialista'] },
-  { field: 'service_name', label: 'Serviço / Procedimento', required: false, synonyms: ['servico', 'serviço', 'procedimento', 'especialidade', 'tipo atendimento', 'tipo consulta'] }
+  { field: 'service_name', label: 'Serviço / Procedimento', required: false, synonyms: ['servico', 'serviço', 'procedimento', 'especialidade', 'tipo atendimento', 'tipo consulta'] },
+  { field: 'insurance_name', label: 'Convênio / Operadora', required: false, synonyms: ['convenio', 'convênio', 'operadora', 'plano de saude', 'plano saude', 'seguro', 'assistencia medica'] },
+  { field: 'insurance_plan', label: 'Plano do Convênio', required: false, synonyms: ['plano', 'categoria plano', 'tipo plano', 'nome plano', 'plano convenio'] },
+  { field: 'insurance_card', label: 'Número da Carteirinha', required: false, synonyms: ['carteirinha', 'matricula', 'matrícula', 'num carteira', 'nr carteira', 'codigo carteira', 'nr matricula'] }
 ];
 
 function cleanDigits(val: any): string {
@@ -203,6 +206,67 @@ function parseDocxContent(buffer: Buffer): { headers: string[]; rows: Record<str
   return { headers, rows };
 }
 
+function parseCsvContent(buffer: Buffer): { headers: string[]; rows: Record<string, string>[] } {
+  let content = buffer.toString('utf8');
+  if (content.includes('\uFFFD')) {
+    content = buffer.toString('latin1');
+  }
+  if (content.charCodeAt(0) === 0xFEFF) {
+    content = content.slice(1);
+  }
+
+  const rawLines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (rawLines.length === 0) return { headers: [], rows: [] };
+
+  // Detecta delimitador: conta ocorrências na primeira linha (suporte especial a ; do Excel BR)
+  const firstLine = rawLines[0];
+  const countSemicolon = (firstLine.match(/;/g) || []).length;
+  const countComma = (firstLine.match(/,/g) || []).length;
+  const countTab = (firstLine.match(/\t/g) || []).length;
+
+  let delimiter = ',';
+  if (countSemicolon >= countComma && countSemicolon >= countTab && countSemicolon > 0) {
+    delimiter = ';';
+  } else if (countTab >= countComma && countTab > 0) {
+    delimiter = '\t';
+  }
+
+  const splitLine = (line: string, delim: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"' || char === "'") {
+        inQuotes = !inQuotes;
+      } else if (char === delim && !inQuotes) {
+        result.push(current.trim().replace(/^["']|["']$/g, ''));
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim().replace(/^["']|["']$/g, ''));
+    return result;
+  };
+
+  const rawHeaders = splitLine(rawLines[0], delimiter);
+  const headers = rawHeaders.map((h, i) => (h && h.length > 0 ? h : `Coluna_${i + 1}`));
+
+  const rows: Record<string, string>[] = [];
+  for (let i = 1; i < rawLines.length; i++) {
+    const cells = splitLine(rawLines[i], delimiter);
+    if (!cells.some(c => c.length > 0)) continue;
+    const rowData: Record<string, string> = {};
+    headers.forEach((h, idx) => {
+      rowData[h] = cells[idx] !== undefined ? cells[idx] : '';
+    });
+    rows.push(rowData);
+  }
+
+  return { headers, rows };
+}
+
 function parseSpreadsheetContent(buffer: Buffer): { headers: string[]; rows: Record<string, string>[] } {
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const sheetName = workbook.SheetNames[0];
@@ -272,7 +336,16 @@ export class ImportController {
 
       if (ext === 'docx') {
         parsed = parseDocxContent(buffer);
-      } else if (['xlsx', 'xls', 'csv', 'tsv', 'txt'].includes(ext)) {
+      } else if (['csv', 'tsv', 'txt'].includes(ext)) {
+        try {
+          parsed = parseCsvContent(buffer);
+          if (parsed.headers.length === 0 || parsed.rows.length === 0) {
+            parsed = parseSpreadsheetContent(buffer);
+          }
+        } catch (e) {
+          parsed = parseSpreadsheetContent(buffer);
+        }
+      } else if (['xlsx', 'xls'].includes(ext)) {
         parsed = parseSpreadsheetContent(buffer);
       } else {
         res.status(400).json({ error: `Formato de arquivo .${ext} não suportado. Utilize .docx, .xlsx, .csv ou .txt` });
@@ -319,10 +392,18 @@ export class ImportController {
         if (normName.length > 3) nameMap.set(normName, p);
       }
 
-      // Análise de duplicidade linha a linha
+      // Análise de duplicidade linha a linha (Banco da clínica + Repetições dentro do próprio arquivo)
+      const intraCpfSet = new Set<string>();
+      const intraPhoneSet = new Set<string>();
+      const intraEmailSet = new Set<string>();
+      const intraNameSet = new Set<string>();
+
       let duplicateCount = 0;
+      let intraDuplicateCount = 0;
+
       const previewRows = parsed.rows.slice(0, 100).map((row, idx) => {
         let isDuplicate = false;
+        let isIntraDuplicate = false;
         let matchedPatient: any = null;
         let matchReason = '';
 
@@ -337,33 +418,56 @@ export class ImportController {
         const rowEmail = emailField ? (row[emailField] || '').toLowerCase().trim() : '';
         const rowName = nameField ? normalizeHeader(row[nameField] || '') : '';
 
+        // 1. Checa contra banco existente
         if (rowCpf && cpfMap.has(rowCpf)) {
           isDuplicate = true;
           matchedPatient = cpfMap.get(rowCpf);
-          matchReason = 'CPF idêntico';
+          matchReason = 'CPF já cadastrado na clínica';
         } else if (rowPhone && rowPhone.length >= 8 && phoneMap.has(rowPhone.slice(-9))) {
           isDuplicate = true;
           matchedPatient = phoneMap.get(rowPhone.slice(-9));
-          matchReason = 'Telefone idêntico';
+          matchReason = 'Telefone já cadastrado na clínica';
         } else if (rowEmail && emailMap.has(rowEmail)) {
           isDuplicate = true;
           matchedPatient = emailMap.get(rowEmail);
-          matchReason = 'E-mail idêntico';
+          matchReason = 'E-mail já cadastrado na clínica';
         } else if (rowName && nameMap.has(rowName)) {
           isDuplicate = true;
           matchedPatient = nameMap.get(rowName);
-          matchReason = 'Nome idêntico';
+          matchReason = 'Nome já cadastrado na clínica';
         }
 
+        // 2. Checa duplicidade intra-arquivo
+        if (rowCpf && intraCpfSet.has(rowCpf)) {
+          isIntraDuplicate = true;
+          matchReason = matchReason ? `${matchReason} (e repetido no arquivo)` : 'CPF repetido no próprio arquivo';
+        } else if (rowPhone && rowPhone.length >= 8 && intraPhoneSet.has(rowPhone.slice(-9))) {
+          isIntraDuplicate = true;
+          matchReason = matchReason ? `${matchReason} (e repetido no arquivo)` : 'Telefone repetido no próprio arquivo';
+        } else if (rowEmail && intraEmailSet.has(rowEmail)) {
+          isIntraDuplicate = true;
+          matchReason = matchReason ? `${matchReason} (e repetido no arquivo)` : 'E-mail repetido no próprio arquivo';
+        } else if (rowName && rowName.length > 5 && intraNameSet.has(rowName)) {
+          isIntraDuplicate = true;
+          matchReason = matchReason ? `${matchReason} (e repetido no arquivo)` : 'Nome repetido no próprio arquivo';
+        }
+
+        if (rowCpf) intraCpfSet.add(rowCpf);
+        if (rowPhone && rowPhone.length >= 8) intraPhoneSet.add(rowPhone.slice(-9));
+        if (rowEmail) intraEmailSet.add(rowEmail);
+        if (rowName) intraNameSet.add(rowName);
+
         if (isDuplicate) duplicateCount++;
+        if (isIntraDuplicate) intraDuplicateCount++;
 
         return {
           rowIndex: idx,
           data: row,
-          isDuplicate,
+          isDuplicate: isDuplicate || isIntraDuplicate,
+          isIntraDuplicate,
           matchedPatient: matchedPatient ? { id: matchedPatient.id, full_name: matchedPatient.full_name, cpf: matchedPatient.cpf, phone: matchedPatient.phone } : null,
           matchReason,
-          suggestedAction: isDuplicate ? 'update' : 'create_new'
+          suggestedAction: isDuplicate ? 'update' : isIntraDuplicate ? 'skip' : 'create_new'
         };
       });
 
@@ -375,6 +479,7 @@ export class ImportController {
         columnMappings,
         availableTargetFields: TARGET_FIELDS,
         duplicateCount,
+        intraDuplicateCount,
         allRows: parsed.rows,
         previewRows
       });

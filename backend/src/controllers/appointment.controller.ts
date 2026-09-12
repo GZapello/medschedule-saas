@@ -4,6 +4,52 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { NotificationService } from '../services/notification.service';
 
+export function validateClinicBusinessHours(tenantId: string, startTime: string, endTime: string): { valid: boolean; error?: string } {
+  try {
+    const tenantRow = db.prepare('SELECT business_hours_json FROM tenants WHERE id = ?').get(tenantId) as { business_hours_json?: string } | undefined;
+    if (!tenantRow?.business_hours_json) return { valid: true };
+
+    const bhList = JSON.parse(tenantRow.business_hours_json);
+    if (!Array.isArray(bhList) || bhList.length === 0) return { valid: true };
+
+    const apptDate = new Date(startTime);
+    const dayOfWeek = apptDate.getDay();
+    const dayConfig = bhList.find((bh: any) => Number(bh.dayOfWeek) === dayOfWeek);
+
+    if (!dayConfig) return { valid: true };
+
+    if (dayConfig.isOpen === false || dayConfig.active === false) {
+      return { valid: false, error: 'A clínica não realiza atendimentos neste dia da semana.' };
+    }
+
+    const timeOnly = (dStr: string) => {
+      const parts = dStr.split('T');
+      return parts[1]?.slice(0, 5) || '00:00';
+    };
+    const reqStartTime = timeOnly(startTime);
+    const reqEndTime = timeOnly(endTime);
+
+    if (dayConfig.startTime && reqStartTime < dayConfig.startTime) {
+      return { valid: false, error: `O horário solicitado (${reqStartTime}) é anterior ao início do expediente da clínica (${dayConfig.startTime}).` };
+    }
+    if (dayConfig.endTime && reqEndTime > dayConfig.endTime) {
+      return { valid: false, error: `O horário de término (${reqEndTime}) ultrapassa o expediente da clínica (${dayConfig.endTime}).` };
+    }
+    if (dayConfig.breakStart && dayConfig.breakEnd) {
+      if (
+        (reqStartTime >= dayConfig.breakStart && reqStartTime < dayConfig.breakEnd) ||
+        (reqEndTime > dayConfig.breakStart && reqEndTime <= dayConfig.breakEnd) ||
+        (reqStartTime <= dayConfig.breakStart && reqEndTime >= dayConfig.breakEnd)
+      ) {
+        return { valid: false, error: `O horário solicitado coincide com o intervalo da clínica (${dayConfig.breakStart} às ${dayConfig.breakEnd}).` };
+      }
+    }
+    return { valid: true };
+  } catch (e) {
+    return { valid: true };
+  }
+}
+
 export class AppointmentController {
   static list(req: Request, res: Response): void {
     try {
@@ -188,6 +234,13 @@ export class AppointmentController {
 
       if (!resolvedPatientId) {
         res.status(400).json({ error: 'Paciente não identificado' });
+        return;
+      }
+
+      // 0. Validação dos horários de funcionamento da clínica (Item 3)
+      const hoursCheck = validateClinicBusinessHours(tenantId, startTime, endTime);
+      if (!hoursCheck.valid) {
+        res.status(400).json({ error: hoursCheck.error });
         return;
       }
 
@@ -420,6 +473,11 @@ export class AppointmentController {
       const tenantId = req.tenantId;
       const { startTime, endTime, reason } = req.body;
 
+      if (!tenantId) {
+        res.status(400).json({ error: 'Identificação da clínica obrigatória' });
+        return;
+      }
+
       if (!startTime || !endTime) {
         res.status(400).json({ error: 'Novo horário de início e fim são obrigatórios' });
         return;
@@ -428,6 +486,13 @@ export class AppointmentController {
       const appt = db.prepare('SELECT patient_id, professional_id, room_id, status FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!appt) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
+        return;
+      }
+
+      // 0. Validação dos horários de funcionamento da clínica (Item 3)
+      const hoursCheck = validateClinicBusinessHours(tenantId, startTime, endTime);
+      if (!hoursCheck.valid) {
+        res.status(400).json({ error: hoursCheck.error });
         return;
       }
 

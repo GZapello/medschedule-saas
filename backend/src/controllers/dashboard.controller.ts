@@ -16,10 +16,15 @@ export class DashboardController {
       // 1. Atendimentos de hoje
       const todayApptsStmt = db.prepare(`
         SELECT 
-          a.id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality,
+          a.id, a.patient_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality,
           pat.full_name as patient_name, pat.phone as patient_phone,
           p.name as professional_name,
-          s.name as service_name
+          s.name as service_name,
+          (SELECT id FROM records WHERE appointment_id = a.id LIMIT 1) as record_id,
+          (SELECT COUNT(*) FROM records WHERE appointment_id = a.id) as has_evolution,
+          (SELECT id FROM clinical_certificates WHERE appointment_id = a.id LIMIT 1) as certificate_id,
+          (SELECT id FROM clinical_prescriptions WHERE appointment_id = a.id LIMIT 1) as prescription_id,
+          (SELECT id FROM clinical_exam_requests WHERE appointment_id = a.id LIMIT 1) as exam_request_id
         FROM appointments a
         JOIN patients pat ON pat.id = a.patient_id
         JOIN professionals p ON p.id = a.professional_id

@@ -69,7 +69,8 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
   const [examRequest, setExamRequest] = useState({
     examsList: '',
-    clinicalIndication: ''
+    clinicalIndication: '',
+    cidCode: ''
   });
 
   const [returnAppt, setReturnAppt] = useState({
@@ -580,15 +581,27 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
                     className="w-full px-3 py-2 border rounded-xl font-mono text-xs"
                   />
                 </div>
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">Indicação Clínica (Opcional)</label>
-                  <input
-                    type="text"
-                    value={examRequest.clinicalIndication}
-                    onChange={e => setExamRequest({ ...examRequest, clinicalIndication: e.target.value })}
-                    placeholder="Ex: Avaliação pré-operatória, Investigação diagnóstica"
-                    className="w-full px-3 py-2 border rounded-xl"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-700 font-bold mb-1">Indicação Clínica (Opcional)</label>
+                    <input
+                      type="text"
+                      value={examRequest.clinicalIndication}
+                      onChange={e => setExamRequest({ ...examRequest, clinicalIndication: e.target.value })}
+                      placeholder="Ex: Avaliação pré-operatória, Investigação diagnóstica"
+                      className="w-full px-3 py-2 border rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">CID-10 (Opcional)</label>
+                    <input
+                      type="text"
+                      value={examRequest.cidCode}
+                      onChange={e => setExamRequest({ ...examRequest, cidCode: e.target.value.toUpperCase() })}
+                      placeholder="Ex: I10, E11"
+                      className="w-full px-3 py-2 border rounded-xl font-mono"
+                    />
+                  </div>
                 </div>
               </div>
             )}

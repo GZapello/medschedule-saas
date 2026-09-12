@@ -44,7 +44,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
   onRegisterUser,
   onOpenPublicBooking
 }) => {
-  const [activeTab, setActiveTab] = useState<'financeiro' | 'servicos' | 'recibos'>('financeiro');
+  const [activeTab, setActiveTab] = useState<'financeiro' | 'atendimento' | 'recibos'>('financeiro');
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-teal-500 selection:text-white font-sans antialiased">
@@ -187,12 +187,12 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Financeiro & Métricas
                 </button>
                 <button
-                  onClick={() => setActiveTab('servicos')}
+                  onClick={() => setActiveTab('atendimento')}
                   className={`px-3 py-1.5 rounded-lg transition-all ${
-                    activeTab === 'servicos' ? 'bg-teal-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                    activeTab === 'atendimento' ? 'bg-teal-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Serviços & Salas
+                  Atendimento Rápido
                 </button>
                 <button
                   onClick={() => setActiveTab('recibos')}
@@ -209,21 +209,21 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
             <div className="rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
               {activeTab === 'financeiro' && (
                 <img
-                  src="/screenshots/screenshot-financeiro.png"
+                  src="/screenshots/screenshot-financeiro.jpg?v=2"
                   alt="Painel Financeiro da Zemda"
                   className="w-full h-auto object-cover rounded-2xl hover:scale-[1.01] transition-transform duration-300"
                 />
               )}
-              {activeTab === 'servicos' && (
+              {activeTab === 'atendimento' && (
                 <img
-                  src="/screenshots/screenshot-servicos-salas.png"
-                  alt="Gestão de Serviços e Salas da Zemda"
+                  src="/screenshots/screenshot-atendimento.jpg?v=2"
+                  alt="Atendimento Rápido e Prontuário da Zemda"
                   className="w-full h-auto object-cover rounded-2xl hover:scale-[1.01] transition-transform duration-300"
                 />
               )}
               {activeTab === 'recibos' && (
                 <img
-                  src="/screenshots/screenshot-recibos.jpg"
+                  src="/screenshots/screenshot-recibos.jpg?v=2"
                   alt="Emissão de Recibos Oficiais da Zemda"
                   className="w-full h-auto object-cover rounded-2xl hover:scale-[1.01] transition-transform duration-300"
                 />

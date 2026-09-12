@@ -19,7 +19,12 @@ import {
   MessageCircle,
   Building2,
   Stethoscope,
-  ChevronRight
+  ChevronRight,
+  Mic,
+  MicOff,
+  Sparkles,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { ReferralModal } from './ReferralModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
@@ -77,7 +82,163 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const DRAFT_KEY = `zemda_quick_consult_${appointment.id}`;
   const debounceTimerRef = useRef<any>(null);
 
+  // Estados para Gravação de Áudio com IA (Item 6)
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
+  const [liveTranscript, setLiveTranscript] = useState<string>('');
+  const [processingAi, setProcessingAi] = useState<boolean>(false);
+  const [showAiDraftModal, setShowAiDraftModal] = useState<boolean>(false);
+  const [aiDraft, setAiDraft] = useState<{
+    chiefComplaint: string;
+    anamnesis: string;
+    physicalExam: string;
+    conduct: string;
+  }>({
+    chiefComplaint: '',
+    anamnesis: '',
+    physicalExam: '',
+    conduct: ''
+  });
+
+  const recognitionRef = useRef<any>(null);
+  const timerIntervalRef = useRef<any>(null);
+
+  const formatTimer = (sec: number) => {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  const startAudioRecording = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showToast('O navegador atual não suporta captura nativa de fala. Recomendamos Google Chrome ou Microsoft Edge.', 'info');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'pt-BR';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+        setRecordingSeconds(0);
+        setLiveTranscript('');
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = setInterval(() => {
+          setRecordingSeconds(s => s + 1);
+        }, 1000);
+      };
+
+      recognition.onresult = (event: any) => {
+        let fullText = '';
+        for (let i = 0; i < event.results.length; i++) {
+          fullText += event.results[i][0].transcript + ' ';
+        }
+        setLiveTranscript(fullText.trim());
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          showToast('Permissão de microfone negada. Conceda acesso ao microfone no navegador.', 'error');
+          stopAudioRecording(false);
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      showToast('Gravação do atendimento iniciada! Fale naturalmente com o paciente.', 'info');
+    } catch (err: any) {
+      showToast('Erro ao iniciar captura de áudio: ' + (err.message || 'Desconhecido'), 'error');
+    }
+  };
+
+  const stopAudioRecording = async (processWithAi = true) => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      recognitionRef.current = null;
+    }
+
+    setIsRecording(false);
+
+    if (!processWithAi) {
+      setLiveTranscript('');
+      return;
+    }
+
+    if (!liveTranscript.trim()) {
+      showToast('Nenhum áudio detectado para estruturação.', 'info');
+      return;
+    }
+
+    try {
+      setProcessingAi(true);
+      const res = await ApiClient.post<{
+        structured: {
+          chiefComplaint: string;
+          anamnesis: string;
+          physicalExam: string;
+          conduct: string;
+        };
+        summaryText: string;
+      }>('/v1/ai/summarize-consultation', {
+        transcript: liveTranscript
+      });
+
+      if (res && res.structured) {
+        setAiDraft({
+          chiefComplaint: res.structured.chiefComplaint || '',
+          anamnesis: res.structured.anamnesis || '',
+          physicalExam: res.structured.physicalExam || '',
+          conduct: res.structured.conduct || ''
+        });
+        setShowAiDraftModal(true);
+        showToast('Rascunho da consulta estruturado pela IA! Revise antes de incluir na evolução.', 'success');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao estruturar consulta com IA', 'error');
+    } finally {
+      setProcessingAi(false);
+    }
+  };
+
+  const applyDraftToEvolution = (mode: 'append' | 'replace') => {
+    const formattedDraft = [
+      `1. QUEIXA PRINCIPAL:\n${aiDraft.chiefComplaint || 'Não relatada.'}`,
+      `2. ANAMNESE E HISTÓRIA CLÍNICA:\n${aiDraft.anamnesis || 'Não relatada.'}`,
+      `3. EXAME CLÍNICO / AVALIAÇÃO:\n${aiDraft.physicalExam || 'Sem achados descritos.'}`,
+      `4. CONDUTA E PLANO TERAPÊUTICO:\n${aiDraft.conduct || 'Sem conduta definida.'}`
+    ].join('\n\n');
+
+    if (mode === 'replace' || !clinicalEvolution.trim()) {
+      handleEvolutionChange(formattedDraft);
+    } else {
+      handleEvolutionChange(clinicalEvolution + '\n\n' + formattedDraft);
+    }
+
+    setShowAiDraftModal(false);
+    showToast('Rascunho inserido com sucesso na evolução clínica!', 'success');
+  };
+
   // 1. Carrega dados completos do paciente e histórico clínico
+  useEffect(() => {
+    return () => {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (e) {}
+      }
+    };
+  }, []);
   useEffect(() => {
     async function loadPatientDetails() {
       try {
@@ -467,10 +628,33 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               </div>
               
               <div className="flex items-center gap-2">
+                {!isRecording ? (
+                  <button
+                    type="button"
+                    onClick={startAudioRecording}
+                    disabled={processingAi}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Gravar áudio da consulta e gerar rascunho estruturado por IA"
+                  >
+                    <Mic className="w-3.5 h-3.5 text-teal-600" />
+                    <span>{processingAi ? 'Processando IA...' : 'Gravar com IA'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => stopAudioRecording(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors animate-pulse cursor-pointer"
+                    title="Concluir gravação e estruturar consulta"
+                  >
+                    <MicOff className="w-3.5 h-3.5" />
+                    <span>Parar & Gerar Rascunho ({formatTimer(recordingSeconds)})</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setShowReferralModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer"
                   title="Encaminhar paciente para outro colega profissional da clínica"
                 >
                   <Share2 className="w-3.5 h-3.5 text-indigo-600" />
@@ -478,6 +662,50 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Banner de Gravação Ativa em Tempo Real */}
+            {isRecording && (
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 animate-in fade-in space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping inline-block" />
+                    <span className="text-xs font-bold text-rose-900">
+                      Gravando consulta com paciente • {formatTimer(recordingSeconds)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => stopAudioRecording(false)}
+                      className="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => stopAudioRecording(true)}
+                      className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                    >
+                      Concluir Gravação
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-rose-800 italic bg-white/80 p-2.5 rounded-xl border border-rose-100 max-h-24 overflow-y-auto">
+                  {liveTranscript || 'Escutando fala do atendimento... Fale normalmente próximo ao microfone.'}
+                </p>
+              </div>
+            )}
+
+            {/* Banner de Processamento IA */}
+            {processingAi && (
+              <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 flex items-center gap-3 text-teal-900 animate-pulse">
+                <Sparkles className="w-5 h-5 text-teal-600 animate-spin" />
+                <div>
+                  <h5 className="text-xs font-bold">IA Zemda estruturando consulta médica...</h5>
+                  <p className="text-[11px] text-teal-700">Organizando queixa principal, anamnese, exame clínico e conduta em rascunho seguro.</p>
+                </div>
+              </div>
+            )}
 
             {/* Campo Principal de Evolução */}
             <div>
@@ -614,6 +842,101 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             onClose();
           }}
         />
+      )}
+
+      {/* MODAL DE VALIDAÇÃO DE RASCUNHO GERADO POR IA (Item 6) */}
+      {showAiDraftModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-teal-600" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Rascunho da Consulta (IA Zemda)</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Apresentado como rascunho. Edite qualquer campo abaixo e aprove para incluir na evolução do paciente.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiDraftModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">1. Queixa Principal</label>
+                <textarea
+                  rows={2}
+                  value={aiDraft.chiefComplaint}
+                  onChange={e => setAiDraft({ ...aiDraft, chiefComplaint: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">2. Anamnese e História Clínica</label>
+                <textarea
+                  rows={3}
+                  value={aiDraft.anamnesis}
+                  onChange={e => setAiDraft({ ...aiDraft, anamnesis: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">3. Exame Clínico / Avaliação</label>
+                <textarea
+                  rows={3}
+                  value={aiDraft.physicalExam}
+                  onChange={e => setAiDraft({ ...aiDraft, physicalExam: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">4. Conduta e Plano Terapêutico</label>
+                <textarea
+                  rows={3}
+                  value={aiDraft.conduct}
+                  onChange={e => setAiDraft({ ...aiDraft, conduct: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-slate-800"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAiDraftModal(false);
+                  showToast('Rascunho descartado sem alterações na evolução.', 'info');
+                }}
+                className="flex items-center gap-1 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" /> Descartar Rascunho
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => applyDraftToEvolution('append')}
+                  className="px-4 py-2 border border-teal-600 text-teal-700 hover:bg-teal-50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Inserir na Evolução
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyDraftToEvolution('replace')}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Substituir Evolução
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

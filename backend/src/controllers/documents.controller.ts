@@ -68,12 +68,14 @@ export class DocumentsController {
         SELECT 
           c.*,
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
-          pr.name as professional_name, pr.registration_type, pr.registration_number,
+          pr.name as professional_name, pr.registration_type, pr.registration_number, pr.gender as professional_gender,
+          COALESCE(spec.name, pr.practice_areas, 'Profissional de Saúde') as specialty,
           t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.street, t.number, t.neighborhood, t.city, t.state, t.address, t.logo_url
+          t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
         FROM clinical_certificates c
         JOIN patients p ON p.id = c.patient_id
         JOIN professionals pr ON pr.id = c.professional_id
+        LEFT JOIN specialties spec ON spec.id = pr.specialty_id
         JOIN tenants t ON t.id = c.tenant_id
         WHERE c.id = ? AND c.tenant_id = ?
       `).get(id, tenantId);
@@ -158,12 +160,14 @@ export class DocumentsController {
         SELECT 
           pr.*,
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
-          prof.name as professional_name, prof.registration_type, prof.registration_number,
+          prof.name as professional_name, prof.registration_type, prof.registration_number, prof.gender as professional_gender,
+          COALESCE(spec.name, prof.practice_areas, 'Profissional de Saúde') as specialty,
           t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.street, t.number, t.neighborhood, t.city, t.state, t.address, t.logo_url
+          t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
         FROM clinical_prescriptions pr
         JOIN patients p ON p.id = pr.patient_id
         JOIN professionals prof ON prof.id = pr.professional_id
+        LEFT JOIN specialties spec ON spec.id = prof.specialty_id
         JOIN tenants t ON t.id = pr.tenant_id
         WHERE pr.id = ? AND pr.tenant_id = ?
       `).get(id, tenantId);
@@ -188,7 +192,7 @@ export class DocumentsController {
   static createExamRequest(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      const { patientId, appointmentId, professionalId, examsList, clinicalIndication } = req.body;
+      const { patientId, appointmentId, professionalId, examsList, clinicalIndication, cidCode } = req.body;
 
       if (!patientId || !examsList) {
         res.status(400).json({ error: 'Paciente e exames solicitados são obrigatórios' });
@@ -219,18 +223,18 @@ export class DocumentsController {
         INSERT INTO clinical_exam_requests (
           id, tenant_id, patient_id, appointment_id, professional_id,
           request_number, exams_list_json, clinical_justification, notes,
-          exams_list, clinical_indication,
+          exams_list, clinical_indication, cid_code,
           created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, appointmentId || null, resolvedProfId,
         reqNumber, JSON.stringify([{ exam: examsList }]), clinicalIndication || null, clinicalIndication || null,
-        examsList, clinicalIndication || null,
+        examsList, clinicalIndication || null, cidCode || null,
         req.user?.name || req.user?.email || 'Profissional'
       );
 
-      logAudit(req, 'CREATE_EXAM_REQUEST', 'clinical_exam_requests', id, { patientId });
+      logAudit(req, 'CREATE_EXAM_REQUEST', 'clinical_exam_requests', id, { patientId, cidCode });
       res.status(201).json({ id, message: 'Pedido de exame emitido com sucesso' });
     } catch (err: any) {
       console.error('[DocumentsController.createExamRequest] Erro:', err);
@@ -247,12 +251,14 @@ export class DocumentsController {
         SELECT 
           er.*,
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
-          prof.name as professional_name, prof.registration_type, prof.registration_number,
+          prof.name as professional_name, prof.registration_type, prof.registration_number, prof.gender as professional_gender,
+          COALESCE(spec.name, prof.practice_areas, 'Profissional de Saúde') as specialty,
           t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.street, t.number, t.neighborhood, t.city, t.state, t.address, t.logo_url
+          t.street, t.number, t.neighborhood, t.city, t.city as clinic_city, t.state, t.state as clinic_state, t.address, t.logo_url
         FROM clinical_exam_requests er
         JOIN patients p ON p.id = er.patient_id
         JOIN professionals prof ON prof.id = er.professional_id
+        LEFT JOIN specialties spec ON spec.id = prof.specialty_id
         JOIN tenants t ON t.id = er.tenant_id
         WHERE er.id = ? AND er.tenant_id = ?
       `).get(id, tenantId);

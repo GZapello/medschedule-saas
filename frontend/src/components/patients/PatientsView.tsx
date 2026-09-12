@@ -32,6 +32,13 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, on
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
+  // Notifica o contexto da IA quando um paciente é selecionado/desselecionado
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('zemda-ai-patient-context', {
+      detail: { patientId: selectedPatientId || undefined }
+    }));
+  }, [selectedPatientId]);
+
   const fetchPatients = async () => {
     try {
       setLoading(true);

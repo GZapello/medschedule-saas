@@ -23,7 +23,7 @@ export class InsuranceController {
   static createClinicInsurance(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      const { name, ansCode, phone, email, notes } = req.body;
+      const { name, ansCode, phone, email, notes, planName, cardNumber, validityDate } = req.body;
 
       if (!name) {
         res.status(400).json({ error: 'Nome do convênio é obrigatório' });
@@ -32,9 +32,9 @@ export class InsuranceController {
 
       const id = 'ins-' + uuidv4().slice(0, 8);
       db.prepare(`
-        INSERT INTO clinic_insurances (id, tenant_id, name, ans_code, phone, email, notes, active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-      `).run(id, tenantId, name, ansCode || null, phone || null, email || null, notes || null);
+        INSERT INTO clinic_insurances (id, tenant_id, name, ans_code, phone, email, notes, plan_name, card_number, validity_date, active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `).run(id, tenantId, name, ansCode || null, phone || null, email || null, notes || null, planName || null, cardNumber || null, validityDate || null);
 
       logAudit(req, 'CREATE_CLINIC_INSURANCE', 'clinic_insurances', id, { name, ansCode });
       res.status(201).json({ id, message: 'Convênio cadastrado com sucesso' });
@@ -48,20 +48,48 @@ export class InsuranceController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { name, ansCode, phone, email, notes, active } = req.body;
+      const { name, ansCode, phone, email, notes, planName, cardNumber, validityDate, active } = req.body;
+
+      const existing = db.prepare('SELECT * FROM clinic_insurances WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Convênio não encontrado' });
+        return;
+      }
+
+      const updatedName = name !== undefined ? name : existing.name;
+      if (!updatedName) {
+        res.status(400).json({ error: 'Nome do convênio é obrigatório' });
+        return;
+      }
+
+      const updatedAns = ansCode !== undefined ? (ansCode || null) : existing.ans_code;
+      const updatedPhone = phone !== undefined ? (phone || null) : existing.phone;
+      const updatedEmail = email !== undefined ? (email || null) : existing.email;
+      const updatedNotes = notes !== undefined ? (notes || null) : existing.notes;
+      const updatedPlan = planName !== undefined ? (planName || null) : existing.plan_name;
+      const updatedCard = cardNumber !== undefined ? (cardNumber || null) : existing.card_number;
+      const updatedValidity = validityDate !== undefined ? (validityDate || null) : existing.validity_date;
+      const updatedActive = active !== undefined ? (active ? 1 : 0) : existing.active;
 
       db.prepare(`
         UPDATE clinic_insurances SET
-          name = COALESCE(?, name),
-          ans_code = COALESCE(?, ans_code),
-          phone = COALESCE(?, phone),
-          email = COALESCE(?, email),
-          notes = COALESCE(?, notes),
-          active = COALESCE(?, active)
+          name = ?,
+          ans_code = ?,
+          phone = ?,
+          email = ?,
+          notes = ?,
+          plan_name = ?,
+          card_number = ?,
+          validity_date = ?,
+          active = ?
         WHERE id = ? AND tenant_id = ?
-      `).run(name || null, ansCode || null, phone || null, email || null, notes || null, active !== undefined ? (active ? 1 : 0) : null, id, tenantId);
+      `).run(
+        updatedName, updatedAns, updatedPhone, updatedEmail, updatedNotes,
+        updatedPlan, updatedCard, updatedValidity, updatedActive,
+        id, tenantId
+      );
 
-      logAudit(req, 'UPDATE_CLINIC_INSURANCE', 'clinic_insurances', id, { name, active });
+      logAudit(req, 'UPDATE_CLINIC_INSURANCE', 'clinic_insurances', id, { name: updatedName, active: updatedActive });
       res.json({ message: 'Convênio atualizado com sucesso' });
     } catch (err: any) {
       console.error('[InsuranceController.updateClinicInsurance] Erro:', err);

@@ -84,7 +84,7 @@ export class StaffController {
       const {
         name, email, phone, role, password,
         professionId, specialtyId, registrationNumber, registrationType,
-        permissions
+        gender, permissions
       } = req.body;
 
       if (!name || !email) {
@@ -133,11 +133,12 @@ export class StaffController {
         db.prepare(`
           INSERT INTO professionals (
             id, tenant_id, user_id, name, profession_id, specialty_id,
-            registration_type, registration_number, active
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            registration_type, registration_number, gender, active
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         `).run(
           profId, tenantId, userId, name, professionId || null, specialtyId || null,
-          registrationType || 'CRP', registrationNumber || null
+          registrationType || 'CRP', registrationNumber || null,
+          gender === 'F' ? 'F' : 'M'
         );
 
         // Grade padrão segunda a sexta 08:00 às 18:00

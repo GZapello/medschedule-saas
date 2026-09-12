@@ -38,6 +38,7 @@ export interface Tenant {
   onboarding_completed?: number;
   onboarding_step?: number;
   manager_confirmed?: number;
+  business_hours_json?: string;
   settings?: Record<string, string>;
 }
 
@@ -91,6 +92,7 @@ export interface Professional {
   bio?: string;
   practice_areas?: string;
   buffer_minutes: number;
+  gender?: 'M' | 'F';
   active: number;
   email?: string;
   phone?: string;
@@ -103,6 +105,7 @@ export interface StaffMember {
   email: string;
   role: Role;
   phone?: string;
+  gender?: 'M' | 'F';
   avatar_url?: string;
   status: 'active' | 'blocked' | 'pending' | 'rejected';
   created_at: string;

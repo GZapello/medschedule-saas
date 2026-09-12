@@ -426,6 +426,17 @@ export function initializeDatabase(): void {
     addColIfMissing('notifications', 'delivery_status', "TEXT DEFAULT 'pending'");
     addColIfMissing('notifications', 'idempotency_key', 'TEXT');
 
+    // Novas colunas solicitadas para horários da clínica, CID em exames, sexo do profissional e convênios
+    addColIfMissing('tenants', 'business_hours_json', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'cid_code', 'TEXT');
+    addColIfMissing('professionals', 'gender', "TEXT DEFAULT 'M'");
+    addColIfMissing('clinic_insurances', 'plan_name', 'TEXT');
+    addColIfMissing('clinic_insurances', 'card_number', 'TEXT');
+    addColIfMissing('clinic_insurances', 'validity_date', 'TEXT');
+    addColIfMissing('clinic_insurances', 'ans_code', 'TEXT');
+    addColIfMissing('clinic_insurances', 'phone', 'TEXT');
+    addColIfMissing('clinic_insurances', 'email', 'TEXT');
+
     // Migração de constraints da tabela notifications para permitir reminder_1h sem restrição
     const notifTableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notifications'").get() as any;
     if (notifTableInfo?.sql && notifTableInfo.sql.includes("CHECK(type IN ('confirmation', 'reminder_24h', 'reminder_2h'")) {
@@ -502,6 +513,99 @@ export function initializeDatabase(): void {
 
     for (const p of allDetailedProfessions) {
       insertProfStmt.run(p.id, p.cat_id, p.name, p.slug, p.reg_label, p.reg_req);
+    }
+
+    // Lista abrangente de especialidades por profissão de saúde
+    const allDetailedSpecialties = [
+      // Fonoaudiologia
+      { id: 'spec-fono-audiologia', prof_id: 'prof-fonoaudiologo', name: 'Audiologia Clínica', slug: 'audiologia-clinica', color: '#0ea5e9' },
+      { id: 'spec-fono-disfagia', prof_id: 'prof-fonoaudiologo', name: 'Disfagia e Deglutição', slug: 'disfagia-degluticao', color: '#06b6d4' },
+      { id: 'spec-fono-educacional', prof_id: 'prof-fonoaudiologo', name: 'Fonoaudiologia Educacional', slug: 'fonoaudiologia-educacional', color: '#14b8a6' },
+      { id: 'spec-fono-hospitalar', prof_id: 'prof-fonoaudiologo', name: 'Fonoaudiologia Hospitalar', slug: 'fonoaudiologia-hospitalar', color: '#0284c7' },
+      { id: 'spec-fono-linguagem', prof_id: 'prof-fonoaudiologo', name: 'Fonoaudiologia Infantil e Linguagem', slug: 'fono-linguagem', color: '#10b981' },
+      { id: 'spec-fono-neurofuncional', prof_id: 'prof-fonoaudiologo', name: 'Fonoaudiologia Neurofuncional', slug: 'fono-neurofuncional', color: '#6366f1' },
+      { id: 'spec-fono-motricidade', prof_id: 'prof-fonoaudiologo', name: 'Motricidade Orofacial', slug: 'motricidade-orofacial', color: '#8b5cf6' },
+      { id: 'spec-fono-voz', prof_id: 'prof-fonoaudiologo', name: 'Voz e Comunicação Profissional', slug: 'fono-voz', color: '#a855f7' },
+      // Psicologia
+      { id: 'spec-psi-clinica', prof_id: 'prof-psicologo', name: 'Psicologia Clínica do Adulto', slug: 'psicologia-clinica-adulto', color: '#6366f1' },
+      { id: 'spec-psi-infantil', prof_id: 'prof-psicologo', name: 'Psicologia Infantil / Ludoterapia', slug: 'psicologia-infantil', color: '#ec4899' },
+      { id: 'spec-psi-tcc', prof_id: 'prof-psicologo', name: 'Terapia Cognitivo-Comportamental (TCC)', slug: 'tcc', color: '#0ea5e9' },
+      { id: 'spec-psi-neuropsi', prof_id: 'prof-psicologo', name: 'Neuropsicologia Clínica', slug: 'neuropsicologia-clinica', color: '#8b5cf6' },
+      { id: 'spec-psi-psicanalise', prof_id: 'prof-psicologo', name: 'Psicanálise', slug: 'psicanalise', color: '#3b82f6' },
+      { id: 'spec-psi-casal', prof_id: 'prof-psicologo', name: 'Terapia Familiar e de Casal', slug: 'terapia-casal-familia', color: '#f43f5e' },
+      { id: 'spec-psi-hospitalar', prof_id: 'prof-psicologo', name: 'Psicologia Hospitalar e da Saúde', slug: 'psicologia-hospitalar', color: '#10b981' },
+      { id: 'spec-psi-avaliacao', prof_id: 'prof-psicologo', name: 'Avaliação Psicológica e Psicodiagnóstico', slug: 'avaliacao-psicologica', color: '#f59e0b' },
+      { id: 'spec-psi-social', prof_id: 'prof-psicologo', name: 'Psicologia Social e Comunitária', slug: 'psicologia-social', color: '#64748b' },
+      // Fisioterapia
+      { id: 'spec-fisio-ortopedia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Traumato-Ortopédica', slug: 'fisio-ortopedica', color: '#10b981' },
+      { id: 'spec-fisio-neuro', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Neurofuncional (Adulto e Infantil)', slug: 'fisio-neuro', color: '#0ea5e9' },
+      { id: 'spec-fisio-respiratoria', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Respiratória e UTI', slug: 'fisio-respiratoria', color: '#06b6d4' },
+      { id: 'spec-fisio-pediatrica', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Pediátrica e Neonatal', slug: 'fisio-pediatrica', color: '#ec4899' },
+      { id: 'spec-fisio-dermato', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Dermatofuncional', slug: 'fisio-dermatofuncional', color: '#f43f5e' },
+      { id: 'spec-fisio-esportiva', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Esportiva', slug: 'fisio-esportiva', color: '#f97316' },
+      { id: 'spec-fisio-pelvica', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Pélvica / Saúde da Mulher', slug: 'fisio-pelvica', color: '#8b5cf6' },
+      { id: 'spec-fisio-osteopatia', prof_id: 'prof-fisioterapeuta', name: 'Osteopatia e Terapia Manual', slug: 'fisio-osteopatia', color: '#d97706' },
+      { id: 'spec-fisio-quiropraxia', prof_id: 'prof-fisioterapeuta', name: 'Quiropraxia e Coluna Vertebral', slug: 'fisio-quiropraxia', color: '#059669' },
+      // Medicina
+      { id: 'spec-med-geral', prof_id: 'prof-medico', name: 'Clínica Médica / Medicina Geral', slug: 'clinica-medica', color: '#3b82f6' },
+      { id: 'spec-med-cardio', prof_id: 'prof-medico', name: 'Cardiologia', slug: 'cardiologia', color: '#ef4444' },
+      { id: 'spec-med-dermato', prof_id: 'prof-medico', name: 'Dermatologia', slug: 'dermatologia', color: '#f43f5e' },
+      { id: 'spec-med-pediatria', prof_id: 'prof-medico', name: 'Pediatria', slug: 'pediatria', color: '#ec4899' },
+      { id: 'spec-med-ginecologia', prof_id: 'prof-medico', name: 'Ginecologia e Obstetrícia', slug: 'ginecologia-obstetricia', color: '#a855f7' },
+      { id: 'spec-med-ortopedia', prof_id: 'prof-medico', name: 'Ortopedia e Traumatologia', slug: 'ortopedia-traumatologia', color: '#10b981' },
+      { id: 'spec-med-neurologia', prof_id: 'prof-medico', name: 'Neurologia', slug: 'neurologia', color: '#6366f1' },
+      { id: 'spec-med-endocrino', prof_id: 'prof-medico', name: 'Endocrinologia e Metabologia', slug: 'endocrinologia', color: '#f59e0b' },
+      { id: 'spec-med-oftalmo', prof_id: 'prof-medico', name: 'Oftalmologia', slug: 'oftalmologia', color: '#0ea5e9' },
+      { id: 'spec-med-otorrino', prof_id: 'prof-medico', name: 'Otorrinolaringologia', slug: 'otorrinolaringologia', color: '#14b8a6' },
+      { id: 'spec-med-gastro', prof_id: 'prof-medico', name: 'Gastroenterologia', slug: 'gastroenterologia', color: '#eab308' },
+      { id: 'spec-med-geriatria', prof_id: 'prof-medico', name: 'Geriatria', slug: 'geriatria', color: '#64748b' },
+      { id: 'spec-med-urologia', prof_id: 'prof-medico', name: 'Urologia', slug: 'urologia', color: '#0284c7' },
+      { id: 'spec-med-psiquiatria', prof_id: 'prof-medico', name: 'Psiquiatria Clínica', slug: 'psiquiatria-clinica', color: '#8b5cf6' },
+      // Odontologia
+      { id: 'spec-odonto-geral', prof_id: 'prof-dentista', name: 'Clínica Geral Odontológica', slug: 'odontologia-geral', color: '#3b82f6' },
+      { id: 'spec-odonto-orto', prof_id: 'prof-dentista', name: 'Ortodontia e Ortopedia Facial', slug: 'ortodontia', color: '#0ea5e9' },
+      { id: 'spec-odonto-pediatria', prof_id: 'prof-dentista', name: 'Odontopediatria', slug: 'odontopediatria', color: '#ec4899' },
+      { id: 'spec-odonto-implante', prof_id: 'prof-dentista', name: 'Implantodontia', slug: 'implantodontia', color: '#10b981' },
+      { id: 'spec-odonto-endo', prof_id: 'prof-dentista', name: 'Endodontia (Canal)', slug: 'endodontia', color: '#f59e0b' },
+      { id: 'spec-odonto-perio', prof_id: 'prof-dentista', name: 'Periodontia', slug: 'periodontia', color: '#059669' },
+      { id: 'spec-odonto-hof', prof_id: 'prof-dentista', name: 'Harmonização Orofacial (HOF)', slug: 'harmonizacao-orofacial', color: '#a855f7' },
+      { id: 'spec-odonto-buco', prof_id: 'prof-dentista', name: 'Cirurgia e Traumatologia Bucomaxilofacial', slug: 'bucomaxilofacial', color: '#ef4444' },
+      { id: 'spec-odonto-protese', prof_id: 'prof-dentista', name: 'Prótese Dentária', slug: 'protese-dentaria', color: '#64748b' },
+      // Nutrição
+      { id: 'spec-nutri-clinica', prof_id: 'prof-nutricionista', name: 'Nutrição Clínica e Funcional', slug: 'nutricao-clinica', color: '#84cc16' },
+      { id: 'spec-nutri-esportiva', prof_id: 'prof-nutricionista', name: 'Nutrição Esportiva', slug: 'nutricao-esportiva', color: '#f97316' },
+      { id: 'spec-nutri-pediatrica', prof_id: 'prof-nutricionista', name: 'Nutrição Materno-Infantil e Pediátrica', slug: 'nutricao-pediatrica', color: '#ec4899' },
+      { id: 'spec-nutri-comportamental', prof_id: 'prof-nutricionista', name: 'Nutrição Comportamental e Transtornos', slug: 'nutricao-comportamental', color: '#6366f1' },
+      { id: 'spec-nutri-emagrecimento', prof_id: 'prof-nutricionista', name: 'Emagrecimento e Doenças Crônicas', slug: 'nutricao-emagrecimento', color: '#10b981' },
+      { id: 'spec-nutri-hospitalar', prof_id: 'prof-nutricionista', name: 'Nutrição Hospitalar e Enteral', slug: 'nutricao-hospitalar', color: '#06b6d4' },
+      // Terapia Ocupacional
+      { id: 'spec-to-integracao', prof_id: 'prof-terapeuta-ocupacional', name: 'Integração Sensorial de Ayres', slug: 'to-integracao-sensorial', color: '#f59e0b' },
+      { id: 'spec-to-pediatria', prof_id: 'prof-terapeuta-ocupacional', name: 'Terapia Ocupacional Pediátrica e Escolar', slug: 'to-pediatrica', color: '#ec4899' },
+      { id: 'spec-to-reab-fisica', prof_id: 'prof-terapeuta-ocupacional', name: 'Reabilitação Física e Membros Superiores', slug: 'to-reab-fisica', color: '#10b981' },
+      { id: 'spec-to-neurofuncional', prof_id: 'prof-terapeuta-ocupacional', name: 'Reabilitação Cognitiva e Neurofuncional', slug: 'to-neurofuncional', color: '#6366f1' },
+      { id: 'spec-to-saude-mental', prof_id: 'prof-terapeuta-ocupacional', name: 'Saúde Mental e Psiquiatria Ocupacional', slug: 'to-saude-mental', color: '#8b5cf6' },
+      { id: 'spec-to-geronto', prof_id: 'prof-terapeuta-ocupacional', name: 'Gerontologia e Envelhecimento Ativo', slug: 'to-gerontologia', color: '#64748b' },
+      // Enfermagem
+      { id: 'spec-enf-geral', prof_id: 'prof-enfermeiro', name: 'Enfermagem Geral e Triagem', slug: 'enfermagem-geral', color: '#0ea5e9' },
+      { id: 'spec-enf-estoma', prof_id: 'prof-enfermeiro', name: 'Enfermagem em Estomaterapia e Feridas', slug: 'enfermagem-estomaterapia', color: '#10b981' },
+      { id: 'spec-enf-pediatrica', prof_id: 'prof-enfermeiro', name: 'Enfermagem Pediátrica e Neonatal', slug: 'enfermagem-pediatrica', color: '#ec4899' },
+      { id: 'spec-enf-obstetrica', prof_id: 'prof-enfermeiro', name: 'Enfermagem Obstétrica e Ginecológica', slug: 'enfermagem-obstetrica', color: '#a855f7' },
+      { id: 'spec-enf-familia', prof_id: 'prof-enfermeiro', name: 'Enfermagem em Saúde da Família', slug: 'enfermagem-saude-familia', color: '#14b8a6' },
+      { id: 'spec-enf-estetica', prof_id: 'prof-enfermeiro', name: 'Enfermagem Estética', slug: 'enfermagem-estetica', color: '#f43f5e' },
+      // Psiquiatria
+      { id: 'spec-psiq-geral', prof_id: 'prof-psiquiatra', name: 'Psiquiatria Geral e Transtornos de Ansiedade', slug: 'psiquiatria-geral', color: '#8b5cf6' },
+      { id: 'spec-psiq-infantil', prof_id: 'prof-psiquiatra', name: 'Psiquiatria da Infância e Adolescência', slug: 'psiquiatria-infantil', color: '#a855f7' },
+      { id: 'spec-psiq-adicao', prof_id: 'prof-psiquiatra', name: 'Dependência Química e Adições', slug: 'psiquiatria-dependencia', color: '#ef4444' },
+      { id: 'spec-psiq-idoso', prof_id: 'prof-psiquiatra', name: 'Psicogeriatria e Demências', slug: 'psicogeriatria', color: '#64748b' }
+    ];
+
+    const insertSpecStmt = rawDb.prepare(`
+      INSERT OR IGNORE INTO specialties (id, profession_id, name, slug, color)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    for (const s of allDetailedSpecialties) {
+      insertSpecStmt.run(s.id, s.prof_id, s.name, s.slug, s.color);
     }
 
     // Assegura que o tenant inicial "Espaço Viver Bem" esteja ativo e com onboarding concluído

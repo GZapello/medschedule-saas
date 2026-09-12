@@ -12,8 +12,10 @@ import {
   X,
   CheckCircle2,
   Mail,
-  Phone
+  Phone,
+  Edit3
 } from 'lucide-react';
+import { formatDoctorName } from '../../utils/formatters';
 
 export const ProfessionalsView: React.FC = () => {
   const { showToast } = useToast();
@@ -22,9 +24,10 @@ export const ProfessionalsView: React.FC = () => {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Modal Novo Profissional
+  // Modal Novo Profissional (Item 9: Sexo e Tratamento Dr./Dra.)
   const [showNewModal, setShowNewModal] = useState<boolean>(false);
   const [name, setName] = useState<string>('');
+  const [gender, setGender] = useState<'M' | 'F'>('M');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('123456');
   const [phone, setPhone] = useState<string>('');
@@ -35,6 +38,18 @@ export const ProfessionalsView: React.FC = () => {
   const [bio, setBio] = useState<string>('');
   const [practiceAreas, setPracticeAreas] = useState<string>('');
   const [bufferMinutes, setBufferMinutes] = useState<number>(10);
+
+  // Modal Editar Profissional
+  const [editingProf, setEditingProf] = useState<Professional | null>(null);
+  const [editName, setEditName] = useState<string>('');
+  const [editGender, setEditGender] = useState<'M' | 'F'>('M');
+  const [editProfessionId, setEditProfessionId] = useState<string>('');
+  const [editSpecialtyId, setEditSpecialtyId] = useState<string>('');
+  const [editRegistrationType, setEditRegistrationType] = useState<string>('CRP');
+  const [editRegistrationNumber, setEditRegistrationNumber] = useState<string>('');
+  const [editBio, setEditBio] = useState<string>('');
+  const [editPracticeAreas, setEditPracticeAreas] = useState<string>('');
+  const [editBufferMinutes, setEditBufferMinutes] = useState<number>(10);
 
   // Modal Bloqueio de Horário
   const [showBlockModal, setShowBlockModal] = useState<boolean>(false);
@@ -87,12 +102,14 @@ export const ProfessionalsView: React.FC = () => {
         registrationNumber: registrationNumber || null,
         bio: bio || null,
         practiceAreas: practiceAreas || null,
-        bufferMinutes: Number(bufferMinutes)
+        bufferMinutes: Number(bufferMinutes),
+        gender
       });
 
       showToast('Profissional cadastrado com sucesso!', 'success');
       setShowNewModal(false);
       setName('');
+      setGender('M');
       setEmail('');
       setPhone('');
       setRegistrationNumber('');
@@ -101,6 +118,33 @@ export const ProfessionalsView: React.FC = () => {
       fetchData();
     } catch (err: any) {
       showToast(err.message || 'Erro ao cadastrar profissional', 'error');
+    }
+  };
+
+  const handleSaveEditProfessional = async () => {
+    if (!editingProf || !editName) {
+      showToast('Nome é obrigatório', 'error');
+      return;
+    }
+
+    try {
+      await ApiClient.put(`/v1/professionals/${editingProf.id}`, {
+        name: editName,
+        gender: editGender,
+        professionId: editProfessionId,
+        specialtyId: editSpecialtyId || null,
+        registrationType: editRegistrationType || null,
+        registrationNumber: editRegistrationNumber || null,
+        bio: editBio || null,
+        practiceAreas: editPracticeAreas || null,
+        bufferMinutes: Number(editBufferMinutes)
+      });
+
+      showToast('Profissional atualizado com sucesso!', 'success');
+      setEditingProf(null);
+      fetchData();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar profissional', 'error');
     }
   };
 
@@ -171,7 +215,9 @@ export const ProfessionalsView: React.FC = () => {
               </div>
 
               <div className="mt-3">
-                <h3 className="font-bold text-slate-900 text-base">{p.name}</h3>
+                <h3 className="font-bold text-slate-900 text-base">
+                  {formatDoctorName(p.name, (p as any).gender)}
+                </h3>
                 <p className="text-xs text-indigo-600 font-semibold">{p.specialty_name || p.profession_name}</p>
                 {p.registration_number && (
                   <p className="text-[11px] text-slate-400 font-medium mt-0.5">
@@ -194,15 +240,36 @@ export const ProfessionalsView: React.FC = () => {
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs text-slate-500">
-              <div className="flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                <span>Intervalo (buffer): <strong>{p.buffer_minutes} min</strong></span>
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Buffer: <strong>{p.buffer_minutes} min</strong></span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <Calendar className="w-3 h-3 text-slate-400" />
+                  <span>Seg a Sex (08:00 - 18:00)</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <span>Grade semanal: <strong>Seg a Sex (08:00 - 18:00)</strong></span>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingProf(p);
+                  setEditName(p.name);
+                  setEditGender((p as any).gender || 'M');
+                  const currentPProfId = p.profession_id || (professions[0]?.id || '');
+                  setEditProfessionId(currentPProfId);
+                  setEditSpecialtyId(p.specialty_id || '');
+                  setEditRegistrationType(p.registration_type || 'CRM');
+                  setEditRegistrationNumber(p.registration_number || '');
+                  setEditBio(p.bio || '');
+                  setEditPracticeAreas(p.practice_areas || '');
+                  setEditBufferMinutes(p.buffer_minutes || 10);
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl transition-all shadow-2xs cursor-pointer text-xs"
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Editar
+              </button>
             </div>
           </div>
         ))}
@@ -220,15 +287,28 @@ export const ProfessionalsView: React.FC = () => {
             </div>
 
             <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome Completo *</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="Ex: Dra. Ana Paula Silveira"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold text-slate-700 mb-1">Nome Completo *</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Ex: Ana Paula Silveira"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Sexo / Prefixo *</label>
+                  <select
+                    value={gender}
+                    onChange={e => setGender(e.target.value as 'M' | 'F')}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-semibold"
+                  >
+                    <option value="M">Masculino (Dr.)</option>
+                    <option value="F">Feminino (Dra.)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -256,11 +336,16 @@ export const ProfessionalsView: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Profissão</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Profissão *</label>
                   <select
                     value={professionId}
-                    onChange={e => setProfessionId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                    onChange={e => {
+                      const newPId = e.target.value;
+                      setProfessionId(newPId);
+                      const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
+                      setSpecialtyId(matching.length > 0 ? matching[0].id : '');
+                    }}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
                   >
                     {professions.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
@@ -268,16 +353,18 @@ export const ProfessionalsView: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Especialidade (dinâmica) *</label>
                   <select
                     value={specialtyId}
                     onChange={e => setSpecialtyId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
                   >
-                    <option value="">Selecione...</option>
-                    {specialties.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
+                    <option value="">Selecione a especialidade...</option>
+                    {specialties
+                      .filter(s => s.profession_id === professionId || (s as any).professionId === professionId)
+                      .map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
                   </select>
                 </div>
               </div>
@@ -342,6 +429,158 @@ export const ProfessionalsView: React.FC = () => {
                   className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
                 >
                   Cadastrar Profissional
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Profissional */}
+      {editingProf && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Editar Profissional: {editingProf.name}</h3>
+              <button onClick={() => setEditingProf(null)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold text-slate-700 mb-1">Nome Completo *</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Sexo / Prefixo *</label>
+                  <select
+                    value={editGender}
+                    onChange={e => setEditGender(e.target.value as 'M' | 'F')}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-semibold"
+                  >
+                    <option value="M">Masculino (Dr.)</option>
+                    <option value="F">Feminino (Dra.)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Estrutura: Profissão -> Especialidade -> Atendimentos/áreas de atuação livres */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Profissão *</label>
+                  <select
+                    value={editProfessionId}
+                    onChange={e => {
+                      const newPId = e.target.value;
+                      setEditProfessionId(newPId);
+                      const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
+                      setEditSpecialtyId(matching.length > 0 ? matching[0].id : '');
+                    }}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
+                  >
+                    {professions.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Especialidade (dinâmica) *</label>
+                  <select
+                    value={editSpecialtyId}
+                    onChange={e => setEditSpecialtyId(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
+                  >
+                    <option value="">Selecione a especialidade...</option>
+                    {specialties
+                      .filter(s => s.profession_id === editProfessionId || (s as any).professionId === editProfessionId)
+                      .map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Atendimentos e áreas de atuação</label>
+                  <span className="text-[10px] text-slate-400 font-medium">Texto livre</span>
+                </div>
+                <textarea
+                  rows={2}
+                  value={editPracticeAreas}
+                  onChange={e => setEditPracticeAreas(e.target.value)}
+                  placeholder="Ex: TEA, TDAH, Ansiedade, Depressão, Orientação de Pais, Avaliação Neuropsicológica..."
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tipo de Registro</label>
+                  <input
+                    type="text"
+                    value={editRegistrationType}
+                    onChange={e => setEditRegistrationType(e.target.value)}
+                    placeholder="Ex: CRP, CRM, OAB"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Número do Registro</label>
+                  <input
+                    type="text"
+                    value={editRegistrationNumber}
+                    onChange={e => setEditRegistrationNumber(e.target.value)}
+                    placeholder="Ex: 06/12345"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Biografia / Apresentação</label>
+                <textarea
+                  rows={2}
+                  value={editBio}
+                  onChange={e => setEditBio(e.target.value)}
+                  placeholder="Breve currículo exibido na página pública..."
+                  className="w-full border border-slate-200 rounded-xl p-2.5 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Intervalo entre consultas (Buffer em minutos)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={editBufferMinutes}
+                  onChange={e => setEditBufferMinutes(Number(e.target.value))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingProf(null)}
+                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditProfessional}
+                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
+                >
+                  Salvar Alterações
                 </button>
               </div>
             </div>

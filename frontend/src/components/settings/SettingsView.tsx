@@ -19,8 +19,29 @@ import {
   CheckCircle2,
   Trash2,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Clock,
+  Edit2
 } from 'lucide-react';
+
+export const COMMON_INSURANCE_PRESETS = [
+  { name: 'Unimed', ansCode: '305146', phone: '0800 014 5555' },
+  { name: 'Bradesco Saúde', ansCode: '005711', phone: '0800 701 2700' },
+  { name: 'Amil', ansCode: '326305', phone: '0800 021 2545' },
+  { name: 'SulAmérica Saúde', ansCode: '006246', phone: '0800 722 0504' },
+  { name: 'NotreDame Intermédica (GNDI)', ansCode: '359017', phone: '0800 015 3855' },
+  { name: 'Hapvida', ansCode: '368253', phone: '0800 280 9130' },
+  { name: 'Cassi', ansCode: '346659', phone: '0800 729 0080' },
+  { name: 'Geap Saúde', ansCode: '323080', phone: '0800 728 8300' },
+  { name: 'Porto Seguro Saúde', ansCode: '000582', phone: '0800 727 9966' },
+  { name: 'Allianz Saúde', ansCode: '000515', phone: '0800 013 0700' },
+  { name: 'Omint', ansCode: '359645', phone: '0800 726 4000' },
+  { name: 'Golden Cross', ansCode: '403911', phone: '0800 728 2001' },
+  { name: 'Petrobras Saúde (AMS)', ansCode: '419168', phone: '0800 287 2267' },
+  { name: 'Postal Saúde', ansCode: '419133', phone: '0800 888 8110' },
+  { name: 'Assefaz', ansCode: '313840', phone: '0800 703 4000' },
+  { name: 'Prevent Senior', ansCode: '302147', phone: '0800 770 0789' }
+];
 
 export const SettingsView: React.FC = () => {
   const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession } = useAuth();
@@ -51,6 +72,17 @@ export const SettingsView: React.FC = () => {
   const [primaryColor, setPrimaryColor] = useState<string>('#4f46e5');
   const [loadingClinic, setLoadingClinic] = useState<boolean>(false);
 
+  // Horários de Funcionamento da Clínica (Item 3)
+  const [businessHours, setBusinessHours] = useState<any[]>([
+    { dayOfWeek: 1, dayName: 'Segunda-feira', isOpen: true, startTime: '08:00', endTime: '18:00', breakStart: '12:00', breakEnd: '13:00' },
+    { dayOfWeek: 2, dayName: 'Terça-feira', isOpen: true, startTime: '08:00', endTime: '18:00', breakStart: '12:00', breakEnd: '13:00' },
+    { dayOfWeek: 3, dayName: 'Quarta-feira', isOpen: true, startTime: '08:00', endTime: '18:00', breakStart: '12:00', breakEnd: '13:00' },
+    { dayOfWeek: 4, dayName: 'Quinta-feira', isOpen: true, startTime: '08:00', endTime: '18:00', breakStart: '12:00', breakEnd: '13:00' },
+    { dayOfWeek: 5, dayName: 'Sexta-feira', isOpen: true, startTime: '08:00', endTime: '18:00', breakStart: '12:00', breakEnd: '13:00' },
+    { dayOfWeek: 6, dayName: 'Sábado', isOpen: true, startTime: '08:00', endTime: '12:00', breakStart: '', breakEnd: '' },
+    { dayOfWeek: 0, dayName: 'Domingo', isOpen: false, startTime: '08:00', endTime: '12:00', breakStart: '', breakEnd: '' }
+  ]);
+
   // Modelos de Documentos (Item 11)
   const [selectedDocType, setSelectedDocType] = useState<string>('certificate');
   const [docTemplate, setDocTemplate] = useState<any>({
@@ -62,10 +94,21 @@ export const SettingsView: React.FC = () => {
     showProfessionalRegistration: true
   });
 
-  // Convênios da Clínica (Item 15)
+  // Convênios da Clínica (Item 5)
   const [clinicInsurances, setClinicInsurances] = useState<any[]>([]);
   const [showNewInsuranceModal, setShowNewInsuranceModal] = useState<boolean>(false);
-  const [insuranceForm, setInsuranceForm] = useState({ name: '', ansCode: '', phone: '', email: '', notes: '' });
+  const [insuranceForm, setInsuranceForm] = useState({
+    id: '',
+    name: '',
+    ansCode: '',
+    planName: '',
+    cardNumber: '',
+    validityDate: '',
+    phone: '',
+    email: '',
+    notes: '',
+    active: true
+  });
 
   // Configurações Pessoais (Minha Conta)
   const [profileEmail, setProfileEmail] = useState<string>(currentUser?.email || '');
@@ -101,13 +144,18 @@ export const SettingsView: React.FC = () => {
     e.preventDefault();
     if (!insuranceForm.name) return;
     try {
-      await ApiClient.post('/v1/insurances/clinic', insuranceForm);
-      showToast('Convênio cadastrado com sucesso!', 'success');
+      if (insuranceForm.id) {
+        await ApiClient.put(`/v1/insurances/clinic/${insuranceForm.id}`, insuranceForm);
+        showToast('Convênio atualizado com sucesso!', 'success');
+      } else {
+        await ApiClient.post('/v1/insurances/clinic', insuranceForm);
+        showToast('Convênio cadastrado com sucesso!', 'success');
+      }
       setShowNewInsuranceModal(false);
-      setInsuranceForm({ name: '', ansCode: '', phone: '', email: '', notes: '' });
+      setInsuranceForm({ id: '', name: '', ansCode: '', planName: '', cardNumber: '', validityDate: '', phone: '', email: '', notes: '', active: true });
       fetchClinicInsurances();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao cadastrar convênio', 'error');
+      showToast(err.message || 'Erro ao salvar convênio', 'error');
     }
   };
 
@@ -182,12 +230,29 @@ export const SettingsView: React.FC = () => {
       return;
     }
 
+    if (file.size < 3 * 1024) {
+      showToast('A imagem selecionada é muito pequena (mínimo: 3KB). Envie uma imagem nítida.', 'error');
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target?.result as string;
-      setLogoPreview(base64);
-      setLogoUrl(base64);
-      showToast('Prévia do logotipo carregada! Clique em Salvar para fixar na clínica.', 'info');
+      const img = new Image();
+      img.onload = () => {
+        // Validação estrita de dimensões mínimas para evitar logos borrados/ilegíveis (Item 2)
+        if (img.width < 180 || img.height < 180) {
+          showToast(`A resolução da imagem é muito baixa (${img.width}x${img.height}px). O tamanho mínimo permitido é 180x180 pixels para garantir nitidez nos documentos e impressões.`, 'error');
+          return;
+        }
+        setLogoPreview(base64);
+        setLogoUrl(base64);
+        showToast('Prévia do logotipo carregada em alta resolução! Clique em Salvar para fixar na clínica.', 'info');
+      };
+      img.onerror = () => {
+        showToast('Não foi possível verificar as dimensões do arquivo.', 'error');
+      };
+      img.src = base64;
     };
     reader.readAsDataURL(file);
   };
@@ -212,6 +277,15 @@ export const SettingsView: React.FC = () => {
       setLogoPreview((currentTenant as any).logo_url || null);
       setClientTermLabel(currentTenant.client_term_label || 'Paciente');
       setPrimaryColor(currentTenant.primary_color || '#4f46e5');
+
+      if ((currentTenant as any).business_hours_json) {
+        try {
+          const parsed = JSON.parse((currentTenant as any).business_hours_json);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setBusinessHours(parsed);
+          }
+        } catch (e) {}
+      }
     }
     if (currentUser) {
       setProfileEmail(currentUser.email || '');
@@ -244,9 +318,10 @@ export const SettingsView: React.FC = () => {
         zipCode,
         logoUrl,
         clientTermLabel,
-        primaryColor
+        primaryColor,
+        businessHoursJson: JSON.stringify(businessHours)
       });
-      showToast('Configurações da clínica e identidade visual atualizadas com sucesso!', 'success');
+      showToast('Configurações da clínica e horários de funcionamento salvos com sucesso!', 'success');
       refreshTenant();
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar configurações da clínica', 'error');
@@ -634,6 +709,116 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Horários de Funcionamento da Clínica (Item 3) */}
+            <div className="pt-4 border-t border-slate-100">
+              <div className="mb-4">
+                <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-indigo-600" />
+                  Dias e Horários de Funcionamento da Clínica
+                </h4>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  Configure os dias da semana e horários em que a clínica está aberta para atendimentos. Agendamentos serão restritos exclusivamente a estes períodos.
+                </p>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
+                    <tr>
+                      <th className="px-4 py-3">Dia da Semana</th>
+                      <th className="px-4 py-3 text-center">Aberto</th>
+                      <th className="px-4 py-3">Horário de Atendimento</th>
+                      <th className="px-4 py-3">Intervalo de Almoço (Opcional)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {businessHours.map((slot, index) => (
+                      <tr key={slot.dayOfWeek} className={!slot.isOpen ? 'bg-slate-50/50 opacity-60' : 'hover:bg-slate-50/70'}>
+                        <td className="px-4 py-3 font-semibold text-slate-800">
+                          {slot.dayName}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={slot.isOpen}
+                              onChange={e => {
+                                const updated = [...businessHours];
+                                updated[index].isOpen = e.target.checked;
+                                setBusinessHours(updated);
+                              }}
+                              className="sr-only peer"
+                            />
+                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                          </label>
+                        </td>
+                        <td className="px-4 py-3">
+                          {slot.isOpen ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={slot.startTime}
+                                onChange={e => {
+                                  const updated = [...businessHours];
+                                  updated[index].startTime = e.target.value;
+                                  setBusinessHours(updated);
+                                }}
+                                className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono"
+                              />
+                              <span className="text-slate-400 font-medium">às</span>
+                              <input
+                                type="time"
+                                value={slot.endTime}
+                                onChange={e => {
+                                  const updated = [...businessHours];
+                                  updated[index].endTime = e.target.value;
+                                  setBusinessHours(updated);
+                                }}
+                                className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic text-xs">Fechado</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {slot.isOpen ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="time"
+                                value={slot.breakStart || ''}
+                                onChange={e => {
+                                  const updated = [...businessHours];
+                                  updated[index].breakStart = e.target.value;
+                                  setBusinessHours(updated);
+                                }}
+                                placeholder="Início"
+                                className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono"
+                              />
+                              <span className="text-slate-400 font-medium">às</span>
+                              <input
+                                type="time"
+                                value={slot.breakEnd || ''}
+                                onChange={e => {
+                                  const updated = [...businessHours];
+                                  updated[index].breakEnd = e.target.value;
+                                  setBusinessHours(updated);
+                                }}
+                                placeholder="Fim"
+                                className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-mono"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end pt-4 border-t border-slate-100">
@@ -769,7 +954,10 @@ export const SettingsView: React.FC = () => {
               </div>
               <button
                 type="button"
-                onClick={() => setShowNewInsuranceModal(true)}
+                onClick={() => {
+                  setInsuranceForm({ id: '', name: '', ansCode: '', planName: '', cardNumber: '', validityDate: '', phone: '', email: '', notes: '', active: true });
+                  setShowNewInsuranceModal(true);
+                }}
                 className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs"
               >
                 <Plus className="w-4 h-4" /> Cadastrar Convênio
@@ -780,44 +968,75 @@ export const SettingsView: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase">
                   <tr>
-                    <th className="px-6 py-3.5">Nome do Convênio</th>
-                    <th className="px-6 py-3.5">Registro ANS</th>
-                    <th className="px-6 py-3.5">Contato / Autorização</th>
-                    <th className="px-6 py-3.5">Status</th>
-                    <th className="px-6 py-3.5 text-right">Ação</th>
+                    <th className="px-4 py-3.5">Nome do Convênio</th>
+                    <th className="px-4 py-3.5">Plano / Categoria</th>
+                    <th className="px-4 py-3.5">Carteirinha</th>
+                    <th className="px-4 py-3.5">Validade</th>
+                    <th className="px-4 py-3.5">Registro ANS</th>
+                    <th className="px-4 py-3.5">Contato</th>
+                    <th className="px-4 py-3.5">Status</th>
+                    <th className="px-4 py-3.5 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {clinicInsurances.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-400">
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
                         Nenhum convênio cadastrado. Todos os atendimentos serão tratados como Particulares.
                       </td>
                     </tr>
                   ) : (
                     clinicInsurances.map(ins => (
                       <tr key={ins.id} className="hover:bg-slate-50/70">
-                        <td className="px-6 py-4 font-bold text-slate-900">{ins.name}</td>
-                        <td className="px-6 py-4 font-mono">{ins.ans_code || '—'}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4 font-bold text-slate-900">{ins.name}</td>
+                        <td className="px-4 py-4 text-slate-700">{ins.plan_name || '—'}</td>
+                        <td className="px-4 py-4 font-mono text-slate-700">{ins.card_number || '—'}</td>
+                        <td className="px-4 py-4 text-slate-700">
+                          {ins.validity_date ? new Date(ins.validity_date).toLocaleDateString('pt-BR') : '—'}
+                        </td>
+                        <td className="px-4 py-4 font-mono text-slate-500">{ins.ans_code || '—'}</td>
+                        <td className="px-4 py-4">
                           <div>{ins.phone || '—'}</div>
                           <div className="text-slate-400 text-[10px]">{ins.email || ''}</div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             ins.active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
                           }`}>
                             {ins.active ? 'Ativo' : 'Inativo'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleInsuranceStatus(ins)}
-                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                          >
-                            {ins.active ? 'Desativar' : 'Ativar'}
-                          </button>
+                        <td className="px-4 py-4 text-right">
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInsuranceForm({
+                                  id: ins.id,
+                                  name: ins.name,
+                                  ansCode: ins.ans_code || '',
+                                  planName: ins.plan_name || '',
+                                  cardNumber: ins.card_number || '',
+                                  validityDate: ins.validity_date ? ins.validity_date.substring(0, 10) : '',
+                                  phone: ins.phone || '',
+                                  email: ins.email || '',
+                                  notes: ins.notes || '',
+                                  active: ins.active !== 0
+                                });
+                                setShowNewInsuranceModal(true);
+                              }}
+                              className="text-xs font-semibold text-slate-600 hover:text-indigo-600 flex items-center gap-1 cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" /> Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleInsuranceStatus(ins)}
+                              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                            >
+                              {ins.active ? 'Desativar' : 'Ativar'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -827,17 +1046,51 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Modal Cadastrar Convênio */}
+          {/* Modal Cadastrar / Editar Convênio */}
           {showNewInsuranceModal && (
             <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
               <form onSubmit={handleSaveInsurance} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 text-xs">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="text-base font-bold text-slate-900">Cadastrar Novo Convênio</h3>
-                  <button type="button" onClick={() => setShowNewInsuranceModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
+                  <h3 className="text-base font-bold text-slate-900">
+                    {insuranceForm.id ? 'Editar Convênio' : 'Cadastrar Novo Convênio'}
+                  </h3>
+                  <button type="button" onClick={() => setShowNewInsuranceModal(false)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
                     ✕
                   </button>
                 </div>
                 <div className="space-y-3">
+                  {/* Modelos Pré-definidos */}
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Modelo Pré-definido (Opcional)
+                    </label>
+                    <select
+                      className="w-full border border-indigo-200 bg-indigo-50/50 text-indigo-950 font-medium rounded-xl px-3 py-2 text-xs"
+                      defaultValue=""
+                      onChange={e => {
+                        const selected = COMMON_INSURANCE_PRESETS.find(p => p.name === e.target.value);
+                        if (selected) {
+                          setInsuranceForm(prev => ({
+                            ...prev,
+                            name: selected.name,
+                            ansCode: selected.ansCode,
+                            phone: prev.phone || selected.phone
+                          }));
+                        }
+                      }}
+                    >
+                      <option value="">Selecione um modelo para preenchimento rápido...</option>
+                      {COMMON_INSURANCE_PRESETS.map(p => (
+                        <option key={p.name} value={p.name}>
+                          {p.name} (ANS: {p.ansCode})
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">
+                      Ao selecionar, nome e código ANS são preenchidos automaticamente e continuam totalmente editáveis.
+                    </span>
+                  </div>
+
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Nome da Operadora / Convênio *</label>
                     <input
@@ -849,15 +1102,48 @@ export const SettingsView: React.FC = () => {
                       className="w-full border border-slate-200 rounded-xl px-3 py-2"
                     />
                   </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Código de Registro ANS</label>
-                    <input
-                      type="text"
-                      value={insuranceForm.ansCode}
-                      onChange={e => setInsuranceForm({ ...insuranceForm, ansCode: e.target.value })}
-                      placeholder="Ex: 305146"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 font-mono"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Plano / Categoria (Opcional)</label>
+                      <input
+                        type="text"
+                        value={insuranceForm.planName}
+                        onChange={e => setInsuranceForm({ ...insuranceForm, planName: e.target.value })}
+                        placeholder="Ex: Especial, Básico"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Código ANS</label>
+                      <input
+                        type="text"
+                        value={insuranceForm.ansCode}
+                        onChange={e => setInsuranceForm({ ...insuranceForm, ansCode: e.target.value })}
+                        placeholder="Ex: 305146"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Nº Carteirinha (Opcional)</label>
+                      <input
+                        type="text"
+                        value={insuranceForm.cardNumber}
+                        onChange={e => setInsuranceForm({ ...insuranceForm, cardNumber: e.target.value })}
+                        placeholder="Ex: 0023.9981..."
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Validade (Opcional)</label>
+                      <input
+                        type="date"
+                        value={insuranceForm.validityDate}
+                        onChange={e => setInsuranceForm({ ...insuranceForm, validityDate: e.target.value })}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2"
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
@@ -891,13 +1177,26 @@ export const SettingsView: React.FC = () => {
                       className="w-full border border-slate-200 rounded-xl px-3 py-2"
                     />
                   </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="insuranceActiveToggle"
+                      checked={insuranceForm.active}
+                      onChange={e => setInsuranceForm({ ...insuranceForm, active: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                    />
+                    <label htmlFor="insuranceActiveToggle" className="font-bold text-slate-700 select-none cursor-pointer">
+                      Convênio Ativo para Agendamentos
+                    </label>
+                  </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                  <button type="button" onClick={() => setShowNewInsuranceModal(false)} className="px-3 py-1.5 border rounded-xl text-slate-600">
+                  <button type="button" onClick={() => setShowNewInsuranceModal(false)} className="px-3 py-1.5 border rounded-xl text-slate-600 cursor-pointer">
                     Cancelar
                   </button>
-                  <button type="submit" className="px-5 py-1.5 bg-indigo-600 text-white font-bold rounded-xl shadow-xs">
-                    Salvar Convênio
+                  <button type="submit" className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs cursor-pointer">
+                    {insuranceForm.id ? 'Atualizar Convênio' : 'Salvar Convênio'}
                   </button>
                 </div>
               </form>

@@ -314,6 +314,7 @@ api.get('/v1/cash-register/:id', requireTenant, CashRegisterController.getById);
 // Assistente de Inteligência Artificial Integrado (Zemda AI)
 api.post('/v1/ai/chat', requireTenant, AIController.chat);
 api.post('/v1/ai/improve-text', requireTenant, AIController.improveText);
+api.post('/v1/ai/summarize-consultation', requireTenant, AIController.summarizeConsultation);
 api.get('/v1/ai/conversations', requireTenant, AIController.listConversations);
 api.post('/v1/ai/conversations', requireTenant, AIController.saveConversation);
 api.delete('/v1/ai/conversations/:id', requireTenant, AIController.deleteConversation);
