@@ -859,6 +859,114 @@ export class AIController {
       candidateModels: GeminiService.getCandidateModels()
     });
   }
+
+  // ================================================================
+  // 7. ORGANIZAÇÃO DE EVOLUÇÃO CLÍNICA & CONDUTA A PARTIR DE FALA
+  // ================================================================
+  static async organizeEvolution(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      const { transcript, text, mode, patientId } = req.body;
+      const rawInput = transcript || text;
+
+      if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length === 0) {
+        res.status(400).json({ error: 'Nenhum áudio transcrito foi fornecido para organização.' });
+        return;
+      }
+
+      const raw = rawInput.trim();
+      const modeKey = (mode && typeof mode === 'string') ? mode.trim().toLowerCase() : 'organize';
+
+      // Identifica o paciente se fornecido
+      let patientName = 'Paciente';
+      if (patientId && tenantId) {
+        try {
+          const p = db.prepare('SELECT full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+          if (p?.full_name) patientName = p.full_name;
+        } catch (_) {}
+      }
+
+      // Tenta processar com o Gemini
+      if (GeminiService.isAvailable()) {
+        const result = await GeminiService.organizeClinicalEvolution({
+          transcript: raw,
+          mode: modeKey,
+          patientName
+        });
+
+        if (result && result.organizedText) {
+          res.json({
+            originalTranscript: raw,
+            organizedText: result.organizedText,
+            mode: result.mode,
+            provider: 'Google Gemini',
+            disclaimer: 'Rascunho gerado por IA — revise antes de salvar.'
+          });
+          return;
+        }
+      }
+
+      // Fallback heurístico inteligente local
+      let organized = raw;
+      switch (modeKey) {
+        case 'summarize':
+          organized = summarizeContent(raw);
+          break;
+        case 'technical':
+          organized = makeTechnical(raw);
+          break;
+        case 'objective':
+          organized = makeObjective(raw);
+          break;
+        case 'grammar':
+          organized = cleanGrammar(raw);
+          break;
+        case 'separate': {
+          const lower = raw.toLowerCase();
+          const splitWords = ['vou continuar', 'vou manter', 'conduta', 'plano', 'próxima sessão', 'proxima sessao', 'orientado', 'orientada', 'manter '];
+          let splitIdx = -1;
+          for (const word of splitWords) {
+            const idx = lower.indexOf(word);
+            if (idx !== -1 && (splitIdx === -1 || idx < splitIdx)) {
+              splitIdx = idx;
+            }
+          }
+          if (splitIdx > 15) {
+            const evolPart = cleanGrammar(raw.slice(0, splitIdx).trim());
+            const condPart = cleanGrammar(raw.slice(splitIdx).trim());
+            organized = `**Evolução Clínica:**\n${evolPart}\n\n**Conduta Terapêutica:**\n${condPart}`;
+          } else {
+            organized = `**Evolução Clínica:**\n${cleanGrammar(raw)}\n\n**Conduta Terapêutica:**\nManter acompanhamento e intervenções conforme programação clínica.`;
+          }
+          break;
+        }
+        case 'organize':
+        default: {
+          let t = raw;
+          t = t.replace(/^(paciente veio hoje,?|o paciente veio hoje,?)/i, 'Paciente compareceu ao atendimento hoje.');
+          t = t.replace(/\bmãe disse que\b/gi, 'responsável relata que');
+          t = t.replace(/\bpai disse que\b/gi, 'responsável relata que');
+          t = t.replace(/\bfizemos atividade de\b/gi, 'foram realizadas atividades de');
+          t = t.replace(/\bfizemos\b/gi, 'foram realizadas intervenções de');
+          t = t.replace(/\bvou continuar trabalhando isso na próxima sessão\b/gi, 'Conduta: manter intervenção direcionada às habilidades trabalhadas e dar continuidade ao acompanhamento na próxima sessão.');
+          t = t.replace(/\bvou continuar trabalhando isso\b/gi, 'Conduta: manter intervenção terapêutica direcionada.');
+          organized = cleanGrammar(t);
+          break;
+        }
+      }
+
+      res.json({
+        originalTranscript: raw,
+        organizedText: organized,
+        mode: modeKey,
+        provider: 'Motor Local Inteligente',
+        disclaimer: 'Rascunho gerado por IA — revise antes de salvar.'
+      });
+    } catch (err: any) {
+      console.error('[AIController.organizeEvolution] Erro:', err);
+      res.status(500).json({ error: 'Erro ao organizar evolução clínica com IA' });
+    }
+  }
 }
 
 // ============================================================================

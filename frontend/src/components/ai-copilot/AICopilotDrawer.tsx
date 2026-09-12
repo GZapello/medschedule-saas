@@ -131,35 +131,64 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     }
   }, [isOpen, activePatientId]);
 
-  // Speech Recognition setup
+  // Speech Recognition setup (sem duplicação de frases ou múltiplos listeners)
+  const baseVoiceTextRef = useRef<string>('');
+
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'pt-BR';
+    if (!SpeechRecognition) return;
 
-      recognition.onresult = (event: any) => {
-        let currentTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          currentTranscript += event.results[i][0].transcript;
-        }
-        if (activeTab === 'audio_draft') {
-          setRecordedDraft(prev => prev + ' ' + currentTranscript);
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'pt-BR';
+
+    recognition.onresult = (event: any) => {
+      let newlyFinal = '';
+      let currentInterim = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        const text = (res[0]?.transcript || '').trim();
+        if (res.isFinal) {
+          if (text) {
+            newlyFinal += (newlyFinal ? ' ' : '') + text;
+          }
         } else {
-          setInput(prev => (prev ? prev + ' ' + currentTranscript : currentTranscript));
+          currentInterim += (currentInterim ? ' ' : '') + text;
         }
-      };
+      }
 
-      recognition.onerror = (event: any) => {
+      if (newlyFinal) {
+        baseVoiceTextRef.current = (baseVoiceTextRef.current ? baseVoiceTextRef.current + ' ' : '') + newlyFinal;
+      }
+
+      const fullText = (baseVoiceTextRef.current + (currentInterim ? ' ' + currentInterim : '')).trim();
+      if (activeTab === 'audio_draft') {
+        setRecordedDraft(fullText);
+      } else {
+        setInput(fullText);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error !== 'no-speech') {
         setIsRecording(false);
         showToast(`Erro no reconhecimento de voz: ${event.error}`, 'error');
-      };
+      }
+    };
 
-      recognition.onend = () => setIsRecording(false);
-      recognitionRef.current = recognition;
-    }
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      try {
+        recognition.abort();
+      } catch (_) {}
+    };
   }, [activeTab]);
 
   const toggleRecording = () => {
@@ -169,16 +198,21 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     }
 
     if (isRecording) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch (_) {}
       setIsRecording(false);
       showToast('Gravação pausada.', 'info');
     } else {
       try {
+        baseVoiceTextRef.current = activeTab === 'audio_draft' ? recordedDraft.trim() : input.trim();
         recognitionRef.current.start();
         setIsRecording(true);
         showToast('Captando áudio em português...', 'info');
       } catch (err) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch (_) {}
         setIsRecording(false);
       }
     }

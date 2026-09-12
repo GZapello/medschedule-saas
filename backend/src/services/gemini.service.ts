@@ -192,6 +192,59 @@ REGRAS:
 - Formate em Markdown limpo
 - Ao final, adicione: "> ⚠️ **Rascunho gerado por IA a partir de transcrição** — revise antes de salvar."`;
 
+const CLINICAL_EVOLUTION_PROMPTS: Record<string, string> = {
+  organize: `Você é um assistente de documentação clínica em saúde.
+Sua função é transformar a fala transcrita do profissional de saúde em um texto clínico formal, fluido e bem estruturado para o prontuário do paciente (campo "Evolução Clínica & Conduta Terapêutica").
+
+REGRAS CRÍTICAS E OBRIGATÓRIAS (NUNCA VIOLE):
+1. PRESERVAÇÃO RIGOROSA: Use ESTRITAMENTE as informações informadas pelo profissional. NUNCA adicione diagnósticos, sintomas, condutas, resultados, exames ou medicamentos que não tenham sido falados.
+2. NÃO INVENTE DADOS: Se algo não foi informado, NÃO complete automaticamente.
+3. CONVERSÃO ELEGANTE: Converta expressões orais ("veio hoje", "mãe disse que", "fizemos", "vou continuar trabalhando") em redação clínica formal ("compareceu ao atendimento", "responsável relata que", "foram realizadas intervenções", "conduta: manter intervenção direcionada").
+4. ESTRUTURA: Se o profissional tiver falado de conduta ou próximos passos, integre harmonicamente ou destaque em "Conduta: ...".
+5. RETORNE APENAS O TEXTO ORGANIZADO: Não inclua saudações, introduções ou notas de aviso.`,
+
+  summarize: `Você é um assistente de documentação clínica em saúde.
+Resuma a fala do profissional de saúde de forma concisa e sintética para o prontuário.
+
+REGRAS CRÍTICAS:
+1. NUNCA adicione diagnósticos, sintomas, condutas ou medicamentos não falados.
+2. Mantenha apenas os pontos essenciais do atendimento em um parágrafo objetivo e claro.
+3. Retorne APENAS o resumo.`,
+
+  technical: `Você é um assistente de documentação clínica em saúde.
+Transforme a fala do profissional de saúde aplicando terminologia técnica e vocabulário formal em saúde.
+
+REGRAS CRÍTICAS:
+1. NUNCA invente sintomas, condutas ou diagnósticos inexistentes no relato.
+2. Substitua termos coloquiais por termos técnicos precisos (ex: "dor de cabeça" -> "cefaleia", "remédio para pressão" -> "anti-hipertensivo").
+3. Retorne APENAS o texto técnico.`,
+
+  objective: `Você é um assistente de documentação clínica em saúde.
+Transforme a fala do profissional de saúde em um texto direto, enxuto e sem rodeios para o prontuário.
+
+REGRAS CRÍTICAS:
+1. NUNCA adicione informações não ditas.
+2. Elimine repetições, hesitações e palavras desnecessárias.
+3. Retorne APENAS o texto objetivo.`,
+
+  separate: `Você é um assistente de documentação clínica em saúde.
+Separe o relato do profissional estritamente em dois blocos distintos:
+
+**Evolução Clínica:**
+[Descrição dos achados, relato da sessão/consulta e queixas informadas pelo profissional]
+
+**Conduta Terapêutica:**
+[Orientações, procedimentos executados, plano terapêutico ou metas para a próxima sessão informados]
+
+REGRAS CRÍTICAS:
+1. NUNCA invente diagnósticos, condutas ou prescrições não mencionadas na fala. Se a conduta não foi mencionada, indique "Conforme rotina de acompanhamento."
+2. Retorne APENAS os dois blocos formatados em Markdown.`,
+
+  grammar: `Você é um assistente de documentação clínica.
+Corrija a gramática, pontuação e concordância verbal da transcrição a seguir, mantendo exatamente as palavras e o sentido do profissional.
+Retorne APENAS o texto corrigido.`
+};
+
 // ============================================================================
 // SERVIÇO PRINCIPAL
 // ============================================================================
@@ -389,6 +442,47 @@ export class GeminiService {
       };
     } catch (err: any) {
       console.error('[GeminiService.synthesizeConsultation] Erro:', err?.message || err);
+      return null;
+    }
+  }
+
+  /**
+   * Organização de fala para Evolução Clínica & Conduta Terapêutica
+   */
+  static async organizeClinicalEvolution(params: {
+    transcript: string;
+    mode?: string;
+    patientName?: string;
+  }): Promise<{ organizedText: string; mode: string } | null> {
+    try {
+      const modeKey = params.mode || 'organize';
+      const systemPrompt = CLINICAL_EVOLUTION_PROMPTS[modeKey] || CLINICAL_EVOLUTION_PROMPTS['organize'];
+
+      const userText = params.patientName && params.patientName !== 'Paciente'
+        ? `[Paciente em atendimento: ${params.patientName}]\n\nFala transcrita do profissional:\n"${params.transcript}"`
+        : `Fala transcrita do profissional:\n"${params.transcript}"`;
+
+      const result = await generateWithCascade(
+        systemPrompt,
+        [{ role: 'user', parts: [{ text: userText }] }],
+        {
+          temperature: 0.2,
+          topP: 0.8,
+          maxOutputTokens: 2048
+        },
+        15000
+      );
+
+      if (result && result.text) {
+        return {
+          organizedText: result.text.trim(),
+          mode: modeKey
+        };
+      }
+
+      return null;
+    } catch (err: any) {
+      console.error('[GeminiService.organizeClinicalEvolution] Erro:', err?.message || err);
       return null;
     }
   }

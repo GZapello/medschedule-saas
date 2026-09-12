@@ -24,8 +24,15 @@ import {
   MicOff,
   Sparkles,
   Edit3,
-  Trash2
+  Trash2,
+  Pause,
+  Play,
+  RotateCcw,
+  Copy,
+  Check,
+  Eye
 } from 'lucide-react';
+import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { ReferralModal } from './ReferralModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
 
@@ -82,26 +89,18 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const DRAFT_KEY = `zemda_quick_consult_${appointment.id}`;
   const debounceTimerRef = useRef<any>(null);
 
-  // Estados para Gravação de Áudio com IA (Item 6)
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
-  const [liveTranscript, setLiveTranscript] = useState<string>('');
-  const [processingAi, setProcessingAi] = useState<boolean>(false);
-  const [showAiDraftModal, setShowAiDraftModal] = useState<boolean>(false);
-  const [aiDraft, setAiDraft] = useState<{
-    chiefComplaint: string;
-    anamnesis: string;
-    physicalExam: string;
-    conduct: string;
-  }>({
-    chiefComplaint: '',
-    anamnesis: '',
-    physicalExam: '',
-    conduct: ''
-  });
-
-  const recognitionRef = useRef<any>(null);
-  const timerIntervalRef = useRef<any>(null);
+  // Estados para Gravação de Áudio com IA (Evolução Clínica)
+  const speech = useSpeechRecognition();
+  const [showAiEvolutionModal, setShowAiEvolutionModal] = useState<boolean>(false);
+  const [originalSpeechText, setOriginalSpeechText] = useState<string>('');
+  const [organizedDraft, setOrganizedDraft] = useState<string>('');
+  const [editedDraftText, setEditedDraftText] = useState<string>('');
+  const [isEditingDraft, setIsEditingDraft] = useState<boolean>(false);
+  const [currentAiMode, setCurrentAiMode] = useState<string>('organize');
+  const [isGeneratingAi, setIsGeneratingAi] = useState<boolean>(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [comparisonTab, setComparisonTab] = useState<'split' | 'organized' | 'original'>('split');
+  const [aiProvider, setAiProvider] = useState<string>('Google Gemini');
 
   const formatTimer = (sec: number) => {
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -109,136 +108,146 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     return `${m}:${s}`;
   };
 
-  const startAudioRecording = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      showToast('O navegador atual não suporta captura nativa de fala. Recomendamos Google Chrome ou Microsoft Edge.', 'info');
-      return;
-    }
-
-    try {
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'pt-BR';
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      recognition.onstart = () => {
-        setIsRecording(true);
-        setRecordingSeconds(0);
-        setLiveTranscript('');
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = setInterval(() => {
-          setRecordingSeconds(s => s + 1);
-        }, 1000);
-      };
-
-      recognition.onresult = (event: any) => {
-        let fullText = '';
-        for (let i = 0; i < event.results.length; i++) {
-          fullText += event.results[i][0].transcript + ' ';
-        }
-        setLiveTranscript(fullText.trim());
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        if (event.error === 'not-allowed') {
-          showToast('Permissão de microfone negada. Conceda acesso ao microfone no navegador.', 'error');
-          stopAudioRecording(false);
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-      showToast('Gravação do atendimento iniciada! Fale naturalmente com o paciente.', 'info');
-    } catch (err: any) {
-      showToast('Erro ao iniciar captura de áudio: ' + (err.message || 'Desconhecido'), 'error');
+  const getModeLabel = (key: string): string => {
+    switch (key) {
+      case 'organize': return 'Organizar evolução';
+      case 'summarize': return 'Resumir';
+      case 'technical': return 'Tornar mais técnico';
+      case 'objective': return 'Tornar mais objetivo';
+      case 'separate': return 'Separar evolução e conduta';
+      case 'grammar': return 'Corrigir gramática';
+      default: return 'Organizar';
     }
   };
 
-  const stopAudioRecording = async (processWithAi = true) => {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
+  // Iniciar microfone
+  const handleStartMic = () => {
+    if (!speech.isSupported) {
+      showToast('Navegador sem suporte à captura nativa de fala. Recomendamos Google Chrome ou Microsoft Edge.', 'info');
+      return;
     }
+    speech.startListening();
+    showToast('Microfone ativado! Fale a evolução da consulta.', 'info');
+  };
 
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {}
-      recognitionRef.current = null;
-    }
+  // Pausar
+  const handlePauseMic = () => {
+    speech.pauseListening();
+    showToast('Microfone pausado.', 'info');
+  };
 
-    setIsRecording(false);
+  // Continuar
+  const handleResumeMic = () => {
+    speech.resumeListening();
+    showToast('Microfone retomado! Pode continuar falando.', 'info');
+  };
 
-    if (!processWithAi) {
-      setLiveTranscript('');
+  // Finalizar gravação e organizar com IA
+  const handleStopAndOrganize = async () => {
+    speech.stopListening();
+    const transcriptText = speech.transcript.trim();
+
+    if (!transcriptText) {
+      showToast('Nenhum áudio detectado pelo microfone.', 'info');
       return;
     }
 
-    if (!liveTranscript.trim()) {
-      showToast('Nenhum áudio detectado para estruturação.', 'info');
-      return;
-    }
+    setOriginalSpeechText(transcriptText);
+    setAiError(null);
+    setIsGeneratingAi(true);
+    setCurrentAiMode('organize');
+    setIsEditingDraft(false);
+    setShowAiEvolutionModal(true);
 
     try {
-      setProcessingAi(true);
       const res = await ApiClient.post<{
-        structured: {
-          chiefComplaint: string;
-          anamnesis: string;
-          physicalExam: string;
-          conduct: string;
-        };
-        summaryText: string;
-      }>('/v1/ai/summarize-consultation', {
-        transcript: liveTranscript
+        originalTranscript: string;
+        organizedText: string;
+        mode: string;
+        provider?: string;
+        disclaimer?: string;
+      }>('/v1/ai/organize-evolution', {
+        transcript: transcriptText,
+        mode: 'organize',
+        patientId: appointment.patient_id
       });
 
-      if (res && res.structured) {
-        setAiDraft({
-          chiefComplaint: res.structured.chiefComplaint || '',
-          anamnesis: res.structured.anamnesis || '',
-          physicalExam: res.structured.physicalExam || '',
-          conduct: res.structured.conduct || ''
-        });
-        setShowAiDraftModal(true);
-        showToast('Rascunho da consulta estruturado pela IA! Revise antes de incluir na evolução.', 'success');
+      if (res && res.organizedText) {
+        setOrganizedDraft(res.organizedText);
+        setEditedDraftText(res.organizedText);
+        if (res.provider) setAiProvider(res.provider);
+        showToast('Rascunho clínico organizado pela IA! Revise antes de confirmar.', 'success');
+      } else {
+        throw new Error('Não foi possível organizar o texto com a IA');
       }
     } catch (err: any) {
-      showToast(err.message || 'Erro ao estruturar consulta com IA', 'error');
+      setAiError(err?.message || 'Falha na comunicação com a IA. Sua fala foi 100% preservada!');
+      setOrganizedDraft(transcriptText);
+      setEditedDraftText(transcriptText);
+      showToast('Aviso: Sua fala foi preservada. Você pode tentar novamente ou editar diretamente.', 'info');
     } finally {
-      setProcessingAi(false);
+      setIsGeneratingAi(false);
     }
   };
 
-  const applyDraftToEvolution = (mode: 'append' | 'replace') => {
-    const formattedDraft = [
-      `1. QUEIXA PRINCIPAL:\n${aiDraft.chiefComplaint || 'Não relatada.'}`,
-      `2. ANAMNESE E HISTÓRIA CLÍNICA:\n${aiDraft.anamnesis || 'Não relatada.'}`,
-      `3. EXAME CLÍNICO / AVALIAÇÃO:\n${aiDraft.physicalExam || 'Sem achados descritos.'}`,
-      `4. CONDUTA E PLANO TERAPÊUTICO:\n${aiDraft.conduct || 'Sem conduta definida.'}`
-    ].join('\n\n');
+  // Executar transformação rápida (Opções Rápidas)
+  const handleTransformMode = async (modeKey: string) => {
+    if (!originalSpeechText.trim()) return;
 
-    if (mode === 'replace' || !clinicalEvolution.trim()) {
-      handleEvolutionChange(formattedDraft);
-    } else {
-      handleEvolutionChange(clinicalEvolution + '\n\n' + formattedDraft);
-    }
+    setIsGeneratingAi(true);
+    setCurrentAiMode(modeKey);
+    setAiError(null);
 
-    setShowAiDraftModal(false);
-    showToast('Rascunho inserido com sucesso na evolução clínica!', 'success');
-  };
+    try {
+      const res = await ApiClient.post<{
+        originalTranscript: string;
+        organizedText: string;
+        mode: string;
+        provider?: string;
+      }>('/v1/ai/organize-evolution', {
+        transcript: originalSpeechText,
+        mode: modeKey,
+        patientId: appointment.patient_id
+      });
 
-  // 1. Carrega dados completos do paciente e histórico clínico
-  useEffect(() => {
-    return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (e) {}
+      if (res && res.organizedText) {
+        setOrganizedDraft(res.organizedText);
+        setEditedDraftText(res.organizedText);
+        setIsEditingDraft(false);
+        if (res.provider) setAiProvider(res.provider);
+        showToast(`Evolução atualizada (${getModeLabel(modeKey)})!`, 'success');
       }
-    };
-  }, []);
+    } catch (err: any) {
+      setAiError('Erro ao aplicar transformação pela IA. Versão anterior mantida.');
+      showToast('Erro ao processar nova transformação pela IA.', 'error');
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
+  // Aplicar rascunho no campo "Evolução Clínica & Conduta Terapêutica *"
+  const handleApplyDraft = (action: 'replace' | 'append') => {
+    const textToInsert = isEditingDraft ? editedDraftText.trim() : organizedDraft.trim();
+    if (!textToInsert) return;
+
+    if (action === 'replace' || !clinicalEvolution.trim()) {
+      handleEvolutionChange(textToInsert);
+    } else {
+      handleEvolutionChange(clinicalEvolution + '\n\n' + textToInsert);
+    }
+
+    setShowAiEvolutionModal(false);
+    speech.resetTranscript();
+    showToast('Texto aplicado com sucesso no campo de Evolução Clínica! Revise e salve quando desejar.', 'success');
+  };
+
+  // Descartar rascunho
+  const handleDiscardDraft = () => {
+    setShowAiEvolutionModal(false);
+    showToast('Rascunho descartado. Nenhuma alteração foi feita no prontuário.', 'info');
+  };
+
+
   useEffect(() => {
     async function loadPatientDetails() {
       try {
@@ -628,26 +637,70 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               </div>
               
               <div className="flex items-center gap-2">
-                {!isRecording ? (
+                {speech.status === 'idle' || speech.status === 'completed' ? (
                   <button
                     type="button"
-                    onClick={startAudioRecording}
-                    disabled={processingAi}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors cursor-pointer disabled:opacity-50"
-                    title="Gravar áudio da consulta e gerar rascunho estruturado por IA"
+                    onClick={handleStartMic}
+                    disabled={isGeneratingAi}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+                    title="Iniciar captura de áudio da evolução clínica"
                   >
                     <Mic className="w-3.5 h-3.5 text-teal-600" />
-                    <span>{processingAi ? 'Processando IA...' : 'Gravar com IA'}</span>
+                    <span>Iniciar microfone</span>
                   </button>
-                ) : (
+                ) : speech.status === 'listening' ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handlePauseMic}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 transition-colors cursor-pointer"
+                      title="Pausar captura de fala"
+                    >
+                      <Pause className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Pausar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStopAndOrganize}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors animate-pulse cursor-pointer shadow-xs"
+                      title="Finalizar gravação e estruturar com IA"
+                    >
+                      <MicOff className="w-3.5 h-3.5" />
+                      <span>Finalizar gravação</span>
+                    </button>
+                  </div>
+                ) : speech.status === 'paused' ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleResumeMic}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-colors cursor-pointer"
+                      title="Continuar captura de fala"
+                    >
+                      <Play className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Continuar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStopAndOrganize}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors cursor-pointer shadow-xs"
+                      title="Finalizar gravação e estruturar com IA"
+                    >
+                      <MicOff className="w-3.5 h-3.5" />
+                      <span>Finalizar gravação</span>
+                    </button>
+                  </div>
+                ) : null}
+
+                {originalSpeechText && !showAiEvolutionModal && (
                   <button
                     type="button"
-                    onClick={() => stopAudioRecording(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors animate-pulse cursor-pointer"
-                    title="Concluir gravação e estruturar consulta"
+                    onClick={() => setShowAiEvolutionModal(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-teal-700 bg-white hover:bg-teal-50 border border-teal-300 transition-colors cursor-pointer"
+                    title="Reabrir rascunho de IA gerado a partir da fala"
                   >
-                    <MicOff className="w-3.5 h-3.5" />
-                    <span>Parar & Gerar Rascunho ({formatTimer(recordingSeconds)})</span>
+                    <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Ver Rascunho IA</span>
                   </button>
                 )}
 
@@ -663,46 +716,110 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               </div>
             </div>
 
-            {/* Banner de Gravação Ativa em Tempo Real */}
-            {isRecording && (
-              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 animate-in fade-in space-y-2">
-                <div className="flex items-center justify-between">
+            {/* Painel de Voz: Estados Claros e Transcrição Sem Duplicação */}
+            {(speech.status === 'listening' || speech.status === 'paused' || isGeneratingAi || speech.status === 'completed') && (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 animate-in fade-in space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping inline-block" />
-                    <span className="text-xs font-bold text-rose-900">
-                      Gravando consulta com paciente • {formatTimer(recordingSeconds)}
+                    {speech.status === 'listening' && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-100 border border-rose-200 text-rose-800 rounded-full font-bold text-xs">
+                        <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping inline-block" />
+                        Microfone ativo • {formatTimer(speech.recordingSeconds)}
+                      </span>
+                    )}
+                    {speech.status === 'paused' && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100 border border-amber-200 text-amber-800 rounded-full font-bold text-xs">
+                        <Pause className="w-3 h-3 text-amber-700" />
+                        Pausado • {formatTimer(speech.recordingSeconds)}
+                      </span>
+                    )}
+                    {isGeneratingAi && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-100 border border-teal-200 text-teal-800 rounded-full font-bold text-xs animate-pulse">
+                        <Sparkles className="w-3.5 h-3.5 text-teal-600 animate-spin" />
+                        Processando…
+                      </span>
+                    )}
+                    {speech.status === 'completed' && !isGeneratingAi && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-full font-bold text-xs">
+                        <Check className="w-3.5 h-3.5 text-emerald-700" />
+                        Concluído
+                      </span>
+                    )}
+                    <span className="text-[11px] text-slate-500 hidden sm:inline">
+                      MICROFONE + IA focado em: <strong>Evolução Clínica & Conduta Terapêutica</strong>
                     </span>
                   </div>
+
                   <div className="flex items-center gap-2">
+                    {speech.status === 'listening' && (
+                      <button
+                        type="button"
+                        onClick={handlePauseMic}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs"
+                      >
+                        Pausar
+                      </button>
+                    )}
+                    {speech.status === 'paused' && (
+                      <button
+                        type="button"
+                        onClick={handleResumeMic}
+                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs"
+                      >
+                        Continuar
+                      </button>
+                    )}
+                    {(speech.status === 'listening' || speech.status === 'paused') && (
+                      <button
+                        type="button"
+                        onClick={handleStopAndOrganize}
+                        className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                      >
+                        Finalizar gravação
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => stopAudioRecording(false)}
-                      className="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+                      onClick={() => speech.resetTranscript()}
+                      className="px-2 py-1 text-slate-400 hover:text-rose-600 text-xs cursor-pointer"
+                      title="Cancelar e limpar fala"
                     >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => stopAudioRecording(true)}
-                      className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
-                    >
-                      Concluir Gravação
+                      Limpar
                     </button>
                   </div>
                 </div>
-                <p className="text-xs text-rose-800 italic bg-white/80 p-2.5 rounded-xl border border-rose-100 max-h-24 overflow-y-auto">
-                  {liveTranscript || 'Escutando fala do atendimento... Fale normalmente próximo ao microfone.'}
-                </p>
+
+                {/* Transcrição limpa sem repetições */}
+                <div className="text-xs text-slate-800 bg-white p-3 rounded-xl border border-slate-200 max-h-28 overflow-y-auto leading-relaxed shadow-inner">
+                  {speech.finalTranscript ? (
+                    <span>
+                      {speech.finalTranscript}{' '}
+                      {speech.interimTranscript && (
+                        <span className="italic text-teal-700/80 bg-teal-50 px-1 rounded">
+                          {speech.interimTranscript}
+                        </span>
+                      )}
+                    </span>
+                  ) : speech.interimTranscript ? (
+                    <span className="italic text-teal-700/80 bg-teal-50 px-1 rounded">
+                      {speech.interimTranscript}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 italic">
+                      Escutando fala do atendimento em tempo real... Fale normalmente próximo ao microfone.
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
             {/* Banner de Processamento IA */}
-            {processingAi && (
+            {isGeneratingAi && (
               <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 flex items-center gap-3 text-teal-900 animate-pulse">
                 <Sparkles className="w-5 h-5 text-teal-600 animate-spin" />
                 <div>
-                  <h5 className="text-xs font-bold">IA Zemda estruturando consulta médica...</h5>
-                  <p className="text-[11px] text-teal-700">Organizando queixa principal, anamnese, exame clínico e conduta em rascunho seguro.</p>
+                  <h5 className="text-xs font-bold">Zemda IA organizando a evolução clínica...</h5>
+                  <p className="text-[11px] text-teal-700">Convertendo a fala em redação técnica clara e conduta, sem inventar informações.</p>
                 </div>
               </div>
             )}
@@ -844,97 +961,329 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         />
       )}
 
-      {/* MODAL DE VALIDAÇÃO DE RASCUNHO GERADO POR IA (Item 6) */}
-      {showAiDraftModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 text-xs">
+      {/* MODAL DE RASCUNHO GERADO POR IA (Evolução Clínica) */}
+      {showAiEvolutionModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200 text-xs">
+            
+            {/* Cabeçalho */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-teal-600" />
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-teal-50 border border-teal-200 rounded-xl">
+                  <Sparkles className="w-5 h-5 text-teal-600" />
+                </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Rascunho da Consulta (IA Zemda)</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900">Evolução Clínica & Conduta com IA</h3>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {aiProvider}
+                    </span>
+                  </div>
                   <p className="text-[11px] text-slate-500">
-                    Apresentado como rascunho. Edite qualquer campo abaixo e aprove para incluir na evolução do paciente.
+                    Fala do atendimento transformada em texto clínico estruturado para conferência prévia.
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAiDraftModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                onClick={handleDiscardDraft}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                title="Fechar rascunho"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto py-4 space-y-4">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">1. Queixa Principal</label>
-                <textarea
-                  rows={2}
-                  value={aiDraft.chiefComplaint}
-                  onChange={e => setAiDraft({ ...aiDraft, chiefComplaint: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl p-2.5 text-slate-800"
-                />
+            {/* Aviso Obrigatório de Rascunho (Item 7) */}
+            <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-2 text-amber-900">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="text-xs font-semibold">
+                  ⚠️ <strong>Rascunho gerado por IA — revise antes de salvar.</strong>
+                </span>
               </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">2. Anamnese e História Clínica</label>
-                <textarea
-                  rows={3}
-                  value={aiDraft.anamnesis}
-                  onChange={e => setAiDraft({ ...aiDraft, anamnesis: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl p-2.5 text-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">3. Exame Clínico / Avaliação</label>
-                <textarea
-                  rows={3}
-                  value={aiDraft.physicalExam}
-                  onChange={e => setAiDraft({ ...aiDraft, physicalExam: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl p-2.5 text-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">4. Conduta e Plano Terapêutico</label>
-                <textarea
-                  rows={3}
-                  value={aiDraft.conduct}
-                  onChange={e => setAiDraft({ ...aiDraft, conduct: e.target.value })}
-                  className="w-full border border-slate-200 rounded-xl p-2.5 text-slate-800"
-                />
-              </div>
+              <span className="text-[10px] font-medium text-amber-700 hidden sm:inline">
+                Nenhum dado é salvo no prontuário sem sua confirmação explícita.
+              </span>
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAiDraftModal(false);
-                  showToast('Rascunho descartado sem alterações na evolução.', 'info');
-                }}
-                className="flex items-center gap-1 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" /> Descartar Rascunho
-              </button>
+            {/* Alerta em caso de erro na IA (Item 10) */}
+            {aiError && (
+              <div className="mt-2.5 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between gap-2 text-rose-900">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="text-xs">{aiError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleTransformMode(currentAiMode)}
+                  disabled={isGeneratingAi}
+                  className="px-2.5 py-1 bg-white hover:bg-rose-100 border border-rose-300 text-rose-800 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            )}
+
+            {/* Opções Rápidas de Transformação (Item 8) */}
+            <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1.5 border-b border-slate-100">
+              <span className="text-[10px] uppercase font-bold text-slate-400 shrink-0 mr-1">
+                Opções Rápidas:
+              </span>
+              {[
+                { key: 'organize', label: '✨ Organizar evolução' },
+                { key: 'summarize', label: '📋 Resumir' },
+                { key: 'technical', label: '🩺 Tornar mais técnico' },
+                { key: 'objective', label: '🎯 Tornar mais objetivo' },
+                { key: 'separate', label: '⚖️ Separar evolução e conduta' },
+                { key: 'grammar', label: '✍️ Corrigir gramática' }
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => handleTransformMode(opt.key)}
+                  disabled={isGeneratingAi}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shrink-0 disabled:opacity-50 ${
+                    currentAiMode === opt.key
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Abas de Visualização e Comparação (Item 9) */}
+            <div className="mt-2.5 flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setComparisonTab('split')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    comparisonTab === 'split'
+                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  📑 Comparar Lado a Lado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setComparisonTab('organized')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    comparisonTab === 'organized'
+                      ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  📄 Versão Organizada
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setComparisonTab('original')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                    comparisonTab === 'original'
+                      ? 'bg-slate-200 text-slate-800 border border-slate-300'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  🎙️ Transcrição Original
+                </button>
+              </div>
 
               <div className="flex items-center gap-2">
+                {!isEditingDraft ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDraft(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-semibold cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Editar rascunho</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrganizedDraft(editedDraftText);
+                      setIsEditingDraft(false);
+                      showToast('Edição do rascunho salva temporariamente!', 'info');
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer shadow-xs"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Concluir edição</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Corpo com Comparação de Conteúdo */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-3">
+              {comparisonTab === 'split' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-full min-h-[260px]">
+                  {/* Coluna 1: Transcrição Original (Preservada) */}
+                  <div className="flex flex-col bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                        <Mic className="w-3.5 h-3.5 text-slate-500" />
+                        TRANSCRIÇÃO ORIGINAL (Fala falada)
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {originalSpeechText.length} caracteres
+                      </span>
+                    </div>
+                    <div className="flex-1 bg-white p-3 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed overflow-y-auto font-mono whitespace-pre-wrap select-text shadow-inner">
+                      {originalSpeechText || 'Nenhuma fala transcrita.'}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-2">
+                      Texto verbatim capturado pelo microfone, preservado na íntegra.
+                    </p>
+                  </div>
+
+                  {/* Coluna 2: Versão Organizada pela IA */}
+                  <div className="flex flex-col bg-teal-50/50 border border-teal-200 rounded-2xl p-3.5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-teal-900 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                        VERSÃO ORGANIZADA PELA IA
+                      </span>
+                      <span className="text-[10px] text-teal-700 font-semibold">
+                        {getModeLabel(currentAiMode)}
+                      </span>
+                    </div>
+                    {isEditingDraft ? (
+                      <textarea
+                        rows={10}
+                        value={editedDraftText}
+                        onChange={e => setEditedDraftText(e.target.value)}
+                        className="flex-1 w-full bg-white p-3 rounded-xl border border-teal-300 text-xs text-slate-800 leading-relaxed focus:outline-none focus:ring-2 focus:ring-teal-500 font-sans resize-none shadow-inner"
+                        placeholder="Edite o rascunho organizado..."
+                      />
+                    ) : (
+                      <div className="flex-1 bg-white p-3 rounded-xl border border-teal-200 text-xs text-slate-800 leading-relaxed overflow-y-auto whitespace-pre-wrap shadow-inner">
+                        {isGeneratingAi ? (
+                          <div className="flex items-center justify-center h-full text-slate-400 animate-pulse gap-2">
+                            <Sparkles className="w-4 h-4 animate-spin text-teal-600" />
+                            <span>Organizando texto com IA...</span>
+                          </div>
+                        ) : (
+                          organizedDraft || 'Nenhum rascunho gerado.'
+                        )}
+                      </div>
+                    )}
+                    <p className="text-[10px] text-teal-700 mt-2">
+                      Sem adições de diagnósticos ou medicamentos não falados.
+                    </p>
+                  </div>
+                </div>
+              ) : comparisonTab === 'organized' ? (
+                <div className="bg-teal-50/50 border border-teal-200 rounded-2xl p-4 flex flex-col min-h-[260px]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-teal-900 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                      VERSÃO ORGANIZADA PELA IA
+                    </span>
+                    <span className="text-[10px] text-teal-700 font-semibold">
+                      {getModeLabel(currentAiMode)}
+                    </span>
+                  </div>
+                  {isEditingDraft ? (
+                    <textarea
+                      rows={12}
+                      value={editedDraftText}
+                      onChange={e => setEditedDraftText(e.target.value)}
+                      className="w-full bg-white p-3.5 rounded-xl border border-teal-300 text-xs text-slate-800 leading-relaxed focus:outline-none focus:ring-2 focus:ring-teal-500 font-sans shadow-inner"
+                      placeholder="Edite o rascunho organizado..."
+                    />
+                  ) : (
+                    <div className="bg-white p-3.5 rounded-xl border border-teal-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap shadow-inner min-h-[200px]">
+                      {isGeneratingAi ? (
+                        <div className="flex items-center justify-center py-10 text-slate-400 animate-pulse gap-2">
+                          <Sparkles className="w-4 h-4 animate-spin text-teal-600" />
+                          <span>Organizando texto com IA...</span>
+                        </div>
+                      ) : (
+                        organizedDraft || 'Nenhum rascunho gerado.'
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col min-h-[260px]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                      <Mic className="w-3.5 h-3.5 text-slate-500" />
+                      TRANSCRIÇÃO ORIGINAL (Áudio verbatim)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(originalSpeechText);
+                        showToast('Transcrição original copiada!', 'info');
+                      }}
+                      className="flex items-center gap-1 text-[11px] text-indigo-600 hover:text-indigo-800 font-bold cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Copiar original
+                    </button>
+                  </div>
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-mono shadow-inner min-h-[200px]">
+                    {originalSpeechText || 'Nenhuma fala transcrita.'}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé de Ações (Item 7) */}
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+              <button
+                type="button"
+                onClick={handleDiscardDraft}
+                className="flex items-center gap-1 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Descartar rascunho</span>
+              </button>
+
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => applyDraftToEvolution('append')}
-                  className="px-4 py-2 border border-teal-600 text-teal-700 hover:bg-teal-50 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  onClick={() => handleTransformMode(currentAiMode)}
+                  disabled={isGeneratingAi}
+                  className="inline-flex items-center gap-1 px-3 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                  title="Gerar novamente com o mesmo modo"
                 >
-                  Inserir na Evolução
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Gerar novamente</span>
                 </button>
+
+                {clinicalEvolution.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => handleApplyDraft('append')}
+                    disabled={isGeneratingAi}
+                    className="px-3.5 py-2 border border-teal-600 text-teal-700 hover:bg-teal-50 rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                    title="Adicionar o rascunho ao final do texto já existente na evolução"
+                  >
+                    Adicionar ao final
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => applyDraftToEvolution('replace')}
-                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  onClick={() => handleApplyDraft('replace')}
+                  disabled={isGeneratingAi}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-teal-500/20 cursor-pointer disabled:opacity-50"
+                  title="Substituir campo de evolução pelo rascunho revisado"
                 >
-                  Substituir Evolução
+                  <Check className="w-4 h-4" />
+                  <span>Usar texto na Evolução</span>
                 </button>
               </div>
             </div>
+
           </div>
         </div>
       )}
