@@ -367,7 +367,13 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 <Sparkles className="w-5 h-5 text-teal-300" />
               </div>
               <div>
-                <h3 className="font-bold text-sm text-white">Assistente Zemda</h3>
+                <div className="flex items-center gap-1.5">
+                  <h3 className="font-bold text-sm text-white">Assistente Zemda</h3>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-teal-400/20 text-teal-200 border border-teal-400/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Gemini AI
+                  </span>
+                </div>
                 <p className="text-[11px] text-teal-200">Inteligência contextual clínica e administrativa</p>
               </div>
             </div>

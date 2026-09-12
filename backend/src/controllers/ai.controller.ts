@@ -153,6 +153,8 @@ export class AIController {
             reply: geminiReply,
             intent: detectedIntent,
             status: 'success',
+            engine: 'gemini',
+            provider: 'Google Gemini',
             actions,
             suggestions,
             conversationId: convId
@@ -843,6 +845,19 @@ export class AIController {
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao registrar feedback' });
     }
+  }
+
+  // ================================================================
+  // 6. STATUS DA IA
+  // ================================================================
+  static async getStatus(req: Request, res: Response): Promise<void> {
+    const isGeminiAvailable = GeminiService.isAvailable();
+    res.json({
+      status: 'online',
+      provider: isGeminiAvailable ? 'Google Gemini' : 'Motor Local Inteligente',
+      geminiConnected: isGeminiAvailable,
+      candidateModels: GeminiService.getCandidateModels()
+    });
   }
 }
 

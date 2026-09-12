@@ -312,6 +312,7 @@ api.get('/v1/cash-register/history', requireTenant, requireRole('clinic_admin', 
 api.get('/v1/cash-register/:id', requireTenant, CashRegisterController.getById);
 
 // Assistente de Inteligência Artificial Integrado (Zemda AI)
+api.get('/v1/ai/status', requireTenant, AIController.getStatus);
 api.post('/v1/ai/chat', requireTenant, AIController.chat);
 api.post('/v1/ai/improve-text', requireTenant, AIController.improveText);
 api.post('/v1/ai/summarize-consultation', requireTenant, AIController.summarizeConsultation);

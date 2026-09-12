@@ -11,18 +11,30 @@ dotenv.config();
 // e o controlador de IA recai no motor heurístico local.
 // ============================================================================
 
-const CANDIDATE_MODELS = ['gemini-3.6-flash'];
+const CANDIDATE_MODELS = [
+  ...(process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL.trim()] : []),
+  'gemini-3.5-flash',
+  'gemini-flash-lite-latest',
+  'gemini-flash-latest',
+  'gemini-3.7-flash',
+  'gemini-3.8-flash',
+  'gemini-3.6-flash'
+];
 
 function getApiKey(): string {
   return process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '';
 }
 
+let cachedApiKey: string = '';
 let genAI: GoogleGenerativeAI | null = null;
 
 function getGenAI(): GoogleGenerativeAI | null {
   const apiKey = getApiKey();
   if (!apiKey) return null;
-  if (!genAI) genAI = new GoogleGenerativeAI(apiKey);
+  if (!genAI || cachedApiKey !== apiKey) {
+    cachedApiKey = apiKey;
+    genAI = new GoogleGenerativeAI(apiKey);
+  }
   return genAI;
 }
 
@@ -217,6 +229,13 @@ export class GeminiService {
    */
   static isAvailable(): boolean {
     return !!getApiKey();
+  }
+
+  /**
+   * Retorna os modelos candidatos configurados
+   */
+  static getCandidateModels(): string[] {
+    return [...CANDIDATE_MODELS];
   }
 
   /**
