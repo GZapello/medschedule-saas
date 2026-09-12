@@ -11,32 +11,55 @@ dotenv.config();
 // e o controlador de IA recai no motor heurístico local.
 // ============================================================================
 
+const CANDIDATE_MODELS = ['gemini-3.6-flash'];
+
 function getApiKey(): string {
-  return process.env.GEMINI_API_KEY?.trim() || '';
+  return process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '';
 }
 
 let genAI: GoogleGenerativeAI | null = null;
-let chatModel: GenerativeModel | null = null;
-let fastModel: GenerativeModel | null = null;
 
-function getChatModel(): GenerativeModel | null {
+function getGenAI(): GoogleGenerativeAI | null {
   const apiKey = getApiKey();
   if (!apiKey) return null;
   if (!genAI) genAI = new GoogleGenerativeAI(apiKey);
-  if (!chatModel) {
-    chatModel = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
-  }
-  return chatModel;
+  return genAI;
 }
 
-function getFastModel(): GenerativeModel | null {
-  const apiKey = getApiKey();
-  if (!apiKey) return null;
-  if (!genAI) genAI = new GoogleGenerativeAI(apiKey);
-  if (!fastModel) {
-    fastModel = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+async function generateWithCascade(
+  systemInstruction: string,
+  contents: Content[],
+  config: { temperature: number; topP: number; maxOutputTokens: number },
+  timeoutMs: number = 8000
+): Promise<{ text: string; modelUsed: string } | null> {
+  const ai = getGenAI();
+  if (!ai) return null;
+
+  for (const modelName of CANDIDATE_MODELS) {
+    try {
+      const model = ai.getGenerativeModel({ model: modelName });
+      const apiCall = model.generateContent({
+        contents,
+        systemInstruction,
+        generationConfig: config
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout de ${timeoutMs}ms excedido na chamada do modelo ${modelName}`)), timeoutMs)
+      );
+
+      const result = await Promise.race([apiCall, timeoutPromise]);
+      const text = result?.response?.text();
+      if (text && text.trim()) {
+        return { text: text.trim(), modelUsed: modelName };
+      }
+    } catch (err: any) {
+      console.warn(`[GeminiService] Falha no modelo ${modelName}:`, err?.message || err);
+      // Continua para o próximo modelo candidato
+    }
   }
-  return fastModel;
+
+  return null;
 }
 
 // ============================================================================
@@ -44,6 +67,11 @@ function getFastModel(): GenerativeModel | null {
 // ============================================================================
 
 const CLINICAL_SYSTEM_PROMPT = `Você é a **Assistente Zemda**, uma IA integrada a uma plataforma de gestão clínica e de saúde chamada Zemda.
+
+## REGRAS DE CONVERSAÇÃO E SAUDAÇÕES:
+- Quando o usuário enviar saudações ("Oi", "Olá", "Bom dia", "Boa tarde", "Tudo bem?", etc.), responda de imediato com educação, simpatia e presteza (exemplo: "Olá! Tudo bem? Como posso ajudar você hoje?").
+- Quando o usuário perguntar "Quem é você?" ou "O que você faz?", responda com clareza que você é a **Assistente Zemda**, inteligência artificial integrada à plataforma Zemda, e liste as formas como você pode apoiar (prontuários, agenda, SOAP, transcrição, documentos e métricas).
+- Para mensagens simples, conversas normais ou dúvidas gerais, NUNCA exija paciente ou contexto clínico para responder. Dialogue com naturalidade.
 
 ## REGRAS FUNDAMENTAIS — NUNCA VIOLE ESTAS REGRAS:
 
@@ -156,6 +184,32 @@ REGRAS:
 // SERVIÇO PRINCIPAL
 // ============================================================================
 
+// Função de sanitização estrita para multiturn no Gemini
+function sanitizeContents(rawContents: Content[]): Content[] {
+  const filtered: Content[] = [];
+  for (const item of rawContents) {
+    const textPart = item.parts?.[0]?.text?.trim();
+    if (!textPart) continue;
+
+    if (filtered.length > 0 && filtered[filtered.length - 1].role === item.role) {
+      // Mescla mensagens consecutivas do mesmo emissor
+      filtered[filtered.length - 1].parts[0].text += '\n\n' + textPart;
+    } else {
+      filtered.push({
+        role: item.role === 'user' ? 'user' : 'model',
+        parts: [{ text: textPart }]
+      });
+    }
+  }
+
+  // O Gemini exige que o primeiro turno seja 'user' se houver mensagens
+  if (filtered.length > 0 && filtered[0].role !== 'user') {
+    filtered.shift();
+  }
+
+  return filtered;
+}
+
 export class GeminiService {
 
   /**
@@ -174,49 +228,59 @@ export class GeminiService {
     contextData: string;
     professionalName?: string;
   }): Promise<string | null> {
-    const model = getChatModel();
-    if (!model) return null;
+    const startTime = Date.now();
 
     try {
-      const contents: Content[] = [];
+      const rawContents: Content[] = [];
 
-      // Injeta contexto clínico/administrativo como primeira troca de mensagem
-      if (params.contextData) {
-        contents.push({
+      // Injeta contexto clínico/administrativo como primeiro turno estruturado
+      if (params.contextData && params.contextData.trim()) {
+        rawContents.push({
           role: 'user',
           parts: [{ text: `[DADOS DO CONTEXTO ATUAL — Use estas informações para responder às perguntas do profissional]\n\n${params.contextData}\n\n[FIM DOS DADOS DE CONTEXTO]\n\nVocê é a Assistente Zemda. Confirme que recebeu o contexto e aguarde o comando do profissional.` }]
         });
-        contents.push({
+        rawContents.push({
           role: 'model',
-          parts: [{ text: 'Contexto carregado com sucesso. Estou pronta para ajudar. O que você precisa?' }]
+          parts: [{ text: 'Contexto carregado com sucesso. Sou a Assistente Zemda e estou pronta para apoiar você. O que você precisa?' }]
         });
       }
 
       // Adiciona histórico de conversa (multi-turn)
       for (const msg of params.conversationHistory) {
-        contents.push({
+        if (!msg.text?.trim()) continue;
+        rawContents.push({
           role: msg.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.text }]
+          parts: [{ text: msg.text.trim() }]
         });
       }
 
       // Adiciona a mensagem atual do usuário
-      contents.push({
+      rawContents.push({
         role: 'user',
-        parts: [{ text: params.message }]
+        parts: [{ text: params.message.trim() }]
       });
 
-      const result = await model.generateContent({
+      const contents = sanitizeContents(rawContents);
+
+      const result = await generateWithCascade(
+        CLINICAL_SYSTEM_PROMPT,
         contents,
-        systemInstruction: CLINICAL_SYSTEM_PROMPT,
-        generationConfig: {
+        {
           temperature: 0.3,
           topP: 0.85,
           maxOutputTokens: 4096,
-        }
-      });
+        },
+        18000 // 18s timeout máximo
+      );
 
-      return result.response.text() || null;
+      const durationMs = Date.now() - startTime;
+      if (result) {
+        console.log(`[GeminiService.chat] Sucesso com ${result.modelUsed} em ${durationMs}ms`);
+        return result.text;
+      }
+
+      console.warn(`[GeminiService.chat] Nenhum modelo candidato respondeu em ${durationMs}ms. Ativando fallback local.`);
+      return null;
     } catch (err: any) {
       console.error('[GeminiService.chat] Erro na chamada Gemini:', err?.message || err);
       return null;
@@ -227,23 +291,21 @@ export class GeminiService {
    * Melhoria de texto clínico — envia texto + modo ao Gemini
    */
   static async improveText(text: string, mode: string): Promise<{ improvedText: string; explanation: string } | null> {
-    const model = getFastModel();
-    if (!model) return null;
-
     try {
       const systemPrompt = TEXT_IMPROVEMENT_PROMPTS[mode] || TEXT_IMPROVEMENT_PROMPTS['grammar'];
 
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text }] }],
-        systemInstruction: systemPrompt,
-        generationConfig: {
+      const result = await generateWithCascade(
+        systemPrompt,
+        [{ role: 'user', parts: [{ text }] }],
+        {
           temperature: 0.2,
           topP: 0.8,
           maxOutputTokens: 2048,
-        }
-      });
+        },
+        15000
+      );
 
-      const improvedText = result.response.text()?.trim() || text;
+      const improvedText = result?.text || text;
 
       const explanations: Record<string, string> = {
         grammar: 'Correções ortográficas, gramaticais e de concordância aplicadas pela IA.',
@@ -275,28 +337,26 @@ export class GeminiService {
     clinicalExams: string;
     planAndConduct: string;
   } | null> {
-    const model = getChatModel();
-    if (!model) return null;
-
     try {
       const contextPrefix = patientName !== 'Paciente'
         ? `Paciente: ${patientName}${patientAge ? ` (${patientAge})` : ''}\n\n`
         : '';
 
-      const result = await model.generateContent({
-        contents: [{
+      const result = await generateWithCascade(
+        CONSULTATION_SYNTHESIS_PROMPT,
+        [{
           role: 'user',
           parts: [{ text: `${contextPrefix}Transcrição da consulta:\n\n"${transcript}"` }]
         }],
-        systemInstruction: CONSULTATION_SYNTHESIS_PROMPT,
-        generationConfig: {
+        {
           temperature: 0.2,
           topP: 0.8,
           maxOutputTokens: 3072,
-        }
-      });
+        },
+        20000
+      );
 
-      const fullText = result.response.text()?.trim() || '';
+      const fullText = result?.text || '';
 
       // Tenta extrair seções do texto gerado
       const sections = parseStructuredSections(fullText);

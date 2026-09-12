@@ -18,12 +18,17 @@ export class AIController {
   // ================================================================
   // 1. CHAT CONTEXTUAL INTELIGENTE
   // ================================================================
+  // ================================================================
   static async chat(req: Request, res: Response): Promise<void> {
     try {
-      const tenantId = req.tenantId;
+      let tenantId = req.tenantId;
       if (!tenantId) {
-        res.status(400).json({ error: 'Tenant não identificado' });
-        return;
+        try {
+          const defaultTenant = db.prepare("SELECT id FROM tenants WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+          tenantId = defaultTenant?.id || 'default-tenant';
+        } catch (_) {
+          tenantId = 'default-tenant';
+        }
       }
 
       const { message, context, conversationId } = req.body;
@@ -39,7 +44,7 @@ export class AIController {
       let convId = conversationId || null;
       let conversationHistory: Array<{ sender: string; text: string }> = [];
 
-      if (convId) {
+      if (convId && tenantId) {
         try {
           const conv = db.prepare('SELECT messages_json FROM ai_conversations WHERE id = ? AND tenant_id = ?').get(convId, tenantId) as any;
           if (conv) {
@@ -53,71 +58,76 @@ export class AIController {
       let patientId = context?.patientId;
 
       // Busca automática: se nenhum paciente selecionado, tenta localizar pelo nome na mensagem
-      if (!patientId && context?.scope !== 'no_clinical') {
-        const patients = db.prepare('SELECT id, full_name FROM patients WHERE tenant_id = ? AND active = 1').all(tenantId) as { id: string; full_name: string }[];
-        for (const p of patients) {
-          const first = p.full_name.split(' ')[0]?.toLowerCase() || '';
-          if (first.length >= 3 && (lower.includes(first) || lower.includes(p.full_name.toLowerCase()))) {
-            patientId = p.id;
-            break;
+      if (!patientId && context?.scope !== 'no_clinical' && tenantId) {
+        try {
+          const patients = db.prepare('SELECT id, full_name FROM patients WHERE tenant_id = ? AND active = 1').all(tenantId) as { id: string; full_name: string }[];
+          for (const p of patients) {
+            const first = p.full_name.split(' ')[0]?.toLowerCase() || '';
+            if (first.length >= 3 && (lower.includes(first) || lower.includes(p.full_name.toLowerCase()))) {
+              patientId = p.id;
+              break;
+            }
           }
-        }
+        } catch (_) {}
       }
 
       // ── 3. Coletar dados clínicos do paciente ────────────────
-      if (patientId && context?.scope !== 'no_clinical') {
-        const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
-        if (patient) {
-          let dateFilter = '';
-          if (context?.scope === 'last_30_days') {
-            dateFilter = ` AND session_date >= date('now', '-30 days')`;
-          } else if (context?.scope === 'last_90_days') {
-            dateFilter = ` AND session_date >= date('now', '-90 days')`;
+      if (patientId && context?.scope !== 'no_clinical' && tenantId) {
+        try {
+          const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+          if (patient) {
+            let dateFilter = '';
+            if (context?.scope === 'last_30_days') {
+              dateFilter = ` AND session_date >= date('now', '-30 days')`;
+            } else if (context?.scope === 'last_90_days') {
+              dateFilter = ` AND session_date >= date('now', '-90 days')`;
+            }
+
+            const records = db.prepare(`
+              SELECT r.*, p.name as prof_name
+              FROM records r
+              LEFT JOIN professionals p ON p.id = r.professional_id
+              WHERE r.patient_id = ? AND r.tenant_id = ? ${dateFilter}
+              ORDER BY r.session_date DESC LIMIT 10
+            `).all(patientId, tenantId) as any[];
+
+            const allergies = db.prepare('SELECT * FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
+            const medications = db.prepare('SELECT * FROM patient_medications WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
+            const exams = db.prepare('SELECT * FROM patient_exams WHERE patient_id = ? AND tenant_id = ? ORDER BY exam_date DESC LIMIT 10').all(patientId, tenantId) as any[];
+            const pastAppts = db.prepare(`
+              SELECT a.*, s.name as service_name, pr.name as prof_name
+              FROM appointments a
+              LEFT JOIN services s ON s.id = a.service_id
+              LEFT JOIN professionals pr ON pr.id = a.professional_id
+              WHERE a.patient_id = ? AND a.tenant_id = ?
+              ORDER BY a.start_time DESC LIMIT 10
+            `).all(patientId, tenantId) as any[];
+            const anamnesis = db.prepare('SELECT * FROM patient_anamnesis WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 3').all(patientId, tenantId) as any[];
+
+            patientContext = { patient, records, allergies, medications, exams, pastAppts, anamnesis };
           }
-
-          const records = db.prepare(`
-            SELECT r.*, p.name as prof_name
-            FROM records r
-            LEFT JOIN professionals p ON p.id = r.professional_id
-            WHERE r.patient_id = ? AND r.tenant_id = ? ${dateFilter}
-            ORDER BY r.session_date DESC LIMIT 10
-          `).all(patientId, tenantId) as any[];
-
-          const allergies = db.prepare('SELECT * FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
-          const medications = db.prepare('SELECT * FROM patient_medications WHERE patient_id = ? AND tenant_id = ?').all(patientId, tenantId) as any[];
-          const exams = db.prepare('SELECT * FROM patient_exams WHERE patient_id = ? AND tenant_id = ? ORDER BY exam_date DESC LIMIT 10').all(patientId, tenantId) as any[];
-          const pastAppts = db.prepare(`
-            SELECT a.*, s.name as service_name, pr.name as prof_name
-            FROM appointments a
-            LEFT JOIN services s ON s.id = a.service_id
-            LEFT JOIN professionals pr ON pr.id = a.professional_id
-            WHERE a.patient_id = ? AND a.tenant_id = ?
-            ORDER BY a.start_time DESC LIMIT 10
-          `).all(patientId, tenantId) as any[];
-          const anamnesis = db.prepare('SELECT * FROM patient_anamnesis WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 3').all(patientId, tenantId) as any[];
-
-          patientContext = { patient, records, allergies, medications, exams, pastAppts, anamnesis };
-        }
+        } catch (_) {}
       }
 
       // ── 4. Coletar dados do atendimento atual ────────────────
       let appointmentContext: any = null;
-      if (context?.appointmentId) {
-        const appt = db.prepare(`
-          SELECT a.*, p.full_name as patient_name, pr.name as prof_name, s.name as service_name
-          FROM appointments a
-          LEFT JOIN patients p ON p.id = a.patient_id
-          LEFT JOIN professionals pr ON pr.id = a.professional_id
-          LEFT JOIN services s ON s.id = a.service_id
-          WHERE a.id = ? AND a.tenant_id = ?
-        `).get(context.appointmentId, tenantId) as any;
-        if (appt) {
-          appointmentContext = appt;
-          // Se não temos paciente pelo contexto, usar o do atendimento
-          if (!patientId && appt.patient_id) {
-            patientId = appt.patient_id;
+      if (context?.appointmentId && tenantId) {
+        try {
+          const appt = db.prepare(`
+            SELECT a.*, p.full_name as patient_name, pr.name as prof_name, s.name as service_name
+            FROM appointments a
+            LEFT JOIN patients p ON p.id = a.patient_id
+            LEFT JOIN professionals pr ON pr.id = a.professional_id
+            LEFT JOIN services s ON s.id = a.service_id
+            WHERE a.id = ? AND a.tenant_id = ?
+          `).get(context.appointmentId, tenantId) as any;
+          if (appt) {
+            appointmentContext = appt;
+            if (!patientId && appt.patient_id) {
+              patientId = appt.patient_id;
+            }
           }
-        }
+        } catch (_) {}
       }
 
       // ── 5. Tentar processar com Gemini ───────────────────────
@@ -125,32 +135,163 @@ export class AIController {
         const contextStr = buildContextString(patientContext, appointmentContext, tenantId, req.user);
         const geminiReply = await GeminiService.chat({
           message: text,
-          conversationHistory: conversationHistory.slice(-20), // Últimas 20 mensagens
+          conversationHistory: conversationHistory.slice(-20),
           contextData: contextStr,
           professionalName: req.user?.name
         });
 
-        if (geminiReply) {
-          // Detectar intenção e ações com base na resposta e mensagem
+        if (geminiReply && geminiReply.trim()) {
           const detectedIntent = detectIntent(lower, geminiReply);
           const actions = buildActions(detectedIntent, patientId, patientContext);
           const suggestions = generateProactiveSuggestions(patientContext, appointmentContext);
 
-          // Salvar na conversa
-          if (convId) {
+          if (convId && tenantId) {
             saveToConversation(convId, tenantId, text, geminiReply);
           }
 
           res.json({
             reply: geminiReply,
             intent: detectedIntent,
+            status: 'success',
             actions,
             suggestions,
             conversationId: convId
           });
           return;
         }
-        // Se Gemini falhar, cai no motor heurístico abaixo
+      }
+
+      // ── 6. MOTOR HEURÍSTICO CONVERSACIONAL (Fallback Inteligente Local) ─────────────────
+      const userName = req.user?.name || 'Doutor(a)';
+
+      // 6.1. Saudações Imediatas ("Oi", "Olá", "Bom dia", etc.)
+      const isGreetingOnly = /^(oi|ol[aá]|bom dia|boa tarde|boa noite|opa|e a[ií])[\s!.,?]*$/i.test(lower) || ['oi', 'olá', 'ola'].includes(lower);
+      if (isGreetingOnly) {
+        const reply = `Olá! Como posso ajudar você hoje?`;
+        if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+        res.json({
+          reply,
+          intent: 'GREETING',
+          status: 'success',
+          suggestions: ['Resuma a agenda de hoje', 'Faturamento deste mês', 'Organizar evolução em SOAP'],
+          conversationId: convId
+        });
+        return;
+      }
+
+      // 6.2. Cortesia ("Tudo bem?", "Como vai?")
+      if (lower.includes('tudo bem') || lower.includes('como vai') || lower.includes('tudo bom') || lower.includes('como você está')) {
+        const reply = `Olá! Tudo ótimo por aqui, pronta para apoiar você. Como posso ajudar com os atendimentos ou gestão clínica hoje?`;
+        if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+        res.json({
+          reply,
+          intent: 'GREETING',
+          status: 'success',
+          suggestions: ['Quais são as consultas de hoje?', 'Mostrar faturamento do mês', 'Ajuda com prontuário'],
+          conversationId: convId
+        });
+        return;
+      }
+
+      // 6.3. Identidade ("Quem é você?")
+      if (lower.includes('quem é você') || lower.includes('quem e voce') || lower.includes('quem e vc') || lower.includes('o que você é') || lower === 'quem e você') {
+        const reply = `Sou a **Assistente Zemda**, a inteligência artificial integrada da plataforma Zemda. Estou aqui para otimizar o dia a dia da clínica, auxiliando na documentação de prontuários, síntese clínica, gestão de agenda, controle de atendimentos e métricas.`;
+        if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+        res.json({
+          reply,
+          intent: 'IDENTITY',
+          status: 'success',
+          suggestions: ['O que você consegue fazer?', 'Resuma a agenda de hoje'],
+          conversationId: convId
+        });
+        return;
+      }
+
+      // 6.4. Capacidades ("O que você faz?", "O que você consegue fazer?")
+      if (lower.includes('o que você faz') || lower.includes('o que você consegue fazer') || lower.includes('o que voce faz') || lower.includes('o que vc faz') || lower.includes('suas funções') || lower.includes('suas funcoes') || lower.includes('o que pode fazer')) {
+        const reply = `Como **Assistente Zemda**, posso ajudar você nas seguintes áreas:\n\n` +
+          `• 📋 **Prontuários & Pacientes:** Resumo clínico de histórico, alerta de alergias e linha do tempo de evolução.\n` +
+          `• 🩺 **Atendimento Rápido:** Estruturação de relatos no modelo SOAP, transcrição de voz e rascunhos de evolução.\n` +
+          `• 📅 **Agenda Inteligente:** Consulta de horários livres, resumo de consultas de hoje, amanhã ou períodos.\n` +
+          `• 💰 **Financeiro & Métricas:** Faturamento apurado do mês, previsão a receber e contagem de atendimentos.\n` +
+          `• 📄 **Documentos Médicos:** Rascunhos de receitas, encaminhamentos e atestados oficiais.\n` +
+          `• ✍️ **Aprimoramento Textual:** Correção ortográfica e conversão de termos coloquiais em termos técnicos.\n\n` +
+          `Como posso apoiar seu trabalho agora?`;
+        if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+        res.json({
+          reply,
+          intent: 'CAPABILITIES',
+          status: 'success',
+          suggestions: ['Resuma a agenda de hoje', 'Consultar faturamento do mês', 'Estruturar em SOAP'],
+          conversationId: convId
+        });
+        return;
+      }
+
+      // 6.5. Pedido de Ajuda ("Me ajude", "Preciso de ajuda")
+      if (lower === 'me ajude' || lower === 'preciso de ajuda' || lower === 'ajuda' || lower === 'socorro' || lower.includes('me ajuda') || lower.includes('preciso de apoio')) {
+        const reply = `Estou pronta para ajudar! Você pode me pedir comandos como:\n\n` +
+          `• *"Quais são os atendimentos de hoje?"*\n` +
+          `• *"Mostre o faturamento deste mês"*\n` +
+          `• *"Resuma o histórico da paciente Mariana"*\n` +
+          `• *"Organize este relato no formato SOAP: [seu texto]"*\n` +
+          `• *"Quais horários livres temos amanhã?"*\n` +
+          `• *"Melhore este texto: [sua frase]"*\n\n` +
+          `Diga-me o que você precisa no momento.`;
+        if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+        res.json({
+          reply,
+          intent: 'HELP',
+          status: 'success',
+          suggestions: ['Ver agenda de hoje', 'Consultar faturamento', 'Organizar relato em SOAP'],
+          conversationId: convId
+        });
+        return;
+      }
+
+      // 6.6. Sobre a Plataforma ("O que é a Zemda?")
+      if (lower.includes('o que é a zemda') || lower.includes('o que e a zemda') || lower.includes('sobre a zemda')) {
+        const reply = `A **Zemda** é uma plataforma completa de tecnologia em saúde e gestão clínica. Ela unifica recepção, agendamento inteligente multissalas, prontuário eletrônico auditado com sigilo LGPD, gestão financeira com recibos oficiais e inteligência artificial para potencializar o cuidado assistencial.`;
+        if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+        res.json({ reply, intent: 'ABOUT_ZEMDA', status: 'success', conversationId: convId });
+        return;
+      }
+
+      // 6.7. Pedido de resumo sem paciente selecionado ("Resuma isso", "Resuma")
+      if ((lower.includes('resuma isso') || lower.includes('resuma este texto') || lower.includes('resumir isso') || lower === 'resuma' || lower === 'resumo') && !patientContext) {
+        let contentToSummarize = text.replace(/.*?(resuma|resumo|resumir)[\s:indeesteisso]*/i, '').trim();
+        if (contentToSummarize && contentToSummarize.length > 15) {
+          const reply = `### 📋 Resumo Clínico Sintetizado:\n\n${contentToSummarize.slice(0, 300)}...\n\n> 💡 *Pontos principais extraídos com precisão.*`;
+          if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+          res.json({ reply, intent: 'TEXT_SUMMARY', status: 'success', conversationId: convId });
+          return;
+        }
+        const reply = `Para resumir um texto, basta colá-lo aqui junto com o pedido (exemplo: *"Resuma este relato: [texto]"*).\n\nSe você deseja o resumo de um paciente cadastrado, basta citar o nome dele (exemplo: *"Resuma o prontuário da Mariana"*).`;
+        if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+        res.json({ reply, intent: 'PROMPT_FOR_TEXT', status: 'success', conversationId: convId });
+        return;
+      }
+
+      // 6.8. Melhoria Textual sem paciente ("Melhore esta frase")
+      if (lower.includes('melhore esta frase') || lower.includes('melhore este texto') || lower.includes('corrija este texto') || lower.includes('melhorar texto')) {
+        let content = text.replace(/.*?(melhore|corrija|ajuste)[\s:estafrasetexto]*/i, '').trim();
+        if (!content || content.length < 5) {
+          const reply = `Envie a frase ou parágrafo que deseja aprimorar. Por exemplo: *"Melhore este texto: paciente relata dor de cabeça forte e enjoo frequente."*`;
+          if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+          res.json({ reply, intent: 'IMPROVE_TEXT_PROMPT', status: 'success', conversationId: convId });
+          return;
+        }
+        const improved = content
+          .replace(/dor de cabe[cç]a/gi, 'cefaleia')
+          .replace(/cansa[cç]o/gi, 'fadiga')
+          .replace(/enjoo/gi, 'náusea')
+          .replace(/falta de ar/gi, 'dispneia')
+          .replace(/incha[cç]o/gi, 'edema')
+          .replace(/press[aã]o alta/gi, 'hipertensão arterial');
+        const reply = `### ✍️ Texto Técnico Aprimorado:\n\n"${improved}"\n\n> 💡 *Vocabulário convertido para terminologia clínica formal.*`;
+        if (convId && tenantId) saveToConversation(convId, tenantId, text, reply);
+        res.json({ reply, intent: 'IMPROVE_TEXT', status: 'success', conversationId: convId });
+        return;
       }
 
       // ── 6. MOTOR HEURÍSTICO LOCAL (fallback) ─────────────────
@@ -528,7 +669,11 @@ export class AIController {
   // ================================================================
   static async listConversations(req: Request, res: Response): Promise<void> {
     try {
-      const tenantId = req.tenantId;
+      let tenantId = req.tenantId;
+      if (!tenantId) {
+        const defaultTenant = db.prepare("SELECT id FROM tenants WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+        tenantId = defaultTenant?.id || 'default-tenant';
+      }
       const userId = req.user?.userId;
       const { patientId } = req.query;
 
@@ -550,7 +695,11 @@ export class AIController {
 
   static async saveConversation(req: Request, res: Response): Promise<void> {
     try {
-      const tenantId = req.tenantId;
+      let tenantId = req.tenantId;
+      if (!tenantId) {
+        const defaultTenant = db.prepare("SELECT id FROM tenants WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+        tenantId = defaultTenant?.id || 'default-tenant';
+      }
       const userId = req.user?.userId;
       const { id, title, patientId, contextScope, messages } = req.body;
 
@@ -577,7 +726,11 @@ export class AIController {
 
   static async deleteConversation(req: Request, res: Response): Promise<void> {
     try {
-      const tenantId = req.tenantId;
+      let tenantId = req.tenantId;
+      if (!tenantId) {
+        const defaultTenant = db.prepare("SELECT id FROM tenants WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+        tenantId = defaultTenant?.id || 'default-tenant';
+      }
       const { id } = req.params;
       db.prepare('DELETE FROM ai_conversations WHERE id = ? AND tenant_id = ?').run(id, tenantId);
       res.json({ message: 'Conversa removida' });

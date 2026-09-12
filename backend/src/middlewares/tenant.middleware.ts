@@ -7,6 +7,14 @@ export function tenantMiddleware(req: Request, res: Response, next: NextFunction
     const overrideTenant = req.headers['x-tenant-id'] as string;
     if (overrideTenant) {
       req.tenantId = overrideTenant;
+    } else {
+      // Fallback automático do SuperAdmin para a clínica ativa principal do sistema
+      try {
+        const defaultTenant = db.prepare("SELECT id FROM tenants WHERE status = 'active' ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined;
+        if (defaultTenant) {
+          req.tenantId = defaultTenant.id;
+        }
+      } catch (_) {}
     }
     return next();
   }

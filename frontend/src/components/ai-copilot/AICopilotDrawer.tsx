@@ -49,6 +49,8 @@ interface Message {
   actions?: Array<{ label: string; type?: string; actionType?: string; payload?: any; patientId?: string; target?: string }>;
   feedbackGiven?: 'up' | 'down';
   suggestions?: string[];
+  isError?: boolean;
+  retryText?: string;
 }
 
 export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
@@ -208,25 +210,45 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     setMessages(prev => [...prev, userMessage]);
     if (!userText) setInput('');
     setLoading(true);
-    setLoadingStatus('Analisando...');
+    setLoadingStatus('Zemda está pensando...');
 
-    try {
-      // Garantir que temos um conversationId para memória
-      const convId = await initConversation();
+    const maxRetries = 2;
+    let attempt = 0;
+    let data: any = null;
 
-      const payload = {
-        message: textToSend,
-        context: {
-          scope: contextScope,
-          patientId: selectedPatientId || undefined,
-          appointmentId: activeAppointmentId || undefined
-        },
-        conversationId: convId || undefined
-      };
+    while (attempt <= maxRetries) {
+      try {
+        if (attempt > 0) {
+          setLoadingStatus(`Zemda está pensando... (tentativa ${attempt + 1})`);
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+        } else {
+          setLoadingStatus('Zemda está pensando...');
+        }
 
-      setLoadingStatus('Processando com inteligência contextual...');
-      const data = await ApiClient.post<any>('/v1/ai/chat', payload);
-      
+        // Garantir que temos um conversationId para memória (sem travar em caso de erro)
+        const convId = await initConversation().catch(() => '');
+
+        const payload = {
+          message: textToSend,
+          context: {
+            scope: contextScope,
+            patientId: selectedPatientId || undefined,
+            appointmentId: activeAppointmentId || undefined
+          },
+          conversationId: convId || undefined
+        };
+
+        data = await ApiClient.post<any>('/v1/ai/chat', payload);
+        if (data && data.reply && typeof data.reply === 'string' && data.reply.trim().length > 0) {
+          break; // Resposta bem-sucedida recebida
+        }
+        attempt++;
+      } catch (err: any) {
+        attempt++;
+      }
+    }
+
+    if (data && data.reply && typeof data.reply === 'string' && data.reply.trim().length > 0) {
       setMessages(prev => [
         ...prev,
         {
@@ -242,18 +264,20 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
       if (data.conversationId && !conversationId) {
         setConversationId(data.conversationId);
       }
-    } catch (err: any) {
+    } else {
       setMessages(prev => [
         ...prev,
         {
           sender: 'assistant',
-          text: 'Desculpe, não foi possível processar a consulta no momento. Nenhuma informação foi perdida. Tente novamente.'
+          text: 'Não consegui processar sua solicitação agora. Nenhuma informação foi perdida. Tente novamente.',
+          isError: true,
+          retryText: textToSend
         }
       ]);
-    } finally {
-      setLoading(false);
-      setLoadingStatus('Processando...');
     }
+
+    setLoading(false);
+    setLoadingStatus('Processando...');
   };
 
   const handleImproveText = async () => {
@@ -277,13 +301,17 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
 
   const handleNewConversation = () => {
     setConversationId(null);
+    setInput('');
+    setRecordedDraft('');
+    setOriginalToImprove('');
+    setImprovedResult('');
     setMessages([
       {
         sender: 'assistant',
-        text: 'Nova conversa iniciada. Selecione o contexto desejado e envie seu comando ou dúvida clínica/administrativa.'
+        text: 'Olá! Sou a **Assistente Zemda**. Estou conectada ao ambiente da sua clínica para apoiar a organização documental, síntese de prontuários, comandos de agenda e transcrição clínica.\n\nComo posso ajudar você agora?'
       }
     ]);
-    showToast('Nova conversa pronta.', 'info');
+    showToast('Nova conversa iniciada. Contexto anterior limpo.', 'info');
   };
 
   const handleFeedback = async (index: number, type: 'up' | 'down') => {
@@ -343,15 +371,20 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 <p className="text-[11px] text-teal-200">Inteligência contextual clínica e administrativa</p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <button
                 onClick={handleNewConversation}
-                className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
-                title="Nova Conversa"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-white/15 hover:bg-white/25 border border-white/20 rounded-lg transition-all cursor-pointer shadow-xs"
+                title="Iniciar Nova Conversa (limpa o contexto e histórico anterior)"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
+                <span>Nova conversa</span>
               </button>
-              <button onClick={onClose} className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+              <button
+                onClick={onClose}
+                className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                title="Fechar assistente"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -488,6 +521,19 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                           ))}
                         </div>
                       )}
+                      {/* Botão de Tentar Novamente para Erros Controlados */}
+                      {m.isError && m.retryText && (
+                        <div className="mt-3 pt-2 border-t border-rose-200/80">
+                          <button
+                            type="button"
+                            onClick={() => handleSend(m.retryText)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Tentar novamente</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Sugestões proativas da IA */}
@@ -507,7 +553,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                     )}
 
                     {/* Feedback + Copiar */}
-                    {m.sender === 'assistant' && i > 0 && (
+                    {m.sender === 'assistant' && i > 0 && !m.isError && (
                       <div className="flex items-center gap-2 mt-1 px-1 text-[11px] text-slate-400">
                         <span>A resposta ajudou?</span>
                         <button
@@ -536,9 +582,9 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 ))}
 
                 {loading && (
-                  <div className="flex items-center gap-2 text-xs text-slate-400 italic">
+                  <div className="flex items-center gap-2.5 text-xs text-teal-800 font-semibold p-3 bg-teal-50/90 border border-teal-200 rounded-2xl w-fit animate-pulse shadow-xs">
                     <Sparkles className="w-4 h-4 animate-spin text-teal-600" />
-                    {loadingStatus}
+                    <span>{loadingStatus || 'Zemda está pensando...'}</span>
                   </div>
                 )}
 
