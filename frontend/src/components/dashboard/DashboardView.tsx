@@ -14,8 +14,10 @@ import {
   AlertCircle,
   Video,
   MapPin,
-  RefreshCw
+  RefreshCw,
+  Stethoscope
 } from 'lucide-react';
+import { QuickConsultationModal } from '../clinical/QuickConsultationModal';
 
 interface DashboardViewProps {
   onNavigate: (view: string) => void;
@@ -32,6 +34,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const { showToast } = useToast();
   const [loading, setLoading] = useState<boolean>(true);
   const [metrics, setMetrics] = useState<any>(null);
+  const [quickConsultAppt, setQuickConsultAppt] = useState<any | null>(null);
 
   const fetchMetrics = async () => {
     try {
@@ -122,8 +125,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* KPI Cards Grid (5 Cards - Ocupação removida) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {/* Atendimentos Hoje */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -186,18 +189,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {formatCurrency(metrics?.monthly?.pending)}
           </div>
           <p className="text-xs text-slate-400 mt-1">a receber</p>
-        </div>
-
-        {/* Taxa de Ocupação */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Ocupação</span>
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold text-slate-900">{metrics?.monthly?.occupancyRate || 0}%</div>
-          <p className="text-xs text-slate-400 mt-1">da capacidade total</p>
         </div>
       </div>
 
@@ -264,6 +255,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                     {/* Quick Status Action Buttons */}
                     <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                      {appt.status !== 'completed' && appt.status !== 'cancelled' && (
+                        <button
+                          onClick={() => setQuickConsultAppt(appt)}
+                          className="flex items-center gap-1 px-3 py-1 text-xs font-bold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-all shadow-xs cursor-pointer"
+                          title="Iniciar Atendimento Rápido"
+                        >
+                          <Stethoscope className="w-3.5 h-3.5" />
+                          <span>Atender</span>
+                        </button>
+                      )}
                       {appt.status === 'scheduled' && (
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
@@ -354,6 +355,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Modal de Atendimento Rápido */}
+      {quickConsultAppt && (
+        <QuickConsultationModal
+          appointment={{
+            id: quickConsultAppt.id,
+            patient_id: quickConsultAppt.patient_id,
+            patient_name: quickConsultAppt.patient_name,
+            patient_phone: quickConsultAppt.patient_phone,
+            professional_id: quickConsultAppt.professional_id,
+            professional_name: quickConsultAppt.professional_name,
+            service_id: quickConsultAppt.service_id,
+            service_name: quickConsultAppt.service_name,
+            start_time: quickConsultAppt.start_time,
+            end_time: quickConsultAppt.end_time,
+            modality: quickConsultAppt.modality,
+            status: quickConsultAppt.status
+          }}
+          onClose={() => setQuickConsultAppt(null)}
+          onFinished={() => {
+            setQuickConsultAppt(null);
+            fetchMetrics();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -23,6 +23,8 @@ import { DocumentsController } from '../controllers/documents.controller';
 import { CashRegisterController } from '../controllers/cash-register.controller';
 import { InsuranceController } from '../controllers/insurance.controller';
 import { ImportController } from '../controllers/import.controller';
+import { NotificationController } from '../controllers/notification.controller';
+import { ReferralController } from '../controllers/referral.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -227,8 +229,22 @@ api.get('/v1/slots/available', requireTenant, SlotController.getAvailableSlots);
 
 // Prontuário & Evolução Clínica (Restrito estritamente a Profissionais e Admins Clínicos - LGPD)
 api.get('/v1/clinical-records/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.listByPatient);
+api.get('/v1/clinical-records/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.getById);
+api.get('/v1/clinical-records/:id/print', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.exportPdfHtml);
 api.post('/v1/clinical-records', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.create);
 api.put('/v1/clinical-records/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.update);
+
+// Encaminhamentos entre Profissionais da Clínica (Item 6)
+api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);
+api.get('/v1/patients/:id/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.listByPatient);
+api.get('/v1/referrals/received', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.listReceived);
+
+// Central de Lembretes Automáticos & Notificações (Itens 20 a 30)
+api.get('/v1/notifications', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.list);
+api.get('/v1/notifications/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.getById);
+api.post('/v1/notifications/schedule', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.schedule);
+api.post('/v1/notifications/:id/cancel', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.cancel);
+api.post('/v1/notifications/:id/retry', requireTenant, requireRole('clinic_admin', 'receptionist'), NotificationController.retry);
 
 // Financeiro & Pagamentos
 api.get('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.list);

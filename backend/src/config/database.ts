@@ -372,6 +372,29 @@ export function initializeDatabase(): void {
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_ai_conversations ON ai_conversations (tenant_id, user_id);
+
+      CREATE TABLE IF NOT EXISTS patient_referrals (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        from_professional_id TEXT NOT NULL,
+        to_professional_id TEXT NOT NULL,
+        service_id TEXT,
+        origin_appointment_id TEXT,
+        target_appointment_id TEXT,
+        reason TEXT NOT NULL,
+        notes TEXT,
+        priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal', 'routine', 'high', 'urgent')),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'scheduled', 'completed', 'cancelled')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (from_professional_id) REFERENCES professionals(id),
+        FOREIGN KEY (to_professional_id) REFERENCES professionals(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_referrals_patient ON patient_referrals (tenant_id, patient_id);
+      CREATE INDEX IF NOT EXISTS idx_referrals_to_prof ON patient_referrals (tenant_id, to_professional_id, status);
     `);
 
     // Migrações de colunas para garantir compatibilidade total de documentos clínicos
@@ -391,7 +414,50 @@ export function initializeDatabase(): void {
     addColIfMissing('clinical_exam_requests', 'created_at', "TEXT DEFAULT (datetime('now'))");
 
     addColIfMissing('patients', 'import_batch_id', 'TEXT');
+    addColIfMissing('patients', 'communication_preferences_json', "TEXT DEFAULT '{\"email\":true,\"sms\":true,\"whatsapp\":true}'");
     addColIfMissing('appointments', 'import_batch_id', 'TEXT');
+
+    addColIfMissing('records', 'created_by', 'TEXT');
+    addColIfMissing('records', 'updated_by', 'TEXT');
+    addColIfMissing('records', 'edit_history_json', 'TEXT');
+
+    addColIfMissing('notifications', 'retry_count', 'INTEGER DEFAULT 0');
+    addColIfMissing('notifications', 'last_error', 'TEXT');
+    addColIfMissing('notifications', 'delivery_status', "TEXT DEFAULT 'pending'");
+    addColIfMissing('notifications', 'idempotency_key', 'TEXT');
+
+    // Migração de constraints da tabela notifications para permitir reminder_1h sem restrição
+    const notifTableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'notifications'").get() as any;
+    if (notifTableInfo?.sql && notifTableInfo.sql.includes("CHECK(type IN ('confirmation', 'reminder_24h', 'reminder_2h'")) {
+      db.exec(`
+        PRAGMA foreign_keys = OFF;
+        CREATE TABLE notifications_migrated (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          patient_id TEXT,
+          professional_id TEXT,
+          appointment_id TEXT,
+          type TEXT NOT NULL,
+          channel TEXT NOT NULL DEFAULT 'whatsapp',
+          recipient TEXT NOT NULL,
+          content TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          scheduled_for TEXT NOT NULL,
+          sent_at TEXT,
+          retry_count INTEGER DEFAULT 0,
+          last_error TEXT,
+          delivery_status TEXT DEFAULT 'pending',
+          idempotency_key TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO notifications_migrated (id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for, sent_at, created_at)
+        SELECT id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for, sent_at, created_at FROM notifications;
+        DROP TABLE notifications;
+        ALTER TABLE notifications_migrated RENAME TO notifications;
+        CREATE INDEX IF NOT EXISTS idx_notifications_queue ON notifications (status, scheduled_for);
+        PRAGMA foreign_keys = ON;
+      `);
+    }
 
     // Assegura que a lista detalhada de profissões de saúde e administração exista no banco
     const allDetailedProfessions = [

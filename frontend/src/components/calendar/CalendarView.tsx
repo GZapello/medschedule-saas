@@ -16,9 +16,11 @@ import {
   X,
   CheckCircle2,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  Stethoscope
 } from 'lucide-react';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
+import { QuickConsultationModal } from '../clinical/QuickConsultationModal';
 
 interface CalendarViewProps {
   onOpenNewAppointment: () => void;
@@ -45,7 +47,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [rescheduleDate, setRescheduleDate] = useState<string>('');
   const [rescheduleTime, setRescheduleTime] = useState<string>('');
 
-  // Modais de Finalização e Cancelamento Estruturado
+  // Modais de Atendimento Rápido, Finalização e Cancelamento Estruturado
+  const [activeConsultationAppt, setActiveConsultationAppt] = useState<any | null>(null);
   const [finishingAppt, setFinishingAppt] = useState<any | null>(null);
   const [cancellingAppt, setCancellingAppt] = useState<any | null>(null);
   const [cancellationCategory, setCancellationCategory] = useState<string>('Desistência do paciente');
@@ -438,31 +441,43 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                   </div>
                 )}
 
-                {/* Status action buttons */}
-                <div className="pt-2 border-t border-slate-100">
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Alterar Status</h4>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => handleUpdateStatus(selectedAppt.id, 'confirmed')}
-                      className="px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg"
-                    >
-                      Confirmar
-                    </button>
-                    <button
-                      onClick={() => handleUpdateStatus(selectedAppt.id, 'in_progress')}
-                      className="px-3 py-1.5 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg"
-                    >
-                      Iniciar
-                    </button>
-                    <button
-                      onClick={() => {
-                        setFinishingAppt(selectedAppt);
-                        setSelectedAppt(null);
-                      }}
-                      className="px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg shadow-xs"
-                    >
-                      Concluir Atendimento
-                    </button>
+                {/* Atendimento Rápido e Status Action Buttons */}
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <button
+                    onClick={() => {
+                      setActiveConsultationAppt(selectedAppt);
+                      setSelectedAppt(null);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
+                  >
+                    <Stethoscope className="w-4 h-4" />
+                    <span>INICIAR ATENDIMENTO</span>
+                  </button>
+
+                  <div>
+                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Alterar Status</h4>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleUpdateStatus(selectedAppt.id, 'confirmed')}
+                        className="px-3 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg"
+                      >
+                        Confirmar
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStatus(selectedAppt.id, 'in_progress')}
+                        className="px-3 py-1.5 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg"
+                      >
+                        Iniciar
+                      </button>
+                      <button
+                        onClick={() => {
+                          setFinishingAppt(selectedAppt);
+                          setSelectedAppt(null);
+                        }}
+                        className="px-3 py-1.5 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg shadow-xs"
+                      >
+                        Concluir Atendimento
+                      </button>
                     <button
                       onClick={() => handleUpdateStatus(selectedAppt.id, 'no_show')}
                       className="px-3 py-1.5 text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg"
@@ -481,6 +496,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     </button>
                   </div>
                 </div>
+              </div>
 
                 <div className="pt-2 flex justify-between">
                   <button
@@ -606,6 +622,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Atendimento Rápido */}
+      {activeConsultationAppt && (
+        <QuickConsultationModal
+          appointment={{
+            id: activeConsultationAppt.id,
+            patient_id: activeConsultationAppt.patient_id,
+            patient_name: activeConsultationAppt.patient_name,
+            patient_phone: activeConsultationAppt.patient_phone,
+            professional_id: activeConsultationAppt.professional_id,
+            professional_name: activeConsultationAppt.professional_name,
+            service_id: activeConsultationAppt.service_id,
+            service_name: activeConsultationAppt.service_name,
+            start_time: activeConsultationAppt.start_time,
+            end_time: activeConsultationAppt.end_time,
+            modality: activeConsultationAppt.modality,
+            status: activeConsultationAppt.status
+          }}
+          onClose={() => setActiveConsultationAppt(null)}
+          onFinished={() => {
+            setActiveConsultationAppt(null);
+            fetchCalendarData();
+          }}
+        />
       )}
 
       {/* Modal de Finalização de Consulta (Item 5) */}

@@ -17,7 +17,9 @@ import {
   CreditCard,
   Plus,
   CheckCircle2,
-  Trash2
+  Trash2,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -30,13 +32,21 @@ export const SettingsView: React.FC = () => {
 
   // Configurações da Clínica
   const [name, setName] = useState<string>('');
+  const [corporateName, setCorporateName] = useState<string>('');
   const [tradeName, setTradeName] = useState<string>('');
   const [cnpjCpf, setCnpjCpf] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [address, setAddress] = useState<string>('');
+  const [street, setStreet] = useState<string>('');
+  const [number, setNumber] = useState<string>('');
+  const [complement, setComplement] = useState<string>('');
+  const [neighborhood, setNeighborhood] = useState<string>('');
   const [city, setCity] = useState<string>('');
   const [state, setState] = useState<string>('');
+  const [zipCode, setZipCode] = useState<string>('');
+  const [logoUrl, setLogoUrl] = useState<string>('');
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [clientTermLabel, setClientTermLabel] = useState<string>('Paciente');
   const [primaryColor, setPrimaryColor] = useState<string>('#4f46e5');
   const [loadingClinic, setLoadingClinic] = useState<boolean>(false);
@@ -113,16 +123,93 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  // Validação oficial de CNPJ
+  const validateCNPJ = (cnpj: string): boolean => {
+    const clean = cnpj.replace(/\D/g, '');
+    if (clean.length !== 14) return false;
+    if (/^(\d)\1+$/.test(clean)) return false;
+
+    let size = clean.length - 2;
+    let numbers = clean.substring(0, size);
+    const digits = clean.substring(size);
+    let sum = 0;
+    let pos = size - 7;
+    for (let i = size; i >= 1; i--) {
+      sum += parseInt(numbers.charAt(size - i), 10) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    let result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+    if (result !== parseInt(digits.charAt(0), 10)) return false;
+
+    size = size + 1;
+    numbers = clean.substring(0, size);
+    sum = 0;
+    pos = size - 7;
+    for (let i = size; i >= 1; i--) {
+      sum += parseInt(numbers.charAt(size - i), 10) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+    return result === parseInt(digits.charAt(1), 10);
+  };
+
+  const formatCNPJ = (val: string): string => {
+    const digits = val.replace(/\D/g, '').slice(0, 14);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return digits.replace(/^(\d{2})(\d)/, '$1.$2');
+    if (digits.length <= 8) return digits.replace(/^(\d{2})(\d{3})(\d)/, '$1.$2.$3');
+    if (digits.length <= 12) return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d)/, '$1.$2.$3/$4');
+    return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d)/, '$1.$2.$3/$4-$5');
+  };
+
+  const formatCEP = (val: string): string => {
+    const digits = val.replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 5) return digits;
+    return digits.replace(/^(\d{5})(\d)/, '$1-$2');
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      showToast('Formato inválido. Selecione uma imagem PNG, JPG ou WEBP.', 'error');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('A imagem deve ter no máximo 2MB para garantir performance.', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setLogoPreview(base64);
+      setLogoUrl(base64);
+      showToast('Prévia do logotipo carregada! Clique em Salvar para fixar na clínica.', 'info');
+    };
+    reader.readAsDataURL(file);
+  };
+
   useEffect(() => {
     if (currentTenant) {
       setName(currentTenant.name || '');
+      setCorporateName((currentTenant as any).corporate_name || currentTenant.name || '');
       setTradeName(currentTenant.trade_name || '');
-      setCnpjCpf(currentTenant.cnpj_cpf || '');
+      setCnpjCpf(currentTenant.cnpj_cpf ? formatCNPJ(currentTenant.cnpj_cpf) : '');
       setEmail(currentTenant.email || '');
       setPhone(currentTenant.phone || '');
       setAddress(currentTenant.address || '');
+      setStreet((currentTenant as any).street || '');
+      setNumber((currentTenant as any).number || '');
+      setComplement((currentTenant as any).complement || '');
+      setNeighborhood((currentTenant as any).neighborhood || '');
       setCity(currentTenant.city || '');
       setState(currentTenant.state || '');
+      setZipCode((currentTenant as any).zip_code ? formatCEP((currentTenant as any).zip_code) : '');
+      setLogoUrl((currentTenant as any).logo_url || '');
+      setLogoPreview((currentTenant as any).logo_url || null);
       setClientTermLabel(currentTenant.client_term_label || 'Paciente');
       setPrimaryColor(currentTenant.primary_color || '#4f46e5');
     }
@@ -133,21 +220,33 @@ export const SettingsView: React.FC = () => {
 
   const handleSaveClinic = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (cnpjCpf.trim() && cnpjCpf.replace(/\D/g, '').length === 14 && !validateCNPJ(cnpjCpf)) {
+      showToast('O CNPJ informado possui dígitos verificadores inválidos', 'error');
+      return;
+    }
+
     try {
       setLoadingClinic(true);
       await ApiClient.put('/v1/tenants/current', {
         name,
+        corporateName,
         tradeName,
         cnpjCpf,
         email,
         phone,
         address,
+        street,
+        number,
+        complement,
+        neighborhood,
         city,
         state,
+        zipCode,
+        logoUrl,
         clientTermLabel,
         primaryColor
       });
-      showToast('Configurações da clínica atualizadas com sucesso!', 'success');
+      showToast('Configurações da clínica e identidade visual atualizadas com sucesso!', 'success');
       refreshTenant();
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar configurações da clínica', 'error');
@@ -305,6 +404,65 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
 
+          {/* Seção Logotipo e Identidade da Clínica */}
+          <div className="p-5 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-indigo-600" />
+                  Logotipo Oficial da Clínica
+                </h3>
+                <p className="text-slate-500 text-[11px] mt-0.5">
+                  Exibido automaticamente no cabeçalho de prontuários, atestados, receitas e recibos.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4 pt-1">
+              {logoPreview ? (
+                <div className="relative group">
+                  <img
+                    src={logoPreview}
+                    alt="Logo da Clínica"
+                    className="w-24 h-24 object-contain rounded-2xl border border-slate-200 bg-white p-2 shadow-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoPreview(null);
+                      setLogoUrl('');
+                    }}
+                    className="absolute -top-2 -right-2 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 shadow-xs transition-colors"
+                    title="Remover logotipo"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-slate-400 p-2 text-center">
+                  <ImageIcon className="w-6 h-6 mb-1 opacity-50" />
+                  <span className="text-[10px] leading-tight font-medium">Sem logo</span>
+                </div>
+              )}
+
+              <div className="flex-1 space-y-2 w-full">
+                <label className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold rounded-xl border border-slate-300 cursor-pointer shadow-xs transition-all text-xs">
+                  <Upload className="w-4 h-4 text-indigo-600" />
+                  <span>Selecionar Imagem (PNG, JPG, WEBP)</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Resolução recomendada: 400x400px ou horizontal. Tamanho máximo: 2MB. Pré-visualização instantânea no navegador.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Dados Gerais */}
           <div className="space-y-4 text-xs">
             <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Identificação Cadastral</h3>
@@ -313,27 +471,49 @@ export const SettingsView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">Razão Social / Nome Oficial</label>
                 <input
                   type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
+                  value={corporateName || name}
+                  onChange={e => {
+                    setCorporateName(e.target.value);
+                    setName(e.target.value);
+                  }}
+                  placeholder="Ex: Clínica Médica e Saúde Integrada LTDA"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome Fantasia (Exibido aos Clientes)</label>
+                <label className="block font-semibold text-slate-700 mb-1">Nome Fantasia (Exibido aos Pacientes)</label>
                 <input
                   type="text"
                   value={tradeName}
                   onChange={e => setTradeName(e.target.value)}
+                  placeholder="Ex: Clínica Bem-Estar"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">CNPJ ou CPF</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">CNPJ (com validação)</label>
+                  {cnpjCpf.replace(/\D/g, '').length === 14 && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      validateCNPJ(cnpjCpf)
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    }`}>
+                      {validateCNPJ(cnpjCpf) ? '✓ CNPJ Válido' : '✕ CNPJ Inválido'}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={cnpjCpf}
-                  onChange={e => setCnpjCpf(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  maxLength={18}
+                  onChange={e => setCnpjCpf(formatCNPJ(e.target.value))}
+                  placeholder="00.000.000/0000-00"
+                  className={`w-full border rounded-xl px-3 py-2 text-xs ${
+                    cnpjCpf.replace(/\D/g, '').length === 14 && !validateCNPJ(cnpjCpf)
+                      ? 'border-rose-300 focus:ring-rose-500'
+                      : 'border-slate-200'
+                  }`}
                 />
               </div>
               <div>
@@ -348,34 +528,72 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Contato e Endereço */}
+          {/* Contato e Endereço Completo */}
           <div className="space-y-4 text-xs pt-4 border-t border-slate-100">
-            <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Endereço & Atendimento</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="sm:col-span-2">
-                <label className="block font-semibold text-slate-700 mb-1">Endereço Completo</label>
+            <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Endereço Completo & Atendimento</h3>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">CEP</label>
                 <input
                   type="text"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
+                  value={zipCode}
+                  maxLength={9}
+                  onChange={e => setZipCode(formatCEP(e.target.value))}
+                  placeholder="00000-000"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">WhatsApp / Telefone</label>
+              <div className="sm:col-span-2">
+                <label className="block font-semibold text-slate-700 mb-1">Logradouro / Rua</label>
                 <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
+                  type="text"
+                  value={street || address}
+                  onChange={e => {
+                    setStreet(e.target.value);
+                    setAddress(e.target.value);
+                  }}
+                  placeholder="Ex: Avenida Brasil"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Cidade</label>
+                <label className="block font-semibold text-slate-700 mb-1">Número</label>
+                <input
+                  type="text"
+                  value={number}
+                  onChange={e => setNumber(e.target.value)}
+                  placeholder="123"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Complemento / Sala</label>
+                <input
+                  type="text"
+                  value={complement}
+                  onChange={e => setComplement(e.target.value)}
+                  placeholder="Sala 402"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Bairro</label>
+                <input
+                  type="text"
+                  value={neighborhood}
+                  onChange={e => setNeighborhood(e.target.value)}
+                  placeholder="Centro"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Cidade *</label>
                 <input
                   type="text"
                   value={city}
                   onChange={e => setCity(e.target.value)}
+                  placeholder="Ex: Erechim"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
@@ -384,7 +602,22 @@ export const SettingsView: React.FC = () => {
                 <input
                   type="text"
                   value={state}
-                  onChange={e => setState(e.target.value)}
+                  maxLength={2}
+                  onChange={e => setState(e.target.value.toUpperCase())}
+                  placeholder="RS"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">WhatsApp / Telefone de Contato</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="(54) 99999-9999"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
@@ -395,9 +628,9 @@ export const SettingsView: React.FC = () => {
                     type="color"
                     value={primaryColor}
                     onChange={e => setPrimaryColor(e.target.value)}
-                    className="w-8 h-8 rounded-lg border border-slate-200 cursor-pointer p-0.5"
+                    className="w-9 h-9 rounded-xl border border-slate-200 cursor-pointer p-0.5"
                   />
-                  <span className="text-slate-500 font-mono">{primaryColor}</span>
+                  <span className="text-slate-500 font-mono text-xs">{primaryColor}</span>
                 </div>
               </div>
             </div>

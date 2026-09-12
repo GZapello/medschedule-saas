@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { NotificationService } from '../services/notification.service';
 
 export class AppointmentController {
   static list(req: Request, res: Response): void {
@@ -330,6 +331,9 @@ export class AppointmentController {
         );
       }
 
+      // Agenda lembrete automático inteligente de 1 hora antes (Item 22)
+      NotificationService.scheduleAppointmentReminder(appointmentId);
+
       logAudit(req, 'CREATE_APPOINTMENT', 'appointments', appointmentId, { appointmentNumber, startTime, endTime });
 
       res.status(201).json({
@@ -398,6 +402,11 @@ export class AppointmentController {
       );
 
       logAudit(req, 'UPDATE_APPOINTMENT_STATUS', 'appointments', id, { from: current.status, to: status, reason, cancellationReasonCategory });
+
+      if (status === 'cancelled') {
+        NotificationService.cancelAppointmentReminders(id as string);
+      }
+
       res.json({ message: `Status alterado para ${status}` });
     } catch (err: any) {
       console.error('[AppointmentController.updateStatus] Erro:', err);
@@ -502,6 +511,10 @@ export class AppointmentController {
         INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
         VALUES (?, ?, ?, 'rescheduled', ?, ?)
       `).run(uuidv4(), id, appt.status, req.user ? req.user.name : 'Sistema', reason || 'Horário remarcado');
+
+      // Atualiza os lembretes automáticos para o novo horário (Item 24)
+      NotificationService.cancelAppointmentReminders(id as string);
+      NotificationService.scheduleAppointmentReminder(id as string);
 
       logAudit(req, 'RESCHEDULE_APPOINTMENT', 'appointments', id, { newStart: startTime, newEnd: endTime });
       res.json({ message: 'Atendimento remarcado com sucesso' });

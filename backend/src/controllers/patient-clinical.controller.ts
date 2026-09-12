@@ -2,17 +2,26 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { hasClinicalAccess } from './clinical.controller';
 
 export class PatientClinicalController {
   // 1. LINHA DO TEMPO CRONOLÓGICA 360° DO PACIENTE
   static getTimeline(req: Request, res: Response): void {
     try {
-      const { id: patientId } = req.params;
+      const patientId = req.params.id as string;
       const tenantId = req.tenantId;
       const { type, startDate, endDate, professionalId, search } = req.query;
 
       if (!tenantId) {
         res.status(400).json({ error: 'Tenant obrigatório' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: profissional não possui consulta agendada, histórico de atendimento ou encaminhamento ativo vinculado a este paciente (Sigilo LGPD).',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
         return;
       }
 

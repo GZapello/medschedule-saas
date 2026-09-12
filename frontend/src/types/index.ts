@@ -233,6 +233,9 @@ export interface ClinicalRecord {
   technical_notes?: string;
   private_notes?: string;
   is_sealed: number;
+  created_by?: string;
+  updated_by?: string;
+  edit_history_json?: string;
   created_at: string;
   updated_at?: string;
   total_attachments?: number;

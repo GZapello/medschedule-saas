@@ -25,6 +25,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Inicializa tabelas e seeds do banco de dados relacional
 initializeDatabase();
 
+// Inicia o motor de segundo plano para lembretes automáticos (Zemda Notifications API)
+import { NotificationService } from './services/notification.service';
+NotificationService.startBackgroundWorker(30000);
+
 // Registra as rotas da API em /api
 app.use('/api', apiRoutes);
 

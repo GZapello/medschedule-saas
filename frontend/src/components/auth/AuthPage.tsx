@@ -328,18 +328,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </div>
         </div>
 
-        {/* Link para o Paciente agendar online caso tenha chegado aqui */}
-        {onOpenPublicBooking && (
-          <div className="text-center">
-            <button
-              onClick={onOpenPublicBooking}
-              className="inline-flex items-center gap-1.5 text-xs text-teal-300/80 hover:text-teal-200 transition-colors font-medium cursor-pointer"
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span>É paciente e deseja agendar uma consulta? Clique aqui</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Modais de Cadastro */}
