@@ -20,22 +20,35 @@ export class DocumentsController {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
         if (prof) resolvedProfId = prof.id;
       }
+      if (!resolvedProfId) {
+        const defaultProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as { id: string } | undefined;
+        if (defaultProf) resolvedProfId = defaultProf.id;
+      }
 
       if (!resolvedProfId) {
         res.status(400).json({ error: 'Profissional emissor não identificado' });
         return;
       }
 
+      const year = new Date().getFullYear();
+      const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_certificates WHERE tenant_id = ?').get(tenantId) as any;
+      const certNumber = `AT-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
       const id = 'crt-' + uuidv4().slice(0, 8);
+      const textSummary = notes || `Atestado médico de ${certificateType === 'rest' ? 'repouso' : 'comparecimento'} (${daysOff || 1} dias).`;
+
       db.prepare(`
         INSERT INTO clinical_certificates (
           id, tenant_id, patient_id, appointment_id, professional_id,
-          certificate_type, days_off, start_date, cid_code, notes
+          certificate_number, days_rest, cid, content_text,
+          certificate_type, days_off, start_date, cid_code, notes,
+          created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, appointmentId || null, resolvedProfId,
-        certificateType, daysOff || null, startDate || null, cidCode || null, notes || null
+        certNumber, daysOff || 1, cidCode || null, textSummary,
+        certificateType, daysOff || 1, startDate || null, cidCode || null, notes || null,
+        req.user?.name || req.user?.email || 'Profissional'
       );
 
       logAudit(req, 'CREATE_CERTIFICATE', 'clinical_certificates', id, { patientId, certificateType });
@@ -55,9 +68,9 @@ export class DocumentsController {
         SELECT 
           c.*,
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
-          pr.name as professional_name, pr.registration_type, pr.registration_number, pr.specialty,
-          t.name as clinic_name, t.document as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.address_street, t.address_number, t.address_neighborhood, t.address_city, t.address_state, t.logo_url
+          pr.name as professional_name, pr.registration_type, pr.registration_number,
+          t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
+          t.street, t.number, t.neighborhood, t.city, t.state, t.address, t.logo_url
         FROM clinical_certificates c
         JOIN patients p ON p.id = c.patient_id
         JOIN professionals pr ON pr.id = c.professional_id
@@ -72,7 +85,7 @@ export class DocumentsController {
 
       // Template da clínica
       const template = db.prepare(`
-        SELECT * FROM clinic_document_templates WHERE tenant_id = ? AND document_type = 'certificate'
+        SELECT * FROM clinic_document_templates WHERE tenant_id = ? AND template_type = 'certificate'
       `).get(tenantId);
 
       res.json({ document: cert, template });
@@ -98,22 +111,34 @@ export class DocumentsController {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
         if (prof) resolvedProfId = prof.id;
       }
+      if (!resolvedProfId) {
+        const defaultProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as { id: string } | undefined;
+        if (defaultProf) resolvedProfId = defaultProf.id;
+      }
 
       if (!resolvedProfId) {
         res.status(400).json({ error: 'Profissional emissor não identificado' });
         return;
       }
 
+      const year = new Date().getFullYear();
+      const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_prescriptions WHERE tenant_id = ?').get(tenantId) as any;
+      const prescNumber = `RC-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
       const id = 'prc-' + uuidv4().slice(0, 8);
+
       db.prepare(`
         INSERT INTO clinical_prescriptions (
           id, tenant_id, patient_id, appointment_id, professional_id,
-          prescription_type, content
+          prescription_number, items_json, instructions,
+          prescription_type, content,
+          created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, appointmentId || null, resolvedProfId,
-        prescriptionType || 'simple', content
+        prescNumber, JSON.stringify([{ text: content }]), content,
+        prescriptionType || 'simple', content,
+        req.user?.name || req.user?.email || 'Profissional'
       );
 
       logAudit(req, 'CREATE_PRESCRIPTION', 'clinical_prescriptions', id, { patientId, prescriptionType });
@@ -133,9 +158,9 @@ export class DocumentsController {
         SELECT 
           pr.*,
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
-          prof.name as professional_name, prof.registration_type, prof.registration_number, prof.specialty,
-          t.name as clinic_name, t.document as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.address_street, t.address_number, t.address_neighborhood, t.address_city, t.address_state, t.logo_url
+          prof.name as professional_name, prof.registration_type, prof.registration_number,
+          t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
+          t.street, t.number, t.neighborhood, t.city, t.state, t.address, t.logo_url
         FROM clinical_prescriptions pr
         JOIN patients p ON p.id = pr.patient_id
         JOIN professionals prof ON prof.id = pr.professional_id
@@ -149,7 +174,7 @@ export class DocumentsController {
       }
 
       const template = db.prepare(`
-        SELECT * FROM clinic_document_templates WHERE tenant_id = ? AND document_type = 'prescription'
+        SELECT * FROM clinic_document_templates WHERE tenant_id = ? AND template_type = 'prescription'
       `).get(tenantId);
 
       res.json({ document: presc, template });
@@ -175,22 +200,34 @@ export class DocumentsController {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
         if (prof) resolvedProfId = prof.id;
       }
+      if (!resolvedProfId) {
+        const defaultProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as { id: string } | undefined;
+        if (defaultProf) resolvedProfId = defaultProf.id;
+      }
 
       if (!resolvedProfId) {
         res.status(400).json({ error: 'Profissional solicitante não identificado' });
         return;
       }
 
+      const year = new Date().getFullYear();
+      const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_exam_requests WHERE tenant_id = ?').get(tenantId) as any;
+      const reqNumber = `EX-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
       const id = 'erq-' + uuidv4().slice(0, 8);
+
       db.prepare(`
         INSERT INTO clinical_exam_requests (
           id, tenant_id, patient_id, appointment_id, professional_id,
-          exams_list, clinical_indication
+          request_number, exams_list_json, clinical_justification, notes,
+          exams_list, clinical_indication,
+          created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, appointmentId || null, resolvedProfId,
-        examsList, clinicalIndication || null
+        reqNumber, JSON.stringify([{ exam: examsList }]), clinicalIndication || null, clinicalIndication || null,
+        examsList, clinicalIndication || null,
+        req.user?.name || req.user?.email || 'Profissional'
       );
 
       logAudit(req, 'CREATE_EXAM_REQUEST', 'clinical_exam_requests', id, { patientId });
@@ -210,9 +247,9 @@ export class DocumentsController {
         SELECT 
           er.*,
           p.full_name as patient_name, p.cpf as patient_cpf, p.birth_date as patient_birth,
-          prof.name as professional_name, prof.registration_type, prof.registration_number, prof.specialty,
-          t.name as clinic_name, t.document as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
-          t.address_street, t.address_number, t.address_neighborhood, t.address_city, t.address_state, t.logo_url
+          prof.name as professional_name, prof.registration_type, prof.registration_number,
+          t.name as clinic_name, t.cnpj_cpf as clinic_cnpj, t.phone as clinic_phone, t.email as clinic_email,
+          t.street, t.number, t.neighborhood, t.city, t.state, t.address, t.logo_url
         FROM clinical_exam_requests er
         JOIN patients p ON p.id = er.patient_id
         JOIN professionals prof ON prof.id = er.professional_id
@@ -226,7 +263,7 @@ export class DocumentsController {
       }
 
       const template = db.prepare(`
-        SELECT * FROM clinic_document_templates WHERE tenant_id = ? AND document_type = 'exam_request'
+        SELECT * FROM clinic_document_templates WHERE tenant_id = ? AND template_type = 'exam_request'
       `).get(tenantId);
 
       res.json({ document: doc, template });
@@ -251,45 +288,44 @@ export class DocumentsController {
   static upsertTemplate(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      const { documentType, title, headerHtml, footerHtml, showLogo, showClinicAddress, showProfessionalRegistration, customCss } = req.body;
+      const { templateType, headerText, footerText, showLogo, showClinicAddress, showRegistry, customNotes } = req.body;
 
-      if (!documentType || !title) {
-        res.status(400).json({ error: 'Tipo e título do modelo são obrigatórios' });
+      if (!templateType) {
+        res.status(400).json({ error: 'Tipo do modelo é obrigatório' });
         return;
       }
 
-      const existing = db.prepare('SELECT id FROM clinic_document_templates WHERE tenant_id = ? AND document_type = ?').get(tenantId, documentType) as { id: string } | undefined;
+      const existing = db.prepare('SELECT id FROM clinic_document_templates WHERE tenant_id = ? AND template_type = ?').get(tenantId, templateType) as { id: string } | undefined;
 
       if (existing) {
         db.prepare(`
           UPDATE clinic_document_templates SET
-            title = ?,
-            header_html = ?,
-            footer_html = ?,
+            header_text = ?,
+            footer_text = ?,
             show_logo = ?,
             show_clinic_address = ?,
-            show_professional_registration = ?,
-            custom_css = ?,
+            show_registry = ?,
+            custom_notes = ?,
             updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
         `).run(
-          title, headerHtml || null, footerHtml || null,
-          showLogo ? 1 : 0, showClinicAddress !== false ? 1 : 0, showProfessionalRegistration !== false ? 1 : 0,
-          customCss || null, existing.id, tenantId
+          headerText || null, footerText || null,
+          showLogo ? 1 : 0, showClinicAddress !== false ? 1 : 0, showRegistry !== false ? 1 : 0,
+          customNotes || null, existing.id, tenantId
         );
         res.json({ id: existing.id, message: 'Modelo de documento atualizado com sucesso' });
       } else {
         const id = 'tmpl-' + uuidv4().slice(0, 8);
         db.prepare(`
           INSERT INTO clinic_document_templates (
-            id, tenant_id, document_type, title, header_html, footer_html,
-            show_logo, show_clinic_address, show_professional_registration, custom_css
+            id, tenant_id, template_type, header_text, footer_text,
+            show_logo, show_clinic_address, show_registry, custom_notes
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          id, tenantId, documentType, title, headerHtml || null, footerHtml || null,
-          showLogo ? 1 : 0, showClinicAddress !== false ? 1 : 0, showProfessionalRegistration !== false ? 1 : 0,
-          customCss || null
+          id, tenantId, templateType, headerText || null, footerText || null,
+          showLogo ? 1 : 0, showClinicAddress !== false ? 1 : 0, showRegistry !== false ? 1 : 0,
+          customNotes || null
         );
         res.status(201).json({ id, message: 'Modelo de documento cadastrado com sucesso' });
       }
@@ -299,8 +335,9 @@ export class DocumentsController {
     }
   }
 
-  // 5. FLUXO COMPLETO DE FINALIZAÇÃO DE CONSULTA
+  // 5. FLUXO COMPLETO E SEGURO DE FINALIZAÇÃO DE CONSULTA (TRANSACTIONAL)
   static finishConsultation(req: Request, res: Response): void {
+    let currentStage = 'INIT';
     try {
       const { id: appointmentId } = req.params;
       const tenantId = req.tenantId;
@@ -313,22 +350,47 @@ export class DocumentsController {
         referral
       } = req.body;
 
+      currentStage = 'FETCH_APPOINTMENT';
       const appt = db.prepare('SELECT * FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any;
       if (!appt) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
       }
 
+      // Proteção contra duplo clique e idempotência
+      if (appt.status === 'completed') {
+        res.json({
+          message: 'Este atendimento já foi concluído anteriormente.',
+          alreadyCompleted: true,
+          generatedDocs: {}
+        });
+        return;
+      }
+
+      // Resolução segura de profissional responsável
       let resolvedProfId = appt.professional_id;
       if (!resolvedProfId && req.user) {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
         if (prof) resolvedProfId = prof.id;
       }
+      if (!resolvedProfId) {
+        const defaultProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as { id: string } | undefined;
+        if (defaultProf) resolvedProfId = defaultProf.id;
+      }
+      if (!resolvedProfId) {
+        res.status(400).json({ error: 'Não foi possível identificar o profissional de saúde responsável pelo atendimento.' });
+        return;
+      }
 
       const generatedDocs: any = {};
+      const year = new Date().getFullYear();
+
+      // Inicia transação atômica
+      db.exec('BEGIN TRANSACTION');
 
       // 1. Grava evolução do prontuário, se preenchida
-      if (evolution && evolution.clinicalEvolution) {
+      if (evolution && evolution.clinicalEvolution && evolution.clinicalEvolution.trim()) {
+        currentStage = 'SAVE_EVOLUTION';
         const recId = 'rec-' + uuidv4().slice(0, 8);
         db.prepare(`
           INSERT INTO records (
@@ -349,57 +411,82 @@ export class DocumentsController {
 
       // 2. Emite Atestado, se preenchido
       if (certificate && certificate.certificateType) {
+        currentStage = 'CREATE_CERTIFICATE';
         const certId = 'crt-' + uuidv4().slice(0, 8);
+        const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_certificates WHERE tenant_id = ?').get(tenantId) as any;
+        const certNum = `AT-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
+        const certSummary = certificate.notes || `Atestado de ${certificate.certificateType === 'rest' ? 'repouso' : 'comparecimento'} (${certificate.daysOff || 1} dias).`;
+
         db.prepare(`
           INSERT INTO clinical_certificates (
             id, tenant_id, patient_id, appointment_id, professional_id,
-            certificate_type, days_off, start_date, cid_code, notes
+            certificate_number, days_rest, cid, content_text,
+            certificate_type, days_off, start_date, cid_code, notes,
+            created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           certId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
-          certificate.certificateType, certificate.daysOff || null, certificate.startDate || null,
-          certificate.cidCode || null, certificate.notes || null
+          certNum, certificate.daysOff || 1, certificate.cidCode || null, certSummary,
+          certificate.certificateType, certificate.daysOff || 1, certificate.startDate || null,
+          certificate.cidCode || null, certificate.notes || null,
+          req.user?.name || 'Profissional'
         );
         generatedDocs.certificateId = certId;
       }
 
       // 3. Emite Receituário, se preenchido
-      if (prescription && prescription.content) {
+      if (prescription && prescription.content && prescription.content.trim()) {
+        currentStage = 'CREATE_PRESCRIPTION';
         const prescId = 'prc-' + uuidv4().slice(0, 8);
+        const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_prescriptions WHERE tenant_id = ?').get(tenantId) as any;
+        const prescNum = `RC-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
+
         db.prepare(`
           INSERT INTO clinical_prescriptions (
             id, tenant_id, patient_id, appointment_id, professional_id,
-            prescription_type, content
+            prescription_number, items_json, instructions,
+            prescription_type, content,
+            created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           prescId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
-          prescription.prescriptionType || 'simple', prescription.content
+          prescNum, JSON.stringify([{ text: prescription.content }]), prescription.content,
+          prescription.prescriptionType || 'simple', prescription.content,
+          req.user?.name || 'Profissional'
         );
         generatedDocs.prescriptionId = prescId;
       }
 
       // 4. Emite Pedido de Exames, se preenchido
-      if (examRequest && examRequest.examsList) {
+      if (examRequest && examRequest.examsList && examRequest.examsList.trim()) {
+        currentStage = 'CREATE_EXAM_REQUEST';
         const reqId = 'erq-' + uuidv4().slice(0, 8);
+        const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_exam_requests WHERE tenant_id = ?').get(tenantId) as any;
+        const reqNum = `EX-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
+
         db.prepare(`
           INSERT INTO clinical_exam_requests (
             id, tenant_id, patient_id, appointment_id, professional_id,
-            exams_list, clinical_indication
+            request_number, exams_list_json, clinical_justification, notes,
+            exams_list, clinical_indication,
+            created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           reqId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
-          examRequest.examsList, examRequest.clinicalIndication || null
+          reqNum, JSON.stringify([{ exam: examRequest.examsList }]), examRequest.clinicalIndication || null, examRequest.clinicalIndication || null,
+          examRequest.examsList, examRequest.clinicalIndication || null,
+          req.user?.name || 'Profissional'
         );
         generatedDocs.examRequestId = reqId;
       }
 
       // 5. Agenda Retorno, se informado
       if (returnAppointment && returnAppointment.startTime && returnAppointment.endTime) {
+        currentStage = 'SCHEDULE_RETURN';
         const retApptId = 'apt-' + uuidv4().slice(0, 8);
-        const year = new Date().getFullYear();
         const count = ((db.prepare('SELECT COUNT(*) as c FROM appointments WHERE tenant_id = ?').get(tenantId) as any)?.c || 0) + 1;
         const apptNum = `AG-${year}-${count.toString().padStart(4, '0')}`;
 
@@ -421,6 +508,7 @@ export class DocumentsController {
 
       // 6. Atualiza dados de Encaminhamento no agendamento, se informado
       if (referral && (referral.referredByProfessionalId || referral.referralReason)) {
+        currentStage = 'RECORD_REFERRAL';
         db.prepare(`
           UPDATE appointments SET
             referred_by_professional_id = ?,
@@ -431,6 +519,7 @@ export class DocumentsController {
       }
 
       // 7. Marca o agendamento como finalizado / completed
+      currentStage = 'UPDATE_APPOINTMENT_STATUS';
       db.prepare(`
         UPDATE appointments SET
           status = 'completed',
@@ -438,10 +527,18 @@ export class DocumentsController {
         WHERE id = ? AND tenant_id = ?
       `).run(appointmentId, tenantId);
 
-      db.prepare(`
-        INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
-        VALUES (?, ?, ?, 'completed', ?, 'Consulta finalizada com sucesso')
-      `).run(uuidv4(), appointmentId, appt.status, req.user ? req.user.name : 'Profissional');
+      // 8. Grava no histórico de status
+      try {
+        db.prepare(`
+          INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
+          VALUES (?, ?, ?, 'completed', ?, 'Consulta finalizada com sucesso')
+        `).run(uuidv4(), appointmentId, appt.status, req.user ? (req.user.name || req.user.email) : 'Profissional');
+      } catch (historyErr) {
+        console.warn('[finishConsultation] Aviso ao gravar historico de status:', historyErr);
+      }
+
+      // Comita a transação com êxito total
+      db.exec('COMMIT');
 
       logAudit(req, 'FINISH_CONSULTATION', 'appointments', appointmentId, { generatedDocs });
       res.json({
@@ -449,8 +546,30 @@ export class DocumentsController {
         generatedDocs
       });
     } catch (err: any) {
-      console.error('[DocumentsController.finishConsultation] Erro:', err);
-      res.status(500).json({ error: 'Erro ao finalizar consulta' });
+      try {
+        db.exec('ROLLBACK');
+      } catch (rollbackErr) {
+        // Ignora erro de rollback se não havia transação aberta
+      }
+
+      // Registro interno detalhado para suporte técnico
+      console.error('[DocumentsController.finishConsultation] FALHA CRÍTICA:', {
+        stage: currentStage,
+        error: err.message,
+        stack: err.stack,
+        appointmentId: req.params.id,
+        tenantId: req.tenantId,
+        user: req.user?.email,
+        timestamp: new Date().toISOString()
+      });
+
+      // Resposta clara, segura e amigável ao profissional
+      res.status(500).json({
+        error: 'Não foi possível finalizar o atendimento. Nenhuma informação foi perdida. Tente novamente ou entre em contato com o suporte.',
+        details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+        stage: currentStage
+      });
     }
   }
 }
+

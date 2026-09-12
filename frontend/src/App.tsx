@@ -15,6 +15,7 @@ import { ReceiptsView } from './components/receipts/ReceiptsView';
 import { StaffManagementView } from './components/staff/StaffManagementView';
 import { TaxonomyView } from './components/taxonomy/TaxonomyView';
 import { ReportsView } from './components/reports/ReportsView';
+import { ImportDataView } from './components/import/ImportDataView';
 import { AuditView } from './components/audit/AuditView';
 import { SettingsView } from './components/settings/SettingsView';
 import { SuperAdminView } from './components/superadmin/SuperAdminView';
@@ -227,7 +228,10 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'patients' && (
-            <PatientsView onOpenNewPatient={() => setIsNewPatientOpen(true)} />
+            <PatientsView
+              onOpenNewPatient={() => setIsNewPatientOpen(true)}
+              onNavigate={setCurrentView}
+            />
           )}
 
           {currentView === 'clinical' && <ClinicalRecordsView />}
@@ -245,6 +249,8 @@ const AppContent: React.FC = () => {
           {currentView === 'taxonomy' && <TaxonomyView />}
 
           {currentView === 'reports' && <ReportsView />}
+
+          {currentView === 'import' && <ImportDataView onNavigate={setCurrentView} />}
 
           {currentView === 'audit' && <AuditView />}
 

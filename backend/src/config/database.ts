@@ -341,7 +341,57 @@ export function initializeDatabase(): void {
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
         UNIQUE(tenant_id, template_type)
       );
+
+      CREATE TABLE IF NOT EXISTS import_batches (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_type TEXT NOT NULL,
+        total_records INTEGER NOT NULL DEFAULT 0,
+        imported_count INTEGER NOT NULL DEFAULT 0,
+        updated_count INTEGER NOT NULL DEFAULT 0,
+        skipped_count INTEGER NOT NULL DEFAULT 0,
+        error_count INTEGER NOT NULL DEFAULT 0,
+        errors_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_import_batches ON import_batches (tenant_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS ai_conversations (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        patient_id TEXT,
+        title TEXT NOT NULL,
+        context_scope TEXT DEFAULT 'general',
+        messages_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_conversations ON ai_conversations (tenant_id, user_id);
     `);
+
+    // Migrações de colunas para garantir compatibilidade total de documentos clínicos
+    addColIfMissing('clinical_certificates', 'certificate_type', "TEXT DEFAULT 'rest'");
+    addColIfMissing('clinical_certificates', 'days_off', "INTEGER DEFAULT 1");
+    addColIfMissing('clinical_certificates', 'start_date', "TEXT");
+    addColIfMissing('clinical_certificates', 'cid_code', "TEXT");
+    addColIfMissing('clinical_certificates', 'notes', "TEXT");
+    addColIfMissing('clinical_certificates', 'created_at', "TEXT DEFAULT (datetime('now'))");
+
+    addColIfMissing('clinical_prescriptions', 'prescription_type', "TEXT DEFAULT 'simple'");
+    addColIfMissing('clinical_prescriptions', 'content', "TEXT");
+    addColIfMissing('clinical_prescriptions', 'created_at', "TEXT DEFAULT (datetime('now'))");
+
+    addColIfMissing('clinical_exam_requests', 'exams_list', "TEXT");
+    addColIfMissing('clinical_exam_requests', 'clinical_indication', "TEXT");
+    addColIfMissing('clinical_exam_requests', 'created_at', "TEXT DEFAULT (datetime('now'))");
+
+    addColIfMissing('patients', 'import_batch_id', 'TEXT');
+    addColIfMissing('appointments', 'import_batch_id', 'TEXT');
 
     // Assegura que a lista detalhada de profissões de saúde e administração exista no banco
     const allDetailedProfessions = [

@@ -15,14 +15,16 @@ import {
   Shield,
   X,
   CheckCircle2,
-  FileText
+  FileText,
+  UploadCloud
 } from 'lucide-react';
 
 interface PatientsViewProps {
   onOpenNewPatient: () => void;
+  onNavigate?: (view: string) => void;
 }
 
-export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient }) => {
+export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, onNavigate }) => {
   const { clientTermLabel } = useAuth();
   const { showToast } = useToast();
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -75,6 +77,17 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient }) 
               className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('import')}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all whitespace-nowrap cursor-pointer"
+              title="Importar de Word (.docx) ou Planilhas (.xlsx/.csv)"
+            >
+              <UploadCloud className="w-4 h-4 text-teal-600" />
+              Importar
+            </button>
+          )}
 
           <button
             onClick={onOpenNewPatient}

@@ -22,6 +22,7 @@ import { PatientClinicalController } from '../controllers/patient-clinical.contr
 import { DocumentsController } from '../controllers/documents.controller';
 import { CashRegisterController } from '../controllers/cash-register.controller';
 import { InsuranceController } from '../controllers/insurance.controller';
+import { ImportController } from '../controllers/import.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -294,8 +295,20 @@ api.post('/v1/cash-register/:id/close', requireTenant, requireRole('clinic_admin
 api.get('/v1/cash-register/history', requireTenant, requireRole('clinic_admin', 'receptionist'), CashRegisterController.listHistory);
 api.get('/v1/cash-register/:id', requireTenant, CashRegisterController.getById);
 
-// Assistente de Inteligência Artificial Integrado
+// Assistente de Inteligência Artificial Integrado (Zemda AI)
 api.post('/v1/ai/chat', requireTenant, AIController.chat);
+api.post('/v1/ai/improve-text', requireTenant, AIController.improveText);
+api.get('/v1/ai/conversations', requireTenant, AIController.listConversations);
+api.post('/v1/ai/conversations', requireTenant, AIController.saveConversation);
+api.delete('/v1/ai/conversations/:id', requireTenant, AIController.deleteConversation);
+api.post('/v1/ai/feedback', requireTenant, AIController.recordFeedback);
+
+// Importação Inteligente de Dados (Word .docx, Planilhas .xlsx/.csv/.txt, Heurística e Lotes)
+api.post('/v1/import/parse-file', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), ImportController.parseFile);
+api.post('/v1/import/execute', requireTenant, requireRole('clinic_admin'), ImportController.executeImport);
+api.get('/v1/import/batches', requireTenant, requireRole('clinic_admin'), ImportController.listBatches);
+api.post('/v1/import/batches/:id/rollback', requireTenant, requireRole('clinic_admin'), ImportController.rollbackBatch);
+api.post('/v1/import/export-custom-docx', requireTenant, ImportController.exportCustomDocx);
 
 // Trilha de Auditoria (LGPD Compliance) — Exclusivo SuperAdmin do SaaS (Item 20)
 api.get('/v1/audit', requireRole('superadmin'), AuditController.list);

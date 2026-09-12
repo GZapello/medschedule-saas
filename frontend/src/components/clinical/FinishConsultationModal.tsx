@@ -85,8 +85,70 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   // Modal para prévia e impressão de documento emitido
   const [printDoc, setPrintDoc] = useState<{ type: 'certificate' | 'prescription' | 'exam_request'; id: string } | null>(null);
 
+  // Resumo de conclusão com sucesso
+  const [completionSummary, setCompletionSummary] = useState<{
+    hasEvolution: boolean;
+    hasCertificate: boolean;
+    hasPrescription: boolean;
+    hasExamRequest: boolean;
+    hasReturn: boolean;
+    hasReferral: boolean;
+    generatedDocs: any;
+  } | null>(null);
+
+  const DRAFT_KEY = `zemda_draft_appt_${appointment.id}`;
+
+  // 1. Recuperação segura de rascunho salvo ao carregar
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.evolution) setEvolution(parsed.evolution);
+        if (parsed.certificate) setCertificate(parsed.certificate);
+        if (parsed.prescription) setPrescription(parsed.prescription);
+        if (parsed.examRequest) setExamRequest(parsed.examRequest);
+        if (parsed.returnAppt) setReturnAppt(parsed.returnAppt);
+        if (parsed.referral) setReferral(parsed.referral);
+        if (parsed.includeEvolution !== undefined) setIncludeEvolution(parsed.includeEvolution);
+        if (parsed.includeCertificate !== undefined) setIncludeCertificate(parsed.includeCertificate);
+        if (parsed.includePrescription !== undefined) setIncludePrescription(parsed.includePrescription);
+        if (parsed.includeExamRequest !== undefined) setIncludeExamRequest(parsed.includeExamRequest);
+        if (parsed.includeReturn !== undefined) setIncludeReturn(parsed.includeReturn);
+        if (parsed.includeReferral !== undefined) setIncludeReferral(parsed.includeReferral);
+      }
+    } catch (e) {
+      console.warn('Erro ao restaurar rascunho:', e);
+    }
+  }, [appointment.id]);
+
+  // 2. Autosave automático e silencioso a cada alteração
+  React.useEffect(() => {
+    try {
+      const stateToSave = {
+        evolution,
+        certificate,
+        prescription,
+        examRequest,
+        returnAppt,
+        referral,
+        includeEvolution,
+        includeCertificate,
+        includePrescription,
+        includeExamRequest,
+        includeReturn,
+        includeReferral
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(stateToSave));
+    } catch (e) {
+      // Ignora erro de quota de localStorage
+    }
+  }, [evolution, certificate, prescription, examRequest, returnAppt, referral, includeEvolution, includeCertificate, includePrescription, includeExamRequest, includeReturn, includeReferral, DRAFT_KEY]);
+
   const handleFinish = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return; // Prevenção rigorosa de duplo clique
+
     try {
       setSubmitting(true);
 
@@ -136,22 +198,152 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
       }
 
       const res = await ApiClient.post<any>(`/v1/appointments/${appointment.id}/finish`, payload);
+      
+      // Limpa rascunho apenas após êxito confirmado do servidor
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch (e) {}
+
       showToast('Atendimento finalizado com sucesso!', 'success');
 
-      // Se gerou receita ou atestado, pergunta ou abre modal de impressão
-      if (res.generatedDocs?.certificateId) {
-        setPrintDoc({ type: 'certificate', id: res.generatedDocs.certificateId });
-      } else if (res.generatedDocs?.prescriptionId) {
-        setPrintDoc({ type: 'prescription', id: res.generatedDocs.prescriptionId });
-      } else {
-        onFinished();
-      }
+      // Exibe tela estruturada de confirmação
+      setCompletionSummary({
+        hasEvolution: includeEvolution && !!evolution.clinicalEvolution.trim(),
+        hasCertificate: includeCertificate,
+        hasPrescription: includePrescription && !!prescription.content.trim(),
+        hasExamRequest: includeExamRequest && !!examRequest.examsList.trim(),
+        hasReturn: includeReturn && !!returnAppt.date,
+        hasReferral: includeReferral && !!referral.referralReason,
+        generatedDocs: res.generatedDocs || {}
+      });
     } catch (err: any) {
-      showToast(err.message || 'Erro ao finalizar atendimento', 'error');
+      console.error('Falha ao finalizar atendimento:', err);
+      // NUNCA apaga os campos preenchidos
+      showToast(
+        err.message || 'Não foi possível finalizar o atendimento. Nenhuma informação foi perdida. Tente novamente ou entre em contato com o suporte.',
+        'error'
+      );
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (completionSummary) {
+    return (
+      <>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 p-6 text-center space-y-5">
+            <div className="w-14 h-14 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+
+            <div>
+              <h2 className="text-xl font-bold text-slate-900">Atendimento Finalizado com Sucesso!</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Consulta de <strong>{appointment.patient_name || 'Paciente'}</strong> concluída e arquivada no histórico.
+              </p>
+            </div>
+
+            {/* Checklist de Resumo */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-2 text-xs text-slate-700">
+              <div className="flex items-center gap-2 text-emerald-700 font-medium">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Atendimento finalizado na agenda</span>
+              </div>
+              {completionSummary.hasEvolution && (
+                <div className="flex items-center gap-2 text-emerald-700 font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Evolução clínica arquivada com lacre legal</span>
+                </div>
+              )}
+              {completionSummary.hasCertificate && (
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-emerald-700 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Atestado médico emitido</span>
+                  </span>
+                  {completionSummary.generatedDocs?.certificateId && (
+                    <button
+                      type="button"
+                      onClick={() => setPrintDoc({ type: 'certificate', id: completionSummary.generatedDocs.certificateId })}
+                      className="text-[11px] font-bold text-teal-700 hover:text-teal-800 flex items-center gap-1 bg-teal-50 px-2 py-1 rounded-lg border border-teal-200"
+                    >
+                      <Printer className="w-3 h-3" /> Imprimir A4
+                    </button>
+                  )}
+                </div>
+              )}
+              {completionSummary.hasPrescription && (
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-emerald-700 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Receituário gerado</span>
+                  </span>
+                  {completionSummary.generatedDocs?.prescriptionId && (
+                    <button
+                      type="button"
+                      onClick={() => setPrintDoc({ type: 'prescription', id: completionSummary.generatedDocs.prescriptionId })}
+                      className="text-[11px] font-bold text-teal-700 hover:text-teal-800 flex items-center gap-1 bg-teal-50 px-2 py-1 rounded-lg border border-teal-200"
+                    >
+                      <Printer className="w-3 h-3" /> Imprimir A4
+                    </button>
+                  )}
+                </div>
+              )}
+              {completionSummary.hasExamRequest && (
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-emerald-700 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Pedido de exame emitido</span>
+                  </span>
+                  {completionSummary.generatedDocs?.examRequestId && (
+                    <button
+                      type="button"
+                      onClick={() => setPrintDoc({ type: 'exam_request', id: completionSummary.generatedDocs.examRequestId })}
+                      className="text-[11px] font-bold text-teal-700 hover:text-teal-800 flex items-center gap-1 bg-teal-50 px-2 py-1 rounded-lg border border-teal-200"
+                    >
+                      <Printer className="w-3 h-3" /> Imprimir A4
+                    </button>
+                  )}
+                </div>
+              )}
+              {completionSummary.hasReturn && (
+                <div className="flex items-center gap-2 text-emerald-700 font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Consulta de retorno agendada na data selecionada</span>
+                </div>
+              )}
+              {completionSummary.hasReferral && (
+                <div className="flex items-center gap-2 text-emerald-700 font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Encaminhamento registrado</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCompletionSummary(null);
+                onFinished();
+              }}
+              className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              Concluir e Voltar
+            </button>
+          </div>
+        </div>
+
+        {printDoc && (
+          <PrintableDocumentModal
+            documentType={printDoc.type}
+            documentId={printDoc.id}
+            onClose={() => setPrintDoc(null)}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <>

@@ -15,6 +15,7 @@ import {
   Globe,
   Receipt,
   UserPlus,
+  UploadCloud,
   X
 } from 'lucide-react';
 
@@ -50,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'staff', label: 'Equipe & Acessos', icon: UserPlus, visible: isClinicAdmin },
     { id: 'taxonomy', label: 'Profissões & Categorias', icon: Layers, visible: isClinicAdmin },
     { id: 'reports', label: 'Relatórios & Exportação', icon: BarChart3, visible: isClinicAdmin },
+    { id: 'import', label: 'Importar Dados', icon: UploadCloud, visible: isClinicAdmin },
     { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isSuperAdmin },
     { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },
     { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: isSuperAdmin },
