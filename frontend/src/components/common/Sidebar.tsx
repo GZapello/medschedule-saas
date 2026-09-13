@@ -16,8 +16,10 @@ import {
   Receipt,
   UserPlus,
   UploadCloud,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
+import { openZemdaAI } from '../../utils/aiHelper';
 
 interface SidebarProps {
   currentView: string;
@@ -89,7 +91,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        <div className="p-3 pb-1">
+          <button
+            onClick={() => {
+              openZemdaAI();
+              onClose();
+            }}
+            className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-teal-500/20 via-indigo-500/20 to-purple-500/20 text-teal-300 hover:text-white border border-teal-500/30 hover:border-teal-400 transition-all group cursor-pointer shadow-xs"
+          >
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-teal-400 group-hover:scale-110 transition-transform animate-pulse" />
+              <span>Assistente Zemda IA</span>
+            </div>
+            <span className="text-[10px] font-extrabold bg-teal-500/30 text-teal-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+              IA
+            </span>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-2 px-3 space-y-1">
           {navItems
             .filter(item => item.visible)
             .map(item => {
@@ -113,6 +133,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
               );
             })}
+        </div>
+
+        <div className="p-3 m-3 bg-slate-800/80 rounded-2xl border border-slate-700/60">
+          <div className="flex items-center gap-2 text-teal-400 text-xs font-bold mb-1">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Precisa de Ajuda?</span>
+          </div>
+          <p className="text-[11px] text-slate-400 leading-snug">
+            Tire dúvidas, resuma prontuários e organize a clínica com a IA Zemda.
+          </p>
+          <button
+            onClick={() => {
+              openZemdaAI({ prompt: 'Olá Zemda! Como você pode me ajudar a gerenciar a clínica e os atendimentos hoje?' });
+              onClose();
+            }}
+            className="mt-2.5 w-full py-1.5 px-2.5 bg-teal-600/30 hover:bg-teal-600 text-teal-200 hover:text-white rounded-xl text-[11px] font-semibold transition-all text-center block cursor-pointer"
+          >
+            Falar com a IA
+          </button>
         </div>
 
         <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">

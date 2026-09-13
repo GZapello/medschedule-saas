@@ -391,12 +391,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setServerUrlInput('https://medschedule-saas-production.up.railway.app/api');
-                      testConnection('https://medschedule-saas-production.up.railway.app/api');
+                      setServerUrlInput('https://zemda.com.br/api');
+                      testConnection('https://zemda.com.br/api');
                     }}
                     className="text-[11px] py-1 px-2.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors font-mono cursor-pointer"
                   >
-                    ☁️ Nuvem Railway (Oficial)
+                    ☁️ Nuvem Zemda (Oficial)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setServerUrlInput('/api');
+                      testConnection('/api');
+                    }}
+                    className="text-[11px] py-1 px-2.5 rounded-lg bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 transition-colors font-mono cursor-pointer"
+                  >
+                    ⚡ Padrão Web (/api)
                   </button>
                   <button
                     type="button"

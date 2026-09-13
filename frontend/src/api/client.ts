@@ -1,14 +1,30 @@
 export const getApiBaseUrl = (): string => {
   // 1. Configuração personalizada de URL salva no cliente (ideal para clínicas conectando ao servidor da rede/nuvem)
   if (typeof window !== 'undefined') {
+    const isZemdaWeb = window.location.hostname === 'zemda.com.br' || window.location.hostname.endsWith('.zemda.com.br');
+
+    // Limpeza de URLs antigas/inválidas do Railway no localStorage
     const customUrl = localStorage.getItem('saas_custom_api_url');
-    if (customUrl && customUrl.trim()) {
-      let clean = customUrl.trim().replace(/\/+$/, '');
-      // Se for domínio desatualizado do railway antigo, migra para o oficial zemda.com.br
-      if (clean.includes('medschedule-saas-production.up.railway.app')) {
-        clean = 'https://zemda.com.br/api';
-        localStorage.setItem('saas_custom_api_url', clean);
+    if (customUrl) {
+      if (
+        customUrl.includes('medschedule') ||
+        customUrl.includes('railway.app') ||
+        customUrl === '/' ||
+        customUrl === '/api' ||
+        (isZemdaWeb && customUrl.includes('localhost'))
+      ) {
+        localStorage.removeItem('saas_custom_api_url');
       }
+    }
+
+    // No navegador acessando zemda.com.br, a API relativa é a mais rápida, segura e nativa
+    if (isZemdaWeb && !localStorage.getItem('saas_custom_api_url')) {
+      return '/api';
+    }
+
+    const validCustomUrl = localStorage.getItem('saas_custom_api_url');
+    if (validCustomUrl && validCustomUrl.trim()) {
+      let clean = validCustomUrl.trim().replace(/\/+$/, '');
       // Se for apenas '/' ou vazio, usa o relativo padrão
       if (clean === '' || clean === '/') {
         return '/api';

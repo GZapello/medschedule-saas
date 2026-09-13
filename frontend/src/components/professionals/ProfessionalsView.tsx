@@ -13,9 +13,11 @@ import {
   CheckCircle2,
   Mail,
   Phone,
-  Edit3
+  Edit3,
+  Sparkles
 } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
+import { openZemdaAI } from '../../utils/aiHelper';
 
 export const ProfessionalsView: React.FC = () => {
   const { showToast } = useToast();
@@ -33,6 +35,7 @@ export const ProfessionalsView: React.FC = () => {
   const [phone, setPhone] = useState<string>('');
   const [professionId, setProfessionId] = useState<string>('');
   const [specialtyId, setSpecialtyId] = useState<string>('');
+  const [specialtyName, setSpecialtyName] = useState<string>('');
   const [registrationType, setRegistrationType] = useState<string>('CRP');
   const [registrationNumber, setRegistrationNumber] = useState<string>('');
   const [bio, setBio] = useState<string>('');
@@ -45,6 +48,7 @@ export const ProfessionalsView: React.FC = () => {
   const [editGender, setEditGender] = useState<'M' | 'F'>('M');
   const [editProfessionId, setEditProfessionId] = useState<string>('');
   const [editSpecialtyId, setEditSpecialtyId] = useState<string>('');
+  const [editSpecialtyName, setEditSpecialtyName] = useState<string>('');
   const [editRegistrationType, setEditRegistrationType] = useState<string>('CRP');
   const [editRegistrationNumber, setEditRegistrationNumber] = useState<string>('');
   const [editBio, setEditBio] = useState<string>('');
@@ -98,6 +102,8 @@ export const ProfessionalsView: React.FC = () => {
         phone,
         professionId,
         specialtyId: specialtyId || null,
+        specialtyName: specialtyName.trim(),
+        specialtyCustom: specialtyName.trim(),
         registrationType: registrationType || null,
         registrationNumber: registrationNumber || null,
         bio: bio || null,
@@ -112,6 +118,7 @@ export const ProfessionalsView: React.FC = () => {
       setGender('M');
       setEmail('');
       setPhone('');
+      setSpecialtyName('');
       setRegistrationNumber('');
       setBio('');
       setPracticeAreas('');
@@ -133,6 +140,8 @@ export const ProfessionalsView: React.FC = () => {
         gender: editGender,
         professionId: editProfessionId,
         specialtyId: editSpecialtyId || null,
+        specialtyName: editSpecialtyName.trim(),
+        specialtyCustom: editSpecialtyName.trim(),
         registrationType: editRegistrationType || null,
         registrationNumber: editRegistrationNumber || null,
         bio: editBio || null,
@@ -260,6 +269,7 @@ export const ProfessionalsView: React.FC = () => {
                   const currentPProfId = p.profession_id || (professions[0]?.id || '');
                   setEditProfessionId(currentPProfId);
                   setEditSpecialtyId(p.specialty_id || '');
+                  setEditSpecialtyName(p.specialty_name || (p as any).specialty_custom || '');
                   setEditRegistrationType(p.registration_type || 'CRM');
                   setEditRegistrationNumber(p.registration_number || '');
                   setEditBio(p.bio || '');
@@ -353,19 +363,17 @@ export const ProfessionalsView: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Especialidade (dinâmica) *</label>
-                  <select
-                    value={specialtyId}
-                    onChange={e => setSpecialtyId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                  >
-                    <option value="">Selecione a especialidade...</option>
-                    {specialties
-                      .filter(s => s.profession_id === professionId || (s as any).professionId === professionId)
-                      .map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">Especialidade(s)</label>
+                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded">Texto livre</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={specialtyName}
+                    onChange={e => setSpecialtyName(e.target.value)}
+                    placeholder="Ex: Cardiologia Clínica, Arritmia..."
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
                 </div>
               </div>
 
@@ -393,7 +401,20 @@ export const ProfessionalsView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Biografia / Apresentação</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Biografia / Apresentação</label>
+                  <button
+                    type="button"
+                    onClick={() => openZemdaAI({
+                      prompt: `Escreva uma biografia profissional curta, empática e elegante para um profissional cujo nome é "${name || 'do profissional'}" e atua na área de "${specialtyName || 'saúde'}".`,
+                      autoSend: true
+                    })}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3 text-indigo-500" />
+                    Gerar com IA
+                  </button>
+                </div>
                 <textarea
                   rows={2}
                   value={bio}
@@ -491,19 +512,17 @@ export const ProfessionalsView: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Especialidade (dinâmica) *</label>
-                  <select
-                    value={editSpecialtyId}
-                    onChange={e => setEditSpecialtyId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                  >
-                    <option value="">Selecione a especialidade...</option>
-                    {specialties
-                      .filter(s => s.profession_id === editProfessionId || (s as any).professionId === editProfessionId)
-                      .map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">Especialidade(s)</label>
+                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded">Texto livre</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={editSpecialtyName}
+                    onChange={e => setEditSpecialtyName(e.target.value)}
+                    placeholder="Ex: Cardiologia Clínica, Arritmia..."
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                  />
                 </div>
               </div>
 
@@ -545,7 +564,20 @@ export const ProfessionalsView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Biografia / Apresentação</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Biografia / Apresentação</label>
+                  <button
+                    type="button"
+                    onClick={() => openZemdaAI({
+                      prompt: `Escreva uma biografia profissional curta, empática e elegante para o profissional "${editName || 'do profissional'}" com especialidade em "${editSpecialtyName || 'da clínica'}".`,
+                      autoSend: true
+                    })}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3 text-indigo-500" />
+                    Gerar com IA
+                  </button>
+                </div>
                 <textarea
                   rows={2}
                   value={editBio}

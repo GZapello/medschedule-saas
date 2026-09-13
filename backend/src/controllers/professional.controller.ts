@@ -15,10 +15,10 @@ export class ProfessionalController {
 
       const stmt = db.prepare(`
         SELECT 
-          p.id, p.tenant_id, p.user_id, p.name, p.photo_url, p.profession_id, p.specialty_id,
+          p.id, p.tenant_id, p.user_id, p.name, p.photo_url, p.profession_id, p.specialty_id, p.specialty_custom,
           p.registration_type, p.registration_number, p.bio, p.practice_areas, p.buffer_minutes, p.active,
           u.email, u.phone,
-          spec.name as specialty_name, spec.color as specialty_color,
+          COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name, spec.color as specialty_color,
           prof.name as profession_name
         FROM professionals p
         LEFT JOIN users u ON u.id = p.user_id
@@ -42,10 +42,10 @@ export class ProfessionalController {
 
       const stmt = db.prepare(`
         SELECT 
-          p.id, p.tenant_id, p.user_id, p.name, p.photo_url, p.profession_id, p.specialty_id,
+          p.id, p.tenant_id, p.user_id, p.name, p.photo_url, p.profession_id, p.specialty_id, p.specialty_custom,
           p.registration_type, p.registration_number, p.bio, p.practice_areas, p.buffer_minutes, p.active,
           u.email, u.phone,
-          spec.name as specialty_name,
+          COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
           prof.name as profession_name
         FROM professionals p
         LEFT JOIN users u ON u.id = p.user_id
@@ -98,7 +98,7 @@ export class ProfessionalController {
       }
 
       const {
-        name, email, password, phone, professionId, specialtyId,
+        name, email, password, phone, professionId, specialtyId, specialtyName, specialtyCustom,
         registrationType, registrationNumber, bio, practiceAreas, bufferMinutes, photoUrl, gender
       } = req.body;
 
@@ -124,12 +124,13 @@ export class ProfessionalController {
       }
 
       const profId = 'pro-' + uuidv4().slice(0, 8);
+      const customSpec = specialtyCustom || specialtyName || null;
       const insertProf = db.prepare(`
         INSERT INTO professionals (
-          id, tenant_id, user_id, name, photo_url, profession_id, specialty_id,
+          id, tenant_id, user_id, name, photo_url, profession_id, specialty_id, specialty_custom,
           registration_type, registration_number, bio, practice_areas, buffer_minutes, gender, active
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `);
 
       insertProf.run(
@@ -140,6 +141,7 @@ export class ProfessionalController {
         photoUrl || null,
         professionId || null,
         specialtyId || null,
+        customSpec,
         registrationType || null,
         registrationNumber || null,
         bio || null,
@@ -170,15 +172,18 @@ export class ProfessionalController {
       const { id } = req.params;
       const tenantId = req.tenantId;
       const {
-        name, professionId, specialtyId, registrationType, registrationNumber,
+        name, professionId, specialtyId, specialtyName, specialtyCustom, registrationType, registrationNumber,
         bio, practiceAreas, bufferMinutes, photoUrl, gender, active
       } = req.body;
+
+      const customSpec = specialtyCustom !== undefined ? specialtyCustom : (specialtyName !== undefined ? specialtyName : null);
 
       const updateStmt = db.prepare(`
         UPDATE professionals SET
           name = COALESCE(?, name),
           profession_id = COALESCE(?, profession_id),
           specialty_id = COALESCE(?, specialty_id),
+          specialty_custom = COALESCE(?, specialty_custom),
           registration_type = COALESCE(?, registration_type),
           registration_number = COALESCE(?, registration_number),
           bio = COALESCE(?, bio),
@@ -195,6 +200,7 @@ export class ProfessionalController {
         name || null,
         professionId || null,
         specialtyId || null,
+        customSpec,
         registrationType || null,
         registrationNumber || null,
         bio || null,

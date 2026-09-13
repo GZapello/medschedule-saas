@@ -40,6 +40,9 @@ interface AICopilotDrawerProps {
   onAppointmentCreated?: () => void;
   activePatientId?: string;
   activeAppointmentId?: string;
+  initialPrompt?: string;
+  initialTab?: 'chat' | 'audio_draft' | 'improve_text';
+  autoSend?: boolean;
 }
 
 interface Message {
@@ -58,7 +61,10 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   onClose,
   onAppointmentCreated,
   activePatientId,
-  activeAppointmentId
+  activeAppointmentId,
+  initialPrompt,
+  initialTab,
+  autoSend
 }) => {
   const { showToast } = useToast();
   const [activeTab, setActiveTab] = useState<'chat' | 'audio_draft' | 'improve_text'>('chat');
@@ -313,6 +319,21 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     setLoading(false);
     setLoadingStatus('Processando...');
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
+      if (initialPrompt) {
+        if (autoSend) {
+          handleSend(initialPrompt);
+        } else {
+          setInput(initialPrompt);
+        }
+      }
+    }
+  }, [isOpen, initialPrompt, initialTab, autoSend]);
 
   const handleImproveText = async () => {
     if (!originalToImprove.trim()) {

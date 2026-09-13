@@ -115,6 +115,7 @@ export function initializeDatabase(): void {
     addColIfMissing('clinic_users', 'profession_custom', 'TEXT');
     addColIfMissing('clinic_users', 'practice_areas', 'TEXT');
     addColIfMissing('professionals', 'practice_areas', 'TEXT');
+    addColIfMissing('professionals', 'specialty_custom', 'TEXT');
 
     // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
     addColIfMissing('appointments', 'insurance_id', 'TEXT');

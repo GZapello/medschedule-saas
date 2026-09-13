@@ -12,8 +12,10 @@ import {
   CreditCard,
   QrCode,
   Banknote,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
+import { openZemdaAI } from '../../utils/aiHelper';
 
 export const FinancialView: React.FC = () => {
   const { showToast } = useToast();
@@ -202,7 +204,18 @@ export const FinancialView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => openZemdaAI({
+              prompt: `Analise a situação financeira da clínica: Total recebido: ${formatCurrency(totalPaid)} | Total pendente: ${formatCurrency(totalPending)}. Quais estratégias você recomenda para acelerar o recebimento dos valores pendentes e otimizar os métodos de pagamento?`,
+              autoSend: true
+            })}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+            title="Receba uma análise inteligente do faturamento com a IA Zemda"
+          >
+            <Sparkles className="w-4 h-4 text-teal-600 animate-pulse" />
+            Insights com IA
+          </button>
           <button
             onClick={handleExportCsv}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"

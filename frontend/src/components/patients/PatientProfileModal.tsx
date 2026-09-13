@@ -24,8 +24,10 @@ import {
   Mail,
   User,
   ExternalLink,
-  Printer
+  Printer,
+  Sparkles
 } from 'lucide-react';
+import { openZemdaAI } from '../../utils/aiHelper';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 
 interface PatientProfileModalProps {
@@ -461,6 +463,19 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openZemdaAI({
+                patientId: patient.id,
+                prompt: `Analise o prontuário de ${patient.full_name}: apresente um resumo clínico conciso, informe antecedentes, alergias, medicações ativas e pontos de atenção recomendados.`,
+                autoSend: true
+              })}
+              title="Consultar Assistente IA sobre este paciente"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-500/80 to-indigo-600/80 hover:from-teal-500 hover:to-indigo-600 text-xs font-bold text-white transition-all shadow-xs border border-white/20 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-teal-200 animate-pulse" />
+              Ajuda com IA
+            </button>
             <button
               onClick={handleExportDocx}
               title="Exportar Prontuário em Word (.docx)"

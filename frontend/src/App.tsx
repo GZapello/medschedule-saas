@@ -43,6 +43,9 @@ const AppContent: React.FC = () => {
   // Contexto ativo para a IA — rastreado via eventos de componentes filhos
   const [aiActivePatientId, setAiActivePatientId] = useState<string | undefined>(undefined);
   const [aiActiveAppointmentId, setAiActiveAppointmentId] = useState<string | undefined>(undefined);
+  const [aiInitialPrompt, setAiInitialPrompt] = useState<string | undefined>(undefined);
+  const [aiInitialTab, setAiInitialTab] = useState<'chat' | 'audio_draft' | 'improve_text' | undefined>(undefined);
+  const [aiAutoSend, setAiAutoSend] = useState<boolean>(false);
 
   // Escuta eventos de contexto disparados por componentes filhos (PatientsView, CalendarView, etc.)
   useEffect(() => {
@@ -57,12 +60,25 @@ const AppContent: React.FC = () => {
       else setAiActiveAppointmentId(undefined);
       if (detail?.patientId) setAiActivePatientId(detail.patientId);
     };
+    const handleOpenAI = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.patientId) setAiActivePatientId(detail.patientId);
+      if (detail?.appointmentId) setAiActiveAppointmentId(detail.appointmentId);
+      if (detail?.tab) setAiInitialTab(detail.tab);
+      if (detail?.prompt) {
+        setAiInitialPrompt(detail.prompt);
+        setAiAutoSend(!!detail.autoSend);
+      }
+      setIsAIOpen(true);
+    };
 
     window.addEventListener('zemda-ai-patient-context', handlePatientContext);
     window.addEventListener('zemda-ai-appointment-context', handleAppointmentContext);
+    window.addEventListener('open-zemda-ai', handleOpenAI);
     return () => {
       window.removeEventListener('zemda-ai-patient-context', handlePatientContext);
       window.removeEventListener('zemda-ai-appointment-context', handleAppointmentContext);
+      window.removeEventListener('open-zemda-ai', handleOpenAI);
     };
   }, []);
 
@@ -312,10 +328,18 @@ const AppContent: React.FC = () => {
 
       <AICopilotDrawer
         isOpen={isAIOpen}
-        onClose={() => setIsAIOpen(false)}
+        onClose={() => {
+          setIsAIOpen(false);
+          setAiInitialPrompt(undefined);
+          setAiInitialTab(undefined);
+          setAiAutoSend(false);
+        }}
         onAppointmentCreated={() => setCurrentView('calendar')}
         activePatientId={aiActivePatientId}
         activeAppointmentId={aiActiveAppointmentId}
+        initialPrompt={aiInitialPrompt}
+        initialTab={aiInitialTab}
+        autoSend={aiAutoSend}
       />
     </div>
   );
