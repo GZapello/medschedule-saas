@@ -27,6 +27,7 @@ import { SEO_PAGES } from './data/seoPagesData';
 import { NewAppointmentModal } from './components/calendar/NewAppointmentModal';
 import { NewPatientModal } from './components/patients/NewPatientModal';
 import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
+import { QuickAIAssistantShortcut } from './components/ai-copilot/QuickAIAssistantShortcut';
 import { NetworkOfflineModal } from './components/common/NetworkOfflineModal';
 import { UpdateNotificationModal } from './components/common/UpdateNotificationModal';
 import { Sparkles } from 'lucide-react';
@@ -397,6 +398,12 @@ const AppContent: React.FC = () => {
         initialPrompt={aiInitialPrompt}
         initialTab={aiInitialTab}
         autoSend={aiAutoSend}
+      />
+
+      {/* Atalho Rápido Assistente IA com Logo da Clínica e Fundo Transparente */}
+      <QuickAIAssistantShortcut
+        tenant={currentTenant}
+        onOpenCopilot={() => setIsAIOpen(true)}
       />
     </div>
   );

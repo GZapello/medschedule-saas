@@ -123,8 +123,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             })}
         </div>
 
-        <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
-          Zemda v1.1.2 • LGPD Compliant
+        <div className="p-3.5 pl-20 border-t border-slate-800 text-xs text-slate-500 flex flex-col justify-center min-h-[64px]">
+          <span className="font-semibold text-slate-400 leading-tight">Zemda v1.1.2</span>
+          <span className="text-[10px] text-slate-500 leading-tight">LGPD & CFM Compliant</span>
         </div>
       </aside>
     </>
