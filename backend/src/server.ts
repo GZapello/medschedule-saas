@@ -110,9 +110,13 @@ Sitemap: https://zemda.com.br/sitemap.xml
 `);
 });
 
-// Rota pública para sitemap.xml com cabeçalho application/xml
-app.get('/sitemap.xml', (req, res) => {
+// Rota pública para sitemap.xml com cabeçalho rigoroso application/xml
+const handleSitemap = (req: express.Request, res: express.Response) => {
+  res.status(200);
+  res.type('application/xml');
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -187,8 +191,12 @@ app.get('/sitemap.xml', (req, res) => {
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
-</urlset>`);
-});
+</urlset>`.trim());
+};
+
+app.get('/sitemap.xml', handleSitemap);
+app.get('/sitemap', handleSitemap);
+app.get('/sitemap_index.xml', handleSitemap);
 
 // Servir arquivos estáticos do frontend em produção (Single Page Application unificada)
 const possibleFrontendDistPaths = [
