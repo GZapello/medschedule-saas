@@ -21,8 +21,8 @@ export const getApiBaseUrl = (): string => {
       navigator.userAgent.includes('Electron');
 
     if (isElectron) {
-      // No aplicativo Desktop Windows, conecta por padrão diretamente ao servidor oficial na nuvem (Railway)
-      return 'https://medschedule-saas-production.up.railway.app/api';
+      // No aplicativo Desktop Windows, conecta por padrão diretamente ao servidor oficial na nuvem (Zemda Cloud)
+      return 'https://zemda.com.br/api';
     }
 
     // 4. Detecção de ambiente Mobile Android / Capacitor
@@ -31,8 +31,8 @@ export const getApiBaseUrl = (): string => {
       window.location.protocol === 'capacitor:';
 
     if (isCapacitor) {
-      // No aplicativo Android, conecta por padrão diretamente ao servidor oficial na nuvem (Railway)
-      return 'https://medschedule-saas-production.up.railway.app/api';
+      // No aplicativo Android, conecta por padrão diretamente ao servidor oficial na nuvem (Zemda Cloud)
+      return 'https://zemda.com.br/api';
     }
   }
 

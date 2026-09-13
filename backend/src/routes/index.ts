@@ -72,15 +72,18 @@ api.get('/v1/public/app-version', (req, res) => {
 });
 
 // Download do Instalador Desktop para Windows (.exe)
+// Download do Instalador Windows (.exe)
 api.get('/v1/public/download-windows', (req, res) => {
   const possiblePaths = [
+    path.resolve(process.cwd(), 'backend/public/downloads'),
+    path.resolve(process.cwd(), '../backend/public/downloads'),
+    path.resolve(process.cwd(), 'public/downloads'),
+    path.resolve(__dirname, '../public/downloads'),
+    path.resolve(__dirname, '../../public/downloads'),
     path.resolve(__dirname, '../../../desktop/dist'),
     path.resolve(__dirname, '../../desktop/dist'),
     path.resolve(process.cwd(), 'desktop/dist'),
-    path.resolve(process.cwd(), '../desktop/dist'),
-    path.resolve(process.cwd(), 'public/downloads'),
-    path.resolve(__dirname, '../public/downloads'),
-    path.resolve(__dirname, '../../public/downloads')
+    path.resolve(process.cwd(), '../desktop/dist')
   ];
 
   let foundFile: string | null = null;
@@ -105,10 +108,14 @@ api.get('/v1/public/download-windows', (req, res) => {
   }
 
   if (foundFile && fs.existsSync(foundFile)) {
-    const filename = path.basename(foundFile);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', 'application/vnd.microsoft.portable-executable');
-    return res.sendFile(foundFile);
+    const filename = 'Zemda Setup 1.1.2.exe';
+    console.log(`[Downloads] Enviando instalador Windows: ${foundFile}`);
+    return res.download(foundFile, filename, (err) => {
+      if (err && !res.headersSent) {
+        console.error('[Downloads] Erro ao enviar instalador Windows:', err);
+        res.status(500).json({ error: 'Erro ao transferir o instalador' });
+      }
+    });
   }
 
   res.status(404).json({
@@ -121,17 +128,17 @@ api.get('/v1/public/download-windows', (req, res) => {
 // Download do Aplicativo Android (.apk)
 api.get('/v1/public/download-android', (req, res) => {
   const possiblePaths = [
+    path.resolve(process.cwd(), 'backend/public/downloads'),
+    path.resolve(process.cwd(), '../backend/public/downloads'),
+    path.resolve(process.cwd(), 'public/downloads'),
+    path.resolve(__dirname, '../public/downloads'),
+    path.resolve(__dirname, '../../public/downloads'),
+    path.resolve(process.cwd(), 'android/Zemda.apk'),
+    path.resolve(process.cwd(), '../android/Zemda.apk'),
     path.resolve(__dirname, '../../../android/app/build/outputs/apk/debug'),
     path.resolve(__dirname, '../../../android/app/build/outputs/apk/release'),
     path.resolve(__dirname, '../../android/app/build/outputs/apk/debug'),
-    path.resolve(process.cwd(), 'android/app/build/outputs/apk/debug'),
-    path.resolve(process.cwd(), 'android/Zemda.apk'),
-    path.resolve(process.cwd(), '../android/Zemda.apk'),
-    path.resolve(process.cwd(), 'android/MedSchedule.apk'),
-    path.resolve(process.cwd(), '../android/MedSchedule.apk'),
-    path.resolve(process.cwd(), 'public/downloads'),
-    path.resolve(__dirname, '../public/downloads'),
-    path.resolve(__dirname, '../../public/downloads')
+    path.resolve(process.cwd(), 'android/app/build/outputs/apk/debug')
   ];
 
   let foundFile: string | null = null;
@@ -154,9 +161,13 @@ api.get('/v1/public/download-android', (req, res) => {
 
   if (foundFile && fs.existsSync(foundFile)) {
     const filename = 'Zemda.apk';
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    return res.sendFile(foundFile);
+    console.log(`[Downloads] Enviando APK Android: ${foundFile}`);
+    return res.download(foundFile, filename, (err) => {
+      if (err && !res.headersSent) {
+        console.error('[Downloads] Erro ao enviar APK Android:', err);
+        res.status(500).json({ error: 'Erro ao transferir o APK' });
+      }
+    });
   }
 
   res.status(404).json({

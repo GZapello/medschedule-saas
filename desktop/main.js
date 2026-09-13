@@ -44,7 +44,7 @@ function createWindow() {
           label: 'Configurar URL do Servidor SaaS...',
           click: async () => {
             mainWindow.webContents.executeJavaScript(`
-              const current = localStorage.getItem('saas_custom_api_url') || 'https://medschedule-saas-production.up.railway.app/api';
+              const current = localStorage.getItem('saas_custom_api_url') || 'https://zemda.com.br/api';
               const next = prompt('Endereço do Servidor SaaS:', current);
               if (next !== null) {
                 if (next.trim()) {

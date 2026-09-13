@@ -82,6 +82,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
         {/* Link para download do instalador Windows */}
         <a
           href={`${ApiClient.getBaseUrl()}/v1/public/download-windows`}
+          download="Zemda Setup 1.1.2.exe"
+          target="_blank"
+          rel="noopener noreferrer"
           className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
           title="Baixar Zemda para Windows Desktop (.exe)"
         >
@@ -92,6 +95,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
         {/* Link para download do app Android */}
         <a
           href={`${ApiClient.getBaseUrl()}/v1/public/download-android`}
+          download="Zemda.apk"
+          target="_blank"
+          rel="noopener noreferrer"
           className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200"
           title="Baixar Zemda para Android (.apk)"
         >
