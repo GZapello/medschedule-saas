@@ -68,7 +68,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     ctaHeadline: 'Transforme a gestão da sua clínica hoje mesmo',
-    ctaSubheadline: 'Cadastre sua clínica no Zemda e experimente uma operação sem fricção.'
+    ctaSubheadline: 'Conheça a plataforma Zemda e descubra como unificar recepção, corpo clínico e financeiro com máxima eficiência.'
   },
 
   'sistema-para-psicologos': {
@@ -116,7 +116,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     ctaHeadline: 'Mais tempo para focar no acolhimento dos seus pacientes',
-    ctaSubheadline: 'Inicie seu consultório no Zemda com prontuário psicológico seguro e sem complicação.'
+    ctaSubheadline: 'Descubra como o prontuário psicológico sigiloso e a gestão de sessões do Zemda simplificam o dia a dia do seu consultório.'
   },
 
   'sistema-para-fonoaudiologos': {
@@ -124,105 +124,105 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
     path: '/sistema-para-fonoaudiologos',
     title: 'Sistema para Fonoaudiólogos e Clínicas de Fonoaudiologia | Zemda',
     metaDescription: 'Plataforma especializada para fonoaudiologia. Registro de avaliações em linguagem, voz, audição, motricidade orofacial e evolução terapêutica contínua.',
-    keywords: 'sistema para fonoaudiologos, software fonoaudiologia, prontuario fonoaudiologico, clinica fonoaudiologia, exercicios fonoaudiologia',
+    keywords: 'sistema-para-fonoaudiologos, software fonoaudiologia, prontuario fonoaudiologico, clinica fonoaudiologia, exercicios fonoaudiologia',
     badge: 'Especializado para Fonoaudiologia',
     h1: 'Sistema Especializado para Clínicas e Consultórios de Fonoaudiologia',
     h2: 'Acompanhamento Terapêutico Preciso em Voz, Linguagem, Audiologia e Motricidade',
-    summary: 'A fonoaudiologia exige continuidade, metas claras e acompanhamento minucioso de cada fase do tratamento. O Zemda oferece o ambiente ideal para documentar diagnósticos fonoaudiológicos e registrar a evolução de cada sessão.',
+    summary: 'Projetado para fonoaudiólogos que necessitam registrar minuciosamente planos terapêuticos e evolução fonoterápica. Permite acompanhar resultados de testes auditivos, histórico de fala, mastigação e desenvolvimento infantil.',
     features: [
       {
-        title: 'Fichas Clínicas de Avaliação e Triagem Terapêutica',
-        description: 'Modelos rápidos para avaliação de motricidade orofacial, disfagia, fala, linguagem e acompanhamento auditivo de pacientes pediátricos e adultos.'
+        title: 'Prontuário com Protocolos Fonoterápicos',
+        description: 'Espaço dedicado para registrar avaliações de fala, audiometria, deglutição e evolução de exercícios por sessão realizada.'
       },
       {
-        title: 'Registro de Exercícios e Evolução Terapêutica Contínua',
-        description: 'Documente os treinos recomendados para casa, avanços na articulação e respostas aos estímulos aplicados ao longo do plano terapêutico.'
+        title: 'Anexo Rápido de Áudios, Vídeos e Relatórios',
+        description: 'Guarde arquivos de gravação de voz e exames complementares direto no perfil seguro do paciente em nuvem.'
       },
       {
-        title: 'Controle de Frequência e Relatórios de Desempenho',
-        description: 'Acompanhe a assiduidade dos pacientes em terapias semanais ou quinzenais, com emissão de relatórios para escolas, médicos e famílias.'
+        title: 'Agenda de Sessões Recorrentes Sem Choque de Horários',
+        description: 'Configure sessões semanais ou quinzenais fixas com facilidade, recebendo avisos de conflitos de sala ou terapeuta.'
       },
       {
-        title: 'Agendamento Recorrente para Terapias Periódicas',
-        description: 'Reserve o mesmo horário semanal automaticamente para o paciente sem precisar recriar compromissos manualmente a cada mês.'
+        title: 'Controle de Planos e Pacotes Terapêuticos',
+        description: 'Painel visual para acompanhar a quantidade de atendimentos realizados e previstos em cada plano de tratamento.'
       }
     ],
     benefits: [
-      'Agilidade no registro das sessões terapêuticas semanais',
-      'Histórico completo para emissão de relatórios multidisciplinares',
-      'Facilidade de anexo de exames audiométricos e relatórios médicos',
-      'Disponível no computador do consultório e no aplicativo mobile'
+      'Histórico completo do desenvolvimento de cada paciente',
+      'Atendimento dentro das diretrizes éticas do CFFa',
+      'Confirmação automática de presença via WhatsApp e e-mail',
+      'Praticidade na emissão de declarações e recibos timbrados'
     ],
     faqs: [
       {
-        question: 'Posso agendar sessões que se repetem toda semana?',
-        answer: 'Sim, a agenda do Zemda permite agendamentos recorrentes automáticos para tratamentos fonoaudiológicos continuados.'
+        question: 'Posso anexar gravações de voz ou vídeos de evolução no prontuário?',
+        answer: 'Sim, o Zemda suporta anexos de arquivos de áudio, relatórios em PDF e laudos diretamente no prontuário com total criptografia.'
       },
       {
-        question: 'Consigo anexar exames auditivos na ficha do paciente?',
-        answer: 'Sim, você pode anexar arquivos em PDF, imagens de exames e laudos diretamente no prontuário do paciente.'
+        question: 'Como funciona o agendamento de sessões com horários fixos semanais?',
+        answer: 'A agenda permite criar agendamentos recorrentes com facilidade, reservando automaticamente os dias e horários para o paciente.'
       }
     ],
     ctaHeadline: 'Eleve o padrão do seu consultório de Fonoaudiologia',
-    ctaSubheadline: 'Junte-se a fonoaudiólogos de todo o Brasil que usam o Zemda para organizar seus atendimentos.'
+    ctaSubheadline: 'Conheça as ferramentas especializadas do Zemda para acompanhamento terapêutico em voz, linguagem e motricidade.'
   },
 
   'sistema-para-fisioterapeutas': {
     slug: 'sistema-para-fisioterapeutas',
     path: '/sistema-para-fisioterapeutas',
     title: 'Sistema para Fisioterapeutas e Clínicas de Fisioterapia | Zemda',
-    metaDescription: 'Software de gestão para fisioterapia, pilates e reabilitação motora. Avaliação postural, evolução de sessões, controle de pacotes e recibos para reembolso.',
-    keywords: 'sistema para fisioterapeutas, software fisioterapia, prontuario fisioterapia, gestao de clinica de fisioterapia, pilates',
+    metaDescription: 'Software de gestão para clínicas de fisioterapia, pilates e reabilitação. Avaliação postural, escala de dor, evolução cinético-funcional e controle de sessões.',
+    keywords: 'sistema para fisioterapeutas, software fisioterapia, prontuario fisioterapia, clinica pilates, gestao fisioterapia',
     badge: 'Especializado para Fisioterapia & Reabilitação',
-    h1: 'Software para Fisioterapeutas e Centros de Reabilitação',
-    h2: 'Controle Clínico de Evolução Motora, Sessões de Fisioterapia e Pilates',
-    summary: 'Gerencie pacientes de ortopedia, neurologia, fisioterapia respiratória e estúdios de pilates com facilidade. Registre a evolução do quadro clínico, amplitudes de movimento e mantenha o faturamento em dia.',
+    h1: 'Software de Gestão para Fisioterapia e Clínicas de Reabilitação',
+    h2: 'Evolução Cinético-Funcional, Controle de Salas e Acompanhamento de Pacientes',
+    summary: 'A ferramenta ideal para fisioterapeutas autônomos e clínicas de reabilitação motora, ortopédica, respiratória ou estúdios de pilates. Agilize o preenchimento de evoluções diárias e tenha controle transparente dos atendimentos.',
     features: [
       {
-        title: 'Anamnese Fisioterapêutica e Registro de Exames',
-        description: 'Estrutura completa para registrar queixa principal, inspeção, palpação, testes ortopédicos e histórico traumato-ortopédico.'
+        title: 'Ficha de Avaliação Fisioterapêutica e Escala de Dor',
+        description: 'Monitore a graduação de dor (EVA), amplitude de movimento e testes específicos ao longo de cada ciclo de atendimento.'
       },
       {
-        title: 'Evolução Dinâmica de Tratamento e Metas do Paciente',
-        description: 'Acompanhe a melhora da dor e da mobilidade a cada sessão através de anotações ágeis pensadas para o ritmo dinâmico da fisioterapia.'
+        title: 'Gestão Inteligente de Boxes, Salas e Aparelhos',
+        description: 'Evite superlotação distribuindo pacientes entre salas de cinesioterapia, eletroterapia ou aparelhos de pilates.'
       },
       {
-        title: 'Gestão de Pacotes de Fisioterapia e Planos de Pilates',
-        description: 'Controle de saldo de sessões em pacotes contratados (ex: 10 sessões), com aviso automático de renovação ao final do ciclo.'
+        title: 'Controle de Sessões Realizadas e Remarcações Rápidas',
+        description: 'Saiba instantaneamente o saldo de sessões do paciente e remaneje horários com um simples clique na agenda.'
       },
       {
-        title: 'Emissão de Declarações e Comprovantes para Reembolso',
-        description: 'Gere declarações de comparecimento e recibos formatados no padrão aceito pelos principais planos de saúde para reembolso.'
+        title: 'Emissão de Recibos para Reembolso em Planos de Saúde',
+        description: 'Imprima comprovantes com descritivo das sessões para que seu paciente solicite reembolso junto ao convênio médico.'
       }
     ],
     benefits: [
-      'Controle rigoroso de sessões realizadas e restantes por paciente',
-      'Agilidade para registrar atendimentos sem atrasar a próxima sessão',
-      'Emissão de atestados e relatórios de alta em formato A4 perfeito',
-      'Interface limpa e rápida que funciona em qualquer dispositivo'
+      'Agilidade no registro da evolução fisioterapêutica diária',
+      'Redução de faltas em até 50% com lembretes automáticos',
+      'Conformidade com os padrões do Coffito e Crefito',
+      'Visão financeira consolidada dos procedimentos mais rentáveis'
     ],
     faqs: [
       {
-        question: 'O sistema atende tanto fisioterapia individual quanto estúdios de pilates?',
-        answer: 'Sim, o Zemda se adapta perfeitamente a atendimentos individuais de fisioterapia e a horários de pilates com gestão de pacotes.'
+        question: 'O sistema permite gerenciar múltiplos fisioterapeutas e salas na mesma clínica?',
+        answer: 'Sim, o sistema possui controle completo de múltiplos profissionais e salas/boxes, impedindo duplicidade de agendamentos.'
       },
       {
-        question: 'Como funciona o controle de sessões do paciente?',
-        answer: 'Ao lançar o atendimento na agenda ou prontuário, o saldo do pacote do paciente é atualizado automaticamente com transparência total.'
+        question: 'Os recibos emitidos servem para o paciente pedir reembolso no convênio?',
+        answer: 'Sim, os recibos emitidos no Zemda contêm todas as informações fiscais e profissionais exigidas pelas operadoras de saúde.'
       }
     ],
     ctaHeadline: 'Profissionalize o atendimento da sua clínica de fisioterapia',
-    ctaSubheadline: 'Comece a usar o Zemda hoje e ganhe tempo para focar na reabilitação dos seus pacientes.'
+    ctaSubheadline: 'Veja como organizar planos de reabilitação, sessões de fisioterapia e controle de evolução em uma única interface.'
   },
 
   'sistema-para-nutricionistas': {
     slug: 'sistema-para-nutricionistas',
     path: '/sistema-para-nutricionistas',
-    title: 'Sistema para Nutricionistas e Consultórios de Nutrição | Zemda',
-    metaDescription: 'Plataforma para nutricionistas com registro de anamnese alimentar, evolução de metas nutricionais, gestão de retornos e recibos para reembolso.',
-    keywords: 'sistema para nutricionistas, software nutricao, prontuario nutricional, gestao consultorio nutricao, anamnese alimentar',
+    title: 'Sistema para Nutricionistas e Clínicas de Nutrição | Zemda',
+    metaDescription: 'Software para nutricionistas com prontuário alimentar, recordatório 24h, avaliação antropométrica, metas e agendamento de retornos simplificado.',
+    keywords: 'sistema para nutricionistas, software nutricao, prontuario nutricional, anamnese nutricional, clinica de nutricao',
     badge: 'Especializado para Nutrição',
-    h1: 'Sistema para Nutricionistas e Clínicas de Nutrição',
+    h1: 'Sistema Integrado para Nutricionistas e Clínicas de Nutrição',
     h2: 'Acompanhe Metas, Registre Anamneses e Fidelize seus Pacientes',
     summary: 'Apoie seus pacientes na conquista de saúde e qualidade de vida com um software ágil. Centralize fichas de hábitos alimentares, evolução de objetivos, agendamento de consultas de retorno e controle financeiro.',
     features: [
@@ -260,7 +260,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     ctaHeadline: 'Dê um salto de organização no seu consultório de Nutrição',
-    ctaSubheadline: 'Cadastre-se no Zemda e aproveite a plataforma de gestão mais completa para a área da saúde.'
+    ctaSubheadline: 'Conheça a plataforma Zemda e descubra recursos dedicados para acompanhamento nutricional e agendamento inteligente.'
   },
 
   'sistema-para-medicos': {
@@ -308,7 +308,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     ctaHeadline: 'Mais modernidade e precisão para seu consultório médico',
-    ctaSubheadline: 'Crie sua conta médica no Zemda e modernize sua rotina de consultas agora mesmo.'
+    ctaSubheadline: 'Conheça a experiência clínica do Zemda em conformidade com as normas do CFM, sem perda de tempo e com total segurança.'
   },
 
   'agenda-online': {
@@ -356,7 +356,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     ctaHeadline: 'Tenha a agenda do seu consultório sempre cheia e organizada',
-    ctaSubheadline: 'Ative sua agenda online no Zemda e libere sua equipe da marcação manual de horários.'
+    ctaSubheadline: 'Conheça o sistema de agendamento online 24h e lembretes automáticos do Zemda que eliminam faltas e otimizam a recepção.'
   },
 
   'prontuario': {
@@ -404,7 +404,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     ctaHeadline: 'Eleve o padrão dos seus registros clínicos com o Zemda',
-    ctaSubheadline: 'Cadastre-se agora e descubra um prontuário eletrônico ágil, moderno e seguro.'
+    ctaSubheadline: 'Explore um prontuário eletrônico completo, ágil e em total conformidade com a LGPD e conselhos profissionais.'
   },
 
   'gestao-financeira': {
@@ -452,7 +452,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     ctaHeadline: 'Tenha total clareza dos números da sua clínica',
-    ctaSubheadline: 'Comece a usar o módulo financeiro do Zemda e potencialize a lucratividade do seu negócio.'
+    ctaSubheadline: 'Conheça o módulo financeiro do Zemda com fechamento de caixa por turno, controle de repasses e emissão de recibos oficiais A4.'
   },
 
   'blog': {
@@ -500,6 +500,6 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     ctaHeadline: 'Aplique as melhores práticas na sua clínica com o Zemda',
-    ctaSubheadline: 'Crie sua conta agora e una o conhecimento do nosso blog à melhor plataforma de gestão.'
+    ctaSubheadline: 'Acompanhe nossos conteúdos estratégicos e conheça as melhores inovações para a gestão do seu consultório.'
   }
 };

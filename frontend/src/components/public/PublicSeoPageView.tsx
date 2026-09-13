@@ -116,13 +116,13 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({
               onClick={onLogin}
               className="px-4 py-2 text-xs font-bold text-slate-300 hover:text-white rounded-xl hover:bg-slate-800 transition-all cursor-pointer border border-slate-800"
             >
-              Entrar
+              Acessar Sistema
             </button>
             <button
-              onClick={onRegisterClinic}
+              onClick={onNavigateHome}
               className="px-4 py-2 text-xs font-bold bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white rounded-xl shadow-lg shadow-teal-500/20 transition-all cursor-pointer flex items-center gap-1.5"
             >
-              Criar Clínica
+              Conhecer a Plataforma
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -166,17 +166,17 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({
               {/* Botões de Ação */}
               <div className="pt-4 flex flex-col sm:flex-row items-center gap-4 justify-center sm:justify-start">
                 <button
-                  onClick={onRegisterClinic}
+                  onClick={onNavigateHome}
                   className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-sm shadow-xl shadow-teal-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  Começar a Usar o Zemda
+                  Conhecer a Plataforma
                   <ArrowRight className="w-4 h-4" />
                 </button>
                 <button
                   onClick={onLogin}
                   className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-sm transition-all cursor-pointer"
                 >
-                  Acessar Minha Conta
+                  Acessar Sistema
                 </button>
               </div>
 
@@ -192,7 +192,7 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-teal-400" />
-                  <span>Sem taxa de adesão</span>
+                  <span>Alta disponibilidade em nuvem</span>
                 </div>
               </div>
             </div>
@@ -327,17 +327,17 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({
             </p>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
-                onClick={onRegisterClinic}
+                onClick={onNavigateHome}
                 className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-sm shadow-xl shadow-teal-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                Criar Minha Conta
+                Conhecer a Plataforma Zemda
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button
                 onClick={onLogin}
                 className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 font-bold text-sm transition-all cursor-pointer"
               >
-                Já sou cadastrado no Zemda
+                Acessar Sistema
               </button>
             </div>
           </div>
