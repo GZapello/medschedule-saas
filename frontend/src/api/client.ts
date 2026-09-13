@@ -1,91 +1,128 @@
 import { Capacitor } from '@capacitor/core';
 
+export const buildApiUrl = (baseUrl: string, endpoint: string): string => {
+  const cleanBase = baseUrl.trim().replace(/\/+$/, '');
+  const cleanEp = endpoint.trim().startsWith('/') ? endpoint.trim() : `/${endpoint.trim()}`;
+
+  // Se baseUrl já termina com /api e endpoint começa com /api/
+  if (cleanBase.endsWith('/api') && cleanEp.startsWith('/api/')) {
+    return `${cleanBase}${cleanEp.substring(4)}`;
+  }
+  // Se baseUrl não termina com /api nem com /v1 e endpoint começa com /v1/
+  if (!cleanBase.endsWith('/api') && !cleanBase.endsWith('/v1') && cleanEp.startsWith('/v1/')) {
+    return `${cleanBase}/api${cleanEp}`;
+  }
+  return `${cleanBase}${cleanEp}`;
+};
+
 export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
+    // 1. Limpeza PROATIVA e IMEDIATA de QUALQUER resquício inválido ou local no localStorage
+    try {
+      const stored = localStorage.getItem('saas_custom_api_url');
+      if (stored) {
+        const cleanStored = stored.trim().toLowerCase();
+        if (
+          cleanStored === '' ||
+          cleanStored === '/' ||
+          cleanStored === '/api' ||
+          cleanStored === 'api' ||
+          cleanStored.includes('localhost') ||
+          cleanStored.includes('127.0.0.1') ||
+          cleanStored.includes('10.0.2.2') ||
+          cleanStored.includes('medschedule') ||
+          cleanStored.includes('railway.app') ||
+          !cleanStored.startsWith('http')
+        ) {
+          localStorage.removeItem('saas_custom_api_url');
+        }
+      }
+    } catch (_) {}
+
     const isZemdaWeb = window.location.hostname === 'zemda.com.br' || window.location.hostname.endsWith('.zemda.com.br');
 
-    // 1. Detecção rigorosa de ambiente Mobile Android nativo (Capacitor)
-    const isAndroidApp = Capacitor.isNativePlatform() ||
+    // 2. Detecção abrangente de ambiente Mobile Android nativo (Capacitor)
+    const isAndroidApp = Boolean(
+      (window as any).Capacitor?.isNativePlatform?.() ||
+      Capacitor.isNativePlatform() ||
       Capacitor.getPlatform() === 'android' ||
+      (window as any).androidBridge ||
       window.location.protocol === 'capacitor:' ||
       window.location.protocol === 'file:' ||
-      (/android/i.test(navigator.userAgent) && (window.location.hostname === 'localhost' || !window.location.hostname));
+      (/android/i.test(navigator.userAgent) && !isZemdaWeb)
+    );
 
-    // No APK Android, a API padrão é SEMPRE a nuvem oficial Zemda
+    // No APK Android, a API padrão é SEMPRE a nuvem oficial Zemda (nunca relativo nem localhost)
     if (isAndroidApp) {
-      const customUrl = localStorage.getItem('saas_custom_api_url');
-      if (customUrl && customUrl.trim()) {
-        let clean = customUrl.trim().replace(/\/+$/, '');
-        if (/^https?:\/\//i.test(clean) && !clean.endsWith('/api') && !clean.endsWith('/v1')) {
-          clean = `${clean}/api`;
+      try {
+        const customUrl = localStorage.getItem('saas_custom_api_url');
+        if (customUrl && customUrl.trim().startsWith('http')) {
+          let clean = customUrl.trim().replace(/\/+$/, '');
+          if (!clean.endsWith('/api') && !clean.endsWith('/v1')) {
+            clean = `${clean}/api`;
+          }
+          return clean;
         }
-        return clean;
-      }
+      } catch (_) {}
       return 'https://zemda.com.br/api';
     }
 
-    // 2. Detecção de Desktop Electron
-    const isElectron = (window as any).isElectron || 
+    // 3. Detecção de Desktop Electron
+    const isElectron = Boolean(
+      (window as any).isElectron || 
       (window as any).process?.type === 'renderer' ||
-      navigator.userAgent.includes('Electron');
+      navigator.userAgent.includes('Electron')
+    );
 
     if (isElectron) {
-      const customUrl = localStorage.getItem('saas_custom_api_url');
-      if (customUrl && customUrl.trim()) {
-        let clean = customUrl.trim().replace(/\/+$/, '');
-        if (/^https?:\/\//i.test(clean) && !clean.endsWith('/api') && !clean.endsWith('/v1')) {
-          clean = `${clean}/api`;
+      try {
+        const customUrl = localStorage.getItem('saas_custom_api_url');
+        if (customUrl && customUrl.trim().startsWith('http')) {
+          let clean = customUrl.trim().replace(/\/+$/, '');
+          if (!clean.endsWith('/api') && !clean.endsWith('/v1')) {
+            clean = `${clean}/api`;
+          }
+          return clean;
         }
-        return clean;
-      }
+      } catch (_) {}
       return 'https://zemda.com.br/api';
     }
 
-    // 3. Limpeza de URLs antigas/inválidas do Railway no localStorage para web
-    const customUrl = localStorage.getItem('saas_custom_api_url');
-    if (customUrl) {
-      if (
-        customUrl.includes('medschedule') ||
-        customUrl.includes('railway.app') ||
-        customUrl === '/' ||
-        customUrl === '/api' ||
-        (isZemdaWeb && customUrl.includes('localhost'))
-      ) {
-        localStorage.removeItem('saas_custom_api_url');
-      }
-    }
-
-    // No navegador acessando zemda.com.br, a API relativa é a mais rápida, segura e nativa
-    if (isZemdaWeb && !localStorage.getItem('saas_custom_api_url')) {
+    // 4. No navegador acessando o domínio oficial zemda.com.br, a API relativa é recomendada
+    if (isZemdaWeb) {
+      try {
+        const customUrl = localStorage.getItem('saas_custom_api_url');
+        if (customUrl && customUrl.trim().startsWith('http')) {
+          let clean = customUrl.trim().replace(/\/+$/, '');
+          if (!clean.endsWith('/api') && !clean.endsWith('/v1')) {
+            clean = `${clean}/api`;
+          }
+          return clean;
+        }
+      } catch (_) {}
       return '/api';
     }
 
-    const validCustomUrl = localStorage.getItem('saas_custom_api_url');
-    if (validCustomUrl && validCustomUrl.trim()) {
-      let clean = validCustomUrl.trim().replace(/\/+$/, '');
-      // Se for apenas '/' ou vazio, usa o relativo padrão
-      if (clean === '' || clean === '/') {
-        return '/api';
+    // 5. Configuração personalizada válida
+    try {
+      const validCustomUrl = localStorage.getItem('saas_custom_api_url');
+      if (validCustomUrl && validCustomUrl.trim().startsWith('http')) {
+        let clean = validCustomUrl.trim().replace(/\/+$/, '');
+        if (!clean.endsWith('/api') && !clean.endsWith('/v1')) {
+          clean = `${clean}/api`;
+        }
+        return clean;
       }
-      // Se for URL HTTP(S) sem o /api ou /v1 no final, acrescenta /api
-      if (/^https?:\/\//i.test(clean) && !clean.endsWith('/api') && !clean.endsWith('/v1')) {
-        clean = `${clean}/api`;
-      }
-      return clean;
+    } catch (_) {}
+
+    // 6. Desenvolvimento local no PC (Vite dev server)
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return '/api';
     }
   }
 
-  // 4. Variável de ambiente (VITE_API_BASE_URL)
-  const envApiUrl = (import.meta as any)?.env?.VITE_API_BASE_URL;
-  if (envApiUrl) {
-    let cleanEnv = envApiUrl.trim().replace(/\/+$/, '');
-    if (/^https?:\/\//i.test(cleanEnv) && !cleanEnv.endsWith('/api') && !cleanEnv.endsWith('/v1')) {
-      cleanEnv = `${cleanEnv}/api`;
-    }
-    return cleanEnv;
-  }
-
-  return '/api';
+  // 7. Padrão final seguro
+  return 'https://zemda.com.br/api';
 };
 
 export class ApiClient {
@@ -117,9 +154,7 @@ export class ApiClient {
     const baseUrl = getApiBaseUrl();
     const token = this.getToken();
     const tenantId = this.getTenantId();
-
-    // Garante que endpoint comece com /
-    const safeEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const requestUrl = buildApiUrl(baseUrl, endpoint);
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -136,7 +171,7 @@ export class ApiClient {
 
     let response: Response;
     try {
-      response = await fetch(`${baseUrl}${safeEndpoint}`, {
+      response = await fetch(requestUrl, {
         ...options,
         headers
       });

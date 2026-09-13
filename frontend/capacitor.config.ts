@@ -5,11 +5,16 @@ const config: CapacitorConfig = {
   appName: 'Zemda',
   webDir: 'dist',
   server: {
-    androidScheme: 'http',
+    androidScheme: 'https',
     cleartext: true
   },
   android: {
     allowMixedContent: true
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true
+    }
   }
 };
 
