@@ -318,7 +318,7 @@ export function runSeed(db: DatabaseSync): void {
     1,
     2,
     60,
-    'Cancelamento gratuito com até 24 horas de antecedência.'
+    'Cancelamento com até 24 horas de antecedência.'
   );
 
   insertService.run(

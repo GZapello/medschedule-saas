@@ -465,7 +465,7 @@ export const BACKEND_SEO_PAGES: Record<string, SeoPageData> = {
       }
     ],
     benefits: [
-      'Artigos 100% gratuitos com orientações práticas para a rotina clínica',
+      'Artigos com orientações práticas para a rotina clínica',
       'Dicas jurídicas e contábeis simplificadas para profissionais de saúde',
       'Metodologias comprovadas de aumento de receita e corte de desperdícios',
       'Atualizações frequentes sobre inovações tecnológicas na medicina e terapia'
