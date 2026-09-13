@@ -18,11 +18,8 @@ import {
   Stethoscope,
   FileText,
   ExternalLink,
-  Filter,
-  Sparkles,
-  Mic
+  Filter
 } from 'lucide-react';
-import { openZemdaAI } from '../../utils/aiHelper';
 import { QuickConsultationModal } from '../clinical/QuickConsultationModal';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { PatientProfileModal } from '../patients/PatientProfileModal';
@@ -150,52 +147,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Plus className="w-4 h-4" />
             Novo Agendamento
           </button>
-        </div>
-      </div>
-
-      {/* Central de Produtividade & IA Zemda */}
-      <div className="bg-gradient-to-r from-teal-900 via-indigo-950 to-slate-900 rounded-2xl p-5 text-white shadow-md border border-teal-800/40 relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-teal-500/20 text-teal-300 rounded-lg border border-teal-500/30">
-                <Sparkles className="w-4 h-4 animate-pulse" />
-              </div>
-              <span className="text-xs font-bold uppercase tracking-wider text-teal-300">
-                Zemda IA Integrada
-              </span>
-            </div>
-            <h3 className="text-base font-bold text-white tracking-tight">
-              Central de Apoio Clínico e Operacional
-            </h3>
-            <p className="text-xs text-slate-300 max-w-xl">
-              Gere resumos do dia, dita prontuários por voz, otimize horários vagos e receba insights administrativos com um clique.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => openZemdaAI({ prompt: `Faça um resumo executivo da agenda de hoje da clínica: temos ${metrics?.today?.total || 0} agendados (${countCompleted} concluídos, ${countInProgress} em atendimento). Quais são os pontos de atenção para hoje?` })}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-teal-600/40 hover:bg-teal-600 text-teal-100 hover:text-white rounded-xl text-xs font-semibold border border-teal-500/40 transition-all cursor-pointer shadow-xs"
-            >
-              <FileText className="w-3.5 h-3.5 text-teal-300" />
-              Resumo do Dia
-            </button>
-            <button
-              onClick={() => openZemdaAI({ tab: 'audio_draft' })}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600/40 hover:bg-indigo-600 text-indigo-100 hover:text-white rounded-xl text-xs font-semibold border border-indigo-500/40 transition-all cursor-pointer shadow-xs"
-            >
-              <Mic className="w-3.5 h-3.5 text-indigo-300" />
-              Ditar por Voz
-            </button>
-            <button
-              onClick={() => openZemdaAI({ prompt: 'Olá Zemda! Me dê 3 sugestões práticas para reduzir faltas (no-show) e melhorar a retenção de pacientes na nossa clínica.' })}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-              Perguntar à IA
-            </button>
-          </div>
         </div>
       </div>
 

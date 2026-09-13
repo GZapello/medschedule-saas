@@ -1,9 +1,47 @@
+import { Capacitor } from '@capacitor/core';
+
 export const getApiBaseUrl = (): string => {
-  // 1. Configuração personalizada de URL salva no cliente (ideal para clínicas conectando ao servidor da rede/nuvem)
   if (typeof window !== 'undefined') {
     const isZemdaWeb = window.location.hostname === 'zemda.com.br' || window.location.hostname.endsWith('.zemda.com.br');
 
-    // Limpeza de URLs antigas/inválidas do Railway no localStorage
+    // 1. Detecção rigorosa de ambiente Mobile Android nativo (Capacitor)
+    const isAndroidApp = Capacitor.isNativePlatform() ||
+      Capacitor.getPlatform() === 'android' ||
+      window.location.protocol === 'capacitor:' ||
+      window.location.protocol === 'file:' ||
+      (/android/i.test(navigator.userAgent) && (window.location.hostname === 'localhost' || !window.location.hostname));
+
+    // No APK Android, a API padrão é SEMPRE a nuvem oficial Zemda
+    if (isAndroidApp) {
+      const customUrl = localStorage.getItem('saas_custom_api_url');
+      if (customUrl && customUrl.trim()) {
+        let clean = customUrl.trim().replace(/\/+$/, '');
+        if (/^https?:\/\//i.test(clean) && !clean.endsWith('/api') && !clean.endsWith('/v1')) {
+          clean = `${clean}/api`;
+        }
+        return clean;
+      }
+      return 'https://zemda.com.br/api';
+    }
+
+    // 2. Detecção de Desktop Electron
+    const isElectron = (window as any).isElectron || 
+      (window as any).process?.type === 'renderer' ||
+      navigator.userAgent.includes('Electron');
+
+    if (isElectron) {
+      const customUrl = localStorage.getItem('saas_custom_api_url');
+      if (customUrl && customUrl.trim()) {
+        let clean = customUrl.trim().replace(/\/+$/, '');
+        if (/^https?:\/\//i.test(clean) && !clean.endsWith('/api') && !clean.endsWith('/v1')) {
+          clean = `${clean}/api`;
+        }
+        return clean;
+      }
+      return 'https://zemda.com.br/api';
+    }
+
+    // 3. Limpeza de URLs antigas/inválidas do Railway no localStorage para web
     const customUrl = localStorage.getItem('saas_custom_api_url');
     if (customUrl) {
       if (
@@ -37,7 +75,7 @@ export const getApiBaseUrl = (): string => {
     }
   }
 
-  // 2. Variável de ambiente (VITE_API_BASE_URL)
+  // 4. Variável de ambiente (VITE_API_BASE_URL)
   const envApiUrl = (import.meta as any)?.env?.VITE_API_BASE_URL;
   if (envApiUrl) {
     let cleanEnv = envApiUrl.trim().replace(/\/+$/, '');
@@ -47,30 +85,6 @@ export const getApiBaseUrl = (): string => {
     return cleanEnv;
   }
 
-  // 3. Detecção de ambiente Desktop Electron ou arquivo local
-  if (typeof window !== 'undefined') {
-    const isElectron = (window as any).isElectron || 
-      (window as any).process?.type === 'renderer' ||
-      window.location.protocol === 'file:' ||
-      navigator.userAgent.includes('Electron');
-
-    if (isElectron) {
-      // No aplicativo Desktop Windows, conecta por padrão diretamente ao servidor oficial na nuvem (Zemda Cloud)
-      return 'https://zemda.com.br/api';
-    }
-
-    // 4. Detecção de ambiente Mobile Android / Capacitor
-    const isCapacitor = (window as any).Capacitor?.isNativePlatform?.() ||
-      (window as any).Capacitor?.getPlatform?.() === 'android' ||
-      window.location.protocol === 'capacitor:';
-
-    if (isCapacitor) {
-      // No aplicativo Android, conecta por padrão diretamente ao servidor oficial na nuvem (Zemda Cloud)
-      return 'https://zemda.com.br/api';
-    }
-  }
-
-  // 5. Modo Web padrão (relativo)
   return '/api';
 };
 
@@ -100,9 +114,9 @@ export class ApiClient {
   }
 
   private static async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const baseUrl = getApiBaseUrl();
     const token = this.getToken();
     const tenantId = this.getTenantId();
-    const baseUrl = getApiBaseUrl();
 
     // Garante que endpoint comece com /
     const safeEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
@@ -135,21 +149,27 @@ export class ApiClient {
       throw err;
     }
 
+    // Validação de Content-Type retornado
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.toLowerCase().includes('application/json');
+
     if (!response.ok) {
       let errorMsg = `Erro ${response.status}: ${response.statusText}`;
       let errorCode: string | undefined = undefined;
       try {
         const text = await response.text();
-        try {
-          const errorData = JSON.parse(text);
-          if (errorData.error) errorMsg = errorData.error;
-          if (errorData.code) errorCode = errorData.code;
-        } catch {
-          if (text.trim().startsWith('<')) {
-            errorMsg = `Erro ${response.status}: O servidor respondeu com uma página de erro (HTML). Verifique o endereço da API.`;
-          } else if (text.trim()) {
-            errorMsg = text.trim();
+        if (isJson) {
+          try {
+            const errorData = JSON.parse(text);
+            if (errorData.error) errorMsg = errorData.error;
+            if (errorData.code) errorCode = errorData.code;
+          } catch {
+            errorMsg = text.trim() || errorMsg;
           }
+        } else if (text.trim().startsWith('<') || contentType.includes('text/html')) {
+          errorMsg = `Erro ${response.status}: O servidor respondeu com uma página HTML em vez de dados (JSON). Verifique o endereço da API e sua conexão.`;
+        } else if (text.trim()) {
+          errorMsg = text.trim();
         }
       } catch (_) {}
       const err: any = new Error(errorMsg);
@@ -162,20 +182,23 @@ export class ApiClient {
     if (response.status === 204) return {} as T;
 
     // Se for CSV ou arquivo binário
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('text/csv')) {
+    if (contentType.includes('text/csv') || contentType.includes('application/octet-stream')) {
       return (await response.text()) as unknown as T;
     }
 
-    // Leitura segura da resposta em JSON prevenindo erro "unexpected token '<'"
+    // Validação estrita de Content-Type antes de parsear JSON
     const rawText = await response.text();
+    if (!isJson) {
+      if (rawText.trim().startsWith('<') || contentType.includes('text/html')) {
+        throw new Error('O servidor respondeu com uma página HTML em vez de dados (JSON). Verifique o endereço do servidor.');
+      }
+      throw new Error(`Esperava JSON da API, mas o servidor retornou ${contentType || 'formato desconhecido'}: ${rawText.slice(0, 100)}`);
+    }
+
     try {
       return JSON.parse(rawText) as T;
     } catch {
-      if (rawText.trim().startsWith('<')) {
-        throw new Error('O servidor respondeu com uma página HTML em vez de dados (JSON). Verifique o endereço do servidor.');
-      }
-      throw new Error(`Resposta inválida do servidor: ${rawText.slice(0, 100)}`);
+      throw new Error(`Resposta JSON inválida do servidor: ${rawText.slice(0, 100)}`);
     }
   }
 

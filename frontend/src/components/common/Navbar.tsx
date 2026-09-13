@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { AccountSettingsModal } from '../profile/AccountSettingsModal';
 import { ApiClient } from '../../api/client';
 import {
-  Sparkles,
+  Bot,
   ExternalLink,
   LogOut,
   Building2,
@@ -105,14 +105,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
           <span className="hidden lg:inline">Zemda Android</span>
         </a>
 
-        {/* Botão do Assistente IA */}
+        {/* Botão do Assistente Zemda (acesso discreto e profissional) */}
         <button
           onClick={onOpenAI}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-teal-500 to-indigo-600 text-white text-xs font-semibold rounded-lg shadow-xs hover:from-teal-600 hover:to-indigo-700 transition-all cursor-pointer transform active:scale-95"
-          title="Abrir Assistente Inteligente da Clínica"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+          title="Abrir Assistente Zemda"
         >
-          <Sparkles className="w-4 h-4 animate-pulse" />
-          <span className="hidden md:inline">Assistente IA</span>
+          <Bot className="w-4 h-4 text-teal-600" />
+          <span className="hidden md:inline">Assistente Zemda</span>
         </button>
 
         {/* Perfil e Role */}

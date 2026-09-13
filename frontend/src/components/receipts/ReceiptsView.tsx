@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { valorPorExtenso } from '../../utils/numberToWords';
 import {
   Receipt,
   Plus,
@@ -558,111 +559,274 @@ export const ReceiptsView: React.FC = () => {
       {/* ========================================================== */}
       {/* MODAL 2: Visualizador Oficial de Recibo (Impressão / PDF) */}
       {/* ========================================================== */}
-      {selectedReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
-            {/* Barra de Ações Superior */}
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <span className="font-mono text-xs font-bold text-indigo-400">
-                {selectedReceipt.receipt_number}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  Imprimir / Salvar PDF
-                </button>
-                <button
-                  onClick={() => {
-                    showToast('Comprovante enviado por e-mail para o paciente com sucesso!', 'success');
-                  }}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Mail className="w-3.5 h-3.5" />
-                  Enviar E-mail
-                </button>
-                <button onClick={() => setSelectedReceipt(null)} className="p-1 text-slate-400 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+      {/* ========================================================== */}
+      {/* MODAL 2: Visualizador Oficial de Recibo (Impressão / PDF) */}
+      {/* ========================================================== */}
+      {selectedReceipt && (() => {
+        const logoUrl = selectedReceipt.emitter?.logoUrl || selectedReceipt.emitter?.logo_url || currentTenant?.logo_url;
+        const emitterName = selectedReceipt.emitter?.tradeName || selectedReceipt.emitter?.name || currentTenant?.trade_name || currentTenant?.name || 'Clínica Médica';
+        const emitterLegalName = selectedReceipt.emitter?.name || currentTenant?.name;
+        const emitterDoc = selectedReceipt.emitter?.document || selectedReceipt.emitter_document || currentTenant?.cnpj_cpf;
+        const emitterBoard = selectedReceipt.emitter?.boardName;
+        const emitterReg = selectedReceipt.emitter?.registryNumber;
+        const emitterRegState = selectedReceipt.emitter?.registryState;
+        const emitterAddress = selectedReceipt.emitter?.address || [currentTenant?.address, currentTenant?.city, currentTenant?.state].filter(Boolean).join(' - ');
+        const emitterPhone = selectedReceipt.emitter?.phone || currentTenant?.phone;
+        const emitterEmail = selectedReceipt.emitter?.email || currentTenant?.email;
 
-            {/* Recibo Oficial Estilizado */}
-            <div className="p-8 sm:p-12 space-y-6 bg-white text-slate-800 print:p-0">
-              {/* Cabeçalho do Emitente */}
-              <div className="flex items-start justify-between pb-6 border-b-2 border-slate-800 gap-4">
-                <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
-                    {selectedReceipt.emitter?.tradeName || selectedReceipt.emitter?.name || currentTenant?.trade_name || currentTenant?.name}
-                  </h2>
-                  <p className="text-xs text-slate-600 mt-1">{selectedReceipt.emitter?.name}</p>
-                  <p className="text-xs text-slate-500">
-                    CNPJ/CPF: <strong>{selectedReceipt.emitter?.document || selectedReceipt.emitter_document}</strong>
-                    {selectedReceipt.emitter?.boardName && ` • ${selectedReceipt.emitter.boardName}: ${selectedReceipt.emitter.registryNumber}/${selectedReceipt.emitter.registryState}`}
-                  </p>
-                  <p className="text-xs text-slate-500">{selectedReceipt.emitter?.address}</p>
-                  <p className="text-xs text-slate-500">
-                    Telefone: {selectedReceipt.emitter?.phone} • E-mail: {selectedReceipt.emitter?.email}
-                  </p>
-                </div>
+        const finalAmountNum = Number(selectedReceipt.final_amount || 0);
+        const amountFormatted = finalAmountNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const amountInWords = valorPorExtenso(finalAmountNum);
 
-                <div className="text-right flex-shrink-0">
-                  <span className="inline-block px-3 py-1 bg-slate-100 border border-slate-300 font-mono font-black text-sm rounded-lg text-slate-900">
+        const methodMap: Record<string, string> = {
+          pix: 'PIX (Transferência Instantânea)',
+          credit_card: 'Cartão de Crédito',
+          debit_card: 'Cartão de Débito',
+          cash: 'Dinheiro em Espécie',
+          bank_transfer: 'Transferência Bancária'
+        };
+        const paymentMethodLabel = methodMap[selectedReceipt.payment_method] || selectedReceipt.payment_method?.toUpperCase() || 'PIX';
+
+        const issueDate = selectedReceipt.issued_at ? new Date(selectedReceipt.issued_at) : new Date();
+        const cityStr = selectedReceipt.emitter?.city || currentTenant?.city || 'Localidade';
+        const stateStr = selectedReceipt.emitter?.state || currentTenant?.state || '';
+        const locationStr = stateStr ? `${cityStr} - ${stateStr}` : cityStr;
+        const dateFormattedLong = issueDate.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white">
+            <div className="bg-white rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl my-8 print:my-0 print:max-w-none print:shadow-none print:rounded-none">
+              {/* Barra de Ações Superior (Oculta na Impressão) */}
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-teal-400">
                     {selectedReceipt.receipt_number}
                   </span>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Emissão: {new Date(selectedReceipt.issued_at).toLocaleDateString('pt-BR')}
+                  <span className="text-[11px] text-slate-400">• Recibo Oficial Quitado</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Imprimir / Salvar PDF
+                  </button>
+                  <button
+                    onClick={() => {
+                      showToast('Comprovante enviado por e-mail para o paciente com sucesso!', 'success');
+                    }}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    Enviar E-mail
+                  </button>
+                  <button
+                    onClick={() => setSelectedReceipt(null)}
+                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Folha Oficial A4 do Recibo */}
+              <div id="printable-receipt-sheet" className="p-8 sm:p-12 space-y-6 bg-white text-slate-800 font-sans print:p-0 print:m-0">
+                {/* 1. Cabeçalho do Emitente com Logotipo */}
+                <div className="flex items-start justify-between pb-6 border-b-2 border-slate-900 gap-6">
+                  <div className="flex items-center gap-4">
+                    {logoUrl ? (
+                      <img
+                        src={logoUrl}
+                        alt={emitterName}
+                        className="h-16 max-w-[180px] object-contain rounded-xl"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 shadow-xs flex-shrink-0">
+                        <Building2 className="w-8 h-8 text-slate-600" />
+                      </div>
+                    )}
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight uppercase leading-tight">
+                        {emitterName}
+                      </h2>
+                      {emitterLegalName && emitterLegalName !== emitterName && (
+                        <p className="text-xs text-slate-600 font-medium">{emitterLegalName}</p>
+                      )}
+                      <div className="text-[11px] text-slate-600 mt-1 space-y-0.5">
+                        <p>
+                          <strong>CNPJ/CPF:</strong> {emitterDoc || '—'}
+                          {emitterBoard && emitterReg && ` • ${emitterBoard}: ${emitterReg}${emitterRegState ? `/${emitterRegState}` : ''}`}
+                          {selectedReceipt.emitter?.municipalRegistration && ` • IM: ${selectedReceipt.emitter.municipalRegistration}`}
+                        </p>
+                        {emitterAddress && <p>{emitterAddress}</p>}
+                        <p>
+                          {emitterPhone && <span>Tel: {emitterPhone}</span>}
+                          {emitterPhone && emitterEmail && <span> • </span>}
+                          {emitterEmail && <span>E-mail: {emitterEmail}</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <span className="inline-block px-3.5 py-1.5 bg-slate-100 border border-slate-300 font-mono font-black text-sm rounded-xl text-slate-900">
+                      {selectedReceipt.receipt_number}
+                    </span>
+                    <p className="text-[11px] text-slate-500 mt-1.5">
+                      Emissão: <strong>{new Date(selectedReceipt.issued_at).toLocaleDateString('pt-BR')}</strong>
+                    </p>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 mt-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      PAGAMENTO QUITADO
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Título & Bloco de Destaque de Valor */}
+                <div className="text-center py-2 space-y-2">
+                  <span className="text-xs font-black tracking-widest text-slate-400 uppercase">
+                    COMPROVANTE / RECIBO DE PAGAMENTO
+                  </span>
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl max-w-lg mx-auto shadow-xs">
+                    <span className="text-[11px] uppercase font-bold text-slate-400 block">Valor Quitado</span>
+                    <p className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+                      {amountFormatted}
+                    </p>
+                    <p className="text-xs font-semibold text-slate-600 italic mt-1">
+                      ({amountInWords})
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. Texto Declaratório de Quitação */}
+                <div className="p-5 bg-slate-50/70 border border-slate-200 rounded-2xl text-xs leading-relaxed text-slate-800">
+                  <p>
+                    Recebemos de <strong>{selectedReceipt.payer_name}</strong>
+                    {selectedReceipt.payer_document && <span>, inscrito(a) sob o documento nº <strong>{selectedReceipt.payer_document}</strong></span>}
+                    , a quantia supra de <strong>{amountFormatted}</strong> (<em>{amountInWords}</em>), referente à prestação do serviço de <strong>{selectedReceipt.service_description}</strong>
+                    {selectedReceipt.service_date && <span>, realizado em <strong>{selectedReceipt.service_date}</strong></span>}
+                    {selectedReceipt.professional_name && <span> através do(a) profissional <strong>{selectedReceipt.professional_name}</strong></span>}
+                    , concedendo pelo presente instrumento a devida e irrevogável quitação da importância discriminada.
                   </p>
                 </div>
-              </div>
 
-              {/* Título e Valor */}
-              <div className="text-center py-2">
-                <h3 className="text-sm font-extrabold tracking-widest text-slate-400 uppercase">
-                  RECIBO DE PRESTAÇÃO DE SERVIÇOS
-                </h3>
-                <p className="text-3xl font-black text-slate-900 mt-1">
-                  {Number(selectedReceipt.final_amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </p>
-              </div>
+                {/* 4. Quadro Estruturado: Tomador & Detalhes da Operação */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-1">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] block mb-1.5 tracking-wider">
+                      Dados do Paciente / Tomador
+                    </span>
+                    <p className="text-slate-900 font-bold text-sm">{selectedReceipt.payer_name}</p>
+                    <p className="text-slate-600">
+                      <strong>Documento:</strong> <span className="font-mono">{selectedReceipt.payer_document || 'Não informado'}</span>
+                    </p>
+                    {selectedReceipt.payer_phone && (
+                      <p className="text-slate-600"><strong>Telefone:</strong> {selectedReceipt.payer_phone}</p>
+                    )}
+                    {selectedReceipt.payer_address && (
+                      <p className="text-slate-600"><strong>Endereço:</strong> {selectedReceipt.payer_address}</p>
+                    )}
+                  </div>
 
-              {/* Texto de Declaração Interpolado */}
-              <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl text-xs leading-relaxed text-slate-800 font-medium">
-                {selectedReceipt.custom_text}
-              </div>
-
-              {/* Tabela de Tomador e Serviço */}
-              <div className="grid grid-cols-2 gap-4 text-xs pt-2">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="font-bold text-slate-400 uppercase text-[10px] block mb-1">Dados do Pagador (Tomador)</span>
-                  <p className="font-bold text-slate-800">{selectedReceipt.payer_name}</p>
-                  <p className="text-slate-600 font-mono">Doc: {selectedReceipt.payer_document}</p>
-                  {selectedReceipt.payer_phone && <p className="text-slate-600">Tel: {selectedReceipt.payer_phone}</p>}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                    <span className="font-bold text-slate-400 uppercase text-[10px] block mb-1.5 tracking-wider">
+                      Detalhes do Serviço & Transação
+                    </span>
+                    <p className="text-slate-800">
+                      <strong>Serviço:</strong> {selectedReceipt.service_description}
+                    </p>
+                    <p className="text-slate-800">
+                      <strong>Forma de Pagamento:</strong> <span className="font-semibold">{paymentMethodLabel}</span>
+                    </p>
+                    <p className="text-slate-800">
+                      <strong>Data do Atendimento:</strong> {selectedReceipt.service_date || new Date().toLocaleDateString('pt-BR')}
+                    </p>
+                    <p className="text-slate-800">
+                      <strong>Status:</strong> <span className="font-bold text-emerald-700">Quitado</span>
+                    </p>
+                  </div>
                 </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="font-bold text-slate-400 uppercase text-[10px] block mb-1">Detalhes do Pagamento</span>
-                  <p className="text-slate-800">Forma: <strong className="uppercase">{selectedReceipt.payment_method}</strong></p>
-                  <p className="text-slate-800">Status: <strong className="uppercase text-emerald-600">Quitado</strong></p>
-                  <p className="text-slate-600">Data: {selectedReceipt.service_date}</p>
+                {/* 5. Localidade e Data por Extenso */}
+                <div className="text-right text-xs text-slate-600 pt-4">
+                  {locationStr}, {dateFormattedLong}.
                 </div>
-              </div>
 
-              {/* Assinatura */}
-              <div className="pt-10 text-center">
-                <div className="w-64 h-0.5 bg-slate-400 mx-auto mb-2" />
-                <p className="font-bold text-xs text-slate-900">{selectedReceipt.professional_name || selectedReceipt.emitter?.name}</p>
-                <p className="text-[11px] text-slate-500">
-                  {selectedReceipt.professional_specialty || 'Responsável Técnico'}
-                  {selectedReceipt.professional_registry && ` • ${selectedReceipt.professional_registry}`}
-                </p>
+                {/* 6. Linha e Bloco de Assinatura */}
+                <div className="pt-10 pb-4 text-center page-break-inside-avoid">
+                  <div className="w-72 h-0.5 bg-slate-800 mx-auto mb-2.5" />
+                  <p className="font-bold text-sm text-slate-900">
+                    {selectedReceipt.professional_name || emitterLegalName || emitterName}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {selectedReceipt.professional_specialty || 'Responsável Técnico'}
+                    {selectedReceipt.professional_registry && ` • ${selectedReceipt.professional_registry}`}
+                  </p>
+                  <span className="text-[10px] text-slate-400 block mt-1">
+                    Assinatura / Carimbo do Emitente
+                  </span>
+                </div>
+
+                {/* 7. Rodapé Discreto Oficial Zemda */}
+                <div className="border-t border-slate-200 pt-4 mt-8 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-400 gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {/* Logotipo monocromático sutil */}
+                    <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                    <span>Documento gerado pelo <strong>Zemda</strong> • Tecnologia para Gestão em Saúde</span>
+                  </div>
+                  <span>Válido para fins de comprovação fiscal e dedução no IRPF conforme legislação vigente</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
+      {/* Estilos Globais de Impressão A4 */}
+      <style>{`
+        @page {
+          size: A4 portrait;
+          margin: 12mm 15mm;
+        }
+        @media print {
+          html, body {
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-receipt-sheet,
+          #printable-receipt-sheet * {
+            visibility: visible !important;
+          }
+          #printable-receipt-sheet {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 10mm 15mm !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+          }
+          .page-break-inside-avoid {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          body {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
 
       {/* ========================================================== */}
       {/* MODAL 3: Configuração de Dados para Emissão de Recibos */}

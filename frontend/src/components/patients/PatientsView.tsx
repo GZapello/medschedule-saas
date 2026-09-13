@@ -16,10 +16,8 @@ import {
   X,
   CheckCircle2,
   FileText,
-  UploadCloud,
-  Sparkles
+  UploadCloud
 } from 'lucide-react';
-import { openZemdaAI } from '../../utils/aiHelper';
 
 interface PatientsViewProps {
   onOpenNewPatient: () => void;
@@ -161,23 +159,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, on
                     <td className="px-6 py-4 text-center font-semibold text-slate-800">
                       {p.total_appointments || 0}
                     </td>
-                    <td className="px-6 py-4 text-right whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openZemdaAI({
-                            patientId: p.id,
-                            prompt: `Faça um resumo clínico completo do paciente ${p.full_name}, destacando antecedentes, medicamentos e últimos atendimentos.`,
-                            autoSend: true
-                          });
-                        }}
-                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2 py-1 rounded-lg transition-all mr-2 cursor-pointer"
-                        title="Resumir histórico com IA"
-                      >
-                        <Sparkles className="w-3 h-3 text-teal-600" />
-                        Resumo IA
-                      </button>
+                    <td className="px-6 py-4 text-right">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

@@ -17,10 +17,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
-  Stethoscope,
-  Sparkles
+  Stethoscope
 } from 'lucide-react';
-import { openZemdaAI } from '../../utils/aiHelper';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { QuickConsultationModal } from '../clinical/QuickConsultationModal';
 
@@ -271,19 +269,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               Semana
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => openZemdaAI({
-              prompt: `Como posso otimizar a distribuição de horários na agenda desta semana? Existem brechas ou conflitos nos horários que eu possa organizar melhor?`,
-              autoSend: true
-            })}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all cursor-pointer shadow-2xs"
-            title="Dicas de otimização de agenda com IA"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-teal-600 animate-pulse" />
-            IA na Agenda
-          </button>
 
           <button
             onClick={onOpenNewAppointment}

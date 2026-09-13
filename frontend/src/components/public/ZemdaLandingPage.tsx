@@ -36,13 +36,15 @@ interface ZemdaLandingPageProps {
   onRegisterClinic: () => void;
   onRegisterUser: () => void;
   onOpenPublicBooking?: () => void;
+  onNavigateSeoPage?: (slug: string) => void;
 }
 
 export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
   onLogin,
   onRegisterClinic,
   onRegisterUser,
-  onOpenPublicBooking
+  onOpenPublicBooking,
+  onNavigateSeoPage
 }) => {
   const [activeTab, setActiveTab] = useState<'financeiro' | 'atendimento' | 'recibos'>('financeiro');
 
@@ -599,25 +601,66 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer className="relative z-10 border-t border-slate-900 py-10 bg-slate-950 px-4 sm:px-6 lg:px-8 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <img src="/brand/zemda-icon.png" alt="Zemda" className="w-6 h-6 object-contain rounded-lg" />
-            <span className="font-bold text-white text-sm">Zemda</span>
-            <span>• Tecnologia em Saúde</span>
+      {/* FOOTER & SEO LINKS DIRECTORY */}
+      <footer className="relative z-10 border-t border-slate-900 py-12 bg-slate-950 px-4 sm:px-6 lg:px-8 text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <img src="/brand/zemda-icon.png" alt="Zemda" className="w-7 h-7 object-contain rounded-lg" />
+              <span className="font-bold text-white text-base tracking-tight">Zemda</span>
+              <span>• Tecnologia para Gestão em Saúde</span>
+            </div>
+
+            <div className="flex items-center gap-6">
+              <button onClick={onLogin} className="hover:text-teal-400 transition-colors cursor-pointer">Acessar Conta</button>
+              <button onClick={onRegisterClinic} className="hover:text-teal-400 transition-colors cursor-pointer">Criar Clínica</button>
+              <span className="text-slate-600">|</span>
+              <span>Conformidade com a LGPD</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <button onClick={onLogin} className="hover:text-teal-400 transition-colors">Acessar Conta</button>
-            <button onClick={onRegisterClinic} className="hover:text-teal-400 transition-colors">Criar Clínica</button>
-            <span className="text-slate-600">|</span>
-            <span>Conformidade com a LGPD</span>
+          {/* Diretório de Soluções por Especialidade */}
+          <div className="pt-6 border-t border-slate-900/80">
+            <p className="font-bold text-[11px] uppercase tracking-wider text-slate-400 mb-3">
+              Soluções Especializadas para Saúde
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 text-[11px]">
+              <button onClick={() => onNavigateSeoPage?.('sistema-para-clinicas')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Clínicas & Consultórios
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('sistema-para-medicos')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Médicos Especialistas
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('sistema-para-psicologos')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Psicólogos & Terapeutas
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('sistema-para-fonoaudiologos')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Fonoaudiologia Clínica
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('sistema-para-fisioterapeutas')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Fisioterapia & Pilates
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('sistema-para-nutricionistas')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Nutricionistas
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('agenda-online')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Agenda Online 24h
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('prontuario')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Prontuário Eletrônico
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('gestao-financeira')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Gestão Financeira & Caixa
+              </button>
+              <button onClick={() => onNavigateSeoPage?.('blog')} className="text-left text-slate-400 hover:text-teal-300 transition-colors cursor-pointer">
+                • Blog & Dicas de Gestão
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div className="max-w-7xl mx-auto mt-6 pt-6 border-t border-slate-900 text-center text-[11px] text-slate-600">
-          © {new Date().getFullYear()} Zemda — Tecnologia em Saúde. Todos os direitos reservados.
+          <div className="pt-6 border-t border-slate-900 text-center text-[11px] text-slate-600">
+            © {new Date().getFullYear()} Zemda — Tecnologia em Saúde. Todos os direitos reservados. Plataforma disponível para Web, Windows e Android.
+          </div>
         </div>
       </footer>
     </div>

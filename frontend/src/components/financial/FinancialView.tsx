@@ -13,9 +13,8 @@ import {
   QrCode,
   Banknote,
   X,
-  Sparkles
+  Receipt
 } from 'lucide-react';
-import { openZemdaAI } from '../../utils/aiHelper';
 
 export const FinancialView: React.FC = () => {
   const { showToast } = useToast();
@@ -204,18 +203,7 @@ export const FinancialView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            onClick={() => openZemdaAI({
-              prompt: `Analise a situação financeira da clínica: Total recebido: ${formatCurrency(totalPaid)} | Total pendente: ${formatCurrency(totalPending)}. Quais estratégias você recomenda para acelerar o recebimento dos valores pendentes e otimizar os métodos de pagamento?`,
-              autoSend: true
-            })}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all cursor-pointer shadow-2xs"
-            title="Receba uma análise inteligente do faturamento com a IA Zemda"
-          >
-            <Sparkles className="w-4 h-4 text-teal-600 animate-pulse" />
-            Insights com IA
-          </button>
+        <div className="flex items-center gap-2.5">
           <button
             onClick={handleExportCsv}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
@@ -373,12 +361,23 @@ export const FinancialView: React.FC = () => {
                           )}
                         </td>
                         <td className="px-6 py-4 text-right">
-                          {p.status === 'pending' && (
+                          {p.status === 'pending' ? (
                             <button
                               onClick={() => handleMarkAsPaid(p.id)}
-                              className="px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-lg text-xs"
+                              className="px-3 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-lg text-xs cursor-pointer"
                             >
                               Confirmar Recebimento
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'receipts' } }));
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-700 font-semibold rounded-lg text-xs transition-colors cursor-pointer"
+                              title="Ver ou emitir recibo oficial"
+                            >
+                              <Receipt className="w-3.5 h-3.5 text-slate-500" />
+                              Recibo
                             </button>
                           )}
                         </td>

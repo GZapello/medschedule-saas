@@ -13,11 +13,9 @@ import {
   CheckCircle2,
   Mail,
   Phone,
-  Edit3,
-  Sparkles
+  Edit3
 } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
-import { openZemdaAI } from '../../utils/aiHelper';
 
 export const ProfessionalsView: React.FC = () => {
   const { showToast } = useToast();
@@ -401,20 +399,7 @@ export const ProfessionalsView: React.FC = () => {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-700">Biografia / Apresentação</label>
-                  <button
-                    type="button"
-                    onClick={() => openZemdaAI({
-                      prompt: `Escreva uma biografia profissional curta, empática e elegante para um profissional cujo nome é "${name || 'do profissional'}" e atua na área de "${specialtyName || 'saúde'}".`,
-                      autoSend: true
-                    })}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md transition-all cursor-pointer"
-                  >
-                    <Sparkles className="w-3 h-3 text-indigo-500" />
-                    Gerar com IA
-                  </button>
-                </div>
+                <label className="block font-semibold text-slate-700 mb-1">Biografia / Apresentação</label>
                 <textarea
                   rows={2}
                   value={bio}
@@ -564,20 +549,7 @@ export const ProfessionalsView: React.FC = () => {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-700">Biografia / Apresentação</label>
-                  <button
-                    type="button"
-                    onClick={() => openZemdaAI({
-                      prompt: `Escreva uma biografia profissional curta, empática e elegante para o profissional "${editName || 'do profissional'}" com especialidade em "${editSpecialtyName || 'da clínica'}".`,
-                      autoSend: true
-                    })}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md transition-all cursor-pointer"
-                  >
-                    <Sparkles className="w-3 h-3 text-indigo-500" />
-                    Gerar com IA
-                  </button>
-                </div>
+                <label className="block font-semibold text-slate-700 mb-1">Biografia / Apresentação</label>
                 <textarea
                   rows={2}
                   value={editBio}

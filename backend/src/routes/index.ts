@@ -36,6 +36,16 @@ const api = Router();
 // 1. ROTAS PÚBLICAS
 // ==========================================
 
+// Health Check Público da API
+api.get('/health', (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.status(200).json({ status: 'ok', service: 'Zemda-API-Core', version: '1.1.2' });
+});
+api.get('/v1/health', (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.status(200).json({ status: 'ok', service: 'Zemda-API-Core', version: '1.1.2' });
+});
+
 // Autenticação e Registro Público
 api.post('/v1/auth/login', AuthController.login);
 api.post('/v1/auth/register', AuthController.register);

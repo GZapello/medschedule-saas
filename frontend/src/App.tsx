@@ -22,6 +22,8 @@ import { SuperAdminView } from './components/superadmin/SuperAdminView';
 import { OnboardingWizardView } from './components/onboarding/OnboardingWizardView';
 import { PublicBookingView } from './components/public-booking/PublicBookingView';
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
+import { PublicSeoPageView } from './components/public/PublicSeoPageView';
+import { SEO_PAGES } from './data/seoPagesData';
 import { NewAppointmentModal } from './components/calendar/NewAppointmentModal';
 import { NewPatientModal } from './components/patients/NewPatientModal';
 import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
@@ -34,6 +36,26 @@ const AppContent: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<string>('dashboard');
   const [publicView, setPublicView] = useState<'landing' | 'login'>('landing');
+
+  // Roteamento de páginas públicas de nicho (SEO)
+  const getInitialSeoSlug = (): string | null => {
+    const cleanPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    return cleanPath && SEO_PAGES[cleanPath] ? cleanPath : null;
+  };
+  const [activeSeoSlug, setActiveSeoSlug] = useState<string | null>(getInitialSeoSlug);
+
+  const navigateToSeoPage = (slug: string) => {
+    if (SEO_PAGES[slug]) {
+      setActiveSeoSlug(slug);
+      window.history.pushState(null, '', `/${slug}`);
+    }
+  };
+
+  const navigateToHome = () => {
+    setActiveSeoSlug(null);
+    window.history.pushState(null, '', '/');
+  };
+
   const [authInitialAction, setAuthInitialAction] = useState<'login' | 'create-clinic' | 'register-user'>('login');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [isAIOpen, setIsAIOpen] = useState<boolean>(false);
@@ -72,13 +94,20 @@ const AppContent: React.FC = () => {
       setIsAIOpen(true);
     };
 
+    const handleNavigate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.view) setCurrentView(detail.view);
+    };
+
     window.addEventListener('zemda-ai-patient-context', handlePatientContext);
     window.addEventListener('zemda-ai-appointment-context', handleAppointmentContext);
     window.addEventListener('open-zemda-ai', handleOpenAI);
+    window.addEventListener('zemda-navigate', handleNavigate);
     return () => {
       window.removeEventListener('zemda-ai-patient-context', handlePatientContext);
       window.removeEventListener('zemda-ai-appointment-context', handleAppointmentContext);
       window.removeEventListener('open-zemda-ai', handleOpenAI);
+      window.removeEventListener('zemda-navigate', handleNavigate);
     };
   }, []);
 
@@ -114,20 +143,35 @@ const AppContent: React.FC = () => {
         modalClose.click();
         return;
       }
-      // 3. Se estiver na tela de login deslogado, volta para a landing page institucional Zemda
+      // 3. Se estiver em página de SEO de nicho, retorna para a home pública
+      if (!currentUser && activeSeoSlug) {
+        navigateToHome();
+        return;
+      }
+      // 4. Se estiver na tela de login deslogado, volta para a landing page institucional Zemda
       if (!currentUser && publicView === 'login') {
         setPublicView('landing');
         return;
       }
-      // 4. Se estiver em visualização secundária, retorna ao dashboard
+      // 5. Se estiver em visualização secundária, retorna ao dashboard
       if (currentView !== 'dashboard' && currentUser?.role !== 'superadmin') {
         setCurrentView('dashboard');
         return;
       }
     };
 
+    const handleSyncUrlState = () => {
+      const cleanPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
+      if (cleanPath && SEO_PAGES[cleanPath]) {
+        setActiveSeoSlug(cleanPath);
+      } else {
+        setActiveSeoSlug(null);
+      }
+    };
+
     window.addEventListener('android-back-button', handleBackButton);
     window.addEventListener('popstate', handleBackButton);
+    window.addEventListener('popstate', handleSyncUrlState);
 
     let cleanupCapacitorListener: (() => void) | null = null;
     try {
@@ -158,11 +202,12 @@ const AppContent: React.FC = () => {
     return () => {
       window.removeEventListener('android-back-button', handleBackButton);
       window.removeEventListener('popstate', handleBackButton);
+      window.removeEventListener('popstate', handleSyncUrlState);
       if (cleanupCapacitorListener) {
         cleanupCapacitorListener();
       }
     };
-  }, [isNewApptOpen, isNewPatientOpen, isAIOpen, sidebarOpen, currentView, currentUser, publicView]);
+  }, [isNewApptOpen, isNewPatientOpen, isAIOpen, sidebarOpen, currentView, currentUser, publicView, activeSeoSlug]);
 
   if (loading) {
     return (
@@ -192,8 +237,26 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // Se não estiver logado, exibe primeiro a Landing Page institucional da Zemda
+  // Se não estiver logado, exibe páginas de SEO de nicho, Landing Page ou Login
   if (!currentUser) {
+    if (activeSeoSlug && SEO_PAGES[activeSeoSlug]) {
+      return (
+        <PublicSeoPageView
+          pageData={SEO_PAGES[activeSeoSlug]}
+          onNavigateHome={navigateToHome}
+          onNavigatePage={navigateToSeoPage}
+          onLogin={() => {
+            setAuthInitialAction('login');
+            setPublicView('login');
+          }}
+          onRegisterClinic={() => {
+            setAuthInitialAction('create-clinic');
+            setPublicView('login');
+          }}
+        />
+      );
+    }
+
     if (publicView === 'landing') {
       return (
         <ZemdaLandingPage
@@ -210,6 +273,7 @@ const AppContent: React.FC = () => {
             setPublicView('login');
           }}
           onOpenPublicBooking={() => setCurrentView('public_preview')}
+          onNavigateSeoPage={navigateToSeoPage}
         />
       );
     }
@@ -217,7 +281,10 @@ const AppContent: React.FC = () => {
     return (
       <AuthPage
         onOpenPublicBooking={() => setCurrentView('public_preview')}
-        onBackToLanding={() => setPublicView('landing')}
+        onBackToLanding={() => {
+          setActiveSeoSlug(null);
+          setPublicView('landing');
+        }}
         initialAction={authInitialAction}
       />
     );
@@ -302,16 +369,6 @@ const AppContent: React.FC = () => {
           {currentView === 'superadmin' && <SuperAdminView />}
         </main>
       </div>
-
-      {/* Floating Action Button para abrir o Assistente de IA */}
-      <button
-        onClick={() => setIsAIOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-teal-500 to-indigo-600 text-white font-bold text-xs rounded-full shadow-2xl hover:scale-105 transition-all cursor-pointer border border-white/20"
-        title="Falar com Assistente de IA"
-      >
-        <Sparkles className="w-4 h-4 animate-bounce" />
-        <span className="hidden sm:inline">Assistente IA</span>
-      </button>
 
       {/* Modais Globais */}
       <NewAppointmentModal

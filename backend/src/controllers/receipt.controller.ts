@@ -258,6 +258,7 @@ export class ReceiptController {
       db.prepare("UPDATE receipt_settings SET next_sequence = next_sequence + 1, updated_at = datetime('now') WHERE tenant_id = ?").run(tenantId);
 
       // 3. Monta snapshot dos dados do emitente
+      const tenantRow = db.prepare('SELECT logo_url, city, state FROM tenants WHERE id = ?').get(tenantId) as any;
       const emitterSnapshot = {
         name: settings.emitter_name,
         tradeName: settings.emitter_trade_name,
@@ -266,9 +267,12 @@ export class ReceiptController {
         boardName: settings.emitter_board_name,
         registryNumber: settings.emitter_registry_number,
         registryState: settings.emitter_registry_state,
-        address: `${settings.emitter_street || ''}, ${settings.emitter_number || ''} ${settings.emitter_complement || ''} - ${settings.emitter_neighborhood || ''}, ${settings.emitter_city || ''}/${settings.emitter_state || ''} - CEP ${settings.emitter_zip_code || ''}`,
+        address: `${settings.emitter_street || ''}, ${settings.emitter_number || ''} ${settings.emitter_complement || ''} - ${settings.emitter_neighborhood || ''}, ${settings.emitter_city || tenantRow?.city || ''}/${settings.emitter_state || tenantRow?.state || ''} - CEP ${settings.emitter_zip_code || ''}`,
+        city: settings.emitter_city || tenantRow?.city || '',
+        state: settings.emitter_registry_state || settings.emitter_state || tenantRow?.state || '',
         phone: settings.emitter_phone,
-        email: settings.emitter_email
+        email: settings.emitter_email,
+        logoUrl: tenantRow?.logo_url || null
       };
 
       // 4. Monta texto padrão interpolado
