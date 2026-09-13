@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { APP_VERSION, compareVersions, VersionInfo } from '../../config/version';
 import { ArrowDownToLine, Sparkles, X, CheckCircle2, ShieldCheck } from 'lucide-react';
@@ -84,7 +84,7 @@ export const UpdateNotificationModal: React.FC = () => {
                 </span>
               </div>
               <h3 className="font-bold text-slate-900 text-lg leading-tight mt-1">
-                Atualização Disponível
+                Atualização do Zemda Disponível
               </h3>
             </div>
           </div>
@@ -116,7 +116,7 @@ export const UpdateNotificationModal: React.FC = () => {
 
         {/* Informações da plataforma detectada */}
         <div className="text-xs text-slate-500 text-center">
-          Plataforma detectada: <strong className="text-slate-700">{isAndroid ? 'Android (APK)' : 'Windows Desktop (.exe)'}</strong>
+          Plataforma detectada: <strong className="text-slate-700">{isAndroid ? 'Zemda Android (APK)' : 'Zemda Windows (.exe)'}</strong>
         </div>
 
         {/* Ações */}

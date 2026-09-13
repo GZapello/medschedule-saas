@@ -83,20 +83,20 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
         <a
           href={`${ApiClient.getBaseUrl()}/v1/public/download-windows`}
           className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
-          title="Baixar Aplicativo Desktop para Windows (.exe)"
+          title="Baixar Zemda para Windows Desktop (.exe)"
         >
           <Monitor className="w-3.5 h-3.5 text-indigo-500" />
-          <span className="hidden lg:inline">App Windows</span>
+          <span className="hidden lg:inline">Zemda Windows</span>
         </a>
 
         {/* Link para download do app Android */}
         <a
           href={`${ApiClient.getBaseUrl()}/v1/public/download-android`}
           className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200"
-          title="Baixar Aplicativo para Android (.apk)"
+          title="Baixar Zemda para Android (.apk)"
         >
           <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-          <span className="hidden lg:inline">App Android</span>
+          <span className="hidden lg:inline">Zemda Android</span>
         </a>
 
         {/* Botão do Assistente IA */}

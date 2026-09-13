@@ -287,19 +287,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <a
               href={`${ApiClient.getBaseUrl()}/v1/public/download-windows`}
               className="inline-flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-all shadow-2xs text-center"
-              title="Baixar instalador do sistema para Windows 10/11 (64-bit)"
+              title="Baixar instalador do Zemda para Windows 10/11 (64-bit)"
             >
               <Monitor className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-              <span className="truncate">App Windows (.exe)</span>
+              <span className="truncate">Zemda Windows (.exe)</span>
             </a>
 
             <a
               href={`${ApiClient.getBaseUrl()}/v1/public/download-android`}
               className="inline-flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all shadow-2xs text-center"
-              title="Baixar aplicativo para celulares e tablets Android (.apk)"
+              title="Baixar aplicativo do Zemda para celulares e tablets Android (.apk)"
             >
               <Smartphone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="truncate">App Android (.apk)</span>
+              <span className="truncate">Zemda Android (.apk)</span>
             </a>
           </div>
 

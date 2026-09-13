@@ -14,7 +14,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     icon: fs.existsSync(iconIco) ? iconIco : (fs.existsSync(iconPath) ? iconPath : undefined),
-    title: 'MedSchedule - Gestão Integrada',
+    title: 'Zemda - Gestão Integrada',
     autoHideMenuBar: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -44,7 +44,7 @@ function createWindow() {
           label: 'Configurar URL do Servidor SaaS...',
           click: async () => {
             mainWindow.webContents.executeJavaScript(`
-              const current = localStorage.getItem('saas_custom_api_url') || 'http://localhost:4000/api';
+              const current = localStorage.getItem('saas_custom_api_url') || 'https://medschedule-saas-production.up.railway.app/api';
               const next = prompt('Endereço do Servidor SaaS:', current);
               if (next !== null) {
                 if (next.trim()) {
@@ -95,13 +95,13 @@ function createWindow() {
       label: 'Ajuda',
       submenu: [
         {
-          label: 'Sobre o MedSchedule...',
+          label: 'Sobre o Zemda...',
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
-              title: 'Sobre o MedSchedule',
-              message: 'MedSchedule / Zemda — Gestão Integrada',
-              detail: 'Versão 1.1.2 Desktop para Windows (64-bit)\nConectado à mesma plataforma e banco de dados SaaS em tempo real.\n\nPreservação total de dados e configurações.',
+              title: 'Sobre o Zemda',
+              message: 'Zemda — Tecnologia em Saúde & Gestão Integrada',
+              detail: 'Versão 1.1.2 Desktop para Windows (64-bit)\nConectado à nuvem oficial Zemda SaaS em tempo real.\n\nPreservação total de dados e configurações.',
               buttons: ['OK']
             });
           }

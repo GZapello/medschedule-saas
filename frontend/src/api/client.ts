@@ -21,7 +21,8 @@ export const getApiBaseUrl = (): string => {
       navigator.userAgent.includes('Electron');
 
     if (isElectron) {
-      return 'http://localhost:4000/api';
+      // No aplicativo Desktop Windows, conecta por padrão diretamente ao servidor oficial na nuvem (Railway)
+      return 'https://medschedule-saas-production.up.railway.app/api';
     }
 
     // 4. Detecção de ambiente Mobile Android / Capacitor

@@ -125,6 +125,8 @@ api.get('/v1/public/download-android', (req, res) => {
     path.resolve(__dirname, '../../../android/app/build/outputs/apk/release'),
     path.resolve(__dirname, '../../android/app/build/outputs/apk/debug'),
     path.resolve(process.cwd(), 'android/app/build/outputs/apk/debug'),
+    path.resolve(process.cwd(), 'android/Zemda.apk'),
+    path.resolve(process.cwd(), '../android/Zemda.apk'),
     path.resolve(process.cwd(), 'android/MedSchedule.apk'),
     path.resolve(process.cwd(), '../android/MedSchedule.apk'),
     path.resolve(process.cwd(), 'public/downloads'),
@@ -141,7 +143,7 @@ api.get('/v1/public/download-android', (req, res) => {
         break;
       } else if (stat.isDirectory()) {
         const files = fs.readdirSync(dirOrFile);
-        const apkFile = files.find(f => f.toLowerCase().endsWith('.apk'));
+        const apkFile = files.find(f => f.toLowerCase() === 'zemda.apk') || files.find(f => f.toLowerCase().endsWith('.apk'));
         if (apkFile) {
           foundFile = path.join(dirOrFile, apkFile);
           break;
@@ -151,7 +153,7 @@ api.get('/v1/public/download-android', (req, res) => {
   }
 
   if (foundFile && fs.existsSync(foundFile)) {
-    const filename = 'MedSchedule.apk';
+    const filename = 'Zemda.apk';
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'application/vnd.android.package-archive');
     return res.sendFile(foundFile);

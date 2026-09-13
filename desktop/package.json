@@ -1,8 +1,8 @@
 {
-  "name": "medschedule-desktop",
-  "productName": "MedSchedule",
+  "name": "zemda-desktop",
+  "productName": "Zemda",
   "version": "1.1.2",
-  "description": "MedSchedule - Sistema de Gestão e Agendamento Profissional para Saúde",
+  "description": "Zemda - Tecnologia em Saúde e Gestão Integrada",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -11,7 +11,7 @@
     "dist": "node copy-renderer.js && electron-builder",
     "dist:win": "node copy-renderer.js && electron-builder --win nsis --x64"
   },
-  "author": "MedSchedule SaaS Team",
+  "author": "Zemda Tecnologia",
   "license": "MIT",
   "devDependencies": {
     "electron": "^33.2.1",
@@ -19,8 +19,8 @@
   },
   "build": {
     "appId": "com.medschedule.app",
-    "productName": "MedSchedule",
-    "copyright": "Copyright © 2026 MedSchedule",
+    "productName": "Zemda",
+    "copyright": "Copyright © 2026 Zemda",
     "directories": {
       "output": "dist",
       "buildResources": "assets"
@@ -38,15 +38,16 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "artifactName": "Zemda Setup ${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "MedSchedule",
-      "uninstallDisplayName": "MedSchedule Gestão Integrada",
+      "shortcutName": "Zemda",
+      "uninstallDisplayName": "Zemda Gestão Integrada",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
     }
