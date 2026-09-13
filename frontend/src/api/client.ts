@@ -3,14 +3,32 @@ export const getApiBaseUrl = (): string => {
   if (typeof window !== 'undefined') {
     const customUrl = localStorage.getItem('saas_custom_api_url');
     if (customUrl && customUrl.trim()) {
-      return customUrl.trim().replace(/\/+$/, '');
+      let clean = customUrl.trim().replace(/\/+$/, '');
+      // Se for domínio desatualizado do railway antigo, migra para o oficial zemda.com.br
+      if (clean.includes('medschedule-saas-production.up.railway.app')) {
+        clean = 'https://zemda.com.br/api';
+        localStorage.setItem('saas_custom_api_url', clean);
+      }
+      // Se for apenas '/' ou vazio, usa o relativo padrão
+      if (clean === '' || clean === '/') {
+        return '/api';
+      }
+      // Se for URL HTTP(S) sem o /api ou /v1 no final, acrescenta /api
+      if (/^https?:\/\//i.test(clean) && !clean.endsWith('/api') && !clean.endsWith('/v1')) {
+        clean = `${clean}/api`;
+      }
+      return clean;
     }
   }
 
   // 2. Variável de ambiente (VITE_API_BASE_URL)
   const envApiUrl = (import.meta as any)?.env?.VITE_API_BASE_URL;
   if (envApiUrl) {
-    return envApiUrl;
+    let cleanEnv = envApiUrl.trim().replace(/\/+$/, '');
+    if (/^https?:\/\//i.test(cleanEnv) && !cleanEnv.endsWith('/api') && !cleanEnv.endsWith('/v1')) {
+      cleanEnv = `${cleanEnv}/api`;
+    }
+    return cleanEnv;
   }
 
   // 3. Detecção de ambiente Desktop Electron ou arquivo local
@@ -36,7 +54,7 @@ export const getApiBaseUrl = (): string => {
     }
   }
 
-  // 5. Modo Web padrão (relativo com proxy/Nginx)
+  // 5. Modo Web padrão (relativo)
   return '/api';
 };
 
@@ -47,7 +65,11 @@ export class ApiClient {
 
   static setCustomBaseUrl(url: string | null): void {
     if (url && url.trim()) {
-      localStorage.setItem('saas_custom_api_url', url.trim());
+      let clean = url.trim().replace(/\/+$/, '');
+      if (/^https?:\/\//i.test(clean) && !clean.endsWith('/api') && !clean.endsWith('/v1')) {
+        clean = `${clean}/api`;
+      }
+      localStorage.setItem('saas_custom_api_url', clean);
     } else {
       localStorage.removeItem('saas_custom_api_url');
     }
@@ -66,6 +88,9 @@ export class ApiClient {
     const tenantId = this.getTenantId();
     const baseUrl = getApiBaseUrl();
 
+    // Garante que endpoint comece com /
+    const safeEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string> || {})
@@ -81,7 +106,7 @@ export class ApiClient {
 
     let response: Response;
     try {
-      response = await fetch(`${baseUrl}${endpoint}`, {
+      response = await fetch(`${baseUrl}${safeEndpoint}`, {
         ...options,
         headers
       });
@@ -98,9 +123,18 @@ export class ApiClient {
       let errorMsg = `Erro ${response.status}: ${response.statusText}`;
       let errorCode: string | undefined = undefined;
       try {
-        const errorData = await response.json();
-        if (errorData.error) errorMsg = errorData.error;
-        if (errorData.code) errorCode = errorData.code;
+        const text = await response.text();
+        try {
+          const errorData = JSON.parse(text);
+          if (errorData.error) errorMsg = errorData.error;
+          if (errorData.code) errorCode = errorData.code;
+        } catch {
+          if (text.trim().startsWith('<')) {
+            errorMsg = `Erro ${response.status}: O servidor respondeu com uma página de erro (HTML). Verifique o endereço da API.`;
+          } else if (text.trim()) {
+            errorMsg = text.trim();
+          }
+        }
       } catch (_) {}
       const err: any = new Error(errorMsg);
       err.code = errorCode;
@@ -117,7 +151,16 @@ export class ApiClient {
       return (await response.text()) as unknown as T;
     }
 
-    return response.json();
+    // Leitura segura da resposta em JSON prevenindo erro "unexpected token '<'"
+    const rawText = await response.text();
+    try {
+      return JSON.parse(rawText) as T;
+    } catch {
+      if (rawText.trim().startsWith('<')) {
+        throw new Error('O servidor respondeu com uma página HTML em vez de dados (JSON). Verifique o endereço do servidor.');
+      }
+      throw new Error(`Resposta inválida do servidor: ${rawText.slice(0, 100)}`);
+    }
   }
 
   static get<T>(endpoint: string): Promise<T> {

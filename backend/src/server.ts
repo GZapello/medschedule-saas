@@ -29,6 +29,14 @@ initializeDatabase();
 import { NotificationService } from './services/notification.service';
 NotificationService.startBackgroundWorker(30000);
 
+// Reescreve requisições que chegam em /v1/... para /api/v1/... para compatibilidade total entre web, mobile e desktop
+app.use((req, res, next) => {
+  if (req.url.startsWith('/v1/')) {
+    req.url = `/api${req.url}`;
+  }
+  next();
+});
+
 // Registra as rotas da API em /api
 app.use('/api', apiRoutes);
 
@@ -38,7 +46,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     service: 'SaaS-Schedule-Core',
-    version: '1.0.0'
+    version: '1.1.2'
   });
 });
 
@@ -57,10 +65,17 @@ if (possibleFrontendDistPaths.length > 0) {
   console.log(`[Frontend SPA] Servindo aplicação estática a partir de: ${frontendDist}`);
   app.use(express.static(frontendDist));
 
-  // Qualquer rota da interface web que não comece com /api ou /health retorna o index.html
+  // Qualquer rota da interface web que não seja API ou health check retorna o index.html
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
-      return next();
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/v1') ||
+      req.path.startsWith('/health')
+    ) {
+      return res.status(404).json({
+        error: `Endpoint ${req.method} ${req.path} não encontrado na API Zemda.`,
+        code: 'ROUTE_NOT_FOUND'
+      });
     }
     const indexPath = path.join(frontendDist, 'index.html');
     if (fs.existsSync(indexPath)) {
