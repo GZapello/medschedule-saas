@@ -1,7 +1,7 @@
 {
   "name": "medschedule-desktop",
   "productName": "MedSchedule",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "MedSchedule - Sistema de Gestão e Agendamento Profissional para Saúde",
   "main": "main.js",
   "scripts": {
@@ -47,7 +47,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "MedSchedule",
       "uninstallDisplayName": "MedSchedule Gestão Integrada",
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     }
   }
 }

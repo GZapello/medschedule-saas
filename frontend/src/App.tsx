@@ -26,6 +26,7 @@ import { NewAppointmentModal } from './components/calendar/NewAppointmentModal';
 import { NewPatientModal } from './components/patients/NewPatientModal';
 import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
 import { NetworkOfflineModal } from './components/common/NetworkOfflineModal';
+import { UpdateNotificationModal } from './components/common/UpdateNotificationModal';
 import { Sparkles } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -326,6 +327,7 @@ export const App: React.FC = () => {
       <ToastProvider>
         <AppContent />
         <NetworkOfflineModal />
+        <UpdateNotificationModal />
       </ToastProvider>
     </AuthProvider>
   );

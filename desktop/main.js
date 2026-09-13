@@ -100,8 +100,8 @@ function createWindow() {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'Sobre o MedSchedule',
-              message: 'MedSchedule - Plataforma SaaS Multi-Clínicas',
-              detail: 'Versão Desktop para Windows (10 e 11, 64-bit)\nConectado à mesma plataforma e banco de dados SaaS.\n\nDesenvolvido com tecnologia de ponta.',
+              message: 'MedSchedule / Zemda — Gestão Integrada',
+              detail: 'Versão 1.1.2 Desktop para Windows (64-bit)\nConectado à mesma plataforma e banco de dados SaaS em tempo real.\n\nPreservação total de dados e configurações.',
               buttons: ['OK']
             });
           }

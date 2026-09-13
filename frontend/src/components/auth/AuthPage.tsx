@@ -321,9 +321,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </div>
 
           {/* Versão e LGPD */}
-          <div className="pt-1 text-center">
-            <p className="text-[10px] text-slate-400">
-              Ambiente Seguro • Criptografia TLS • LGPD Compliant
+          <div className="pt-1 text-center space-y-0.5">
+            <p className="text-[10px] text-slate-400 font-medium">
+              Zemda v1.1.2 • Ambiente Seguro • Criptografia TLS • LGPD Compliant
             </p>
           </div>
         </div>

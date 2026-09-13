@@ -52,6 +52,25 @@ api.get('/v1/public/tenants/:slug', TenantController.getPublicProfile);
 api.get('/v1/public/slots/available', SlotController.getAvailableSlots);
 api.post('/v1/public/appointments', AppointmentController.create);
 
+// Verificação de Versão da Aplicação (Mecanismo de Auto-Update / Notificação)
+api.get('/v1/public/app-version', (req, res) => {
+  res.json({
+    currentVersion: '1.1.2',
+    latestVersion: '1.1.2',
+    minRequiredVersion: '1.0.0',
+    releaseDate: '2026-09-12',
+    appName: 'Zemda',
+    releaseNotes: 'Versão 1.1.2: Reconhecimento de fala aprimorado, IA para evolução clínica e melhorias de estabilidade.',
+    downloadWindowsUrl: '/v1/public/download-windows',
+    downloadAndroidUrl: '/v1/public/download-android',
+    features: [
+      'Reconhecimento de fala sem repetições com controles pausar/retomar',
+      'Estruturação de evolução clínica e conduta terapêutica com IA Zemda',
+      'Compatibilidade e preservação total de dados na atualização'
+    ]
+  });
+});
+
 // Download do Instalador Desktop para Windows (.exe)
 api.get('/v1/public/download-windows', (req, res) => {
   const possiblePaths = [
@@ -68,10 +87,12 @@ api.get('/v1/public/download-windows', (req, res) => {
   for (const dir of possiblePaths) {
     if (fs.existsSync(dir)) {
       const files = fs.readdirSync(dir);
-      // Procura primeiro pelo instalador Setup
-      const setupExe = files.find(f => f.toLowerCase().endsWith('.exe') && f.toLowerCase().includes('setup'));
-      if (setupExe) {
-        foundFile = path.join(dir, setupExe);
+      // Procura primeiro pelo instalador Setup da versão mais recente (ex: 1.1.2)
+      const setupFiles = files
+        .filter(f => f.toLowerCase().endsWith('.exe') && f.toLowerCase().includes('setup'))
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }));
+      if (setupFiles.length > 0) {
+        foundFile = path.join(dir, setupFiles[0]);
         break;
       }
       // Ou qualquer outro .exe

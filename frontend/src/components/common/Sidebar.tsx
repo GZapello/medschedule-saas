@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
-          Zemda • LGPD Compliant
+          Zemda v1.1.2 • LGPD Compliant
         </div>
       </aside>
     </>

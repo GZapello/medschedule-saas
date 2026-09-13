@@ -1,6 +1,6 @@
 {
   "name": "medschedule-backend",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "Backend modular em Node.js e SQLite com suporte a sincronização Local-First para SaaS de saúde",
   "main": "dist/server.js",
   "scripts": {
