@@ -76,12 +76,12 @@ export const QuickAIAssistantShortcut: React.FC<QuickAIAssistantShortcutProps> =
   };
 
   return (
-    <div className="fixed bottom-4 left-4 z-40 select-none">
+    <div className="fixed bottom-4 right-4 z-40 select-none">
       {/* Popover do Assistente Rápido de Atalho */}
       {isOpen && (
         <div
           ref={popoverRef}
-          className="absolute bottom-16 left-0 w-80 sm:w-92 rounded-3xl bg-slate-900/95 backdrop-blur-xl border border-teal-500/30 shadow-2xl shadow-teal-950/60 p-4.5 space-y-3.5 z-50 text-slate-200 animate-in fade-in slide-in-from-bottom-3 duration-200"
+          className="absolute bottom-16 right-0 w-80 sm:w-92 rounded-3xl bg-slate-900/95 backdrop-blur-xl border border-teal-500/30 shadow-2xl shadow-teal-950/60 p-4.5 space-y-3.5 z-50 text-slate-200 animate-in fade-in slide-in-from-bottom-3 duration-200"
         >
           {/* Cabeçalho do Popover */}
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
