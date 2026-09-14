@@ -75,7 +75,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [medicationsList, setMedicationsList] = useState<any[]>([]);
 
   // ZemdaFisio - Mapa de Dor & Avaliação Fisioterapêutica (Regras 3, 4, 5, 6, 7)
-  const [isAppointmentPhysio, setIsAppointmentPhysio] = useState<boolean>(false);
+  const [isAppointmentPhysio, setIsAppointmentPhysio] = useState<boolean>(() => !!isPhysiotherapist);
   const [zemdaFisioExpanded, setZemdaFisioExpanded] = useState<boolean>(true);
   const [bodyMapJson, setBodyMapJson] = useState<string>('');
   const [bodyMapImage, setBodyMapImage] = useState<string>('');
@@ -981,29 +981,6 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               </div>
             )}
 
-            {/* Campo Principal de Evolução */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-slate-700">
-                  Evolução Clínica & Conduta Terapêutica *
-                </label>
-                <span className="text-[11px] text-slate-400">
-                  {clinicalEvolution.length} caracteres
-                </span>
-              </div>
-              <textarea
-                rows={10}
-                value={clinicalEvolution}
-                onChange={e => handleEvolutionChange(e.target.value)}
-                placeholder="Descreva a queixa principal, anamnese, exame clínico, procedimentos realizados, evolução do paciente e conduta adotada nesta sessão..."
-                className="w-full text-sm leading-relaxed p-4 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white shadow-inner resize-y font-sans text-slate-800"
-              />
-              <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
-                Texto salvo continuamente contra perdas acidentais no navegador e recuperável a qualquer momento.
-              </p>
-            </div>
-
             {/* ZEMDAFISIO: MÓDULO EXCLUSIVO DE FISIOTERAPIA & MAPA DE DOR (Regras 3, 4, 5, 6, 7) */}
             {isAppointmentPhysio && (
               <div className="bg-gradient-to-br from-teal-50/70 via-emerald-50/40 to-slate-50 border-2 border-teal-200/80 rounded-2xl p-5 shadow-xs transition-all">
@@ -1186,6 +1163,29 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 )}
               </div>
             )}
+
+            {/* Campo Principal de Evolução */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Evolução Clínica & Conduta Terapêutica *
+                </label>
+                <span className="text-[11px] text-slate-400">
+                  {clinicalEvolution.length} caracteres
+                </span>
+              </div>
+              <textarea
+                rows={10}
+                value={clinicalEvolution}
+                onChange={e => handleEvolutionChange(e.target.value)}
+                placeholder="Descreva a queixa principal, anamnese, exame clínico, procedimentos realizados, evolução do paciente e conduta adotada nesta sessão..."
+                className="w-full text-sm leading-relaxed p-4 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white shadow-inner resize-y font-sans text-slate-800"
+              />
+              <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                Texto salvo continuamente contra perdas acidentais no navegador e recuperável a qualquer momento.
+              </p>
+            </div>
 
             {/* Anotações Técnicas / Orientações */}
             <div>

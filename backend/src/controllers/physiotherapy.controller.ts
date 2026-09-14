@@ -14,7 +14,8 @@ import { hasClinicalAccess } from './clinical.controller';
  */
 export function isPhysiotherapistOrClinicManager(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
-  if (req.user.role === 'superadmin') return true;
+  // 1. Administrador Global / Sistema NUNCA pode acessar recursos do ZemdaFisio (Regras 1, 3 e 6)
+  if (req.user.role === 'superadmin') return false;
 
   // Busca dados em professionals (se houver cadastro profissional do usuário)
   const prof = db.prepare(`
