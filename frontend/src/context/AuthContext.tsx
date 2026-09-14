@@ -20,6 +20,8 @@ interface AuthContextType {
   isPatient: boolean;
   isPhysiotherapist: boolean;
   isZemdaFisio: boolean;
+  isDentist: boolean;
+  isZemdaOdonto: boolean;
   clientTermLabel: string;
 }
 
@@ -166,14 +168,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     userPermissions.includes('access_zemda_fisio') ||
     !!(currentUser as any)?.zemdaFisioEnabled;
 
-  // Regra Estrita de Acesso ao ZemdaFisio (Itens 8, 9, 10, 11, 15):
-  // 1. Administrador Global NUNCA tem uso clínico do ZemdaFisio
-  // 2. Deve pertencer à profissão / área de atuação de Fisioterapia
-  // 3. Deve possuir liberação explícita do gestor da clínica (ou ser o gerente da clínica com a área)
+  // Regra Estrita de Acesso ao ZemdaFisio:
   const isPhysiotherapist = !isSuperAdmin && (isProfessional || isClinicAdmin) && hasPhysioArea && isZemdaFisioAuthorized;
-
-  // Ambiente ZemdaFisio ativo EXCLUSIVAMENTE para fisioterapeutas liberados
   const isZemdaFisio = isPhysiotherapist;
+
+  // Regra Estrita de Acesso ao ZemdaOdonto:
+  // 1. Administrador Global NUNCA tem uso clínico do ZemdaOdonto (nem botão nem tela)
+  // 2. Deve pertencer à profissão / área de Odontologia (Cirurgião-Dentista, Odontologia)
+  // 3. Deve possuir liberação explícita do gestor da clínica (ou ser gerente com a formação em Odontologia)
+  const hasOdontoArea =
+    profId === 'prof-dentista' ||
+    profId === 'prof-odontologia' ||
+    profId.includes('odonto') ||
+    profId.includes('dentis') ||
+    profSlug.includes('odonto') ||
+    profSlug.includes('dentis') ||
+    profName.includes('odonto') ||
+    profName.includes('dentis') ||
+    practiceAreas.includes('odonto') ||
+    practiceAreas.includes('dentis') ||
+    practiceAreas.includes('cro');
+
+  const isZemdaOdontoAuthorized =
+    (currentUser?.role === 'clinic_admin' && hasOdontoArea) ||
+    userPermissions.includes('access_zemda_odonto') ||
+    !!(currentUser as any)?.zemdaOdontoEnabled;
+
+  const isDentist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') && hasOdontoArea && isZemdaOdontoAuthorized;
+  const isZemdaOdonto = isDentist;
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
 
@@ -197,6 +219,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isPatient,
         isPhysiotherapist,
         isZemdaFisio,
+        isDentist,
+        isZemdaOdonto,
         clientTermLabel
       }}
     >

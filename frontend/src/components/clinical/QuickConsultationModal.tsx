@@ -34,12 +34,14 @@ import {
   Activity,
   ChevronDown,
   ChevronUp,
-  History
+  History,
+  Smile
 } from 'lucide-react';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { ReferralModal } from './ReferralModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
 import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
+import { OdontogramCanvas, OdontogramData } from '../dentistry/OdontogramCanvas';
 
 interface QuickConsultationModalProps {
   appointment: {
@@ -66,7 +68,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   onClose,
   onFinished
 }) => {
-  const { currentTenant, clientTermLabel, isPhysiotherapist, currentUser } = useAuth();
+  const { currentTenant, clientTermLabel, isPhysiotherapist, isDentist, currentUser } = useAuth();
   const { showToast } = useToast();
 
   const [loadingPatient, setLoadingPatient] = useState<boolean>(true);
@@ -86,6 +88,12 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [physioAssessments, setPhysioAssessments] = useState<any[]>([]);
   const [viewingHistoricalId, setViewingHistoricalId] = useState<string | null>(null);
   const [savingPhysio, setSavingPhysio] = useState<boolean>(false);
+
+  // ZemdaOdonto - Odontograma & Procedimentos Odontológicos
+  const [isAppointmentDentist, setIsAppointmentDentist] = useState<boolean>(() => !!isDentist);
+  const [zemdaOdontoExpanded, setZemdaOdontoExpanded] = useState<boolean>(true);
+  const [odontogramData, setOdontogramData] = useState<OdontogramData>({});
+  const [pendingToothChanges, setPendingToothChanges] = useState<any[]>([]);
 
   // Campos clínicos
   const [title, setTitle] = useState<string>(
@@ -304,6 +312,31 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     }
     setIsAppointmentPhysio(true);
   }, [isPhysiotherapist]);
+
+  // Verifica autorização estrita da área de atuação para exibir ZemdaOdonto
+  useEffect(() => {
+    if (!isDentist) {
+      setIsAppointmentDentist(false);
+      return;
+    }
+    setIsAppointmentDentist(true);
+  }, [isDentist]);
+
+  // Carrega odontograma do paciente
+  useEffect(() => {
+    async function loadOdontogram() {
+      if (!isAppointmentDentist || !appointment.patient_id) return;
+      try {
+        const res = await ApiClient.get<any>(`/v1/dentistry/odontograms/${appointment.patient_id}`);
+        if (res?.current?.status_data) {
+          setOdontogramData(res.current.status_data);
+        }
+      } catch (err) {
+        console.warn('Odontograma não carregado:', err);
+      }
+    }
+    loadOdontogram();
+  }, [isAppointmentDentist, appointment.patient_id]);
 
   // Carrega histórico de avaliações e mapas de dor do paciente (Regra 7)
   useEffect(() => {
@@ -559,6 +592,20 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         }
       }
 
+      if (isAppointmentDentist) {
+        try {
+          await ApiClient.post('/v1/dentistry/odontograms', {
+            patientId: appointment.patient_id,
+            appointmentId: appointment.id,
+            type: 'current',
+            statusData: odontogramData,
+            toothChanges: pendingToothChanges
+          });
+        } catch (e) {
+          console.warn('Erro ao sincronizar odontograma ZemdaOdonto:', e);
+        }
+      }
+
       // Conclui o agendamento
       await ApiClient.put(`/v1/appointments/${appointment.id}/status`, {
         status: 'completed'
@@ -568,7 +615,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         localStorage.removeItem(DRAFT_KEY);
       } catch {}
 
-      showToast(isAppointmentPhysio ? 'Atendimento ZemdaFisio finalizado com sucesso!' : 'Atendimento finalizado com sucesso!', 'success');
+      showToast(
+        isAppointmentDentist
+          ? 'Atendimento ZemdaOdonto finalizado com sucesso!'
+          : isAppointmentPhysio
+          ? 'Atendimento ZemdaFisio finalizado com sucesso!'
+          : 'Atendimento finalizado com sucesso!',
+        'success'
+      );
       onFinished();
       onClose();
     } catch (err: any) {
@@ -614,9 +668,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${isAppointmentPhysio ? 'bg-emerald-400' : 'bg-teal-400'}`} />
-              <span className={`text-xs font-black tracking-wider uppercase flex items-center gap-1.5 ${isAppointmentPhysio ? 'text-emerald-400' : 'text-teal-400'}`}>
-                {isAppointmentPhysio ? (
+              <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${isAppointmentPhysio ? 'bg-emerald-400' : isAppointmentDentist ? 'bg-cyan-400' : 'bg-teal-400'}`} />
+              <span className={`text-xs font-black tracking-wider uppercase flex items-center gap-1.5 ${isAppointmentPhysio ? 'text-emerald-400' : isAppointmentDentist ? 'text-cyan-400' : 'text-teal-400'}`}>
+                {isAppointmentDentist ? (
+                  <>
+                    <Smile className="w-4 h-4 text-cyan-400" />
+                    <span>ZemdaOdonto — Atendimento Odontológico</span>
+                  </>
+                ) : isAppointmentPhysio ? (
                   <>
                     <Activity className="w-4 h-4 text-emerald-400" />
                     <span>ZemdaFisio — Atendimento Fisioterapêutico</span>
@@ -1014,6 +1073,51 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   <h5 className="text-xs font-bold">Zemda IA organizando a evolução clínica...</h5>
                   <p className="text-[11px] text-teal-700">Convertendo a fala em redação técnica clara e conduta, sem inventar informações.</p>
                 </div>
+              </div>
+            )}
+
+            {/* ZEMDAODONTO: MÓDULO EXCLUSIVO DE ODONTOLOGIA & ODONTOGRAMA */}
+            {isAppointmentDentist && (
+              <div className="bg-gradient-to-br from-cyan-50/80 via-sky-50/40 to-slate-50 border-2 border-cyan-200/90 rounded-2xl p-5 shadow-xs transition-all">
+                <div className="flex items-center justify-between pb-3 border-b border-cyan-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-cyan-600 text-white flex items-center justify-center shadow-xs">
+                      <Smile className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-800">ZemdaOdonto: Odontograma & Procedimentos</h4>
+                        <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200">
+                          Exclusivo Odontologia
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Odontograma FDI interativo com marcação de faces (V, L/P, M, D, O), cáries, restaurações e tratamentos.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setZemdaOdontoExpanded(!zemdaOdontoExpanded)}
+                    className="p-1.5 rounded-xl text-cyan-700 hover:bg-cyan-100 transition-colors cursor-pointer"
+                    title={zemdaOdontoExpanded ? 'Recolher módulo' : 'Expandir módulo'}
+                  >
+                    {zemdaOdontoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {zemdaOdontoExpanded && (
+                  <div className="pt-4 space-y-4">
+                    <OdontogramCanvas
+                      currentData={odontogramData}
+                      onChange={(updated, changes) => {
+                        setOdontogramData(updated);
+                        setPendingToothChanges(prev => [...prev, ...changes]);
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             )}
 

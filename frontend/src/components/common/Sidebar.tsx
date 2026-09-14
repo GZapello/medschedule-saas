@@ -26,7 +26,8 @@ import {
   Wallet,
   LifeBuoy,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Smile
 } from 'lucide-react';
 import { openZemdaAI } from '../../utils/aiHelper';
 
@@ -56,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose
 }) => {
-  const { isSuperAdmin, isClinicAdmin, isProfessional, isPhysiotherapist, clientTermLabel } = useAuth();
+  const { isSuperAdmin, isClinicAdmin, isProfessional, isPhysiotherapist, isDentist, clientTermLabel } = useAuth();
 
   const categories: NavCategory[] = [
     {
@@ -77,6 +78,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'ZemdaFisio (Fisioterapia)',
           icon: Activity,
           visible: isPhysiotherapist
+        },
+        {
+          id: 'zemda-odonto',
+          label: 'ZemdaOdonto (Odontologia)',
+          icon: Smile,
+          visible: isDentist
         },
         { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
       ]

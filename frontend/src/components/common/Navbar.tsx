@@ -22,7 +22,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNavigate }) => {
-  const { currentUser, currentTenant, isSuperAdmin, logout, clientTermLabel, isZemdaFisio } = useAuth();
+  const { currentUser, currentTenant, isSuperAdmin, logout, clientTermLabel, isZemdaFisio, isZemdaOdonto } = useAuth();
   const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
 
   const getRoleBadge = () => {
@@ -58,16 +58,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-slate-900 text-base leading-tight">
-                {isZemdaFisio ? 'ZemdaFisio' : (currentTenant?.trade_name || currentTenant?.name || 'Zemda')}
+                {isZemdaOdonto ? 'ZemdaOdonto' : isZemdaFisio ? 'ZemdaFisio' : (currentTenant?.trade_name || currentTenant?.name || 'Zemda')}
               </h1>
-              {isZemdaFisio && (
+              {isZemdaOdonto && (
+                <span className="bg-cyan-100 text-cyan-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-cyan-200">
+                  Odontologia
+                </span>
+              )}
+              {isZemdaFisio && !isZemdaOdonto && (
                 <span className="bg-teal-100 text-teal-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-teal-200">
                   Fisioterapia
                 </span>
               )}
             </div>
             <p className="text-xs text-slate-500 font-medium">
-              {isZemdaFisio
+              {isZemdaOdonto
+                ? 'Prontuário Odontológico & Odontograma'
+                : isZemdaFisio
                 ? 'Prontuário & Gestão Fisioterapêutica'
                 : isSuperAdmin
                 ? 'Plataforma Multi-Clínicas'

@@ -182,6 +182,11 @@ export function initializeDatabase(): void {
     addColIfMissing('clinic_users', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('users', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
 
+    // Liberação explícita do ZemdaOdonto no profissional
+    addColIfMissing('professionals', 'zemda_odonto_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_odonto_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_odonto_enabled', 'INTEGER DEFAULT 0');
+
     // Padronização de datas nos agendamentos para conformidade ISO e precisão matemática de slots
     try {
       rawDb.exec(`
@@ -1028,6 +1033,192 @@ export function initializeDatabase(): void {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_invites_token ON clinic_invites (token);
       CREATE INDEX IF NOT EXISTS idx_clinic_invites_tenant_status ON clinic_invites (tenant_id, status);
+
+      -- =========================================================================
+      -- 9. MÓDULO CLÍNICO ZEMDAODONTO (ODONTOLOGIA)
+      -- =========================================================================
+      
+      -- Odontograma Geral (Inicial, Atual e Históricos com todos os 32 dentes e faces)
+      CREATE TABLE IF NOT EXISTS odontograms (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        type TEXT NOT NULL DEFAULT 'current',
+        status_data_json TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_odontograms_patient ON odontograms (tenant_id, patient_id, type);
+
+      -- Histórico detalhado por dente e face
+      CREATE TABLE IF NOT EXISTS dental_tooth_records (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        tooth_number INTEGER NOT NULL,
+        face TEXT DEFAULT 'whole',
+        condition TEXT NOT NULL,
+        previous_condition TEXT,
+        procedure_name TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tooth_records_patient ON dental_tooth_records (tenant_id, patient_id, tooth_number);
+
+      -- Periodontia (PERIO)
+      CREATE TABLE IF NOT EXISTS dental_periodontal_records (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        periodontogram_json TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_perio_patient ON dental_periodontal_records (tenant_id, patient_id, created_at);
+
+      -- Endodontia (ENDO)
+      CREATE TABLE IF NOT EXISTS dental_endodontic_records (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        tooth_number INTEGER NOT NULL,
+        pulpar_diagnosis TEXT,
+        periapical_diagnosis TEXT,
+        canals_count INTEGER DEFAULT 1,
+        working_length TEXT,
+        instrumentation TEXT,
+        irrigation TEXT,
+        intracanal_medication TEXT,
+        obturation TEXT,
+        material TEXT,
+        sessions_count INTEGER DEFAULT 1,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_endo_patient ON dental_endodontic_records (tenant_id, patient_id, tooth_number);
+
+      -- Anamnese Odontológica
+      CREATE TABLE IF NOT EXISTS dental_anamnesis (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL UNIQUE,
+        professional_id TEXT,
+        systemic_diseases_json TEXT,
+        habits_json TEXT,
+        allergies_json TEXT,
+        current_medications TEXT,
+        previous_surgeries TEXT,
+        anesthesia_history TEXT,
+        custom_fields_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_anamnesis_patient ON dental_anamnesis (tenant_id, patient_id);
+
+      -- Plano de Tratamento e Orçamento Integrado
+      CREATE TABLE IF NOT EXISTS dental_treatment_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        title TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'planned',
+        total_value REAL DEFAULT 0,
+        discount_value REAL DEFAULT 0,
+        final_value REAL DEFAULT 0,
+        items_json TEXT NOT NULL,
+        payment_terms TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_treatment_plans_patient ON dental_treatment_plans (tenant_id, patient_id);
+
+      -- Laboratório de Prótese
+      CREATE TABLE IF NOT EXISTS dental_prosthetics_lab (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        lab_name TEXT NOT NULL,
+        work_type TEXT NOT NULL,
+        tooth_number TEXT,
+        shade_color TEXT,
+        material TEXT,
+        sent_date TEXT,
+        expected_date TEXT,
+        received_date TEXT,
+        cost_value REAL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'requested',
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_prosthetics_patient ON dental_prosthetics_lab (tenant_id, patient_id);
+
+      -- Ortodontia
+      CREATE TABLE IF NOT EXISTS dental_orthodontics (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appliance_type TEXT,
+        installation_date TEXT,
+        forecast_months INTEGER,
+        monthly_evolutions_json TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_orthodontics_patient ON dental_orthodontics (tenant_id, patient_id);
+
+      -- Harmonização Orofacial (HOF)
+      CREATE TABLE IF NOT EXISTS dental_hof (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        procedure_name TEXT NOT NULL,
+        facial_region TEXT,
+        product_brand TEXT,
+        lot_number TEXT,
+        units_quantity TEXT,
+        expiry_date TEXT,
+        application_points_json TEXT,
+        before_after_images_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_hof_patient ON dental_hof (tenant_id, patient_id);
     `);
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);

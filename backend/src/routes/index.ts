@@ -31,6 +31,7 @@ import { InventoryController } from '../controllers/inventory.controller';
 import { BudgetController } from '../controllers/budget.controller';
 import { PayrollController } from '../controllers/payroll.controller';
 import { PhysiotherapyController } from '../controllers/physiotherapy.controller';
+import { DentistryController } from '../controllers/dentistry.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -311,6 +312,38 @@ api.put('/v1/physiotherapy/assessments/:id', requireTenant, requireRole('clinic_
 api.get('/v1/physiotherapy/evolutions/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listEvolutionsByPatient);
 api.post('/v1/physiotherapy/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createEvolution);
 api.put('/v1/physiotherapy/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.updateEvolution);
+
+// ==========================================
+// MÓDULO CLÍNICO ZEMDAODONTO (ODONTOLOGIA)
+// ==========================================
+api.get('/v1/dentistry/odontograms/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getOdontogram);
+api.post('/v1/dentistry/odontograms', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveOdontogram);
+api.get('/v1/dentistry/teeth/:patientId/history', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getToothHistory);
+
+api.get('/v1/dentistry/perio/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getPerioRecords);
+api.post('/v1/dentistry/perio', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.savePerioRecord);
+
+api.get('/v1/dentistry/endo/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getEndoRecords);
+api.post('/v1/dentistry/endo', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveEndoRecord);
+
+api.get('/v1/dentistry/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getAnamnesis);
+api.post('/v1/dentistry/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveAnamnesis);
+
+api.get('/v1/dentistry/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listTreatmentPlans);
+api.post('/v1/dentistry/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveTreatmentPlan);
+api.put('/v1/dentistry/treatment-plans/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.updateTreatmentPlanStatus);
+
+api.get('/v1/dentistry/prosthetics/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listProsthetics);
+api.post('/v1/dentistry/prosthetics', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveProsthetic);
+api.put('/v1/dentistry/prosthetics/:id', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.updateProsthetic);
+
+api.get('/v1/dentistry/orthodontics/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getOrtho);
+api.post('/v1/dentistry/orthodontics', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveOrtho);
+
+api.get('/v1/dentistry/hof/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listHof);
+api.post('/v1/dentistry/hof', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveHof);
+
+api.post('/v1/dentistry/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.finishConsultation);
 
 // Encaminhamentos entre Profissionais da Clínica (Item 6)
 api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);

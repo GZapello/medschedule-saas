@@ -41,7 +41,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas' },
   { id: 'view_reports', label: 'Acessar relatórios e exportar planilhas' },
   { id: 'manage_settings', label: 'Alterar configurações da clínica' },
-  { id: 'access_zemda_fisio', label: 'ZemdaFisio: Acesso permitido' }
+  { id: 'access_zemda_fisio', label: 'ZemdaFisio: Acesso permitido' },
+  { id: 'access_zemda_odonto', label: 'ZemdaOdonto: Acesso permitido' }
 ];
 
 const PERMISSION_PRESETS = [
@@ -56,6 +57,12 @@ const PERMISSION_PRESETS = [
     label: 'Profissional de Saúde',
     desc: 'Agenda própria e gestão de pacientes',
     perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient']
+  },
+  {
+    id: 'dentist',
+    label: 'Cirurgião-Dentista',
+    desc: 'Agenda, pacientes e ZemdaOdonto completo',
+    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'access_zemda_odonto']
   },
   {
     id: 'clinic_admin',
@@ -1094,6 +1101,43 @@ export const StaffManagementView: React.FC = () => {
                         </label>
                         <p className="text-[11px] text-teal-700 pl-6.5 leading-relaxed">
                           Habilita prontuário de fisioterapia, escalas de dor, goniometria, testes ortopédicos e evoluções clínicas exclusivas (exige profissão Fisioterapia).
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  if (p.id === 'access_zemda_odonto') {
+                    return (
+                      <div
+                        key={p.id}
+                        className="p-3 bg-cyan-50 border border-cyan-200 rounded-2xl space-y-1.5 my-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wide text-cyan-900">
+                            Módulo Odontologia (ZemdaOdonto)
+                          </span>
+                        </div>
+                        <label className="flex items-center gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={e => {
+                              const updated = e.target.checked
+                                ? [...currentPerms, p.id]
+                                : currentPerms.filter((id: string) => id !== p.id);
+                              setEditingPermissionsUser({
+                                ...editingPermissionsUser,
+                                permissions: updated
+                              });
+                            }}
+                            className="rounded text-cyan-600 focus:ring-cyan-500 w-4 h-4 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-cyan-950">
+                            ZemdaOdonto: Acesso permitido
+                          </span>
+                        </label>
+                        <p className="text-[11px] text-cyan-700 pl-6.5 leading-relaxed">
+                          Habilita odontograma interativo (32 dentes e faces), periodontograma, endodontia, planos de tratamento, prótese e HOF (exige profissão Odontologia).
                         </p>
                       </div>
                     );

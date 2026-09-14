@@ -21,6 +21,9 @@ export interface User {
   specialtyName?: string;
   professionalSlug?: string;
   practiceAreas?: string;
+  zemdaFisioEnabled?: boolean;
+  zemdaOdontoEnabled?: boolean;
+  permissions?: string[];
 }
 
 export interface Tenant {
