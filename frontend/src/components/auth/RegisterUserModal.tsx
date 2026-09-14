@@ -11,7 +11,8 @@ import {
   Briefcase,
   Award,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ShieldCheck
 } from 'lucide-react';
 
 interface RegisterUserModalProps {
@@ -81,6 +82,90 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, on
   const [practiceAreas, setPracticeAreas] = useState('');
   const [registrationType, setRegistrationType] = useState('CRP');
   const [registrationNumber, setRegistrationNumber] = useState('');
+
+  const PRACTICE_AREAS_SUGGESTIONS: Record<string, string[]> = {
+    Fisioterapia: [
+      'Traumato-Ortopédica',
+      'Neurológica / Neurofuncional',
+      'Respiratória / Cardiovascular',
+      'Pélvica / Saúde da Mulher',
+      'Fisioterapia Pediátrica',
+      'Fisioterapia Esportiva',
+      'Dermatofuncional',
+      'Gerontologia',
+      'Fisioterapia Geral',
+      'Pilates Clínico',
+      'Reabilitação Vestibular'
+    ],
+    Psicologia: [
+      'Psicologia Clínica',
+      'Terapia Cognitivo-Comportamental (TCC)',
+      'Psicanálise',
+      'Psicologia Infantil / Escolar',
+      'Neuropsicologia / Avaliação',
+      'Terapia Familiar e de Casal',
+      'Transtornos de Ansiedade e Humor',
+      'TEA / TDAH'
+    ],
+    Medicina: [
+      'Clínica Geral',
+      'Pediatria',
+      'Psiquiatria',
+      'Ortopedia e Traumatologia',
+      'Neurologia',
+      'Medicina da Família e Comunidade',
+      'Cardiologia',
+      'Geriatria'
+    ],
+    Fonoaudiologia: [
+      'Linguagem e Fala',
+      'Voz Clínica e Profissional',
+      'Audiologia Clínica',
+      'Motricidade Orofacial',
+      'Disfagia',
+      'Fonoaudiologia Pediátrica e Escolar',
+      'Neurofonoaudiologia'
+    ],
+    Nutrição: [
+      'Nutrição Clínica',
+      'Nutrição Esportiva',
+      'Nutrição Comportamental',
+      'Saúde Materno-Infantil',
+      'Doenças Crônicas e Emagrecimento',
+      'Reeducação Alimentar'
+    ],
+    'Terapia Ocupacional': [
+      'Integração Sensorial',
+      'Desenvolvimento Infantil',
+      'Reabilitação Física e Neurológica',
+      'Saúde Mental',
+      'Gerontologia / Autonomia'
+    ]
+  };
+
+  const getSuggestionsForProfession = (prof: string): string[] => {
+    const low = prof.toLowerCase();
+    if (low.includes('fisio')) return PRACTICE_AREAS_SUGGESTIONS['Fisioterapia'];
+    if (low.includes('psic') || low.includes('terapeuta cognitivo') || low.includes('psicanalista')) return PRACTICE_AREAS_SUGGESTIONS['Psicologia'];
+    if (low.includes('médic') || low.includes('medic') || low.includes('psiquiat') || low.includes('pediat')) return PRACTICE_AREAS_SUGGESTIONS['Medicina'];
+    if (low.includes('fono')) return PRACTICE_AREAS_SUGGESTIONS['Fonoaudiologia'];
+    if (low.includes('nutri')) return PRACTICE_AREAS_SUGGESTIONS['Nutrição'];
+    if (low.includes('terapeuta ocupacional')) return PRACTICE_AREAS_SUGGESTIONS['Terapia Ocupacional'];
+    return [];
+  };
+
+  const togglePracticeArea = (area: string) => {
+    const currentAreas = practiceAreas
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (currentAreas.includes(area)) {
+      setPracticeAreas(currentAreas.filter(a => a !== area).join(', '));
+    } else {
+      setPracticeAreas([...currentAreas, area].join(', '));
+    }
+  };
 
   const handleProfessionChange = (val: string) => {
     setSelectedProfession(val);
@@ -379,23 +464,56 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, on
               </div>
             )}
 
-            {/* Campo aberto/texto livre: Atendimentos e áreas de atuação */}
+            {/* Áreas de Atuação Especializadas */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-bold text-slate-700">
-                  Atendimentos e áreas de atuação
+                  Áreas de Atuação / Especialidades
                 </label>
-                <span className="text-[10px] text-slate-400 font-medium">Texto livre</span>
+                <span className="text-[10px] text-slate-400 font-medium">Definido no cadastro</span>
               </div>
+
+              {/* Sugestões dinâmicas baseadas na profissão */}
+              {getSuggestionsForProfession(finalProfessionName).length > 0 && (
+                <div className="mb-2">
+                  <span className="text-[10px] text-slate-500 font-semibold block mb-1.5">
+                    Sugestões para {finalProfessionName} (clique para selecionar):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-100">
+                    {getSuggestionsForProfession(finalProfessionName).map(sug => {
+                      const isSelected = practiceAreas
+                        .split(',')
+                        .map(s => s.trim().toLowerCase())
+                        .includes(sug.toLowerCase());
+                      return (
+                        <button
+                          key={sug}
+                          type="button"
+                          onClick={() => togglePracticeArea(sug)}
+                          className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                              : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+                          }`}
+                        >
+                          {isSelected ? '✓ ' : '+ '}{sug}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={practiceAreas}
                 onChange={e => setPracticeAreas(e.target.value)}
-                placeholder="Ex: TEA, TDAH, Ansiedade, Depressão, Orientação de Pais, Avaliação Neuropsicológica, Terapia de Casal, Dificuldades de Aprendizagem..."
-                rows={3}
+                placeholder="Ex: Traumato-Ortopédica, Neurológica, Desportiva..."
+                rows={2}
                 className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
               />
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Descreva livremente os focos de atendimento, públicos ou abordagens.
+              <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-slate-500" />
+                Sua área de atuação é fixada no cadastro para segurança ética e conformidade de acesso.
               </p>
             </div>
 

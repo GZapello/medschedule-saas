@@ -12,7 +12,9 @@ import {
   X,
   Search,
   ShieldCheck,
-  FileText
+  FileText,
+  Award,
+  Briefcase
 } from 'lucide-react';
 
 interface CreateClinicModalProps {
@@ -40,8 +42,124 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
     city: '',
     state: '',
     termsAccepted: false,
-    privacyAccepted: false
+    privacyAccepted: false,
+    managerProfession: 'Fisioterapia',
+    managerPracticeAreas: '',
+    managerRegistrationType: 'CREFITO',
+    managerRegistrationNumber: ''
   });
+
+  const PRACTICE_AREAS_SUGGESTIONS: Record<string, string[]> = {
+    Fisioterapia: [
+      'Traumato-Ortopédica',
+      'Neurológica / Neurofuncional',
+      'Respiratória / Cardiovascular',
+      'Pélvica / Saúde da Mulher',
+      'Fisioterapia Pediátrica',
+      'Fisioterapia Esportiva',
+      'Dermatofuncional',
+      'Gerontologia',
+      'Fisioterapia Geral',
+      'Pilates Clínico',
+      'Reabilitação Vestibular'
+    ],
+    Psicologia: [
+      'Psicologia Clínica',
+      'Terapia Cognitivo-Comportamental (TCC)',
+      'Psicanálise',
+      'Psicologia Infantil / Escolar',
+      'Neuropsicologia / Avaliação',
+      'Terapia Familiar e de Casal',
+      'Transtornos de Ansiedade e Humor',
+      'TEA / TDAH'
+    ],
+    Medicina: [
+      'Clínica Geral',
+      'Pediatria',
+      'Psiquiatria',
+      'Ortopedia e Traumatologia',
+      'Neurologia',
+      'Medicina da Família e Comunidade',
+      'Cardiologia',
+      'Geriatria'
+    ],
+    Fonoaudiologia: [
+      'Linguagem e Fala',
+      'Voz Clínica e Profissional',
+      'Audiologia Clínica',
+      'Motricidade Orofacial',
+      'Disfagia',
+      'Fonoaudiologia Pediátrica e Escolar',
+      'Neurofonoaudiologia'
+    ],
+    Nutrição: [
+      'Nutrição Clínica',
+      'Nutrição Esportiva',
+      'Nutrição Comportamental',
+      'Saúde Materno-Infantil',
+      'Doenças Crônicas e Emagrecimento',
+      'Reeducação Alimentar'
+    ],
+    'Terapia Ocupacional': [
+      'Integração Sensorial',
+      'Desenvolvimento Infantil',
+      'Reabilitação Física e Neurológica',
+      'Saúde Mental',
+      'Gerontologia / Autonomia'
+    ]
+  };
+
+  const getSuggestionsForProfession = (prof: string): string[] => {
+    const low = prof.toLowerCase();
+    if (low.includes('fisio')) return PRACTICE_AREAS_SUGGESTIONS['Fisioterapia'];
+    if (low.includes('psic') || low.includes('terapeuta cognitivo') || low.includes('psicanalista')) return PRACTICE_AREAS_SUGGESTIONS['Psicologia'];
+    if (low.includes('médic') || low.includes('medic') || low.includes('psiquiat') || low.includes('pediat')) return PRACTICE_AREAS_SUGGESTIONS['Medicina'];
+    if (low.includes('fono')) return PRACTICE_AREAS_SUGGESTIONS['Fonoaudiologia'];
+    if (low.includes('nutri')) return PRACTICE_AREAS_SUGGESTIONS['Nutrição'];
+    if (low.includes('terapeuta ocupacional')) return PRACTICE_AREAS_SUGGESTIONS['Terapia Ocupacional'];
+    return [];
+  };
+
+  const handleManagerProfessionChange = (val: string) => {
+    let regType = formData.managerRegistrationType;
+    const low = val.toLowerCase();
+    if (low.includes('fisio')) {
+      regType = 'CREFITO';
+    } else if (low.includes('psic')) {
+      regType = 'CRP';
+    } else if (low.includes('médic') || low.includes('medic') || low.includes('psiquiat') || low.includes('pediat')) {
+      regType = 'CRM';
+    } else if (low.includes('fono')) {
+      regType = 'CRFa';
+    } else if (low.includes('nutri')) {
+      regType = 'CRN';
+    } else if (low.includes('terapeuta ocupacional')) {
+      regType = 'CREFITO';
+    }
+    setFormData(prev => ({
+      ...prev,
+      managerProfession: val,
+      managerRegistrationType: regType
+    }));
+  };
+
+  const toggleManagerPracticeArea = (area: string) => {
+    const currentAreas = formData.managerPracticeAreas
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    let updated: string[];
+    if (currentAreas.includes(area)) {
+      updated = currentAreas.filter(a => a !== area);
+    } else {
+      updated = [...currentAreas, area];
+    }
+    setFormData(prev => ({
+      ...prev,
+      managerPracticeAreas: updated.join(', ')
+    }));
+  };
 
   if (!isOpen) return null;
 
@@ -111,7 +229,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         city: formData.city,
         state: formData.state,
         termsAccepted: formData.termsAccepted,
-        privacyAccepted: formData.privacyAccepted
+        privacyAccepted: formData.privacyAccepted,
+        managerProfession: formData.managerProfession,
+        managerPracticeAreas: formData.managerPracticeAreas || undefined,
+        managerRegistrationType: formData.managerProfession !== 'Apenas Gestão / Administrativo' ? formData.managerRegistrationType : undefined,
+        managerRegistrationNumber: formData.managerProfession !== 'Apenas Gestão / Administrativo' ? formData.managerRegistrationNumber : undefined
       });
 
       setSuccessData(data);
@@ -266,6 +388,131 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
                       className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
                     />
+                  </div>
+
+                  {/* Atuação Profissional do Gerenciador / Admin */}
+                  <div className="sm:col-span-2 pt-2 border-t border-slate-100">
+                    <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
+                      Área de Atuação Profissional do Responsável / Gerenciador *
+                    </label>
+                    <p className="text-[11px] text-slate-500 mb-2">
+                      O gerenciador possui duplo papel: gestão administrativa da clínica e atuação nos atendimentos conforme sua profissão.
+                    </p>
+                    <select
+                      value={formData.managerProfession}
+                      onChange={e => handleManagerProfessionChange(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="Fisioterapia">Fisioterapia (Acesso ao ZemdaFisio e Prontuários Fisioterapêuticos)</option>
+                      <option value="Psicologia">Psicologia (Prontuário Psicológico e Evolução)</option>
+                      <option value="Medicina">Medicina / Médico (Prontuário Médico, Prescrições)</option>
+                      <option value="Fonoaudiologia">Fonoaudiologia</option>
+                      <option value="Nutrição">Nutrição</option>
+                      <option value="Terapia Ocupacional">Terapia Ocupacional</option>
+                      <option value="Odontologia">Odontologia</option>
+                      <option value="Apenas Gestão / Administrativo">Apenas Gestão Administrativa (Sem atendimentos clínicos)</option>
+                      <option value="Outro">Outro Profissional da Saúde</option>
+                    </select>
+                  </div>
+
+                  {formData.managerProfession !== 'Apenas Gestão / Administrativo' && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Conselho / Registro Profissional
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: CREFITO, CRM, CRP"
+                          value={formData.managerRegistrationType}
+                          onChange={e => setFormData({ ...formData, managerRegistrationType: e.target.value })}
+                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 uppercase"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Número do Registro
+                        </label>
+                        <div className="relative">
+                          <Award className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Ex: 12345-F / SP"
+                            value={formData.managerRegistrationNumber}
+                            onChange={e => setFormData({ ...formData, managerRegistrationNumber: e.target.value })}
+                            className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700">
+                            Especialidades / Áreas de Atuação
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-medium">Definido no cadastro</span>
+                        </div>
+
+                        {getSuggestionsForProfession(formData.managerProfession).length > 0 && (
+                          <div className="mb-2">
+                            <span className="text-[10px] text-slate-500 font-semibold block mb-1">
+                              Sugestões de especialidades (clique para selecionar):
+                            </span>
+                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-100">
+                              {getSuggestionsForProfession(formData.managerProfession).map(sug => {
+                                const isSelected = formData.managerPracticeAreas
+                                  .split(',')
+                                  .map(s => s.trim().toLowerCase())
+                                  .includes(sug.toLowerCase());
+                                return (
+                                  <button
+                                    key={sug}
+                                    type="button"
+                                    onClick={() => toggleManagerPracticeArea(sug)}
+                                    className={`text-[10px] px-2 py-0.5 rounded-lg font-medium transition-all cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                                        : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+                                    }`}
+                                  >
+                                    {isSelected ? '✓ ' : '+ '}{sug}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <input
+                          type="text"
+                          placeholder="Ex: Traumato-Ortopédica, Fisioterapia Esportiva, Reabilitação"
+                          value={formData.managerPracticeAreas}
+                          onChange={e => setFormData({ ...formData, managerPracticeAreas: e.target.value })}
+                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Informação sobre permissão ZemdaFisio */}
+                  <div className="sm:col-span-2">
+                    {formData.managerProfession.toLowerCase().includes('fisio') ? (
+                      <div className="p-2.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 text-[11px] flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0" />
+                        <span>
+                          <strong>ZemdaFisio Habilitado:</strong> Você terá acesso à gestão administrativa e aos recursos clínicos exclusivos de Fisioterapia e Mapa de Dor Corporal.
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>
+                          <strong>Acesso Administrativo Pleno:</strong> Você gerenciará toda a clínica. O módulo clínico ZemdaFisio permanece restrito aos profissionais fisioterapeutas da equipe.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

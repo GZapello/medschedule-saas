@@ -76,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-fisio',
           label: 'ZemdaFisio (Fisioterapia)',
           icon: Activity,
-          visible: isPhysiotherapist || isClinicAdmin
+          visible: isPhysiotherapist
         },
         { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
       ]

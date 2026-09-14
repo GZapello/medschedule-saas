@@ -30,11 +30,16 @@ import {
   RotateCcw,
   Copy,
   Check,
-  Eye
+  Eye,
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  History
 } from 'lucide-react';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { ReferralModal } from './ReferralModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
+import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
 
 interface QuickConsultationModalProps {
   appointment: {
@@ -61,13 +66,26 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   onClose,
   onFinished
 }) => {
-  const { currentTenant, clientTermLabel } = useAuth();
+  const { currentTenant, clientTermLabel, isPhysiotherapist, currentUser } = useAuth();
   const { showToast } = useToast();
 
   const [loadingPatient, setLoadingPatient] = useState<boolean>(true);
   const [patientData, setPatientData] = useState<any>(null);
   const [allergiesList, setAllergiesList] = useState<any[]>([]);
   const [medicationsList, setMedicationsList] = useState<any[]>([]);
+
+  // ZemdaFisio - Mapa de Dor & Avaliação Fisioterapêutica (Regras 3, 4, 5, 6, 7)
+  const [isAppointmentPhysio, setIsAppointmentPhysio] = useState<boolean>(false);
+  const [zemdaFisioExpanded, setZemdaFisioExpanded] = useState<boolean>(true);
+  const [bodyMapJson, setBodyMapJson] = useState<string>('');
+  const [bodyMapImage, setBodyMapImage] = useState<string>('');
+  const [painScore, setPainScore] = useState<number>(0);
+  const [painLocation, setPainLocation] = useState<string>('');
+  const [painCharacteristics, setPainCharacteristics] = useState<string>('');
+  const [conductsExercises, setConductsExercises] = useState<string>('');
+  const [physioAssessments, setPhysioAssessments] = useState<any[]>([]);
+  const [viewingHistoricalId, setViewingHistoricalId] = useState<string | null>(null);
+  const [savingPhysio, setSavingPhysio] = useState<boolean>(false);
 
   // Campos clínicos
   const [title, setTitle] = useState<string>(
@@ -277,6 +295,83 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     loadPatientDetails();
   }, [appointment.patient_id]);
 
+  // Verifica autorização estrita da área de atuação para exibir ZemdaFisio (Regras 1, 3, 4 e 5)
+  useEffect(() => {
+    async function checkPhysioAuthorization() {
+      // 1. O usuário conectado DEVE ter permissão em Fisioterapia
+      if (!isPhysiotherapist) {
+        setIsAppointmentPhysio(false);
+        return;
+      }
+
+      // 2. Se o usuário logado for o próprio profissional do agendamento
+      if (currentUser && appointment.professional_id && currentUser.id === appointment.professional_id) {
+        setIsAppointmentPhysio(true);
+        return;
+      }
+
+      // 3. Verifica se o serviço ou agendamento é de Fisioterapia
+      const serviceLow = (appointment.service_name || '').toLowerCase();
+      if (serviceLow.includes('fisio') || serviceLow.includes('reabilita')) {
+        setIsAppointmentPhysio(true);
+        return;
+      }
+
+      // 4. Se houver profissional do agendamento, verifica a especialidade/área dele
+      if (appointment.professional_id) {
+        try {
+          const prof = await ApiClient.get<any>(`/v1/professionals/${appointment.professional_id}`);
+          const pArea = (prof.practice_areas || '').toLowerCase();
+          const pType = (prof.registration_type || '').toLowerCase();
+          const pName = (prof.name || '').toLowerCase();
+          if (pArea.includes('fisio') || pType.includes('crefito') || pName.includes('fisio')) {
+            setIsAppointmentPhysio(true);
+          } else {
+            setIsAppointmentPhysio(false);
+          }
+        } catch {
+          setIsAppointmentPhysio(true);
+        }
+      } else {
+        setIsAppointmentPhysio(true);
+      }
+    }
+
+    checkPhysioAuthorization();
+  }, [isPhysiotherapist, appointment.professional_id, appointment.service_name, currentUser]);
+
+  // Carrega histórico de avaliações e mapas de dor do paciente (Regra 7)
+  useEffect(() => {
+    async function loadPhysioAssessments() {
+      if (!isAppointmentPhysio || !appointment.patient_id) return;
+      try {
+        const list = await ApiClient.get<any[]>(`/v1/physiotherapy/assessments/patient/${appointment.patient_id}`);
+        if (Array.isArray(list)) {
+          setPhysioAssessments(list);
+
+          // Se já existe avaliação gravada para este agendamento específico, restaura seus dados
+          const currentAssessment = list.find(a => a.appointment_id === appointment.id);
+          if (currentAssessment) {
+            if (currentAssessment.pain_score !== undefined) setPainScore(currentAssessment.pain_score);
+            if (currentAssessment.pain_location) setPainLocation(currentAssessment.pain_location);
+            if (currentAssessment.pain_characteristics) setPainCharacteristics(currentAssessment.pain_characteristics);
+            if (currentAssessment.conducts_exercises) setConductsExercises(currentAssessment.conducts_exercises);
+            if (currentAssessment.body_map_json) setBodyMapJson(currentAssessment.body_map_json);
+            if (currentAssessment.body_map_image) setBodyMapImage(currentAssessment.body_map_image);
+          } else if (list.length > 0) {
+            // Se for um novo atendimento, podemos carregar a queixa da última sessão como referência sem sobrescrever
+            const latest = list[0];
+            if (latest.pain_location && !painLocation) setPainLocation(latest.pain_location);
+          }
+        }
+      } catch (err) {
+        console.warn('ZemdaFisio: Erro ao carregar avaliações do paciente:', err);
+      }
+    }
+
+    loadPhysioAssessments();
+  }, [isAppointmentPhysio, appointment.patient_id, appointment.id]);
+
   // 2. Restaura rascunho salvo anteriormente do LocalStorage
   useEffect(() => {
     try {
@@ -352,6 +447,42 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     }
   };
 
+  // Salvar Avaliação e Mapa de Dor ZemdaFisio (Regras 6 e 7)
+  const handleSavePhysioData = async () => {
+    try {
+      setSavingPhysio(true);
+      const existingForAppt = physioAssessments.find(a => a.appointment_id === appointment.id);
+
+      const payload = {
+        patientId: appointment.patient_id,
+        appointmentId: appointment.id,
+        professionalId: appointment.professional_id,
+        chiefComplaint: title || `Atendimento de Fisioterapia - ${appointment.service_name || 'Rotina'}`,
+        painScore,
+        painLocation: painLocation.trim() || undefined,
+        painCharacteristics: painCharacteristics.trim() || undefined,
+        conductsExercises: conductsExercises.trim() || undefined,
+        bodyMapJson: bodyMapJson || undefined,
+        bodyMapImage: bodyMapImage || undefined
+      };
+
+      if (existingForAppt) {
+        await ApiClient.put(`/v1/physiotherapy/assessments/${existingForAppt.id}`, payload);
+        showToast('Mapa de dor e condutas ZemdaFisio atualizados com sucesso!', 'success');
+      } else {
+        await ApiClient.post('/v1/physiotherapy/assessments', payload);
+        showToast('Mapa de dor e condutas ZemdaFisio gravados no prontuário!', 'success');
+      }
+
+      const list = await ApiClient.get<any[]>(`/v1/physiotherapy/assessments/patient/${appointment.patient_id}`);
+      setPhysioAssessments(list || []);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar dados do ZemdaFisio', 'error');
+    } finally {
+      setSavingPhysio(false);
+    }
+  };
+
   // 5. Salvar Evolução Direto no Prontuário Eletrônico
   const handleSaveEvolution = async () => {
     if (!clinicalEvolution.trim()) {
@@ -373,6 +504,32 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         technicalNotes: technicalNotes.trim() || null,
         isSealed
       });
+
+      // Sincroniza dados do ZemdaFisio caso preenchidos
+      if (isAppointmentPhysio && (bodyMapJson || painScore > 0 || conductsExercises.trim() || painLocation.trim())) {
+        try {
+          const existingForAppt = physioAssessments.find(a => a.appointment_id === appointment.id);
+          const physioPayload = {
+            patientId: appointment.patient_id,
+            appointmentId: appointment.id,
+            professionalId: appointment.professional_id,
+            chiefComplaint: title || `Atendimento de Fisioterapia`,
+            painScore,
+            painLocation: painLocation.trim() || undefined,
+            painCharacteristics: painCharacteristics.trim() || undefined,
+            conductsExercises: conductsExercises.trim() || undefined,
+            bodyMapJson: bodyMapJson || undefined,
+            bodyMapImage: bodyMapImage || undefined
+          };
+          if (existingForAppt) {
+            await ApiClient.put(`/v1/physiotherapy/assessments/${existingForAppt.id}`, physioPayload);
+          } else {
+            await ApiClient.post('/v1/physiotherapy/assessments', physioPayload);
+          }
+        } catch (e) {
+          console.warn('Erro ao sincronizar avaliação ZemdaFisio:', e);
+        }
+      }
 
       showToast('Evolução clínica gravada com sucesso no prontuário oficial!', 'success');
       // Atualiza status do agendamento para in_progress se ainda estiver scheduled
@@ -846,6 +1003,189 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 Texto salvo continuamente contra perdas acidentais no navegador e recuperável a qualquer momento.
               </p>
             </div>
+
+            {/* ZEMDAFISIO: MÓDULO EXCLUSIVO DE FISIOTERAPIA & MAPA DE DOR (Regras 3, 4, 5, 6, 7) */}
+            {isAppointmentPhysio && (
+              <div className="bg-gradient-to-br from-teal-50/70 via-emerald-50/40 to-slate-50 border-2 border-teal-200/80 rounded-2xl p-5 shadow-xs transition-all">
+                <div className="flex items-center justify-between pb-3 border-b border-teal-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                      <Activity className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-800">ZemdaFisio: Avaliação & Mapa de Dor</h4>
+                        <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                          Exclusivo Fisioterapia
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Mapa anatômico interativo para marcação de queixas álgicas, escala EVA e condutas motoras.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {physioAssessments.length > 0 && (
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={viewingHistoricalId || ''}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setViewingHistoricalId(val || null);
+                            if (val) {
+                              const found = physioAssessments.find(a => a.id === val);
+                              if (found) {
+                                setPainScore(found.pain_score || 0);
+                                setPainLocation(found.pain_location || '');
+                                setPainCharacteristics(found.pain_characteristics || '');
+                                setConductsExercises(found.conducts_exercises || '');
+                                if (found.body_map_json) setBodyMapJson(found.body_map_json);
+                                if (found.body_map_image) setBodyMapImage(found.body_map_image);
+                                showToast(`Carregada sessão anterior de ${found.created_at ? new Date(found.created_at).toLocaleDateString('pt-BR') : ''}`, 'info');
+                              }
+                            }
+                          }}
+                          className="text-xs py-1.5 px-2.5 rounded-xl border border-teal-200 bg-white text-teal-900 font-medium cursor-pointer shadow-2xs"
+                        >
+                          <option value="">Consultar Sessão Anterior ({physioAssessments.length})</option>
+                          {physioAssessments.map((pa, idx) => (
+                            <option key={pa.id} value={pa.id}>
+                              Sessão {physioAssessments.length - idx}: {pa.created_at ? new Date(pa.created_at).toLocaleDateString('pt-BR') : ''} {pa.pain_score ? `(EVA ${pa.pain_score})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setZemdaFisioExpanded(!zemdaFisioExpanded)}
+                      className="p-1.5 rounded-xl text-teal-700 hover:bg-teal-100 transition-colors cursor-pointer"
+                      title={zemdaFisioExpanded ? 'Recolher módulo' : 'Expandir módulo'}
+                    >
+                      {zemdaFisioExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {zemdaFisioExpanded && (
+                  <div className="pt-4 space-y-4">
+                    {/* Escala EVA & Local da Dor */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="md:col-span-1 bg-white p-3 rounded-xl border border-teal-100 shadow-2xs">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-slate-700">Intensidade da Dor (EVA)</label>
+                          <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
+                            painScore === 0 ? 'bg-slate-100 text-slate-600' :
+                            painScore <= 3 ? 'bg-emerald-100 text-emerald-800' :
+                            painScore <= 7 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {painScore} / 10
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="10"
+                          value={painScore}
+                          onChange={e => setPainScore(Number(e.target.value))}
+                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
+                        />
+                        <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-medium">
+                          <span>0 Sem dor</span>
+                          <span>5 Moderada</span>
+                          <span>10 Insuportável</span>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2 bg-white p-3 rounded-xl border border-teal-100 shadow-2xs">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Localização Principal da Queixa / Região
+                        </label>
+                        <input
+                          type="text"
+                          value={painLocation}
+                          onChange={e => setPainLocation(e.target.value)}
+                          placeholder="Ex: Joelho direito compartimento medial, Lombar L4-L5, Trapézio bilateral..."
+                          className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Canvas do Mapa de Dor Corporal */}
+                    <div className="bg-white p-4 rounded-2xl border border-teal-100 shadow-2xs">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-slate-800">Mapa Anatômico de Dor Corporal</span>
+                          <span className="text-[11px] text-slate-500">(Anterior, Posterior e Lateral)</span>
+                        </div>
+                        {viewingHistoricalId && (
+                          <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                            Exibindo sessão histórica
+                          </span>
+                        )}
+                      </div>
+
+                      <BodyPainMapCanvas
+                        initialDataJson={bodyMapJson}
+                        onSave={(dataJson: string, dataImage: string) => {
+                          setBodyMapJson(dataJson);
+                          setBodyMapImage(dataImage);
+                        }}
+                      />
+                    </div>
+
+                    {/* Características e Exercícios / Condutas Prescritas */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Características da Dor & Fatores Agravantes
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={painCharacteristics}
+                          onChange={e => setPainCharacteristics(e.target.value)}
+                          placeholder="Ex: Queimação contínua, piora ao agachar ou descer escadas, melhora com repouso..."
+                          className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 resize-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Condutas Motoras, Exercícios & Recursos Fisioterapêuticos
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={conductsExercises}
+                          onChange={e => setConductsExercises(e.target.value)}
+                          placeholder="Ex: Cinesioterapia ativa-assistida, mobilização Maitland grau II, TENS 100Hz 20min..."
+                          className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 resize-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Botão de Salvar Avaliação Fisioterapêutica */}
+                    <div className="flex items-center justify-between pt-2 border-t border-teal-100/80">
+                      <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-teal-600" />
+                        Marcações anatômicas salvas permanentemente no histórico deste paciente.
+                      </p>
+
+                      <button
+                        type="button"
+                        disabled={savingPhysio}
+                        onClick={handleSavePhysioData}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-teal-900 bg-teal-100 hover:bg-teal-200 border border-teal-300 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
+                        <span>{savingPhysio ? 'Salvando...' : 'Salvar Mapa e Avaliação ZemdaFisio'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Anotações Técnicas / Orientações */}
             <div>

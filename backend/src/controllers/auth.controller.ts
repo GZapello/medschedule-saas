@@ -119,9 +119,9 @@ export class AuthController {
       // Log de auditoria
       logAudit(req, 'USER_LOGIN', 'users', user.id, { email: user.email, role: user.role });
 
-      // Busca dados profissionais se for professional
+      // Busca dados profissionais se for professional ou se o clinic_admin atuar como profissional
       let profDetails: any = null;
-      if (user.role === 'professional') {
+      if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = db.prepare(`
           SELECT 
             p.id as professional_id, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
@@ -133,6 +133,29 @@ export class AuthController {
           LEFT JOIN specialties spec ON spec.id = p.specialty_id
           WHERE p.user_id = ?
         `).get(user.id);
+
+        // Se não houver registro formal em professionals, verifica clinic_users / users
+        if (!profDetails && user.role === 'clinic_admin') {
+          const cu = db.prepare(`
+            SELECT cu.profession_custom, cu.practice_areas, u.profession_name, u.practice_areas as user_practice_areas,
+                   u.registration_type, u.registration_number
+            FROM clinic_users cu
+            LEFT JOIN users u ON u.id = cu.user_id
+            WHERE cu.user_id = ? AND cu.tenant_id = ?
+          `).get(user.id, user.tenant_id) as any;
+
+          if (cu && (cu.profession_custom || cu.profession_name || cu.practice_areas || cu.user_practice_areas)) {
+            const pName = cu.profession_custom || cu.profession_name || '';
+            const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
+            profDetails = {
+              profession_name: pName,
+              profession_slug: pSlug,
+              practice_areas: cu.practice_areas || cu.user_practice_areas,
+              registration_type: cu.registration_type,
+              registration_number: cu.registration_number
+            };
+          }
+        }
       }
 
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
@@ -156,7 +179,8 @@ export class AuthController {
           registrationType: profDetails?.registration_type,
           registrationNumber: profDetails?.registration_number,
           specialtyName: profDetails?.specialty_name,
-          professionalSlug: profDetails?.professional_slug
+          professionalSlug: profDetails?.professional_slug,
+          practiceAreas: profDetails?.practice_areas
         },
         tenant: tenantData
       });
@@ -198,9 +222,9 @@ export class AuthController {
         tenantData = tenantStmt.get(user.tenant_id);
       }
 
-      // Busca dados profissionais se for professional
+      // Busca dados profissionais se for professional ou se o clinic_admin atuar como profissional
       let profDetails: any = null;
-      if (user.role === 'professional') {
+      if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = db.prepare(`
           SELECT 
             p.id as professional_id, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
@@ -212,6 +236,28 @@ export class AuthController {
           LEFT JOIN specialties spec ON spec.id = p.specialty_id
           WHERE p.user_id = ?
         `).get(user.id);
+
+        if (!profDetails && user.role === 'clinic_admin') {
+          const cu = db.prepare(`
+            SELECT cu.profession_custom, cu.practice_areas, u.profession_name, u.practice_areas as user_practice_areas,
+                   u.registration_type, u.registration_number
+            FROM clinic_users cu
+            LEFT JOIN users u ON u.id = cu.user_id
+            WHERE cu.user_id = ? AND cu.tenant_id = ?
+          `).get(user.id, user.tenant_id) as any;
+
+          if (cu && (cu.profession_custom || cu.profession_name || cu.practice_areas || cu.user_practice_areas)) {
+            const pName = cu.profession_custom || cu.profession_name || '';
+            const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
+            profDetails = {
+              profession_name: pName,
+              profession_slug: pSlug,
+              practice_areas: cu.practice_areas || cu.user_practice_areas,
+              registration_type: cu.registration_type,
+              registration_number: cu.registration_number
+            };
+          }
+        }
       }
 
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
@@ -234,7 +280,8 @@ export class AuthController {
           registrationType: profDetails?.registration_type,
           registrationNumber: profDetails?.registration_number,
           specialtyName: profDetails?.specialty_name,
-          professionalSlug: profDetails?.professional_slug
+          professionalSlug: profDetails?.professional_slug,
+          practiceAreas: profDetails?.practice_areas
         },
         tenant: tenantData
       });
@@ -323,10 +370,16 @@ export class AuthController {
 
       // Insere na tabela users como PENDENTE de aprovação pelo gestor
       const insertStmt = db.prepare(`
-        INSERT INTO users (id, tenant_id, name, email, password_hash, role, phone, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+        INSERT INTO users (
+          id, tenant_id, name, email, password_hash, role, phone, status,
+          profession_name, practice_areas, registration_type, registration_number
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
       `);
-      insertStmt.run(userId, tenantId, name, cleanEmail, hashedPassword, userRole, phone || null);
+      insertStmt.run(
+        userId, tenantId, name, cleanEmail, hashedPassword, userRole, phone || null,
+        professionName || null, practiceAreas || null, registrationType || null, registrationNumber || null
+      );
 
       // Insere na tabela clinic_users com a profissão estruturada e áreas de atuação livres
       db.prepare(`
@@ -334,19 +387,20 @@ export class AuthController {
           id, tenant_id, user_id, role, status, is_manager, permissions_json,
           profession_custom, practice_areas, created_at
         )
-        VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, datetime('now'))
       `).run(
         'cu-' + uuidv4().slice(0, 8),
         tenantId,
         userId,
         userRole,
+        userRole === 'clinic_admin' ? 1 : 0,
         defaultPerms,
         professionName || null,
         practiceAreas || null
       );
 
-      // Se for profissional de saúde ou atendimento, registra na tabela professionals com active = 0 (aguardando aprovação)
-      if (userRole === 'professional') {
+      // Se for profissional ou gestor com área de saúde informada, registra na tabela professionals com active = 0 (aguardando aprovação ou ativação)
+      if (userRole === 'professional' || (userRole === 'clinic_admin' && professionName && professionName !== 'Gestor / Administrador')) {
         const profId = 'pro-' + uuidv4().slice(0, 8);
         db.prepare(`
           INSERT INTO professionals (

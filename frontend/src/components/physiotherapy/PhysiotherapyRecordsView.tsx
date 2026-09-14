@@ -24,6 +24,7 @@ import {
   Sparkles,
   ClipboardCheck
 } from 'lucide-react';
+import { BodyPainMapCanvas } from './BodyPainMapCanvas';
 
 export const PhysiotherapyRecordsView: React.FC = () => {
   const { clientTermLabel, currentTenant, currentUser } = useAuth();
@@ -83,6 +84,8 @@ export const PhysiotherapyRecordsView: React.FC = () => {
     treatmentPlan: '',
     conductsExercises: '',
     guidelines: '',
+    bodyMapJson: '',
+    bodyMapImage: '',
     isSealed: false
   });
 
@@ -194,6 +197,8 @@ export const PhysiotherapyRecordsView: React.FC = () => {
         treatmentPlan: '',
         conductsExercises: '',
         guidelines: '',
+        bodyMapJson: '',
+        bodyMapImage: '',
         isSealed: false
       });
       loadPatientPhysioData(selectedPatientId);
@@ -663,6 +668,34 @@ export const PhysiotherapyRecordsView: React.FC = () => {
                         />
                       </div>
                     </div>
+
+                    {/* MAPA CORPORAL DE DOR COM CANETA AMARELA */}
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block border border-amber-500" />
+                          Mapa Corporal Anatômico de Dor (Marcação Visual)
+                        </label>
+                        <span className="text-[11px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                          Caneta Amarela / Círculos
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Clique ou arraste com a caneta amarela sobre a anatomia muscular para registrar os pontos e zonas de dor relatados pelo paciente.
+                      </p>
+                      <BodyPainMapCanvas
+                        initialDataJson={assessmentForm.bodyMapJson}
+                        initialImageDataUrl={assessmentForm.bodyMapImage}
+                        onSave={(dataJson, dataUrl) => {
+                          setAssessmentForm(prev => ({
+                            ...prev,
+                            bodyMapJson: dataJson,
+                            bodyMapImage: dataUrl
+                          }));
+                        }}
+                        height={460}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -1052,9 +1085,30 @@ export const PhysiotherapyRecordsView: React.FC = () => {
 
               <div>
                 <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1">Avaliação da Dor (EVA: {viewingAssessment.pain_score}/10)</h5>
-                <p className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <p className="bg-slate-50 p-3 rounded-xl border border-slate-100 mb-2">
                   Localização: {viewingAssessment.pain_location || 'Não especificada'} | Características: {viewingAssessment.pain_characteristics || 'Não especificadas'}
                 </p>
+
+                {/* Exibição do Mapa Corporal de Dor Gravado */}
+                {(viewingAssessment.body_map_json || viewingAssessment.body_map_image) && (
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 border border-amber-500 inline-block" />
+                        Mapa Corporal Anatômico de Dor Gravado
+                      </span>
+                      <span className="text-[10px] font-semibold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md">
+                        Registro Clínico Permanente
+                      </span>
+                    </div>
+                    <BodyPainMapCanvas
+                      initialDataJson={viewingAssessment.body_map_json}
+                      initialImageDataUrl={viewingAssessment.body_map_image}
+                      readOnly={true}
+                      height={400}
+                    />
+                  </div>
+                )}
               </div>
 
               {viewingAssessment.range_of_motion && (

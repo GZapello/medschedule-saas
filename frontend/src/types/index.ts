@@ -20,6 +20,7 @@ export interface User {
   registrationNumber?: string;
   specialtyName?: string;
   professionalSlug?: string;
+  practiceAreas?: string;
 }
 
 export interface Tenant {
@@ -470,6 +471,8 @@ export interface PhysiotherapyAssessment {
   treatment_plan?: string;
   conducts_exercises?: string;
   guidelines?: string;
+  body_map_json?: string;
+  body_map_image?: string;
   is_sealed: number;
   created_by?: string;
   updated_by?: string;

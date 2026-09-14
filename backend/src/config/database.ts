@@ -117,6 +117,16 @@ export function initializeDatabase(): void {
     addColIfMissing('professionals', 'practice_areas', 'TEXT');
     addColIfMissing('professionals', 'specialty_custom', 'TEXT');
 
+    // Colunas de Mapa Corporal de Dor e Área de Atuação do Gestor
+    addColIfMissing('physiotherapy_assessments', 'body_map_json', 'TEXT');
+    addColIfMissing('physiotherapy_assessments', 'body_map_image', 'TEXT');
+    addColIfMissing('users', 'profession_name', 'TEXT');
+    addColIfMissing('users', 'practice_areas', 'TEXT');
+    addColIfMissing('users', 'registration_type', 'TEXT');
+    addColIfMissing('users', 'registration_number', 'TEXT');
+    addColIfMissing('tenants', 'manager_profession', 'TEXT');
+    addColIfMissing('tenants', 'manager_practice_areas', 'TEXT');
+
     // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
     addColIfMissing('appointments', 'insurance_id', 'TEXT');
     addColIfMissing('appointments', 'referred_from_appointment_id', 'TEXT');

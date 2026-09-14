@@ -78,17 +78,26 @@ export class TenantController {
       const userId = 'usr-' + uuidv4().slice(0, 8);
       const hashedPassword = await hashPassword(password);
 
+      const {
+        managerProfession,
+        managerPracticeAreas,
+        managerRegistrationType,
+        managerRegistrationNumber
+      } = req.body;
+
       // Insere o tenant com status PENDENTE
       const insertTenant = db.prepare(`
         INSERT INTO tenants (
           id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
           city, state, responsible_name, responsible_email, responsible_phone,
+          manager_profession, manager_practice_areas,
           status, onboarding_completed, onboarding_step, manager_confirmed,
           terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
           created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
+          ?, ?,
           'pending', 0, 1, 0,
           1, datetime('now'), 1, datetime('now'),
           datetime('now'), datetime('now')
@@ -108,28 +117,59 @@ export class TenantController {
         state || null,
         responsibleName,
         cleanEmail,
-        phone || null
+        phone || null,
+        managerProfession || null,
+        managerPracticeAreas || null
       );
 
       // Insere o usuário gestor com status PENDENTE e role 'clinic_admin'
       const insertUser = db.prepare(`
         INSERT INTO users (
-          id, tenant_id, name, email, password_hash, role, phone, status, created_at, updated_at
+          id, tenant_id, name, email, password_hash, role, phone, status,
+          profession_name, practice_areas, registration_type, registration_number,
+          created_at, updated_at
         ) VALUES (
-          ?, ?, ?, ?, ?, 'clinic_admin', ?, 'pending', datetime('now'), datetime('now')
+          ?, ?, ?, ?, ?, 'clinic_admin', ?, 'pending',
+          ?, ?, ?, ?,
+          datetime('now'), datetime('now')
         )
       `);
 
-      insertUser.run(userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null);
+      insertUser.run(
+        userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null,
+        managerProfession || null, managerPracticeAreas || null, managerRegistrationType || null, managerRegistrationNumber || null
+      );
 
-      // Associa em clinic_users
+      // Associa em clinic_users com a profissão e área clínica do gestor
       db.prepare(`
         INSERT INTO clinic_users (
-          id, tenant_id, user_id, role, status, is_manager, created_at
+          id, tenant_id, user_id, role, status, is_manager,
+          profession_custom, practice_areas, created_at
         ) VALUES (
-          ?, ?, ?, 'clinic_admin', 'pending', 1, datetime('now')
+          ?, ?, ?, 'clinic_admin', 'pending', 1,
+          ?, ?, datetime('now')
         )
-      `).run('cu-' + uuidv4().slice(0, 8), tenantId, userId);
+      `).run('cu-' + uuidv4().slice(0, 8), tenantId, userId, managerProfession || null, managerPracticeAreas || null);
+
+      // Se o gestor também for profissional de saúde clínico, cria o registro em professionals
+      if (managerProfession && managerProfession !== 'Gestor / Administrador') {
+        const profId = 'pro-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO professionals (
+            id, tenant_id, user_id, name, registration_type, registration_number,
+            practice_areas, bio, active
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(
+          profId,
+          tenantId,
+          userId,
+          responsibleName,
+          managerRegistrationType || 'Registro',
+          managerRegistrationNumber || null,
+          managerPracticeAreas || null,
+          managerPracticeAreas || null
+        );
+      }
 
       logAudit(req, 'REGISTER_CLINIC_REQUEST', 'tenants', tenantId, {
         clinicName,

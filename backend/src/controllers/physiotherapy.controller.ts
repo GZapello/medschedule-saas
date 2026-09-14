@@ -5,28 +5,59 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 
 /**
- * Validação de acesso exclusivo para Fisioterapia (Regra 4 e 5 do Requisito)
- * Apenas profissionais cadastrados como Fisioterapeutas ou Administradores da Clínica
- * têm permissão para acessar e manusear os módulos específicos do ZemdaFisio.
+ * Validação de acesso exclusivo para Fisioterapia (Regras 1, 3, 4, 8)
+ * Bloqueio REAL no backend:
+ * - SuperAdmin: Acesso global de manutenção
+ * - ClinicAdmin: Acesso ao ZemdaFisio SOMENTE SE possuir área de atuação ou profissão em Fisioterapia
+ * - Professional: Acesso SOMENTE SE for Fisioterapeuta
+ * - Outras profissões (médicos, psicólogos, fonoaudiólogos, recepcionistas, etc.): BLOQUEADOS (403)
  */
 export function isPhysiotherapistOrClinicManager(req: Request): boolean {
-  if (!req.user) return false;
-  if (req.user.role === 'superadmin' || req.user.role === 'clinic_admin') return true;
+  if (!req.user || !req.tenantId) return false;
+  if (req.user.role === 'superadmin') return true;
 
-  if (req.user.role === 'professional') {
-    const prof = db.prepare(`
-      SELECT p.id, prof.slug as profession_slug, prof.name as profession_name
-      FROM professionals p
-      LEFT JOIN professions prof ON prof.id = p.profession_id
-      WHERE p.user_id = ? AND p.tenant_id = ?
-    `).get(req.user.userId, req.tenantId) as any;
+  // Busca dados em professionals (se houver cadastro profissional do usuário)
+  const prof = db.prepare(`
+    SELECT p.id, p.practice_areas, prof.slug as profession_slug, prof.name as profession_name
+    FROM professionals p
+    LEFT JOIN professions prof ON prof.id = p.profession_id
+    WHERE p.user_id = ? AND p.tenant_id = ?
+  `).get(req.user.userId, req.tenantId) as any;
 
-    if (!prof) return false;
-
+  if (prof) {
     const slug = (prof.profession_slug || '').toLowerCase();
     const name = (prof.profession_name || '').toLowerCase();
+    const areas = (prof.practice_areas || '').toLowerCase();
+    if (slug.includes('fisio') || name.includes('fisio') || slug.includes('physio') || name.includes('physio') || areas.includes('fisio')) {
+      return true;
+    }
+  }
 
-    return slug.includes('fisio') || name.includes('fisio') || slug.includes('physio') || name.includes('physio');
+  // Se for clinic_admin, verifica se há profissão/área de atuação registrada em users, clinic_users ou tenants
+  if (req.user.role === 'clinic_admin') {
+    const userClinic = db.prepare(`
+      SELECT u.profession_name, u.practice_areas as user_practice_areas,
+             cu.profession_custom, cu.practice_areas as cu_practice_areas,
+             t.manager_profession, t.manager_practice_areas
+      FROM users u
+      LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+      LEFT JOIN tenants t ON t.id = ?
+      WHERE u.id = ?
+    `).get(req.tenantId, req.tenantId, req.user.userId) as any;
+
+    if (userClinic) {
+      const combined = [
+        userClinic.profession_custom,
+        userClinic.cu_practice_areas,
+        userClinic.profession_name,
+        userClinic.user_practice_areas,
+        userClinic.manager_profession,
+        userClinic.manager_practice_areas
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      return combined.includes('fisio') || combined.includes('physio');
+    }
+    return false;
   }
 
   return false;
@@ -144,7 +175,8 @@ export class PhysiotherapyController {
         painScore, painLocation, painCharacteristics, inspectionPalpation,
         rangeOfMotion, muscleStrength, postureBalance, gaitMobility,
         functionalLimitations, specificTests, shortTermGoals, longTermGoals,
-        treatmentPlan, conductsExercises, guidelines, isSealed
+        treatmentPlan, conductsExercises, guidelines, isSealed,
+        bodyMapJson, bodyMapImage
       } = req.body;
 
       if (!patientId || !chiefComplaint) {
@@ -180,6 +212,7 @@ export class PhysiotherapyController {
           range_of_motion, muscle_strength, posture_balance, gait_mobility,
           functional_limitations, specific_tests, short_term_goals, long_term_goals,
           treatment_plan, conducts_exercises, guidelines, is_sealed,
+          body_map_json, body_map_image,
           created_by, updated_by
         ) VALUES (
           ?, ?, ?, ?, ?, ?,
@@ -188,6 +221,7 @@ export class PhysiotherapyController {
           ?, ?, ?, ?,
           ?, ?, ?, ?,
           ?, ?, ?, ?,
+          ?, ?,
           ?, ?
         )
       `).run(
@@ -197,6 +231,8 @@ export class PhysiotherapyController {
         rangeOfMotion || null, muscleStrength || null, postureBalance || null, gaitMobility || null,
         functionalLimitations || null, specificTests || null, shortTermGoals || null, longTermGoals || null,
         treatmentPlan || null, conductsExercises || null, guidelines || null, isSealed ? 1 : 0,
+        bodyMapJson ? (typeof bodyMapJson === 'string' ? bodyMapJson : JSON.stringify(bodyMapJson)) : null,
+        bodyMapImage || null,
         creatorName, creatorName
       );
 
@@ -214,18 +250,21 @@ export class PhysiotherapyController {
       const tenantId = req.tenantId;
 
       if (!isPhysiotherapistOrClinicManager(req)) {
-        res.status(403).json({ error: 'Acesso restrito a fisioterapeutas' });
+        res.status(403).json({
+          error: 'Apenas fisioterapeutas podem atualizar avaliação fisioterapêutica.',
+          code: 'PHYSIOTHERAPY_RESTRICTED'
+        });
         return;
       }
 
-      const existing = db.prepare('SELECT id, is_sealed FROM physiotherapy_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const existing = db.prepare('SELECT * FROM physiotherapy_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
-        res.status(404).json({ error: 'Avaliação fisioterapêutica não encontrada' });
+        res.status(404).json({ error: 'Avaliação não encontrada' });
         return;
       }
 
       if (existing.is_sealed === 1) {
-        res.status(403).json({ error: 'Esta avaliação está lacrada juridicamente e não pode ser editada' });
+        res.status(403).json({ error: 'Esta avaliação está lacrada e não pode ser modificada por exigência ética/legal.' });
         return;
       }
 
@@ -234,7 +273,8 @@ export class PhysiotherapyController {
         painScore, painLocation, painCharacteristics, inspectionPalpation,
         rangeOfMotion, muscleStrength, postureBalance, gaitMobility,
         functionalLimitations, specificTests, shortTermGoals, longTermGoals,
-        treatmentPlan, conductsExercises, guidelines, isSealed
+        treatmentPlan, conductsExercises, guidelines, isSealed,
+        bodyMapJson, bodyMapImage
       } = req.body;
 
       const updaterName = req.user?.name || req.user?.email || 'Fisioterapeuta';
@@ -262,6 +302,8 @@ export class PhysiotherapyController {
           treatment_plan = COALESCE(?, treatment_plan),
           conducts_exercises = COALESCE(?, conducts_exercises),
           guidelines = COALESCE(?, guidelines),
+          body_map_json = COALESCE(?, body_map_json),
+          body_map_image = COALESCE(?, body_map_image),
           is_sealed = CASE WHEN ? = 1 THEN 1 ELSE is_sealed END,
           updated_by = ?,
           updated_at = datetime('now')
@@ -273,6 +315,8 @@ export class PhysiotherapyController {
         rangeOfMotion || null, muscleStrength || null, postureBalance || null, gaitMobility || null,
         functionalLimitations || null, specificTests || null, shortTermGoals || null, longTermGoals || null,
         treatmentPlan || null, conductsExercises || null, guidelines || null,
+        bodyMapJson !== undefined ? (typeof bodyMapJson === 'string' ? bodyMapJson : JSON.stringify(bodyMapJson)) : null,
+        bodyMapImage !== undefined ? bodyMapImage : null,
         isSealed ? 1 : 0, updaterName,
         id, tenantId
       );

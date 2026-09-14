@@ -39,7 +39,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   onClose,
   onUpdated
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, isPhysiotherapist } = useAuth();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<
@@ -506,8 +506,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
             { id: 'timeline', label: 'Linha do Tempo 360°', icon: Clock },
             { id: 'allergies_meds', label: 'Alergias & Remédios', icon: AlertTriangle },
             { id: 'records', label: 'Prontuário & Evolução', icon: FileText },
-            ...((currentUser?.role === 'clinic_admin' || currentUser?.role === 'superadmin' ||
-                 (currentUser?.professionSlug || '').includes('fisio') || (currentUser?.professionName || '').toLowerCase().includes('fisio'))
+            ...(isPhysiotherapist
               ? [{ id: 'physiotherapy', label: 'ZemdaFisio', icon: Activity }]
               : []),
             { id: 'anamnesis', label: 'Anamneses', icon: Activity },

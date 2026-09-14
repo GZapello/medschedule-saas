@@ -130,11 +130,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const profSlug = (currentUser?.professionSlug || '').toLowerCase();
   const profName = (currentUser?.professionName || '').toLowerCase();
-  const isPhysiotherapist =
-    isProfessional &&
-    (profSlug.includes('fisio') || profName.includes('fisio') || profSlug.includes('physio') || profName.includes('physio'));
+  const practiceAreas = (currentUser?.practiceAreas || '').toLowerCase();
 
-  // Ambiente ZemdaFisio ativo quando o profissional for fisioterapeuta
+  // Verifica se o usuário tem área de atuação em Fisioterapia (Regras 1, 3 e 4)
+  // Válido tanto para Professional quanto para ClinicAdmin que atua como Fisioterapeuta
+  const hasPhysioArea =
+    profSlug.includes('fisio') ||
+    profName.includes('fisio') ||
+    profSlug.includes('physio') ||
+    profName.includes('physio') ||
+    practiceAreas.includes('fisio') ||
+    practiceAreas.includes('physio');
+
+  const isPhysiotherapist = isSuperAdmin || ((isProfessional || isClinicAdmin) && hasPhysioArea);
+
+  // Ambiente ZemdaFisio ativo EXCLUSIVAMENTE quando o usuário possuir área de atuação em Fisioterapia
   const isZemdaFisio = isPhysiotherapist;
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
