@@ -141,6 +141,9 @@ export function initializeDatabase(): void {
     // Colunas em pacientes para status explícito de alergias
     addColIfMissing('patients', 'allergies_status', "TEXT DEFAULT 'not_informed'");
 
+    // Coluna opcional de CID em exames a receber
+    addColIfMissing('pending_exams', 'cid_code', 'TEXT');
+
     // Criação das novas tabelas clínicas, de convênios, documentos e caixa
     rawDb.exec(`
       CREATE TABLE IF NOT EXISTS patient_allergies (
@@ -736,6 +739,7 @@ export function initializeDatabase(): void {
         received_date TEXT,
         status TEXT NOT NULL DEFAULT 'waiting' CHECK(status IN ('waiting', 'received', 'delayed', 'cancelled')),
         notes TEXT,
+        cid_code TEXT,
         created_by TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),

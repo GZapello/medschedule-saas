@@ -4,21 +4,24 @@ import { useToast } from '../../context/ToastContext';
 import { X, Printer, Download, Eye, CheckCircle2, AlertCircle } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
 
-interface PrintableDocumentModalProps {
-  documentType: 'certificate' | 'prescription' | 'exam_request';
+export interface PrintableDocumentModalProps {
+  documentType: 'certificate' | 'prescription' | 'exam_request' | 'pending_exam';
   documentId: string;
   onClose: () => void;
+  initialAction?: 'view' | 'print' | 'pdf';
 }
 
 export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
   documentType,
   documentId,
-  onClose
+  onClose,
+  initialAction
 }) => {
   const { showToast } = useToast();
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<any>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const triggeredActionRef = useRef<boolean>(false);
 
   useEffect(() => {
     async function loadDocument() {
@@ -27,6 +30,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
         const endpoint =
           documentType === 'certificate' ? `/v1/clinical/certificates/${documentId}` :
           documentType === 'prescription' ? `/v1/clinical/prescriptions/${documentId}` :
+          documentType === 'pending_exam' ? `/v1/pending-exams/${documentId}/document` :
           `/v1/clinical/exam-requests/${documentId}`;
 
         const res = await ApiClient.get<any>(endpoint);
@@ -149,6 +153,17 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
       document.title = originalTitle;
     }, 1000);
   };
+
+  useEffect(() => {
+    if (!loading && data && initialAction && !triggeredActionRef.current) {
+      triggeredActionRef.current = true;
+      if (initialAction === 'print') {
+        setTimeout(() => handlePrint(), 300);
+      } else if (initialAction === 'pdf') {
+        setTimeout(() => handleDownloadPdf(), 300);
+      }
+    }
+  }, [loading, data, initialAction]);
 
   if (loading || !data) {
     return (
@@ -309,17 +324,17 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                 </div>
               )}
 
-              {documentType === 'exam_request' && (
+              {(documentType === 'exam_request' || documentType === 'pending_exam') && (
                 <div className="space-y-4">
                   <p className="font-semibold text-xs text-slate-500 uppercase tracking-wider">
                     Solicito a realização dos seguintes exames laboratoriais / de imagem:
                   </p>
                   <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 whitespace-pre-wrap font-mono text-sm">
-                    {doc.exams_list}
+                    {doc.exams_list || doc.exam_name}
                   </div>
-                  {doc.clinical_indication && (
+                  {(doc.clinical_indication || doc.notes) && (
                     <p className="text-xs text-slate-600">
-                      <strong>Indicação Clínica:</strong> {doc.clinical_indication}
+                      <strong>Indicação Clínica / Observações:</strong> {doc.clinical_indication || doc.notes}
                     </p>
                   )}
                   {doc.cid_code && (
@@ -340,10 +355,12 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
             <div className="pt-16 mt-12 flex flex-col items-center justify-center text-center page-break-inside-avoid">
               <div className="w-72 border-t-2 border-slate-800 mb-2" />
               <strong className="text-slate-900 text-sm">
-                {formatDoctorName(doc.professional_name, doc.professional_gender)}
+                {doc.professional_name ? formatDoctorName(doc.professional_name, doc.professional_gender) : 'Assinatura e Carimbo do Profissional Solicitante'}
               </strong>
               <span className="text-xs text-slate-600 font-medium">
-                {doc.specialty || 'Profissional de Saúde'} • {doc.registration_type || 'CRM'} nº {doc.registration_number || '—'}
+                {doc.professional_name
+                  ? `${doc.specialty || 'Profissional de Saúde'}${doc.registration_number ? ` • ${doc.registration_type || 'CRM'} nº ${doc.registration_number}` : ''}`
+                  : (doc.clinic_name || 'Clínica')}
               </span>
             </div>
           </div>

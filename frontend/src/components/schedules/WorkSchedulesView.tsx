@@ -191,10 +191,11 @@ export const WorkSchedulesView: React.FC = () => {
       if (res.warning) {
         setWarningMessage(res.warning);
         setConflicts(res.conflicts || []);
-        showToast('Escala salva! Conflitos detectados foram preservados com segurança.', 'info');
+        showToast('Horários atualizados com sucesso. Conflitos detectados foram preservados com segurança.', 'info');
       } else {
-        showToast('Escala de trabalho salva com sucesso!', 'success');
+        showToast(res.message || 'Horários atualizados com sucesso.', 'success');
       }
+      loadProfessionalDetails(selectedProfId);
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar horários de trabalho', 'error');
     } finally {

@@ -15,9 +15,13 @@ import {
   User,
   Trash2,
   Edit3,
-  Filter
+  Filter,
+  Eye,
+  Printer,
+  Download
 } from 'lucide-react';
 import { PendingExam, Patient, Professional } from '../../types';
+import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 
 export const PendingExamsView: React.FC = () => {
   const { showToast } = useToast();
@@ -40,6 +44,10 @@ export const PendingExamsView: React.FC = () => {
   const [editingExam, setEditingExam] = useState<PendingExam | null>(null);
   const [receivingExam, setReceivingExam] = useState<PendingExam | null>(null);
 
+  // Modal de Impressão / Documento A4
+  const [printingExamId, setPrintingExamId] = useState<string | null>(null);
+  const [printInitialAction, setPrintInitialAction] = useState<'view' | 'print' | 'pdf'>('view');
+
   // Form states para Novo / Edição
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [selectedProfId, setSelectedProfId] = useState<string>('');
@@ -47,6 +55,7 @@ export const PendingExamsView: React.FC = () => {
   const [requestDate, setRequestDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [expectedDate, setExpectedDate] = useState<string>('');
   const [examNotes, setExamNotes] = useState<string>('');
+  const [cidCode, setCidCode] = useState<string>('');
   const [saving, setSaving] = useState<boolean>(false);
 
   // Form state para Dar Baixa
@@ -101,6 +110,11 @@ export const PendingExamsView: React.FC = () => {
     fetchExams();
   };
 
+  const handleOpenPrintDoc = (examId: string, action: 'view' | 'print' | 'pdf') => {
+    setPrintInitialAction(action);
+    setPrintingExamId(examId);
+  };
+
   const handleCreateExam = async () => {
     if (!selectedPatientId || !examName.trim() || !requestDate) {
       showToast('Preencha o paciente, nome do exame e data de solicitação', 'error');
@@ -114,13 +128,15 @@ export const PendingExamsView: React.FC = () => {
         examName: examName.trim(),
         requestDate,
         expectedDate: expectedDate || null,
-        notes: examNotes || null
+        notes: examNotes || null,
+        cidCode: cidCode.trim() || null
       });
 
       showToast('Exame adicionado ao controle com sucesso!', 'success');
       setShowNewModal(false);
       setExamName('');
       setExamNotes('');
+      setCidCode('');
       setExpectedDate('');
       fetchExams();
     } catch (err: any) {
@@ -139,11 +155,13 @@ export const PendingExamsView: React.FC = () => {
         professionalId: selectedProfId || null,
         requestDate,
         expectedDate: expectedDate || null,
-        notes: examNotes || null
+        notes: examNotes || null,
+        cidCode: cidCode.trim() || null
       });
 
       showToast('Exame atualizado com sucesso!', 'success');
       setEditingExam(null);
+      setCidCode('');
       fetchExams();
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar exame', 'error');
@@ -192,6 +210,7 @@ export const PendingExamsView: React.FC = () => {
     setRequestDate(exam.request_date);
     setExpectedDate(exam.expected_date || '');
     setExamNotes(exam.notes || '');
+    setCidCode(exam.cid_code || '');
   };
 
   // Contadores de resumo
@@ -219,6 +238,7 @@ export const PendingExamsView: React.FC = () => {
           onClick={() => {
             setExamName('');
             setExamNotes('');
+            setCidCode('');
             setExpectedDate('');
             setShowNewModal(true);
           }}
@@ -399,7 +419,37 @@ export const PendingExamsView: React.FC = () => {
                         )}
                       </td>
 
-                      <td className="p-4 text-right space-x-1.5">
+                      <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
+                        {/* 1. Visualizar Solicitação de Exame */}
+                        <button
+                          onClick={() => handleOpenPrintDoc(exam.id, 'view')}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg text-[11px] font-semibold transition-all cursor-pointer"
+                          title="Visualizar Solicitação de Exame em folha A4"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-indigo-500" />
+                          <span className="hidden xl:inline">Visualizar</span>
+                        </button>
+
+                        {/* 2. Imprimir Solicitação de Exame */}
+                        <button
+                          onClick={() => handleOpenPrintDoc(exam.id, 'print')}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-600 hover:text-teal-700 hover:bg-teal-50 border border-slate-200 hover:border-teal-200 rounded-lg text-[11px] font-semibold transition-all cursor-pointer"
+                          title="Imprimir Solicitação de Exame em papel A4"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-teal-600" />
+                          <span className="hidden xl:inline">Imprimir</span>
+                        </button>
+
+                        {/* 3. Baixar PDF */}
+                        <button
+                          onClick={() => handleOpenPrintDoc(exam.id, 'pdf')}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-600 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-lg text-[11px] font-semibold transition-all cursor-pointer"
+                          title="Baixar PDF da Solicitação de Exame"
+                        >
+                          <Download className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="hidden xl:inline">Baixar PDF</span>
+                        </button>
+
                         {!isReceived && (
                           <button
                             onClick={() => {
@@ -504,6 +554,17 @@ export const PendingExamsView: React.FC = () => {
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">CID-10 (Opcional)</label>
+                <input
+                  type="text"
+                  value={cidCode}
+                  onChange={e => setCidCode(e.target.value)}
+                  placeholder="Ex: R10.4, M54.5"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono"
+                />
               </div>
 
               <div>
@@ -653,6 +714,17 @@ export const PendingExamsView: React.FC = () => {
               </div>
 
               <div>
+                <label className="block font-semibold text-slate-700 mb-1">CID-10 (Opcional)</label>
+                <input
+                  type="text"
+                  value={cidCode}
+                  onChange={e => setCidCode(e.target.value)}
+                  placeholder="Ex: R10.4, M54.5"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono"
+                />
+              </div>
+
+              <div>
                 <label className="block font-semibold text-slate-700 mb-1">Observações</label>
                 <textarea
                   rows={2}
@@ -682,6 +754,16 @@ export const PendingExamsView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Impressão / Visualização / PDF */}
+      {printingExamId && (
+        <PrintableDocumentModal
+          documentType="pending_exam"
+          documentId={printingExamId}
+          initialAction={printInitialAction}
+          onClose={() => setPrintingExamId(null)}
+        />
       )}
     </div>
   );

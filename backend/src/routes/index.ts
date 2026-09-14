@@ -405,6 +405,7 @@ api.patch('/v1/support/tickets/:id/status', requireRole('superadmin'), SupportCo
 
 // Exames a Receber
 api.get('/v1/pending-exams', requireTenant, PendingExamController.list);
+api.get('/v1/pending-exams/:id/document', requireTenant, PendingExamController.getDocument);
 api.post('/v1/pending-exams', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), PendingExamController.create);
 api.put('/v1/pending-exams/:id', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), PendingExamController.update);
 api.delete('/v1/pending-exams/:id', requireTenant, requireRole('clinic_admin'), PendingExamController.delete);

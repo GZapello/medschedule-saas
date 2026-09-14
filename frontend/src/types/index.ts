@@ -331,6 +331,7 @@ export interface PendingExam {
   received_date?: string;
   status: 'waiting' | 'received' | 'delayed' | 'cancelled';
   notes?: string;
+  cid_code?: string;
   patient_name?: string;
   patient_phone?: string;
   professional_name?: string;

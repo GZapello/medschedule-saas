@@ -72,7 +72,10 @@ export class ProfessionalController {
         WHERE professional_id = ? AND tenant_id = ?
         ORDER BY day_of_week ASC
       `);
-      const schedules = schedStmt.all(id, tenantId);
+      const schedules = schedStmt.all(id, tenantId).map((s: any) => ({
+        ...s,
+        is_active: Boolean(s.is_active)
+      }));
 
       // Busca bloqueios futuros
       const blockStmt = db.prepare(`
@@ -261,30 +264,59 @@ export class ProfessionalController {
       const tenantId = req.tenantId;
       const { schedules } = req.body; // Array de { day_of_week, start_time, end_time, break_start, break_end, is_active }
 
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
       if (!Array.isArray(schedules)) {
         res.status(400).json({ error: 'Array de horários (schedules) é obrigatório' });
         return;
       }
 
-      // Validação de Conflitos: Busca agendamentos futuros não-cancelados
+      // Verifica se o profissional existe no tenant
+      const prof = db.prepare('SELECT id, user_id FROM professionals WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { id: string; user_id: string } | undefined;
+      if (!prof) {
+        res.status(404).json({ error: 'Profissional não encontrado' });
+        return;
+      }
+
+      // Se for profissional logado, garante que só pode alterar a sua própria grade
+      if (req.user?.role === 'professional' && prof.user_id && prof.user_id !== req.user.userId) {
+        res.status(403).json({ error: 'Você só pode alterar sua própria grade de horários' });
+        return;
+      }
+
+      // Validação de Conflitos: Busca agendamentos futuros não-cancelados com JOIN seguro em patients
       const futureAppts = db.prepare(`
-        SELECT id, patient_name, start_time, end_time
-        FROM appointments
-        WHERE tenant_id = ? AND professional_id = ? AND status NOT IN ('cancelled') AND start_time >= datetime('now')
-        ORDER BY start_time ASC
+        SELECT a.id, COALESCE(p.full_name, 'Paciente') as patient_name, a.start_time, a.end_time
+        FROM appointments a
+        LEFT JOIN patients p ON p.id = a.patient_id
+        WHERE a.tenant_id = ? AND a.professional_id = ? AND a.status NOT IN ('cancelled') AND a.start_time >= datetime('now')
+        ORDER BY a.start_time ASC
       `).all(tenantId, id) as { id: string; patient_name: string; start_time: string; end_time: string }[];
 
       const conflicts: Array<{ appointmentId: string; patientName: string; startTime: string; reason: string }> = [];
 
+      const extractTime = (timeStr: string) => {
+        if (!timeStr) return '';
+        const part = timeStr.includes('T') ? timeStr.split('T')[1] : timeStr.split(' ')[1] || timeStr;
+        return part.slice(0, 5);
+      };
+
       // Verifica se cada consulta futura cabe na nova grade de trabalho
       for (const appt of futureAppts) {
-        const apptDate = new Date(appt.start_time);
-        const dayOfWeek = apptDate.getDay();
-        const apptStartTime = appt.start_time.split('T')[1]?.slice(0, 5) || '';
-        const apptEndTime = appt.end_time.split('T')[1]?.slice(0, 5) || '';
+        if (!appt.start_time || !appt.end_time) continue;
+        const normalizedStart = appt.start_time.includes('T') ? appt.start_time : appt.start_time.replace(' ', 'T');
+        const apptDate = new Date(normalizedStart);
+        const dayOfWeek = isNaN(apptDate.getDay()) ? -1 : apptDate.getDay();
+        if (dayOfWeek === -1) continue;
+
+        const apptStartTime = extractTime(appt.start_time);
+        const apptEndTime = extractTime(appt.end_time);
 
         // Procura se há algum turno ativo no mesmo dia que englobe esse agendamento
-        const activeShiftsForDay = schedules.filter(s => Number(s.day_of_week) === dayOfWeek && s.is_active);
+        const activeShiftsForDay = schedules.filter(s => Number(s.day_of_week) === dayOfWeek && Boolean(s.is_active));
         if (activeShiftsForDay.length === 0) {
           conflicts.push({
             appointmentId: appt.id,
@@ -325,33 +357,41 @@ export class ProfessionalController {
         }
       }
 
-      // Remove horários existentes e insere a nova grade
-      db.prepare('DELETE FROM schedules WHERE professional_id = ? AND tenant_id = ?').run(id, tenantId);
+      // Remove horários existentes e insere a nova grade em transação atômica segura
+      db.exec('BEGIN TRANSACTION');
+      try {
+        db.prepare('DELETE FROM schedules WHERE professional_id = ? AND tenant_id = ?').run(id, tenantId);
 
-      const insertStmt = db.prepare(`
-        INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, break_start, break_end, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+        const insertStmt = db.prepare(`
+          INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, break_start, break_end, is_active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
 
-      for (const s of schedules) {
-        insertStmt.run(
-          `sch-${uuidv4().slice(0, 8)}`,
-          tenantId,
-          id,
-          Number(s.day_of_week),
-          s.start_time || '08:00',
-          s.end_time || '18:00',
-          s.break_start || null,
-          s.break_end || null,
-          s.is_active ? 1 : 0
-        );
+        for (const s of schedules) {
+          insertStmt.run(
+            `sch-${uuidv4().slice(0, 8)}`,
+            tenantId,
+            id,
+            Number(s.day_of_week),
+            s.start_time || '08:00',
+            s.end_time || '18:00',
+            s.break_start || null,
+            s.break_end || null,
+            s.is_active ? 1 : 0
+          );
+        }
+
+        db.exec('COMMIT');
+      } catch (txErr) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
+        throw txErr;
       }
 
       logAudit(req, 'UPDATE_SCHEDULES', 'schedules', id, { totalPeriods: schedules.length, conflictsCount: conflicts.length });
       
       // Responde com sucesso e detalhes de conflito, sem apagar consultas existentes
       res.json({
-        message: 'Grade de horários atualizada com sucesso',
+        message: 'Horários atualizados com sucesso.',
         warning: conflicts.length > 0
           ? `Atenção: Foram encontrados ${conflicts.length} agendamento(s) já marcado(s) fora dos novos horários definidos. As consultas foram preservadas intactas.`
           : undefined,
