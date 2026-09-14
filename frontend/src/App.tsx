@@ -23,6 +23,7 @@ import { SuperAdminView } from './components/superadmin/SuperAdminView';
 import { OnboardingWizardView } from './components/onboarding/OnboardingWizardView';
 import { PublicBookingView } from './components/public-booking/PublicBookingView';
 import { PublicProfessionalBookingView } from './components/public-booking/PublicProfessionalBookingView';
+import { InviteRegisterView } from './components/auth/InviteRegisterView';
 import { WorkSchedulesView } from './components/schedules/WorkSchedulesView';
 import { SupportTicketsView } from './components/support/SupportTicketsView';
 import { PendingExamsView } from './components/exams/PendingExamsView';
@@ -59,6 +60,16 @@ const AppContent: React.FC = () => {
     return match ? match[1] : null;
   };
   const [activeProfSlug, setActiveProfSlug] = useState<string | null>(getInitialProfSlug);
+
+  // Roteamento para convite único de clínica (/convite/:clinicSlug/:token ou /convite/:token)
+  const getInitialInvite = (): { clinicSlug?: string; token: string } | null => {
+    const doubleMatch = window.location.pathname.match(/^\/convite\/([^/]+)\/([^/]+)/);
+    if (doubleMatch) return { clinicSlug: doubleMatch[1], token: doubleMatch[2] };
+    const singleMatch = window.location.pathname.match(/^\/convite\/([^/]+)/);
+    if (singleMatch) return { token: singleMatch[1] };
+    return null;
+  };
+  const [activeInvite, setActiveInvite] = useState<{ clinicSlug?: string; token: string } | null>(getInitialInvite);
 
   const navigateToSeoPage = (slug: string) => {
     if (SEO_PAGES[slug]) {
@@ -192,6 +203,14 @@ const AppContent: React.FC = () => {
 
       const match = window.location.pathname.match(/^\/agendar\/([^/]+)/);
       setActiveProfSlug(match ? match[1] : null);
+
+      const doubleInviteMatch = window.location.pathname.match(/^\/convite\/([^/]+)\/([^/]+)/);
+      if (doubleInviteMatch) {
+        setActiveInvite({ clinicSlug: doubleInviteMatch[1], token: doubleInviteMatch[2] });
+      } else {
+        const singleInviteMatch = window.location.pathname.match(/^\/convite\/([^/]+)/);
+        setActiveInvite(singleInviteMatch ? { token: singleInviteMatch[1] } : null);
+      }
     };
 
     window.addEventListener('android-back-button', handleBackButton);
@@ -275,6 +294,22 @@ const AppContent: React.FC = () => {
           } else {
             setPublicView('landing');
           }
+        }}
+      />
+    );
+  }
+
+  // Se o usuário está acessando link único de convite da clínica (/convite/:clinicSlug/:token ou /convite/:token)
+  if (activeInvite) {
+    return (
+      <InviteRegisterView
+        clinicSlug={activeInvite.clinicSlug}
+        token={activeInvite.token}
+        onBackToLogin={() => {
+          setActiveInvite(null);
+          window.history.pushState(null, '', '/');
+          setPublicView('login');
+          setAuthInitialAction('login');
         }}
       />
     );

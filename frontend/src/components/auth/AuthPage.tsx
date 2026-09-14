@@ -260,14 +260,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           {/* Opções de Cadastro */}
           <div className="pt-2 border-t border-slate-100 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Botão de Solicitação de Acesso a Clínica */}
+              {/* Botão de Acesso por Convite de Clínica */}
               <button
                 type="button"
                 onClick={() => setIsRegisterUserOpen(true)}
                 className="w-full py-2.5 px-3 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs rounded-xl border border-slate-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <UserPlus className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Solicitar Acesso</span>
+                <span>Entrar com Convite</span>
               </button>
 
               {/* Botão de Criação de Nova Clínica */}

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hashPassword } from '../utils/password';
 
@@ -266,16 +267,18 @@ export class StaffController {
       }
 
       const permsJson = JSON.stringify(permissions);
-      db.prepare(`
-        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json)
-        VALUES (?, ?, ?, 'receptionist', 'active', 0, ?)
-        ON CONFLICT(tenant_id, user_id) DO UPDATE SET
-          permissions_json = excluded.permissions_json
-      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, permsJson);
-
-      // Sincroniza flag zemda_fisio_enabled no cadastro profissional (Item 9)
       const zemdaFisioActive = permissions.includes('access_zemda_fisio') ? 1 : 0;
+      db.prepare(`
+        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_fisio_enabled)
+        VALUES (?, ?, ?, 'receptionist', 'active', 0, ?, ?)
+        ON CONFLICT(tenant_id, user_id) DO UPDATE SET
+          permissions_json = excluded.permissions_json,
+          zemda_fisio_enabled = excluded.zemda_fisio_enabled
+      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, permsJson, zemdaFisioActive);
+
+      // Sincroniza flag zemda_fisio_enabled no cadastro profissional e usuários (Item 9)
       db.prepare("UPDATE professionals SET zemda_fisio_enabled = ? WHERE user_id = ? AND tenant_id = ?").run(zemdaFisioActive, id, tenantId);
+      db.prepare("UPDATE users SET zemda_fisio_enabled = ? WHERE id = ? AND tenant_id = ?").run(zemdaFisioActive, id, tenantId);
 
       logAudit(req, 'UPDATE_STAFF_PERMISSIONS', 'users', id, { permissionsCount: permissions.length });
       res.json({ message: 'Permissões do funcionário atualizadas com sucesso' });
@@ -350,6 +353,160 @@ export class StaffController {
     } catch (err: any) {
       console.error('[StaffController.toggleStatus] Erro:', err);
       res.status(500).json({ error: 'Erro ao alterar status do funcionário' });
+    }
+  }
+
+  // =========================================================================
+  // GESTÃO DE CONVITES POR LINK ÚNICO DA CLÍNICA (Itens 14 a 23)
+  // =========================================================================
+
+  /**
+   * Gera um novo link de convite exclusivo e seguro para a clínica.
+   */
+  static async createInvite(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      const userId = req.user?.userId;
+
+      if (!tenantId || !userId) {
+        res.status(400).json({ error: 'Identificação de clínica e usuário obrigatória' });
+        return;
+      }
+
+      const { role = 'professional', validityDays = 7, maxUses = 1 } = req.body;
+
+      // Busca dados do tenant para compor o slug e URL
+      const tenant = db.prepare('SELECT id, name, slug FROM tenants WHERE id = ?').get(tenantId) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      // Gera token seguro e imprevisível de 48 caracteres hexadecimais
+      const token = crypto.randomBytes(24).toString('hex');
+      const inviteId = 'cinv-' + uuidv4().slice(0, 8);
+      const days = Math.max(1, Math.min(Number(validityDays) || 7, 30));
+
+      const insertStmt = db.prepare(`
+        INSERT INTO clinic_invites (
+          id, tenant_id, created_by, token, role, expires_at, status, max_uses, used_count
+        ) VALUES (
+          ?, ?, ?, ?, ?, datetime('now', '+' || ? || ' days'), 'pending', ?, 0
+        )
+      `);
+      insertStmt.run(inviteId, tenantId, userId, token, role, days, Number(maxUses) || 1);
+
+      // Busca o registro recém-criado
+      const createdInvite = db.prepare('SELECT * FROM clinic_invites WHERE id = ?').get(inviteId) as any;
+      const clinicSlug = tenant.slug || tenant.id;
+      const invitePath = `/convite/${clinicSlug}/${token}`;
+
+      logAudit(req, 'CREATE_CLINIC_INVITE', 'clinic_invites', inviteId, {
+        tenantId,
+        role,
+        validityDays: days,
+        expiresAt: createdInvite.expires_at
+      });
+
+      res.status(201).json({
+        message: 'Link de convite gerado com sucesso!',
+        invite: {
+          ...createdInvite,
+          clinicName: tenant.name,
+          clinicSlug,
+          inviteUrl: invitePath
+        }
+      });
+    } catch (err: any) {
+      console.error('[StaffController.createInvite] Erro:', err);
+      res.status(500).json({ error: 'Erro ao gerar link de convite' });
+    }
+  }
+
+  /**
+   * Lista todos os convites da clínica, auto-expirando links vencidos.
+   */
+  static listInvites(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Identificação de clínica obrigatória' });
+        return;
+      }
+
+      // Auto-expira convites vencidos no banco
+      db.prepare(`
+        UPDATE clinic_invites
+        SET status = 'expired', updated_at = datetime('now')
+        WHERE tenant_id = ? AND status = 'pending' AND expires_at < datetime('now')
+      `).run(tenantId);
+
+      const tenant = db.prepare('SELECT id, name, slug FROM tenants WHERE id = ?').get(tenantId) as any;
+      const clinicSlug = tenant?.slug || tenantId;
+
+      const invites = db.prepare(`
+        SELECT 
+          ci.id, ci.tenant_id, ci.created_by, ci.token, ci.role, ci.expires_at,
+          ci.status, ci.max_uses, ci.used_count, ci.used_at, ci.used_by,
+          ci.created_at, ci.updated_at,
+          u.name as creator_name,
+          ub.name as used_by_name
+        FROM clinic_invites ci
+        LEFT JOIN users u ON u.id = ci.created_by
+        LEFT JOIN users ub ON ub.id = ci.used_by
+        WHERE ci.tenant_id = ?
+        ORDER BY ci.created_at DESC
+      `).all(tenantId) as any[];
+
+      const formatted = invites.map(inv => ({
+        ...inv,
+        clinicSlug,
+        inviteUrl: `/convite/${clinicSlug}/${inv.token}`
+      }));
+
+      res.json({ invites: formatted });
+    } catch (err: any) {
+      console.error('[StaffController.listInvites] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar links de convite' });
+    }
+  }
+
+  /**
+   * Cancela um link de convite antes de ser utilizado.
+   */
+  static cancelInvite(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const { id } = req.params;
+
+      if (!tenantId || !id) {
+        res.status(400).json({ error: 'Parâmetros obrigatórios ausentes' });
+        return;
+      }
+
+      const invite = db.prepare('SELECT * FROM clinic_invites WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!invite) {
+        res.status(404).json({ error: 'Convite não encontrado nesta clínica' });
+        return;
+      }
+
+      if (invite.status === 'used') {
+        res.status(400).json({ error: 'Não é possível cancelar um convite que já foi utilizado.' });
+        return;
+      }
+
+      db.prepare(`
+        UPDATE clinic_invites
+        SET status = 'cancelled', updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(id, tenantId);
+
+      logAudit(req, 'CANCEL_CLINIC_INVITE', 'clinic_invites', id, { tenantId });
+
+      res.json({ message: 'Convite cancelado com sucesso' });
+    } catch (err: any) {
+      console.error('[StaffController.cancelInvite] Erro:', err);
+      res.status(500).json({ error: 'Erro ao cancelar convite' });
     }
   }
 }

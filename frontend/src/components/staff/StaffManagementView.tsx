@@ -16,7 +16,13 @@ import {
   Edit3,
   Tag,
   AlertCircle,
-  FileText
+  FileText,
+  Link as LinkIcon,
+  Copy,
+  Plus,
+  Trash2,
+  ShieldCheck,
+  Clock
 } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
 
@@ -112,14 +118,23 @@ const formatDeletionDate = (scheduledAt?: string, deactivatedAt?: string) => {
 };
 
 export const StaffManagementView: React.FC = () => {
-  const { isClinicAdmin } = useAuth();
+  const { isClinicAdmin, reloadSession } = useAuth();
   const { showToast } = useToast();
 
   const [staffList, setStaffList] = useState<any[]>([]);
   const [, setInvites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'inactive'>('active');
+  const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'inactive' | 'invites'>('active');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Convites por link único da clínica (Itens 14 a 23)
+  const [clinicInvites, setClinicInvites] = useState<any[]>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteFormRole, setInviteFormRole] = useState('professional');
+  const [inviteFormDays, setInviteFormDays] = useState(7);
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [recentlyCreatedLink, setRecentlyCreatedLink] = useState<string | null>(null);
 
   // Modais
   const [editingPermissionsUser, setEditingPermissionsUser] = useState<any>(null);
@@ -145,9 +160,63 @@ export const StaffManagementView: React.FC = () => {
     }
   };
 
+  const loadClinicInvites = async () => {
+    try {
+      setLoadingInvites(true);
+      const res = await ApiClient.get<{ invites: any[] }>('/v1/staff/invites');
+      setClinicInvites(res.invites || []);
+    } catch (err) {
+      console.error('Erro ao carregar convites da clínica:', err);
+    } finally {
+      setLoadingInvites(false);
+    }
+  };
+
   useEffect(() => {
     loadStaff();
-  }, []);
+    if (isClinicAdmin) {
+      loadClinicInvites();
+    }
+  }, [isClinicAdmin]);
+
+  const handleCreateInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setGeneratingInvite(true);
+      const res = await ApiClient.post<{ message: string; invite: any }>('/v1/staff/invites', {
+        role: inviteFormRole,
+        validityDays: inviteFormDays,
+        maxUses: 1
+      });
+      showToast(res.message || 'Link gerado com sucesso!', 'success');
+      const origin = window.location.origin;
+      const fullUrl = `${origin}${res.invite.inviteUrl}`;
+      setRecentlyCreatedLink(fullUrl);
+      loadClinicInvites();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao gerar link de convite', 'error');
+    } finally {
+      setGeneratingInvite(false);
+    }
+  };
+
+  const handleCancelInvite = async (inviteId: string) => {
+    if (!window.confirm('Deseja realmente cancelar este link de convite?')) return;
+    try {
+      await ApiClient.delete(`/v1/staff/invites/${inviteId}`);
+      showToast('Convite cancelado com sucesso', 'success');
+      loadClinicInvites();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao cancelar convite', 'error');
+    }
+  };
+
+  const handleCopyLink = (url: string) => {
+    const origin = window.location.origin;
+    const fullUrl = url.startsWith('http') ? url : `${origin}${url}`;
+    navigator.clipboard.writeText(fullUrl);
+    showToast('Link copiado para a área de transferência!', 'success');
+  };
 
   const handleApprove = async (userId: string, name: string) => {
     try {
@@ -222,6 +291,9 @@ export const StaffManagementView: React.FC = () => {
       showToast('Permissões atualizadas com sucesso!', 'success');
       setEditingPermissionsUser(null);
       loadStaff();
+      if (reloadSession) {
+        await reloadSession();
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar permissões', 'error');
     }
@@ -272,11 +344,25 @@ export const StaffManagementView: React.FC = () => {
             Aprove solicitações de novos membros, gerencie funções, áreas de atuação e permissões individuais.
           </p>
         </div>
+
+        {isClinicAdmin && (
+          <button
+            type="button"
+            onClick={() => {
+              setRecentlyCreatedLink(null);
+              setIsInviteModalOpen(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer shrink-0"
+          >
+            <LinkIcon className="w-4 h-4" />
+            <span>Gerar Link de Convite</span>
+          </button>
+        )}
       </div>
 
       {/* Abas e Busca */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-fit text-xs font-bold">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-fit text-xs font-bold flex-wrap">
           <button
             onClick={() => setActiveTab('active')}
             className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
@@ -314,6 +400,20 @@ export const StaffManagementView: React.FC = () => {
           >
             Recusados / Inativos ({inactiveCount})
           </button>
+
+          {isClinicAdmin && (
+            <button
+              onClick={() => setActiveTab('invites')}
+              className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'invites'
+                  ? 'bg-white text-indigo-600 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <LinkIcon className="w-3.5 h-3.5" />
+              Links de Convite ({clinicInvites.filter(i => i.status === 'pending').length})
+            </button>
+          )}
         </div>
 
         <div className="relative w-full sm:w-80">
@@ -532,14 +632,307 @@ export const StaffManagementView: React.FC = () => {
           </div>
         ))}
 
-        {filteredStaff.length === 0 && (
+        {activeTab !== 'invites' && filteredStaff.length === 0 && (
           <div className="col-span-full py-12 text-center text-slate-400 bg-white rounded-3xl border border-slate-100">
             {loading ? 'Carregando equipe...' : 'Nenhum membro encontrado nesta categoria.'}
           </div>
         )}
       </div>
 
+      {/* ========================================================== */}
+      {/* ABA: Links de Convite da Clínica (Itens 14 a 23) */}
+      {/* ========================================================== */}
+      {activeTab === 'invites' && (
+        <div className="space-y-4">
+          <div className="p-4 bg-indigo-50/70 border border-indigo-100 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-start gap-2.5 text-indigo-950">
+              <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Fluxo Seguro de Convites</strong>
+                <p className="text-indigo-800 text-[11px] leading-relaxed">
+                  Novos funcionários não escolhem mais a clínica manualmente na tela aberta de registro. O vínculo acontece através do link único e criptografado gerado abaixo.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setRecentlyCreatedLink(null);
+                setIsInviteModalOpen(true);
+              }}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Novo Link
+            </button>
+          </div>
 
+          <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="p-3.5">Cargo / Papel</th>
+                    <th className="p-3.5">Link de Acesso</th>
+                    <th className="p-3.5">Validade</th>
+                    <th className="p-3.5">Usos</th>
+                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5">Criado em</th>
+                    <th className="p-3.5 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {clinicInvites.map(inv => {
+                    const isExpired = inv.status === 'expired';
+                    const isUsed = inv.status === 'used';
+                    const isCancelled = inv.status === 'cancelled';
+                    const isPending = inv.status === 'pending';
+
+                    return (
+                      <tr key={inv.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="p-3.5 font-bold text-slate-800">
+                          {getRoleLabel(inv.role)}
+                        </td>
+                        <td className="p-3.5">
+                          <div className="flex items-center gap-2 max-w-xs">
+                            <span className="truncate font-mono text-[11px] text-slate-600 bg-slate-100 px-2 py-1 rounded-lg">
+                              {inv.inviteUrl}
+                            </span>
+                            {isPending && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyLink(inv.inviteUrl)}
+                                title="Copiar Link"
+                                className="p-1 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap text-slate-500 text-[11px]">
+                          <div className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>
+                              {new Date(inv.expires_at.replace(' ', 'T') + 'Z').toLocaleDateString('pt-BR')}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap text-[11px]">
+                          <span className="font-semibold">{inv.used_count}</span> de {inv.max_uses}
+                          {inv.used_by_name && (
+                            <span className="block text-[10px] text-slate-400 truncate">
+                              Por: {inv.used_by_name}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
+                          {isPending && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200">
+                              Pendente
+                            </span>
+                          )}
+                          {isUsed && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Utilizado
+                            </span>
+                          )}
+                          {isExpired && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200">
+                              Expirado
+                            </span>
+                          )}
+                          {isCancelled && (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
+                              Cancelado
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap text-slate-400 text-[11px]">
+                          {new Date(inv.created_at.replace(' ', 'T') + 'Z').toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="p-3.5 text-right whitespace-nowrap">
+                          {isPending && (
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyLink(inv.inviteUrl)}
+                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg transition-colors cursor-pointer text-[11px]"
+                              >
+                                Copiar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelInvite(inv.id)}
+                                title="Cancelar link de convite"
+                                className="p-1 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {clinicInvites.length === 0 && (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                {loadingInvites ? 'Carregando links...' : 'Nenhum link de convite gerado até o momento.'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================== */}
+      {/* MODAL 1: Gerar Link de Convite Único da Clínica */}
+      {/* ========================================================== */}
+      {isInviteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-8 border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-extrabold flex items-center gap-2">
+                  <LinkIcon className="w-5 h-5 text-indigo-400" />
+                  Convidar Novo Funcionário
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Gere um link exclusivo e seguro com vínculo inalterável a esta clínica.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInviteModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 text-xs text-left">
+              {recentlyCreatedLink ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
+                    <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block font-bold text-emerald-900">Link de Convite Criado!</strong>
+                      <p className="text-emerald-800 text-[11px] mt-0.5">
+                        Envie o link abaixo para o novo colaborador. Ao acessar, ele completará o cadastro e será vinculado diretamente a esta clínica.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Link Único de Cadastro:</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={recentlyCreatedLink}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-[11px] font-mono text-slate-800 select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCopyLink(recentlyCreatedLink)}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Copiar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setRecentlyCreatedLink(null)}
+                      className="px-4 py-2 font-bold text-slate-600 hover:text-slate-800 cursor-pointer"
+                    >
+                      Gerar Outro Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsInviteModalOpen(false)}
+                      className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-xs cursor-pointer"
+                    >
+                      Concluído
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleCreateInvite} className="space-y-4">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Função Pretendida do Membro *
+                    </label>
+                    <select
+                      value={inviteFormRole}
+                      onChange={e => setInviteFormRole(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium text-xs focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="professional">Profissional de Atendimento / Saúde</option>
+                      <option value="receptionist">Recepcionista / Atendimento</option>
+                      <option value="secretary">Secretária(o)</option>
+                      <option value="financial">Financeiro</option>
+                      <option value="assistant">Auxiliar Administrativo</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Prazo de Validade do Link *
+                    </label>
+                    <select
+                      value={inviteFormDays}
+                      onChange={e => setInviteFormDays(Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium text-xs focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value={3}>3 dias</option>
+                      <option value={7}>7 dias (Padrão recomendado)</option>
+                      <option value={15}>15 dias</option>
+                      <option value={30}>30 dias</option>
+                    </select>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Após o prazo de validade, o link expirará automaticamente e não poderá ser mais utilizado.
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                      Uso Único e Seguro
+                    </span>
+                    <p className="text-[11px] text-slate-500 leading-normal">
+                      Cada link gerado é criptográfico e exclusivo. Assim que o colaborador concluir seu cadastro, o link é invalidado para evitar múltiplos cadastros não autorizados.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setIsInviteModalOpen(false)}
+                      className="px-4 py-2 font-bold text-slate-600 hover:text-slate-800 cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={generatingInvite}
+                      className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md cursor-pointer disabled:opacity-50"
+                    >
+                      {generatingInvite ? 'Gerando Link...' : 'Gerar Link Seguro'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================== */}
       {/* MODAL 2: Editar Cargo, Profissão e Áreas de Atuação */}

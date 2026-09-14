@@ -42,6 +42,22 @@ class SafeDatabase {
       }
     };
   }
+
+  transaction<T extends (...args: any[]) => any>(fn: T): T {
+    return ((...args: any[]) => {
+      rawDb.exec('BEGIN IMMEDIATE;');
+      try {
+        const result = fn(...args);
+        rawDb.exec('COMMIT;');
+        return result;
+      } catch (error) {
+        try {
+          rawDb.exec('ROLLBACK;');
+        } catch (_) {}
+        throw error;
+      }
+    }) as T;
+  }
 }
 
 export const db = new SafeDatabase();
@@ -157,6 +173,8 @@ export function initializeDatabase(): void {
 
     // Liberação explícita do ZemdaFisio no profissional (Item 9)
     addColIfMissing('professionals', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
 
     // Padronização de datas nos agendamentos para conformidade ISO e precisão matemática de slots
     try {
@@ -165,6 +183,30 @@ export function initializeDatabase(): void {
         UPDATE appointments SET end_time = REPLACE(end_time, ' ', 'T') WHERE end_time LIKE '% %';
       `);
     } catch (e) {}
+
+    // Criação da tabela de convites de funcionários por link seguro (Itens 14 a 20)
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS clinic_invites (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL DEFAULT 'professional',
+        expires_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'used', 'expired', 'cancelled')),
+        max_uses INTEGER NOT NULL DEFAULT 1,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        used_at TEXT,
+        used_by TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_clinic_invites_token ON clinic_invites (token);
+      CREATE INDEX IF NOT EXISTS idx_clinic_invites_tenant ON clinic_invites (tenant_id, status);
+    `);
 
     // Criação das novas tabelas clínicas, de convênios, documentos e caixa
     rawDb.exec(`
@@ -958,6 +1000,28 @@ export function initializeDatabase(): void {
       );
       CREATE INDEX IF NOT EXISTS idx_physio_evol_patient ON physiotherapy_evolutions (tenant_id, patient_id, session_date);
       CREATE INDEX IF NOT EXISTS idx_physio_evol_prof ON physiotherapy_evolutions (tenant_id, professional_id);
+
+      -- 8. Links Únicos e Seguros de Convite da Clínica (Itens 14 a 23)
+      CREATE TABLE IF NOT EXISTS clinic_invites (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL DEFAULT 'professional',
+        expires_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'used', 'expired', 'cancelled')),
+        max_uses INTEGER NOT NULL DEFAULT 1,
+        used_count INTEGER NOT NULL DEFAULT 0,
+        used_at TEXT,
+        used_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (used_by) REFERENCES users(id) ON DELETE SET NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_invites_token ON clinic_invites (token);
+      CREATE INDEX IF NOT EXISTS idx_clinic_invites_tenant_status ON clinic_invites (tenant_id, status);
     `);
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);

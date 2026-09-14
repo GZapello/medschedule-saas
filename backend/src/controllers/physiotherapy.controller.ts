@@ -26,24 +26,33 @@ export function isPhysiotherapistOrClinicManager(req: Request): boolean {
 
   // 3. Busca vínculo do usuário na clínica
   const clinicUser = db.prepare(`
-    SELECT cu.role, cu.is_manager, cu.permissions_json, cu.profession_custom, cu.practice_areas as cu_practice_areas,
-           u.profession_name, u.practice_areas as u_practice_areas
+    SELECT cu.role, cu.status as cu_status, cu.is_manager, cu.permissions_json, cu.profession_custom,
+           cu.practice_areas as cu_practice_areas, cu.zemda_fisio_enabled,
+           u.status as u_status, u.profession_name, u.practice_areas as u_practice_areas, u.zemda_fisio_enabled as u_zemda_fisio_enabled
     FROM users u
     LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
     WHERE u.id = ?
   `).get(req.tenantId, req.user.userId) as any;
 
+  if (clinicUser?.u_status === 'inactive' || clinicUser?.u_status === 'blocked' || clinicUser?.cu_status === 'inactive' || clinicUser?.cu_status === 'blocked') {
+    return false;
+  }
+
+  // Busca dados de tenant para profissão do gestor
+  const tenant = db.prepare('SELECT manager_profession, manager_practice_areas FROM tenants WHERE id = ?').get(req.tenantId) as any;
+
   // Busca dados de professional se houver
   const prof = db.prepare(`
-    SELECT p.id, p.practice_areas, p.specialty_custom, p.zemda_fisio_enabled,
+    SELECT p.id, p.profession_id, p.practice_areas, p.specialty_custom, p.zemda_fisio_enabled,
            prof.slug as profession_slug, prof.name as profession_name
     FROM professionals p
     LEFT JOIN professions prof ON prof.id = p.profession_id
     WHERE p.user_id = ? AND p.tenant_id = ?
   `).get(req.user.userId, req.tenantId) as any;
 
-  // 4. Critério 1: Profissão / Área clínica deve ser Fisioterapia
+  // 4. Critério 1: Profissão / Área clínica deve ser Fisioterapia (reconhece prof-fisioterapeuta, prof-fisioterapia e todas as variações)
   const combinedProfessionText = [
+    prof?.profession_id,
     prof?.profession_slug,
     prof?.profession_name,
     prof?.practice_areas,
@@ -51,15 +60,22 @@ export function isPhysiotherapistOrClinicManager(req: Request): boolean {
     clinicUser?.profession_custom,
     clinicUser?.cu_practice_areas,
     clinicUser?.profession_name,
-    clinicUser?.u_practice_areas
+    clinicUser?.u_practice_areas,
+    tenant?.manager_profession,
+    tenant?.manager_practice_areas
   ].filter(Boolean).join(' ').toLowerCase();
 
-  const isPhysioArea = combinedProfessionText.includes('fisio') || combinedProfessionText.includes('physio');
+  const isPhysioArea =
+    prof?.profession_id === 'prof-fisioterapeuta' ||
+    prof?.profession_id === 'prof-fisioterapia' ||
+    combinedProfessionText.includes('fisio') ||
+    combinedProfessionText.includes('physio');
+
   if (!isPhysioArea) {
-    return false; // Não é da área de Fisioterapia -> BLOQUEADO
+    return false; // Não é da área de Fisioterapia -> BLOQUEADO (403)
   }
 
-  // 5. Critério 2: Liberação explícita pelo gestor da clínica (access_zemda_fisio ou zemda_fisio_enabled)
+  // 5. Critério 2: Liberação explícita pelo gestor da clínica (ou é o próprio gerente atuando em fisioterapia)
   let perms: string[] = [];
   try {
     if (clinicUser?.permissions_json) {
@@ -67,9 +83,14 @@ export function isPhysiotherapistOrClinicManager(req: Request): boolean {
     }
   } catch {}
 
+  const isManager = req.user.role === 'clinic_admin' || clinicUser?.is_manager === 1 || clinicUser?.role === 'clinic_admin';
+
   const isAuthorizedByManager =
+    (isManager && isPhysioArea) ||
     perms.includes('access_zemda_fisio') ||
-    Number(prof?.zemda_fisio_enabled) === 1;
+    Number(prof?.zemda_fisio_enabled) === 1 ||
+    Number(clinicUser?.zemda_fisio_enabled) === 1 ||
+    Number(clinicUser?.u_zemda_fisio_enabled) === 1;
 
   return isAuthorizedByManager;
 }

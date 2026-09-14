@@ -58,6 +58,11 @@ api.post('/v1/auth/register', AuthController.register);
 api.post('/v1/public/tenants/register', TenantController.registerPublic);
 api.get('/v1/public/tenants', TenantController.listPublic);
 
+// Validação e Registro via Convite Único da Clínica (Itens 14 a 23)
+api.get('/v1/public/invites/:token', AuthController.validateInvite);
+api.get('/v1/public/invites/:clinicSlug/:token', AuthController.validateInvite);
+api.post('/v1/auth/register-invite', AuthController.registerWithInvite);
+
 // Taxonomia pública (para formulários e página pública)
 api.get('/v1/taxonomy/categories', TaxonomyController.listCategories);
 api.get('/v1/taxonomy/professions', TaxonomyController.listProfessions);
@@ -236,6 +241,9 @@ api.post('/v1/receipts', requireTenant, requireRole('clinic_admin', 'receptionis
 // Gestão de Funcionários e Equipe da Clínica
 api.get('/v1/staff', requireTenant, StaffController.listStaff);
 api.post('/v1/staff/invite', requireTenant, requireRole('clinic_admin'), StaffController.invite);
+api.get('/v1/staff/invites', requireTenant, requireRole('clinic_admin'), StaffController.listInvites);
+api.post('/v1/staff/invites', requireTenant, requireRole('clinic_admin'), StaffController.createInvite);
+api.delete('/v1/staff/invites/:id', requireTenant, requireRole('clinic_admin'), StaffController.cancelInvite);
 api.put('/v1/staff/:id/approve', requireTenant, requireRole('clinic_admin'), StaffController.approve);
 api.put('/v1/staff/:id/reject', requireTenant, requireRole('clinic_admin'), StaffController.reject);
 api.put('/v1/staff/:id/permissions', requireTenant, requireRole('clinic_admin'), StaffController.updatePermissions);

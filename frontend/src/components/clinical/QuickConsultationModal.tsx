@@ -295,50 +295,15 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     loadPatientDetails();
   }, [appointment.patient_id]);
 
-  // Verifica autorização estrita da área de atuação para exibir ZemdaFisio (Regras 1, 3, 4 e 5)
+  // Verifica autorização estrita da área de atuação para exibir ZemdaFisio (Regras 1, 3, 4, 5 e 6)
   useEffect(() => {
-    async function checkPhysioAuthorization() {
-      // 1. O usuário conectado DEVE ter permissão em Fisioterapia
-      if (!isPhysiotherapist) {
-        setIsAppointmentPhysio(false);
-        return;
-      }
-
-      // 2. Se o usuário logado for o próprio profissional do agendamento
-      if (currentUser && appointment.professional_id && currentUser.id === appointment.professional_id) {
-        setIsAppointmentPhysio(true);
-        return;
-      }
-
-      // 3. Verifica se o serviço ou agendamento é de Fisioterapia
-      const serviceLow = (appointment.service_name || '').toLowerCase();
-      if (serviceLow.includes('fisio') || serviceLow.includes('reabilita')) {
-        setIsAppointmentPhysio(true);
-        return;
-      }
-
-      // 4. Se houver profissional do agendamento, verifica a especialidade/área dele
-      if (appointment.professional_id) {
-        try {
-          const prof = await ApiClient.get<any>(`/v1/professionals/${appointment.professional_id}`);
-          const pArea = (prof.practice_areas || '').toLowerCase();
-          const pType = (prof.registration_type || '').toLowerCase();
-          const pName = (prof.name || '').toLowerCase();
-          if (pArea.includes('fisio') || pType.includes('crefito') || pName.includes('fisio')) {
-            setIsAppointmentPhysio(true);
-          } else {
-            setIsAppointmentPhysio(false);
-          }
-        } catch {
-          setIsAppointmentPhysio(true);
-        }
-      } else {
-        setIsAppointmentPhysio(true);
-      }
+    // Se o usuário conectado for fisioterapeuta autorizado, abre DIRETAMENTE o ZemdaFisio
+    if (!isPhysiotherapist) {
+      setIsAppointmentPhysio(false);
+      return;
     }
-
-    checkPhysioAuthorization();
-  }, [isPhysiotherapist, appointment.professional_id, appointment.service_name, currentUser]);
+    setIsAppointmentPhysio(true);
+  }, [isPhysiotherapist]);
 
   // Carrega histórico de avaliações e mapas de dor do paciente (Regra 7)
   useEffect(() => {
@@ -549,6 +514,70 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     }
   };
 
+  // 6. Finalizar Atendimento diretamente com persistência de evolução e ZemdaFisio (Regra 6)
+  const handleFinalizeAttendance = async () => {
+    try {
+      setSavingRecord(true);
+      const sessionDate = appointment.start_time ? appointment.start_time.split('T')[0] : new Date().toISOString().split('T')[0];
+      const finalEvolution = clinicalEvolution.trim() || (isAppointmentPhysio
+        ? `Atendimento fisioterapêutico realizado. Queixa álgica EVA: ${painScore}/10. ${painLocation ? 'Local: ' + painLocation + '.' : ''} ${conductsExercises ? 'Condutas: ' + conductsExercises : ''}`
+        : 'Atendimento concluído.');
+
+      await ApiClient.post('/v1/clinical-records', {
+        patientId: appointment.patient_id,
+        appointmentId: appointment.id,
+        professionalId: appointment.professional_id,
+        sessionDate,
+        title: title.trim() || (isAppointmentPhysio ? 'Atendimento Fisioterapêutico (ZemdaFisio)' : `Consulta de ${appointment.service_name || 'Rotina'}`),
+        clinicalEvolution: finalEvolution,
+        technicalNotes: technicalNotes.trim() || null,
+        isSealed
+      });
+
+      if (isAppointmentPhysio) {
+        try {
+          const existingForAppt = physioAssessments.find(a => a.appointment_id === appointment.id);
+          const physioPayload = {
+            patientId: appointment.patient_id,
+            appointmentId: appointment.id,
+            professionalId: appointment.professional_id,
+            chiefComplaint: title || 'Atendimento de Fisioterapia',
+            painScore,
+            painLocation: painLocation.trim() || undefined,
+            painCharacteristics: painCharacteristics.trim() || undefined,
+            conductsExercises: conductsExercises.trim() || undefined,
+            bodyMapJson: bodyMapJson || undefined,
+            bodyMapImage: bodyMapImage || undefined
+          };
+          if (existingForAppt) {
+            await ApiClient.put(`/v1/physiotherapy/assessments/${existingForAppt.id}`, physioPayload);
+          } else {
+            await ApiClient.post('/v1/physiotherapy/assessments', physioPayload);
+          }
+        } catch (e) {
+          console.warn('Erro ao sincronizar avaliação ZemdaFisio:', e);
+        }
+      }
+
+      // Conclui o agendamento
+      await ApiClient.put(`/v1/appointments/${appointment.id}/status`, {
+        status: 'completed'
+      });
+
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {}
+
+      showToast(isAppointmentPhysio ? 'Atendimento ZemdaFisio finalizado com sucesso!' : 'Atendimento finalizado com sucesso!', 'success');
+      onFinished();
+      onClose();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao finalizar atendimento', 'error');
+    } finally {
+      setSavingRecord(false);
+    }
+  };
+
   // Calcula idade a partir da data de nascimento
   const calculateAge = (birthDateString?: string) => {
     if (!birthDateString) return null;
@@ -585,9 +614,16 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse" />
-              <span className="text-xs font-black tracking-wider uppercase text-teal-400">
-                Atendimento Rápido
+              <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${isAppointmentPhysio ? 'bg-emerald-400' : 'bg-teal-400'}`} />
+              <span className={`text-xs font-black tracking-wider uppercase flex items-center gap-1.5 ${isAppointmentPhysio ? 'text-emerald-400' : 'text-teal-400'}`}>
+                {isAppointmentPhysio ? (
+                  <>
+                    <Activity className="w-4 h-4 text-emerald-400" />
+                    <span>ZemdaFisio — Atendimento Fisioterapêutico</span>
+                  </>
+                ) : (
+                  <span>Atendimento Rápido</span>
+                )}
               </span>
             </div>
             <span className="text-slate-500">•</span>
@@ -1251,14 +1287,36 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               Fechar
             </button>
 
-            <button
-              type="button"
-              onClick={() => setShowFinishModal(true)}
-              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
-            >
-              <span>Finalizar Atendimento</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
+            {isAppointmentPhysio ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFinishModal(true)}
+                  className="px-3.5 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 border border-teal-200 rounded-xl transition-colors cursor-pointer"
+                  title="Emitir atestados, prescrições ou encaminhamentos"
+                >
+                  Documentos / Atestado
+                </button>
+                <button
+                  type="button"
+                  disabled={savingRecord}
+                  onClick={handleFinalizeAttendance}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{savingRecord ? 'Finalizando...' : 'Finalizar Atendimento'}</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowFinishModal(true)}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
+              >
+                <span>Finalizar Atendimento</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 

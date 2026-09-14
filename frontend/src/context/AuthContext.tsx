@@ -8,6 +8,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ user: User; tenant: Tenant | null }>;
+  loginWithToken: (token: string, user: User, tenant?: Tenant | null) => void;
   logout: () => void;
   switchTenant: (tenantId: string) => Promise<void>;
   refreshTenant: () => Promise<void>;
@@ -81,6 +82,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { user: data.user, tenant: data.tenant };
   };
 
+  const loginWithToken = (authToken: string, userData: User, tenantData?: Tenant | null) => {
+    localStorage.setItem('auth_token', authToken);
+    setToken(authToken);
+    setCurrentUser(userData);
+
+    if (tenantData) {
+      localStorage.setItem('active_tenant_id', tenantData.id);
+      setCurrentTenant(tenantData);
+    } else if (userData.tenantId) {
+      localStorage.setItem('active_tenant_id', userData.tenantId);
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('active_tenant_id');
@@ -128,6 +142,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isReceptionist = currentUser?.role === 'receptionist';
   const isPatient = currentUser?.role === 'patient';
 
+  const profId = ((currentUser as any)?.professionId || '').toLowerCase();
   const profSlug = (currentUser?.professionSlug || '').toLowerCase();
   const profName = (currentUser?.professionName || '').toLowerCase();
   const practiceAreas = (currentUser?.practiceAreas || '').toLowerCase();
@@ -135,6 +150,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Verifica se o usuário tem área de atuação em Fisioterapia (Regras 1, 3 e 4)
   // Válido tanto para Professional quanto para ClinicAdmin que atua como Fisioterapeuta
   const hasPhysioArea =
+    profId === 'prof-fisioterapeuta' ||
+    profId === 'prof-fisioterapia' ||
+    profId.includes('fisio') ||
     profSlug.includes('fisio') ||
     profName.includes('fisio') ||
     profSlug.includes('physio') ||
@@ -143,12 +161,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('physio');
 
   const userPermissions = (currentUser as any)?.permissions || [];
-  const isZemdaFisioAuthorized = userPermissions.includes('access_zemda_fisio') || !!(currentUser as any)?.zemdaFisioEnabled;
+  const isZemdaFisioAuthorized =
+    isClinicAdmin ||
+    userPermissions.includes('access_zemda_fisio') ||
+    !!(currentUser as any)?.zemdaFisioEnabled;
 
   // Regra Estrita de Acesso ao ZemdaFisio (Itens 8, 9, 10, 11, 15):
   // 1. Administrador Global NUNCA tem uso clínico do ZemdaFisio
   // 2. Deve pertencer à profissão / área de atuação de Fisioterapia
-  // 3. Deve possuir liberação explícita do gestor da clínica
+  // 3. Deve possuir liberação explícita do gestor da clínica (ou ser o gerente da clínica com a área)
   const isPhysiotherapist = !isSuperAdmin && (isProfessional || isClinicAdmin) && hasPhysioArea && isZemdaFisioAuthorized;
 
   // Ambiente ZemdaFisio ativo EXCLUSIVAMENTE para fisioterapeutas liberados
@@ -164,6 +185,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         token,
         loading,
         login,
+        loginWithToken,
         logout,
         switchTenant,
         refreshTenant,

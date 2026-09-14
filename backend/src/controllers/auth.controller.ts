@@ -125,7 +125,7 @@ export class AuthController {
         profDetails = db.prepare(`
           SELECT 
             p.id as professional_id, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-            p.practice_areas, p.slug as professional_slug,
+            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
@@ -134,25 +134,30 @@ export class AuthController {
           WHERE p.user_id = ?
         `).get(user.id);
 
-        // Se não houver registro formal em professionals, verifica clinic_users / users
+        // Se não houver registro formal em professionals, verifica clinic_users / users / tenant
         if (!profDetails && user.role === 'clinic_admin') {
           const cu = db.prepare(`
-            SELECT cu.profession_custom, cu.practice_areas, u.profession_name, u.practice_areas as user_practice_areas,
+            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled,
+                   u.profession_name, u.practice_areas as user_practice_areas,
                    u.registration_type, u.registration_number
             FROM clinic_users cu
             LEFT JOIN users u ON u.id = cu.user_id
             WHERE cu.user_id = ? AND cu.tenant_id = ?
           `).get(user.id, user.tenant_id) as any;
 
-          if (cu && (cu.profession_custom || cu.profession_name || cu.practice_areas || cu.user_practice_areas)) {
-            const pName = cu.profession_custom || cu.profession_name || '';
+          const pName = cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
+          const pAreas = cu?.practice_areas || cu?.user_practice_areas || tenantData?.manager_practice_areas || '';
+
+          if (pName || pAreas) {
             const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
             profDetails = {
+              profession_id: (pName.toLowerCase().includes('fisio') ? 'prof-fisioterapeuta' : undefined),
               profession_name: pName,
               profession_slug: pSlug,
-              practice_areas: cu.practice_areas || cu.user_practice_areas,
-              registration_type: cu.registration_type,
-              registration_number: cu.registration_number
+              practice_areas: pAreas,
+              registration_type: cu?.registration_type,
+              registration_number: cu?.registration_number,
+              zemda_fisio_enabled: cu?.zemda_fisio_enabled ?? 1
             };
           }
         }
@@ -161,13 +166,37 @@ export class AuthController {
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
 
       let userPermissions: string[] = [];
+      let cuRow: any = null;
       if (user.tenant_id) {
-        const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
       }
-      const zemdaFisioEnabled = userPermissions.includes('access_zemda_fisio') || Number(profDetails?.zemda_fisio_enabled) === 1;
+
+      const checkPhysioText = [
+        profDetails?.profession_id,
+        profDetails?.profession_slug,
+        profDetails?.profession_name,
+        profDetails?.practice_areas,
+        tenantData?.manager_profession,
+        tenantData?.manager_practice_areas
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      const isPhysioUser =
+        profDetails?.profession_id === 'prof-fisioterapeuta' ||
+        profDetails?.profession_id === 'prof-fisioterapia' ||
+        checkPhysioText.includes('fisio') ||
+        checkPhysioText.includes('physio');
+
+      const isManagerUser = user.role === 'clinic_admin';
+
+      const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (
+        isManagerUser ||
+        userPermissions.includes('access_zemda_fisio') ||
+        Number(profDetails?.zemda_fisio_enabled) === 1 ||
+        Number(cuRow?.zemda_fisio_enabled) === 1
+      );
 
       res.json({
         token,
@@ -239,7 +268,7 @@ export class AuthController {
         profDetails = db.prepare(`
           SELECT 
             p.id as professional_id, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-            p.practice_areas, p.slug as professional_slug,
+            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
@@ -250,36 +279,65 @@ export class AuthController {
 
         if (!profDetails && user.role === 'clinic_admin') {
           const cu = db.prepare(`
-            SELECT cu.profession_custom, cu.practice_areas, u.profession_name, u.practice_areas as user_practice_areas,
+            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled,
+                   u.profession_name, u.practice_areas as user_practice_areas,
                    u.registration_type, u.registration_number
             FROM clinic_users cu
             LEFT JOIN users u ON u.id = cu.user_id
             WHERE cu.user_id = ? AND cu.tenant_id = ?
           `).get(user.id, user.tenant_id) as any;
 
-          if (cu && (cu.profession_custom || cu.profession_name || cu.practice_areas || cu.user_practice_areas)) {
-            const pName = cu.profession_custom || cu.profession_name || '';
+          const pName = cu?.profession_custom || cu?.profession_name || tenantData?.manager_profession || '';
+          const pAreas = cu?.practice_areas || cu?.user_practice_areas || tenantData?.manager_practice_areas || '';
+
+          if (pName || pAreas) {
             const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
             profDetails = {
+              profession_id: (pName.toLowerCase().includes('fisio') ? 'prof-fisioterapeuta' : undefined),
               profession_name: pName,
               profession_slug: pSlug,
-              practice_areas: cu.practice_areas || cu.user_practice_areas,
-              registration_type: cu.registration_type,
-              registration_number: cu.registration_number
+              practice_areas: pAreas,
+              registration_type: cu?.registration_type,
+              registration_number: cu?.registration_number,
+              zemda_fisio_enabled: cu?.zemda_fisio_enabled ?? 1
             };
           }
         }
       }
 
       let userPermissions: string[] = [];
+      let cuRow: any = null;
       if (user.tenant_id) {
-        const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
       }
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
-      const zemdaFisioEnabled = userPermissions.includes('access_zemda_fisio') || Number(profDetails?.zemda_fisio_enabled) === 1;
+
+      const checkPhysioText = [
+        profDetails?.profession_id,
+        profDetails?.profession_slug,
+        profDetails?.profession_name,
+        profDetails?.practice_areas,
+        tenantData?.manager_profession,
+        tenantData?.manager_practice_areas
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      const isPhysioUser =
+        profDetails?.profession_id === 'prof-fisioterapeuta' ||
+        profDetails?.profession_id === 'prof-fisioterapia' ||
+        checkPhysioText.includes('fisio') ||
+        checkPhysioText.includes('physio');
+
+      const isManagerUser = user.role === 'clinic_admin';
+
+      const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (
+        isManagerUser ||
+        userPermissions.includes('access_zemda_fisio') ||
+        Number(profDetails?.zemda_fisio_enabled) === 1 ||
+        Number(cuRow?.zemda_fisio_enabled) === 1
+      );
 
       res.json({
         user: {
@@ -558,6 +616,360 @@ export class AuthController {
     } catch (err: any) {
       console.error('[AuthController.updateProfileEmail] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar e-mail' });
+    }
+  }
+
+  // =========================================================================
+  // VALIDAÇÃO E CADASTRO POR CONVITE ÚNICO (Itens 14 a 23)
+  // =========================================================================
+
+  /**
+   * Valida publicamente o token do convite.
+   * Verifica existência, data de expiração, status e contagem de usos.
+   */
+  static async validateInvite(req: Request, res: Response): Promise<void> {
+    try {
+      const tokenParam = req.params.token;
+      const tokenStr = Array.isArray(tokenParam) ? tokenParam[0] : tokenParam;
+      if (!tokenStr || !tokenStr.trim()) {
+        res.status(400).json({ valid: false, error: 'Token de convite não informado' });
+        return;
+      }
+
+      const cleanToken = tokenStr.trim();
+
+      // Busca o convite no banco
+      const invite = db.prepare(`
+        SELECT 
+          ci.id, ci.tenant_id, ci.token, ci.role, ci.expires_at, ci.status,
+          ci.max_uses, ci.used_count, ci.created_at,
+          t.name as clinic_name, t.slug as clinic_slug, t.logo_url as clinic_logo_url, t.status as clinic_status
+        FROM clinic_invites ci
+        JOIN tenants t ON t.id = ci.tenant_id
+        WHERE ci.token = ?
+      `).get(cleanToken) as any;
+
+      if (!invite) {
+        res.status(404).json({
+          valid: false,
+          code: 'INVITE_NOT_FOUND',
+          error: 'Convite não encontrado ou inválido.'
+        });
+        return;
+      }
+
+      // Verifica status da clínica
+      if (invite.clinic_status !== 'active') {
+        res.status(400).json({
+          valid: false,
+          code: 'CLINIC_INACTIVE',
+          error: 'A clínica associada a este convite está inativa ou suspensa.'
+        });
+        return;
+      }
+
+      // Verifica cancelamento
+      if (invite.status === 'cancelled') {
+        res.status(410).json({
+          valid: false,
+          code: 'INVITE_CANCELLED',
+          error: 'Este convite foi cancelado pela clínica.'
+        });
+        return;
+      }
+
+      // Verifica uso prévio
+      if (invite.status === 'used' || (invite.used_count >= invite.max_uses)) {
+        res.status(410).json({
+          valid: false,
+          code: 'INVITE_ALREADY_USED',
+          error: 'Este convite já foi utilizado.'
+        });
+        return;
+      }
+
+      // Verifica expiração
+      const now = new Date();
+      const expiresAt = new Date(invite.expires_at.replace(' ', 'T') + 'Z');
+      if (invite.status === 'expired' || now > expiresAt) {
+        // Atualiza status no banco caso ainda constasse pending
+        if (invite.status === 'pending') {
+          db.prepare("UPDATE clinic_invites SET status = 'expired', updated_at = datetime('now') WHERE id = ?").run(invite.id);
+        }
+        res.status(410).json({
+          valid: false,
+          code: 'INVITE_EXPIRED',
+          error: 'Este convite expirou. Solicite um novo convite à clínica.'
+        });
+        return;
+      }
+
+      res.json({
+        valid: true,
+        tenant: {
+          id: invite.tenant_id,
+          name: invite.clinic_name,
+          slug: invite.clinic_slug,
+          logoUrl: invite.clinic_logo_url
+        },
+        role: invite.role,
+        expiresAt: invite.expires_at
+      });
+    } catch (err: any) {
+      console.error('[AuthController.validateInvite] Erro:', err);
+      res.status(500).json({ valid: false, error: 'Erro ao validar convite' });
+    }
+  }
+
+  /**
+   * Conclui o cadastro do colaborador através do link único do convite.
+   * Cria o usuário vinculado à clínica do convite e invalida o convite.
+   */
+  static async registerWithInvite(req: Request, res: Response): Promise<void> {
+    try {
+      const {
+        token,
+        name,
+        email,
+        password,
+        phone,
+        prefix,
+        professionName,
+        practiceAreas,
+        registrationType,
+        registrationNumber
+      } = req.body;
+
+      if (!token || !token.trim()) {
+        res.status(400).json({ error: 'Token de convite obrigatório' });
+        return;
+      }
+
+      if (!name || !email || !password) {
+        res.status(400).json({ error: 'Nome completo, e-mail e senha são obrigatórios' });
+        return;
+      }
+
+      if (password.trim().length < 6) {
+        res.status(400).json({ error: 'A senha deve possuir pelo menos 6 caracteres' });
+        return;
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanToken = token.trim();
+
+      // Transação atômica para validar o convite e registrar o usuário
+      const transaction = db.transaction(() => {
+        const invite = db.prepare(`
+          SELECT 
+            ci.id, ci.tenant_id, ci.token, ci.role, ci.expires_at, ci.status,
+            ci.max_uses, ci.used_count, t.name as clinic_name, t.status as clinic_status
+          FROM clinic_invites ci
+          JOIN tenants t ON t.id = ci.tenant_id
+          WHERE ci.token = ?
+        `).get(cleanToken) as any;
+
+        if (!invite) {
+          throw new Error('INVITE_NOT_FOUND: Convite não encontrado ou inválido.');
+        }
+
+        if (invite.clinic_status !== 'active') {
+          throw new Error('CLINIC_INACTIVE: A clínica associada a este convite não está ativa.');
+        }
+
+        if (invite.status === 'cancelled') {
+          throw new Error('INVITE_CANCELLED: Este convite foi cancelado pela clínica.');
+        }
+
+        if (invite.status === 'used' || invite.used_count >= invite.max_uses) {
+          throw new Error('INVITE_ALREADY_USED: Este convite já foi utilizado.');
+        }
+
+        // Verifica expiração
+        const now = new Date();
+        const expiresAt = new Date(invite.expires_at.replace(' ', 'T') + 'Z');
+        if (invite.status === 'expired' || now > expiresAt) {
+          db.prepare("UPDATE clinic_invites SET status = 'expired', updated_at = datetime('now') WHERE id = ?").run(invite.id);
+          throw new Error('INVITE_EXPIRED: Este convite expirou. Solicite um novo convite à clínica.');
+        }
+
+        // Verifica se o e-mail já existe
+        const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+        if (existingUser) {
+          throw new Error('EMAIL_EXISTS: Este e-mail já está cadastrado na plataforma.');
+        }
+
+        return invite;
+      });
+
+      let inviteData: any;
+      try {
+        inviteData = transaction();
+      } catch (txErr: any) {
+        const msg = txErr.message || '';
+        if (msg.startsWith('INVITE_EXPIRED:')) {
+          res.status(410).json({ error: 'Este convite expirou. Solicite um novo convite à clínica.' });
+          return;
+        }
+        if (msg.startsWith('INVITE_ALREADY_USED:')) {
+          res.status(410).json({ error: 'Este convite já foi utilizado.' });
+          return;
+        }
+        if (msg.startsWith('INVITE_CANCELLED:')) {
+          res.status(410).json({ error: 'Este convite foi cancelado pela clínica.' });
+          return;
+        }
+        if (msg.startsWith('INVITE_NOT_FOUND:')) {
+          res.status(404).json({ error: 'Convite não encontrado ou inválido.' });
+          return;
+        }
+        if (msg.startsWith('EMAIL_EXISTS:')) {
+          res.status(409).json({ error: 'Este e-mail já está cadastrado na plataforma' });
+          return;
+        }
+        res.status(400).json({ error: msg || 'Erro ao validar convite' });
+        return;
+      }
+
+      const tenantId = inviteData.tenant_id;
+      const hashedPassword = await hashPassword(password);
+      const userId = 'usr-' + uuidv4().slice(0, 8);
+
+      // Mapeamento de cargo
+      let userRole = inviteData.role || 'professional';
+      const profLower = (professionName || '').toLowerCase();
+      if (profLower.includes('médic') || profLower.includes('psic') || profLower.includes('fono') ||
+          profLower.includes('fisio') || profLower.includes('terap') || profLower.includes('nutri') ||
+          profLower.includes('dent') || profLower.includes('enferm') || profLower.includes('biomed') ||
+          profLower.includes('farmac') || profLower.includes('saúde')) {
+        userRole = 'professional';
+      } else if (['receptionist', 'secretary', 'financial', 'assistant'].includes(userRole)) {
+        // mantém role
+      }
+
+      // Permissões padrão
+      const defaultPerms = JSON.stringify([
+        'view_schedule', 'create_appointment', 'create_patient'
+      ]);
+
+      // Monta nome com prefixo de sexo / tratamento se informado (Dr., Dra., etc.)
+      let finalName = name.trim();
+      if (prefix && !finalName.startsWith('Dr.') && !finalName.startsWith('Dra.')) {
+        if (prefix === 'Dra.') finalName = `Dra. ${finalName}`;
+        else if (prefix === 'Dr.') finalName = `Dr. ${finalName}`;
+      }
+
+      // Executa inserções e consome o convite em transação
+      const completeRegister = db.transaction(() => {
+        // 1. users (ativo, já aprovado via convite oficial da clínica)
+        db.prepare(`
+          INSERT INTO users (
+            id, tenant_id, name, email, password_hash, role, phone, status,
+            profession_name, practice_areas, registration_type, registration_number
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+        `).run(
+          userId, tenantId, finalName, cleanEmail, hashedPassword, userRole, phone || null,
+          professionName || null, practiceAreas || null, registrationType || null, registrationNumber || null
+        );
+
+        // 2. clinic_users
+        db.prepare(`
+          INSERT INTO clinic_users (
+            id, tenant_id, user_id, role, status, is_manager, permissions_json,
+            profession_custom, practice_areas, approved_at, approved_by, created_at
+          ) VALUES (?, ?, ?, ?, 'active', 0, ?, ?, ?, datetime('now'), ?, datetime('now'))
+        `).run(
+          'cu-' + uuidv4().slice(0, 8),
+          tenantId,
+          userId,
+          userRole,
+          defaultPerms,
+          professionName || null,
+          practiceAreas || null,
+          inviteData.created_by || 'invite'
+        );
+
+        // 3. professionals (se for professional ou tiver área de saúde)
+        if (userRole === 'professional' || professionName) {
+          const profId = 'pro-' + uuidv4().slice(0, 8);
+          // Gera slug
+          const baseSlug = finalName
+            .toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
+          const finalSlug = `${baseSlug}-${profId.slice(-4)}`;
+
+          db.prepare(`
+            INSERT INTO professionals (
+              id, tenant_id, user_id, name, registration_type, registration_number,
+              practice_areas, bio, slug, active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          `).run(
+            profId,
+            tenantId,
+            userId,
+            finalName,
+            registrationType || 'Registro',
+            registrationNumber || null,
+            practiceAreas || null,
+            practiceAreas || null,
+            finalSlug
+          );
+        }
+
+        // 4. Marca o convite como utilizado (uso único por padrão)
+        const nextUsedCount = inviteData.used_count + 1;
+        const newStatus = nextUsedCount >= inviteData.max_uses ? 'used' : 'pending';
+        db.prepare(`
+          UPDATE clinic_invites
+          SET used_count = ?,
+              status = ?,
+              used_at = datetime('now'),
+              used_by = ?,
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).run(nextUsedCount, newStatus, userId, inviteData.id);
+      });
+
+      completeRegister();
+
+      // Gera token de autenticação
+      const jwtToken = generateToken({
+        userId,
+        tenantId,
+        role: userRole,
+        email: cleanEmail,
+        name: finalName
+      });
+
+      logAudit(req, 'REGISTER_WITH_INVITE', 'users', userId, {
+        tenantId,
+        clinicName: inviteData.clinic_name,
+        inviteId: inviteData.id,
+        role: userRole,
+        email: cleanEmail
+      });
+
+      res.status(201).json({
+        message: `Cadastro concluído com sucesso na clínica ${inviteData.clinic_name}!`,
+        token: jwtToken,
+        user: {
+          id: userId,
+          name: finalName,
+          email: cleanEmail,
+          role: userRole,
+          status: 'active',
+          tenantId
+        },
+        clinic: {
+          id: tenantId,
+          name: inviteData.clinic_name
+        }
+      });
+    } catch (err: any) {
+      console.error('[AuthController.registerWithInvite] Erro:', err);
+      res.status(500).json({ error: 'Erro ao concluir cadastro por convite' });
     }
   }
 }
