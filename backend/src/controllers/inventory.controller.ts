@@ -321,4 +321,19 @@ export class InventoryController {
       res.status(500).json({ error: 'Erro ao listar movimentações' });
     }
   }
+
+  // Desativar / Excluir item de estoque
+  static deleteItem(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenantId;
+
+      db.prepare('UPDATE inventory_items SET active = 0, updated_at = datetime(\'now\') WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+      logAudit(req, 'DELETE_INVENTORY_ITEM', 'inventory_items', id);
+      res.json({ success: true, message: 'Item desativado do estoque com sucesso' });
+    } catch (err: any) {
+      console.error('[InventoryController.deleteItem] Erro:', err);
+      res.status(500).json({ success: false, error: 'Erro ao desativar item de estoque' });
+    }
+  }
 }

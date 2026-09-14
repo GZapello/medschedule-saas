@@ -25,6 +25,20 @@ export const SupportTicketsView: React.FC = () => {
   const { showToast } = useToast();
   const { currentUser, isSuperAdmin, isClinicAdmin } = useAuth();
 
+  if (!isSuperAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+        <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito</h2>
+        <p className="text-sm text-slate-600 mb-4">
+          Você não possui permissão para acessar esta área. O gerenciamento da Central de Chamados é exclusivo para a administração geral da Zemda.
+        </p>
+      </div>
+    );
+  }
+
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);

@@ -30,6 +30,7 @@ import { PendingExamController } from '../controllers/pending-exam.controller';
 import { InventoryController } from '../controllers/inventory.controller';
 import { BudgetController } from '../controllers/budget.controller';
 import { PayrollController } from '../controllers/payroll.controller';
+import { PhysiotherapyController } from '../controllers/physiotherapy.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -287,6 +288,18 @@ api.get('/v1/clinical-records/:id/print', requireTenant, requireRole('clinic_adm
 api.post('/v1/clinical-records', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.create);
 api.put('/v1/clinical-records/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.update);
 
+// ==========================================
+// 8.1 ZEMDAFISIO: PRONTUÁRIO & EVOLUÇÃO FISIOTERAPÊUTICA
+// ==========================================
+api.get('/v1/physiotherapy/assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listAssessmentsByPatient);
+api.get('/v1/physiotherapy/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.getAssessmentById);
+api.post('/v1/physiotherapy/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createAssessment);
+api.put('/v1/physiotherapy/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.updateAssessment);
+
+api.get('/v1/physiotherapy/evolutions/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listEvolutionsByPatient);
+api.post('/v1/physiotherapy/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createEvolution);
+api.put('/v1/physiotherapy/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.updateEvolution);
+
 // Encaminhamentos entre Profissionais da Clínica (Item 6)
 api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);
 api.get('/v1/patients/:id/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.listByPatient);
@@ -382,12 +395,13 @@ api.get('/v1/import/batches', requireTenant, requireRole('clinic_admin'), Import
 api.post('/v1/import/batches/:id/rollback', requireTenant, requireRole('clinic_admin'), ImportController.rollbackBatch);
 api.post('/v1/import/export-custom-docx', requireTenant, ImportController.exportCustomDocx);
 
-// Central de Chamados & Suporte (para qualquer usuário autenticado e SuperAdmin)
-api.get('/v1/support/tickets', SupportController.list);
-api.get('/v1/support/tickets/:id', SupportController.getById);
-api.post('/v1/support/tickets', SupportController.create);
-api.post('/v1/support/tickets/:id/messages', SupportController.addMessage);
-api.put('/v1/support/tickets/:id/status', SupportController.updateStatus);
+// Central de Chamados & Suporte (Exclusivo SuperAdmin / Administrador Global)
+api.get('/v1/support/tickets', requireRole('superadmin'), SupportController.list);
+api.get('/v1/support/tickets/:id', requireRole('superadmin'), SupportController.getById);
+api.post('/v1/support/tickets', requireRole('superadmin'), SupportController.create);
+api.post('/v1/support/tickets/:id/messages', requireRole('superadmin'), SupportController.addMessage);
+api.put('/v1/support/tickets/:id/status', requireRole('superadmin'), SupportController.updateStatus);
+api.patch('/v1/support/tickets/:id/status', requireRole('superadmin'), SupportController.updateStatus);
 
 // Exames a Receber
 api.get('/v1/pending-exams', requireTenant, PendingExamController.list);
@@ -396,9 +410,14 @@ api.put('/v1/pending-exams/:id', requireTenant, requireRole('clinic_admin', 'pro
 api.delete('/v1/pending-exams/:id', requireTenant, requireRole('clinic_admin'), PendingExamController.delete);
 
 // Estoque de Insumos e Produtos (Exclusivo Gerenciador da Clínica)
+api.get('/v1/inventory', requireTenant, requireRole('clinic_admin'), InventoryController.list);
 api.get('/v1/inventory/items', requireTenant, requireRole('clinic_admin'), InventoryController.list);
+api.post('/v1/inventory', requireTenant, requireRole('clinic_admin'), InventoryController.createItem);
 api.post('/v1/inventory/items', requireTenant, requireRole('clinic_admin'), InventoryController.createItem);
+api.put('/v1/inventory/:id', requireTenant, requireRole('clinic_admin'), InventoryController.updateItem);
 api.put('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin'), InventoryController.updateItem);
+api.delete('/v1/inventory/:id', requireTenant, requireRole('clinic_admin'), InventoryController.deleteItem);
+api.delete('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin'), InventoryController.deleteItem);
 api.post('/v1/inventory/movements', requireTenant, requireRole('clinic_admin'), InventoryController.recordMovement);
 api.get('/v1/inventory/movements', requireTenant, requireRole('clinic_admin'), InventoryController.listMovements);
 
@@ -407,13 +426,24 @@ api.get('/v1/budgets', requireTenant, BudgetController.list);
 api.get('/v1/budgets/:id', requireTenant, BudgetController.getById);
 api.post('/v1/budgets', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.create);
 api.put('/v1/budgets/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.updateStatus);
+api.patch('/v1/budgets/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.updateStatus);
 api.post('/v1/budgets/:id/convert-to-inventory', requireTenant, requireRole('clinic_admin'), BudgetController.convertToInventory);
 
-// Pagamentos, Comissões e Salário dos Profissionais (Exclusivo Gerenciador da Clínica)
-api.get('/v1/payrolls', requireTenant, requireRole('clinic_admin'), PayrollController.list);
+// Pagamentos, Comissões e Salário dos Profissionais (Exclusivo Gerenciador da Clínica e visualização do próprio profissional)
+api.get('/v1/payroll', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.list);
+api.get('/v1/payrolls', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.list);
+api.post('/v1/payroll/calculate', requireTenant, requireRole('clinic_admin'), PayrollController.calculate);
 api.post('/v1/payrolls/calculate', requireTenant, requireRole('clinic_admin'), PayrollController.calculate);
+api.post('/v1/payroll', requireTenant, requireRole('clinic_admin'), PayrollController.save);
 api.post('/v1/payrolls', requireTenant, requireRole('clinic_admin'), PayrollController.save);
+api.patch('/v1/payroll/:id/pay', requireTenant, requireRole('clinic_admin'), PayrollController.markPaid);
+api.patch('/v1/payrolls/:id/pay', requireTenant, requireRole('clinic_admin'), PayrollController.markPaid);
+api.put('/v1/payroll/:id/status', requireTenant, requireRole('clinic_admin'), PayrollController.updateStatus);
 api.put('/v1/payrolls/:id/status', requireTenant, requireRole('clinic_admin'), PayrollController.updateStatus);
+api.patch('/v1/payroll/:id/status', requireTenant, requireRole('clinic_admin'), PayrollController.updateStatus);
+api.patch('/v1/payrolls/:id/status', requireTenant, requireRole('clinic_admin'), PayrollController.updateStatus);
+api.delete('/v1/payroll/:id', requireTenant, requireRole('clinic_admin'), PayrollController.delete);
+api.delete('/v1/payrolls/:id', requireTenant, requireRole('clinic_admin'), PayrollController.delete);
 
 // Trilha de Auditoria (LGPD Compliance) — Exclusivo SuperAdmin do SaaS (Item 20)
 api.get('/v1/audit', requireRole('superadmin'), AuditController.list);

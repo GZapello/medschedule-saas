@@ -12,6 +12,14 @@ export interface User {
   tenantId?: string | null;
   status?: string;
   needsOnboarding?: boolean;
+  professionalId?: string;
+  professionId?: string;
+  professionName?: string;
+  professionSlug?: string;
+  registrationType?: string;
+  registrationNumber?: string;
+  specialtyName?: string;
+  professionalSlug?: string;
 }
 
 export interface Tenant {
@@ -432,4 +440,74 @@ export interface ProfessionalPayroll {
   notes?: string;
   created_at: string;
   updated_at: string;
+}
+
+// 6. ZemdaFisio: Prontuário & Avaliação Fisioterapêutica
+export interface PhysiotherapyAssessment {
+  id: string;
+  tenant_id: string;
+  patient_id: string;
+  professional_id: string;
+  appointment_id?: string;
+  specialty_id?: string;
+  chief_complaint: string;
+  hpi?: string;
+  past_medical_history?: string;
+  medical_diagnosis?: string;
+  physio_diagnosis?: string;
+  pain_score: number;
+  pain_location?: string;
+  pain_characteristics?: string;
+  inspection_palpation?: string;
+  range_of_motion?: string;
+  muscle_strength?: string;
+  posture_balance?: string;
+  gait_mobility?: string;
+  functional_limitations?: string;
+  specific_tests?: string;
+  short_term_goals?: string;
+  long_term_goals?: string;
+  treatment_plan?: string;
+  conducts_exercises?: string;
+  guidelines?: string;
+  is_sealed: number;
+  created_by?: string;
+  updated_by?: string;
+  created_at: string;
+  updated_at?: string;
+  professional_name?: string;
+  registration_type?: string;
+  registration_number?: string;
+  specialty_name?: string;
+}
+
+// 7. ZemdaFisio: Evolução de Sessão
+export interface PhysiotherapyEvolution {
+  id: string;
+  tenant_id: string;
+  patient_id: string;
+  professional_id: string;
+  appointment_id?: string;
+  specialty_id?: string;
+  session_date: string;
+  session_time?: string;
+  patient_condition?: string;
+  procedures_performed?: string;
+  exercises_performed?: string;
+  techniques_used?: string;
+  clinical_evolution: string;
+  treatment_response?: string;
+  complications?: string;
+  guidelines?: string;
+  next_session_plan?: string;
+  notes?: string;
+  is_sealed: number;
+  created_by?: string;
+  updated_by?: string;
+  created_at: string;
+  updated_at?: string;
+  professional_name?: string;
+  registration_type?: string;
+  registration_number?: string;
+  specialty_name?: string;
 }

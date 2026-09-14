@@ -5,6 +5,7 @@ import {
   Calendar,
   Users,
   FileText,
+  Activity,
   ClipboardList,
   UserCog,
   CalendarClock,
@@ -55,7 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose
 }) => {
-  const { isSuperAdmin, isClinicAdmin, isProfessional, clientTermLabel } = useAuth();
+  const { isSuperAdmin, isClinicAdmin, isProfessional, isPhysiotherapist, clientTermLabel } = useAuth();
 
   const categories: NavCategory[] = [
     {
@@ -70,6 +71,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'Prontuário & Evolução',
           icon: FileText,
           visible: isClinicAdmin || isProfessional
+        },
+        {
+          id: 'zemda-fisio',
+          label: 'ZemdaFisio (Fisioterapia)',
+          icon: Activity,
+          visible: isPhysiotherapist || isClinicAdmin
         },
         { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
       ]
@@ -108,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Suporte & Sistema',
       items: [
         { id: 'ai-assistant', label: 'Assistente Zemda', icon: Bot, visible: true },
-        { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: true },
+        { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: isSuperAdmin },
         { id: 'import', label: 'Importar Dados', icon: UploadCloud, visible: isClinicAdmin },
         { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isSuperAdmin },
         { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },

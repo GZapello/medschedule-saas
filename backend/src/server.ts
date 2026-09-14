@@ -15,12 +15,30 @@ const PORT = process.env.PORT || 4000;
 // Configurações de Middleware
 app.use(cors({
   origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Requested-With', 'Accept']
 }));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Logger estruturado para monitoramento de rotas de API com medição de latência
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api') || req.url.startsWith('/v1')) {
+    const startTime = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      const tenant = req.headers['x-tenant-id'] || '-';
+      const status = res.statusCode;
+      if (status >= 400) {
+        console.warn(`[API ${req.method}] ${req.originalUrl || req.url} -> Status ${status} (${duration}ms) | Tenant: ${tenant}`);
+      } else if (req.method !== 'GET') {
+        console.log(`[API ${req.method}] ${req.originalUrl || req.url} -> Status ${status} (${duration}ms) | Tenant: ${tenant}`);
+      }
+    });
+  }
+  next();
+});
 
 // Inicializa tabelas e seeds do banco de dados relacional
 initializeDatabase();
@@ -65,6 +83,16 @@ app.get('/v1/health', healthHandler);
 
 // Registra as rotas da API em /api
 app.use('/api', apiRoutes);
+
+// Middleware universal de 404 para chamadas de API: NUNCA retorna HTML, SEMPRE JSON
+app.all(['/api', '/api/*', '/v1', '/v1/*'], (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.status(404).json({
+    success: false,
+    error: `Endpoint ${req.method} ${req.originalUrl || req.url} não encontrado na API Zemda.`,
+    code: 'ROUTE_NOT_FOUND'
+  });
+});
 
 import { renderPreRenderedHtml } from './seo/preRender';
 
@@ -245,7 +273,12 @@ if (possibleFrontendDistPaths.length > 0) {
 // Middleware de tratamento centralizado de erros
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('[Unhandled Error]', err);
-  res.status(500).json({ error: 'Ocorreu um erro interno no servidor', details: err.message });
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.status(err.status || 500).json({
+    success: false,
+    error: err.message || 'Ocorreu um erro interno no servidor',
+    code: err.code || 'INTERNAL_SERVER_ERROR'
+  });
 });
 
 app.listen(PORT, () => {

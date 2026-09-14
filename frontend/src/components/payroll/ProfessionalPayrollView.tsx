@@ -97,7 +97,7 @@ export const ProfessionalPayrollView: React.FC = () => {
         periodMonth
       });
 
-      // Salva os cálculos apurados no banco
+      // Salva os cálculos apurados no banco preservando quitação e ajustes existentes
       if (res.results && res.results.length > 0) {
         for (const r of res.results) {
           await ApiClient.post('/v1/payroll', {
@@ -109,10 +109,12 @@ export const ProfessionalPayrollView: React.FC = () => {
             commissionPercentage: r.commissionPercentage,
             commissionAmount: r.commissionAmount,
             fixedSalary: r.fixedSalary,
-            adjustments: 0,
+            adjustments: Number(r.adjustments || 0),
+            adjustmentNotes: r.adjustmentNotes || undefined,
             totalPayable: r.totalPayable,
             dueDate: r.dueDate,
-            status: 'pending'
+            status: r.status || 'pending',
+            paidDate: r.paidDate || undefined
           });
         }
       }

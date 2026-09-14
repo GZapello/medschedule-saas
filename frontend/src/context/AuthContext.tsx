@@ -17,6 +17,8 @@ interface AuthContextType {
   isProfessional: boolean;
   isReceptionist: boolean;
   isPatient: boolean;
+  isPhysiotherapist: boolean;
+  isZemdaFisio: boolean;
   clientTermLabel: string;
 }
 
@@ -126,6 +128,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isReceptionist = currentUser?.role === 'receptionist';
   const isPatient = currentUser?.role === 'patient';
 
+  const profSlug = (currentUser?.professionSlug || '').toLowerCase();
+  const profName = (currentUser?.professionName || '').toLowerCase();
+  const isPhysiotherapist =
+    isProfessional &&
+    (profSlug.includes('fisio') || profName.includes('fisio') || profSlug.includes('physio') || profName.includes('physio'));
+
+  // Ambiente ZemdaFisio ativo quando o profissional for fisioterapeuta
+  const isZemdaFisio = isPhysiotherapist;
+
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
 
   return (
@@ -145,6 +156,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isProfessional,
         isReceptionist,
         isPatient,
+        isPhysiotherapist,
+        isZemdaFisio,
         clientTermLabel
       }}
     >

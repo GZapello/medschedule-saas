@@ -8,6 +8,7 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { PatientsView } from './components/patients/PatientsView';
 import { ClinicalRecordsView } from './components/clinical/ClinicalRecordsView';
+import { PhysiotherapyRecordsView } from './components/physiotherapy/PhysiotherapyRecordsView';
 import { ProfessionalsView } from './components/professionals/ProfessionalsView';
 import { ServicesView } from './components/services/ServicesView';
 import { FinancialView } from './components/financial/FinancialView';
@@ -37,7 +38,7 @@ import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
 import { QuickAIAssistantShortcut } from './components/ai-copilot/QuickAIAssistantShortcut';
 import { NetworkOfflineModal } from './components/common/NetworkOfflineModal';
 import { UpdateNotificationModal } from './components/common/UpdateNotificationModal';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, AlertCircle } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { currentUser, currentTenant, loading, reloadSession } = useAuth();
@@ -388,6 +389,23 @@ const AppContent: React.FC = () => {
 
           {currentView === 'clinical' && <ClinicalRecordsView />}
 
+          {currentView === 'zemda-fisio' && (
+            (currentUser?.role === 'clinic_admin' || currentUser?.role === 'superadmin' ||
+             (currentUser?.professionSlug || '').includes('fisio') || (currentUser?.professionName || '').toLowerCase().includes('fisio')) ? (
+              <PhysiotherapyRecordsView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Exclusivo ZemdaFisio</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Este módulo é exclusivo para profissionais cadastrados na área de Fisioterapia e administração clínica.
+                </p>
+              </div>
+            )
+          )}
+
           {currentView === 'pending-exams' && <PendingExamsView />}
 
           {currentView === 'professionals' && <ProfessionalsView />}
@@ -412,7 +430,21 @@ const AppContent: React.FC = () => {
 
           {currentView === 'reports' && <ReportsView />}
 
-          {currentView === 'support-tickets' && <SupportTicketsView />}
+          {currentView === 'support-tickets' && (
+            currentUser?.role === 'superadmin' ? (
+              <SupportTicketsView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para acessar esta área. O módulo de Chamados é exclusivo para a administração geral da Zemda.
+                </p>
+              </div>
+            )
+          )}
 
           {currentView === 'import' && <ImportDataView onNavigate={setCurrentView} />}
 

@@ -82,6 +82,24 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, on
   const [registrationType, setRegistrationType] = useState('CRP');
   const [registrationNumber, setRegistrationNumber] = useState('');
 
+  const handleProfessionChange = (val: string) => {
+    setSelectedProfession(val);
+    const low = val.toLowerCase();
+    if (low.includes('fisio')) {
+      setRegistrationType('CREFITO');
+    } else if (low.includes('psic')) {
+      setRegistrationType('CRP');
+    } else if (low.includes('médic') || low.includes('medic') || low.includes('psiquiat') || low.includes('pediat')) {
+      setRegistrationType('CRM');
+    } else if (low.includes('fono')) {
+      setRegistrationType('CRFa');
+    } else if (low.includes('nutri')) {
+      setRegistrationType('CRN');
+    } else if (low.includes('terapeuta ocupacional')) {
+      setRegistrationType('CREFITO');
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       setIsSuccess(false);
@@ -306,7 +324,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, on
                 <Briefcase className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <select
                   value={selectedProfession}
-                  onChange={e => setSelectedProfession(e.target.value)}
+                  onChange={e => handleProfessionChange(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
                 >
                   {PROFESSIONS_LIST.map(p => (

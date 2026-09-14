@@ -30,6 +30,21 @@ export class PayrollController {
       `;
       const params: any[] = [tenantId];
 
+      const user = req.user;
+      if (user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(user.userId, tenantId) as any;
+        if (prof) {
+          query += ' AND py.professional_id = ?';
+          params.push(prof.id);
+        } else {
+          res.json([]);
+          return;
+        }
+      } else if (user?.role !== 'clinic_admin' && user?.role !== 'superadmin') {
+        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
+        return;
+      }
+
       if (periodMonth) {
         query += ' AND py.period_month = ?';
         params.push(periodMonth);
@@ -49,7 +64,7 @@ export class PayrollController {
       res.json(payrolls);
     } catch (err: any) {
       console.error('[PayrollController.list] Erro:', err);
-      res.status(500).json({ error: 'Erro ao listar pagamentos e comissões' });
+      res.status(500).json({ success: false, error: 'Erro ao listar pagamentos e comissões' });
     }
   }
 
@@ -58,13 +73,13 @@ export class PayrollController {
     try {
       const tenantId = req.tenantId;
       if (!tenantId) {
-        res.status(400).json({ error: 'Tenant não informado' });
+        res.status(400).json({ success: false, error: 'Tenant não informado' });
         return;
       }
 
       const { periodMonth, professionalId } = req.body;
       if (!periodMonth) {
-        res.status(400).json({ error: 'Mês de apuração (YYYY-MM) é obrigatório' });
+        res.status(400).json({ success: false, error: 'Mês de apuração (YYYY-MM) é obrigatório' });
         return;
       }
 
@@ -83,7 +98,7 @@ export class PayrollController {
       const results: any[] = [];
 
       for (const p of professionals) {
-        // Busca atendimentos concluídos no mês
+        // Busca atendimentos concluídos/confirmados no mês (exclui cancelados e no-show)
         const apptQuery = `
           SELECT count(a.id) as total_appts, COALESCE(sum(s.price), 0) as total_produced
           FROM appointments a
@@ -91,6 +106,7 @@ export class PayrollController {
           WHERE a.tenant_id = ? 
             AND a.professional_id = ?
             AND a.status IN ('completed', 'confirmed')
+            AND a.status NOT IN ('cancelled', 'no_show')
             AND a.start_time LIKE ?
         `;
         const stats = db.prepare(apptQuery).get(tenantId, p.id, `${periodMonth}%`) as {
@@ -102,15 +118,37 @@ export class PayrollController {
         const produced = stats ? stats.total_produced : 0;
         const remType = p.remuneration_type || 'commission';
         const commPct = p.commission_percentage || 0;
-        const commAmount = (produced * commPct) / 100;
-        const fixedSal = (remType === 'salary' || remType === 'both') ? (p.fixed_salary || 0) : 0;
-        const totalPayable = commAmount + fixedSal;
+
+        // Cálculo estrito e preciso conforme a modalidade contratual
+        let commAmount = 0;
+        let fixedSal = 0;
+        if (remType === 'commission' || remType === 'both') {
+          commAmount = (produced * commPct) / 100;
+        }
+        if (remType === 'salary' || remType === 'both') {
+          fixedSal = p.fixed_salary || 0;
+        }
+
+        // Verifica se já existe registro para preservar quitação ou ajustes existentes
+        const existing = db.prepare(`
+          SELECT id, status, paid_date, adjustments, adjustment_notes
+          FROM professional_payrolls
+          WHERE tenant_id = ? AND professional_id = ? AND period_month = ?
+        `).get(tenantId, p.id, periodMonth) as any;
+
+        const currentAdjustments = existing ? Number(existing.adjustments || 0) : 0;
+        const currentAdjNotes = existing ? existing.adjustment_notes : null;
+        const currentStatus = existing && existing.status === 'paid' ? 'paid' : 'pending';
+        const currentPaidDate = existing ? existing.paid_date : null;
+
+        const totalPayable = Math.max(0, commAmount + fixedSal + currentAdjustments);
 
         // Vencimento previsto baseado no payment_day
         const payDay = p.payment_day || 5;
         const dueDate = `${periodMonth}-${String(payDay).padStart(2, '0')}`;
 
         results.push({
+          id: existing?.id || undefined,
           professionalId: p.id,
           professionalName: p.name,
           periodMonth,
@@ -120,21 +158,24 @@ export class PayrollController {
           commissionPercentage: commPct,
           commissionAmount: commAmount,
           fixedSalary: fixedSal,
-          adjustments: 0,
+          adjustments: currentAdjustments,
+          adjustmentNotes: currentAdjNotes,
           totalPayable,
           dueDate,
-          status: 'pending'
+          paidDate: currentPaidDate,
+          status: currentStatus
         });
       }
 
       res.json({
+        success: true,
         periodMonth,
         calculatedCount: results.length,
         results
       });
     } catch (err: any) {
       console.error('[PayrollController.calculate] Erro:', err);
-      res.status(500).json({ error: 'Erro ao calcular folha de pagamento' });
+      res.status(500).json({ success: false, error: 'Erro ao calcular folha de pagamento' });
     }
   }
 
@@ -234,10 +275,11 @@ export class PayrollController {
       }
 
       logAudit(req, 'SAVE_PAYROLL', 'professional_payrolls', targetId, { professionalId, periodMonth, totalPayable, status });
-      res.json({ id: targetId, message: 'Lançamento de pagamento salvo com sucesso' });
+      const updated = db.prepare('SELECT * FROM professional_payrolls WHERE id = ? AND tenant_id = ?').get(targetId, tenantId);
+      res.json({ success: true, id: targetId, message: 'Lançamento de pagamento salvo com sucesso', payroll: updated });
     } catch (err: any) {
       console.error('[PayrollController.save] Erro:', err);
-      res.status(500).json({ error: 'Erro ao salvar pagamento' });
+      res.status(500).json({ success: false, error: 'Erro ao salvar pagamento' });
     }
   }
 
@@ -250,7 +292,7 @@ export class PayrollController {
 
       const allowed = ['pending', 'paid', 'delayed'];
       if (!allowed.includes(status)) {
-        res.status(400).json({ error: `Status inválido. Permitidos: ${allowed.join(', ')}` });
+        res.status(400).json({ success: false, error: `Status inválido. Permitidos: ${allowed.join(', ')}` });
         return;
       }
 
@@ -265,10 +307,53 @@ export class PayrollController {
       `).run(status, finalPaidDate, id, tenantId);
 
       logAudit(req, 'UPDATE_PAYROLL_STATUS', 'professional_payrolls', id, { status, paidDate: finalPaidDate });
-      res.json({ message: 'Status de pagamento atualizado com sucesso', status, paidDate: finalPaidDate });
+      const updated = db.prepare('SELECT * FROM professional_payrolls WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      res.json({ success: true, message: 'Status de pagamento atualizado com sucesso', status, paidDate: finalPaidDate, payroll: updated });
     } catch (err: any) {
       console.error('[PayrollController.updateStatus] Erro:', err);
-      res.status(500).json({ error: 'Erro ao atualizar status de pagamento' });
+      res.status(500).json({ success: false, error: 'Erro ao atualizar status de pagamento' });
+    }
+  }
+
+  // Baixa direta / Registro de quitação com data e notas
+  static markPaid(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenantId;
+      const { paidDate, notes } = req.body;
+
+      const finalPaidDate = paidDate || new Date().toISOString().split('T')[0];
+
+      db.prepare(`
+        UPDATE professional_payrolls SET
+          status = 'paid',
+          paid_date = ?,
+          notes = COALESCE(?, notes),
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(finalPaidDate, notes || null, id, tenantId);
+
+      logAudit(req, 'MARK_PAYROLL_PAID', 'professional_payrolls', id, { paidDate: finalPaidDate });
+      const updated = db.prepare('SELECT * FROM professional_payrolls WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      res.json({ success: true, message: 'Pagamento registrado com sucesso!', status: 'paid', paidDate: finalPaidDate, payroll: updated });
+    } catch (err: any) {
+      console.error('[PayrollController.markPaid] Erro:', err);
+      res.status(500).json({ success: false, error: 'Erro ao registrar pagamento' });
+    }
+  }
+
+  // Excluir lançamento de folha/pagamento
+  static delete(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenantId;
+
+      db.prepare('DELETE FROM professional_payrolls WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+      logAudit(req, 'DELETE_PAYROLL', 'professional_payrolls', id);
+      res.json({ success: true, message: 'Lançamento de pagamento excluído com sucesso' });
+    } catch (err: any) {
+      console.error('[PayrollController.delete] Erro:', err);
+      res.status(500).json({ success: false, error: 'Erro ao excluir lançamento' });
     }
   }
 }

@@ -43,7 +43,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'timeline' | 'allergies_meds' | 'records' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
+    'overview' | 'timeline' | 'allergies_meds' | 'records' | 'physiotherapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
   >('overview');
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -95,7 +95,27 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   const [showAddInsurance, setShowAddInsurance] = useState<boolean>(false);
   const [newInsurance, setNewInsurance] = useState({ insuranceId: '', cardNumber: '', planName: '', isPrimary: true });
 
-  // Consents state
+  // Physiotherapy state (ZemdaFisio)
+  const [physioAssessments, setPhysioAssessments] = useState<any[]>([]);
+  const [physioEvolutions, setPhysioEvolutions] = useState<any[]>([]);
+  const [loadingPhysio, setLoadingPhysio] = useState<boolean>(false);
+
+  const loadPhysiotherapyData = async () => {
+    try {
+      setLoadingPhysio(true);
+      const [assessRes, evolRes] = await Promise.all([
+        ApiClient.get<any[]>(`/v1/physiotherapy/assessments/patient/${patientId}`),
+        ApiClient.get<any[]>(`/v1/physiotherapy/evolutions/patient/${patientId}`)
+      ]);
+      setPhysioAssessments(assessRes || []);
+      setPhysioEvolutions(evolRes || []);
+    } catch (err) {
+      console.warn('Fisioterapia não disponível para este usuário ou sem registros:', err);
+    } finally {
+      setLoadingPhysio(false);
+    }
+  };
+
   const [consents, setConsents] = useState<any[]>([]);
   const [showNewConsent, setShowNewConsent] = useState<boolean>(false);
   const [consentForm, setConsentForm] = useState({
@@ -204,6 +224,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     if (activeTab === 'timeline') loadTimeline();
     if (activeTab === 'allergies_meds') loadAllergiesAndMeds();
     if (activeTab === 'records') loadRecords();
+    if (activeTab === 'physiotherapy') loadPhysiotherapyData();
     if (activeTab === 'anamnesis') loadAnamnesis();
     if (activeTab === 'exams') loadExams();
     if (activeTab === 'insurances') loadInsurances();
@@ -485,6 +506,10 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
             { id: 'timeline', label: 'Linha do Tempo 360°', icon: Clock },
             { id: 'allergies_meds', label: 'Alergias & Remédios', icon: AlertTriangle },
             { id: 'records', label: 'Prontuário & Evolução', icon: FileText },
+            ...((currentUser?.role === 'clinic_admin' || currentUser?.role === 'superadmin' ||
+                 (currentUser?.professionSlug || '').includes('fisio') || (currentUser?.professionName || '').toLowerCase().includes('fisio'))
+              ? [{ id: 'physiotherapy', label: 'ZemdaFisio', icon: Activity }]
+              : []),
             { id: 'anamnesis', label: 'Anamneses', icon: Activity },
             { id: 'exams', label: 'Exames & Laudos IA', icon: FileUp },
             { id: 'insurances', label: 'Convênios', icon: CreditCard },
@@ -1580,6 +1605,162 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB: ZEMDAFISIO (FISIOTERAPIA) */}
+          {activeTab === 'physiotherapy' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-transparent p-5 rounded-2xl border border-teal-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-teal-950">ZemdaFisio — Prontuário de Fisioterapia</h3>
+                      <span className="bg-teal-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Especializado
+                      </span>
+                    </div>
+                    <p className="text-xs text-teal-700 mt-1">
+                      Avaliações funcionais, escalas de dor (EVA), goniometria, testes musculares e evoluções de sessão deste paciente.
+                    </p>
+                  </div>
+                  <button
+                    onClick={loadPhysiotherapyData}
+                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold text-teal-700 bg-white hover:bg-teal-50 border border-teal-200 rounded-xl transition-all shadow-xs cursor-pointer"
+                  >
+                    Atualizar Dados
+                  </button>
+                </div>
+              </div>
+
+              {/* Avaliações Funcionais */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-teal-600" />
+                    Avaliações Fisioterapêuticas ({physioAssessments.length})
+                  </h4>
+                </div>
+
+                {loadingPhysio ? (
+                  <div className="bg-white p-8 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                    Carregando avaliações de fisioterapia...
+                  </div>
+                ) : physioAssessments.length === 0 ? (
+                  <div className="bg-white p-6 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                    Nenhuma avaliação fisioterapêutica registrada para este paciente. As avaliações são criadas no módulo <strong>ZemdaFisio</strong>.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {physioAssessments.map((item: any) => (
+                      <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 hover:border-teal-300 shadow-xs transition-all space-y-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-teal-600" />
+                            {item.assessment_date ? new Date(item.assessment_date).toLocaleDateString('pt-BR') : 'Data n/d'}
+                          </span>
+                          {item.pain_eva_score !== null && item.pain_eva_score !== undefined && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              Dor EVA: {item.pain_eva_score}/10
+                            </span>
+                          )}
+                        </div>
+
+                        {item.clinical_diagnosis && (
+                          <p className="text-slate-700">
+                            <strong>Diagnóstico Clínico:</strong> {item.clinical_diagnosis}
+                          </p>
+                        )}
+                        {item.physiotherapy_diagnosis && (
+                          <p className="text-teal-900 bg-teal-50/70 p-2 rounded-lg border border-teal-100">
+                            <strong>Diagnóstico Fisioterapêutico:</strong> {item.physiotherapy_diagnosis}
+                          </p>
+                        )}
+                        {item.chief_complaint && (
+                          <p className="text-slate-500 line-clamp-2">
+                            <strong>Queixa Principal:</strong> {item.chief_complaint}
+                          </p>
+                        )}
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                          <span>Profissional: <strong>{item.professional_name || 'Fisioterapeuta'}</strong></span>
+                          <span>CREFITO: {item.crefito_number || '—'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Evoluções de Sessão */}
+              <div className="space-y-3 pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-emerald-600" />
+                    Evoluções de Sessão ({physioEvolutions.length})
+                  </h4>
+                </div>
+
+                {loadingPhysio ? (
+                  <div className="bg-white p-8 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                    Carregando evoluções de sessão...
+                  </div>
+                ) : physioEvolutions.length === 0 ? (
+                  <div className="bg-white p-6 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                    Nenhuma evolução de sessão registrada para este paciente.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {physioEvolutions.map((ev: any) => (
+                      <div key={ev.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2 text-xs">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">
+                              {ev.session_number ? `Sessão #${ev.session_number}` : 'Sessão de Fisioterapia'}
+                            </span>
+                            <span className="text-slate-400 text-[11px]">
+                              {ev.session_date ? new Date(ev.session_date).toLocaleDateString('pt-BR') : '—'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ev.pain_eva_pre !== null && ev.pain_eva_pre !== undefined && (
+                              <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200">
+                                Pré: {ev.pain_eva_pre}/10
+                              </span>
+                            )}
+                            {ev.pain_eva_post !== null && ev.pain_eva_post !== undefined && (
+                              <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200">
+                                Pós: {ev.pain_eva_post}/10
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {ev.subjective_evolution && (
+                          <div className="text-slate-700">
+                            <span className="font-semibold text-slate-900">Relato do Paciente:</span> {ev.subjective_evolution}
+                          </div>
+                        )}
+                        {ev.objective_conduct && (
+                          <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-slate-700">
+                            <span className="font-semibold text-slate-900">Conduta Aplicada:</span> {ev.objective_conduct}
+                          </div>
+                        )}
+                        {ev.patient_response && (
+                          <div className="text-slate-500">
+                            <span className="font-semibold text-slate-700">Resposta / Tolerância:</span> {ev.patient_response}
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                          <span>Fisioterapeuta: <strong>{ev.professional_name || 'Profissional'}</strong></span>
+                          {ev.specialty_name && <span>Especialidade: {ev.specialty_name}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

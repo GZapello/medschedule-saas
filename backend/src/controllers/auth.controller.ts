@@ -119,6 +119,22 @@ export class AuthController {
       // Log de auditoria
       logAudit(req, 'USER_LOGIN', 'users', user.id, { email: user.email, role: user.role });
 
+      // Busca dados profissionais se for professional
+      let profDetails: any = null;
+      if (user.role === 'professional') {
+        profDetails = db.prepare(`
+          SELECT 
+            p.id as professional_id, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
+            p.practice_areas, p.slug as professional_slug,
+            prof.name as profession_name, prof.slug as profession_slug,
+            spec.name as specialty_name
+          FROM professionals p
+          LEFT JOIN professions prof ON prof.id = p.profession_id
+          LEFT JOIN specialties spec ON spec.id = p.specialty_id
+          WHERE p.user_id = ?
+        `).get(user.id);
+      }
+
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
 
       res.json({
@@ -132,7 +148,15 @@ export class AuthController {
           phone: user.phone,
           avatarUrl: user.avatar_url,
           tenantId: user.tenant_id,
-          needsOnboarding
+          needsOnboarding,
+          professionalId: profDetails?.professional_id,
+          professionId: profDetails?.profession_id,
+          professionName: profDetails?.profession_name,
+          professionSlug: profDetails?.profession_slug,
+          registrationType: profDetails?.registration_type,
+          registrationNumber: profDetails?.registration_number,
+          specialtyName: profDetails?.specialty_name,
+          professionalSlug: profDetails?.professional_slug
         },
         tenant: tenantData
       });
@@ -174,6 +198,22 @@ export class AuthController {
         tenantData = tenantStmt.get(user.tenant_id);
       }
 
+      // Busca dados profissionais se for professional
+      let profDetails: any = null;
+      if (user.role === 'professional') {
+        profDetails = db.prepare(`
+          SELECT 
+            p.id as professional_id, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
+            p.practice_areas, p.slug as professional_slug,
+            prof.name as profession_name, prof.slug as profession_slug,
+            spec.name as specialty_name
+          FROM professionals p
+          LEFT JOIN professions prof ON prof.id = p.profession_id
+          LEFT JOIN specialties spec ON spec.id = p.specialty_id
+          WHERE p.user_id = ?
+        `).get(user.id);
+      }
+
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
 
       res.json({
@@ -186,7 +226,15 @@ export class AuthController {
           phone: user.phone,
           avatarUrl: user.avatar_url,
           tenantId: user.tenant_id,
-          needsOnboarding
+          needsOnboarding,
+          professionalId: profDetails?.professional_id,
+          professionId: profDetails?.profession_id,
+          professionName: profDetails?.profession_name,
+          professionSlug: profDetails?.profession_slug,
+          registrationType: profDetails?.registration_type,
+          registrationNumber: profDetails?.registration_number,
+          specialtyName: profDetails?.specialty_name,
+          professionalSlug: profDetails?.professional_slug
         },
         tenant: tenantData
       });

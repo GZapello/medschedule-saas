@@ -406,6 +406,13 @@ export const ProfessionalsView: React.FC = () => {
                     onChange={e => {
                       const newPId = e.target.value;
                       setProfessionId(newPId);
+                      const selProf = professions.find(p => p.id === newPId);
+                      const isPhysio = selProf?.slug?.includes('fisio') || selProf?.name?.toLowerCase().includes('fisio');
+                      if (isPhysio) {
+                        setRegistrationType('CREFITO');
+                      } else if (selProf?.registration_board_label) {
+                        setRegistrationType(selProf.registration_board_label);
+                      }
                       const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
                       setSpecialtyId(matching.length > 0 ? matching[0].id : '');
                     }}
@@ -418,16 +425,41 @@ export const ProfessionalsView: React.FC = () => {
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700">Especialidade(s)</label>
-                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded">Texto livre</span>
+                    <label className="block font-semibold text-slate-700">Especialidade Principal</label>
+                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded">Catálogo / Livre</span>
                   </div>
-                  <input
-                    type="text"
-                    value={specialtyName}
-                    onChange={e => setSpecialtyName(e.target.value)}
-                    placeholder="Ex: Cardiologia Clínica, Arritmia..."
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
-                  />
+                  {(() => {
+                    const selProf = professions.find(p => p.id === professionId);
+                    const matching = specialties.filter(s => s.profession_id === professionId || (s as any).professionId === professionId);
+                    if (matching.length > 0) {
+                      return (
+                        <select
+                          value={specialtyId}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setSpecialtyId(val);
+                            const found = matching.find(m => m.id === val);
+                            if (found) setSpecialtyName(found.name);
+                          }}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
+                        >
+                          <option value="">Selecione ou digite abaixo...</option>
+                          {matching.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      );
+                    }
+                    return (
+                      <input
+                        type="text"
+                        value={specialtyName}
+                        onChange={e => setSpecialtyName(e.target.value)}
+                        placeholder="Ex: Fisioterapia Traumato-Ortopédica, Neuro..."
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                      />
+                    );
+                  })()}
                 </div>
               </div>
 

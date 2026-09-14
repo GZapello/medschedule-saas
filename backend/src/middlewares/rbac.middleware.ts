@@ -16,7 +16,9 @@ export function requireRole(...allowedRoles: Role[]) {
 
     if (!allowedRoles.includes(req.user.role as Role)) {
       res.status(403).json({
-        error: 'Acesso negado: seu perfil de usuário não possui permissão para executar esta ação'
+        success: false,
+        error: 'Você não possui permissão para acessar esta área.',
+        code: 'FORBIDDEN'
       });
       return;
     }

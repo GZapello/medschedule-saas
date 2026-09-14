@@ -4,12 +4,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 
 export class SupportController {
-  // Listar chamados: usuário comum vê apenas os seus ou da sua clínica; superadmin vê todos
+  // Listar chamados: Exclusivo para Administrador Global (SuperAdmin)
   static list(req: Request, res: Response): void {
     try {
       const user = req.user;
-      if (!user) {
-        res.status(401).json({ error: 'Usuário não autenticado' });
+      if (!user || user.role !== 'superadmin') {
+        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
         return;
       }
 
@@ -26,17 +26,6 @@ export class SupportController {
         WHERE 1=1
       `;
       const params: any[] = [];
-
-      if (user.role !== 'superadmin') {
-        // Usuários regulares veem chamados da sua clínica ou os seus
-        if (req.tenantId) {
-          query += ' AND (t.tenant_id = ? OR t.user_id = ?)';
-          params.push(req.tenantId, user.userId);
-        } else {
-          query += ' AND t.user_id = ?';
-          params.push(user.userId);
-        }
-      }
 
       if (status) {
         query += ' AND t.status = ?';
@@ -61,13 +50,13 @@ export class SupportController {
     }
   }
 
-  // Detalhes do chamado e mensagens associadas
+  // Detalhes do chamado e mensagens associadas (Exclusivo SuperAdmin)
   static getById(req: Request, res: Response): void {
     try {
       const { id } = req.params;
       const user = req.user;
-      if (!user) {
-        res.status(401).json({ error: 'Usuário não autenticado' });
+      if (!user || user.role !== 'superadmin') {
+        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
         return;
       }
 
@@ -84,13 +73,7 @@ export class SupportController {
       `).get(id) as any;
 
       if (!ticket) {
-        res.status(404).json({ error: 'Chamado não encontrado' });
-        return;
-      }
-
-      // Validação de acesso
-      if (user.role !== 'superadmin' && ticket.tenant_id !== req.tenantId && ticket.user_id !== user.userId) {
-        res.status(403).json({ error: 'Você não tem permissão para visualizar este chamado' });
+        res.status(404).json({ success: false, error: 'Chamado não encontrado' });
         return;
       }
 
@@ -104,26 +87,26 @@ export class SupportController {
         ORDER BY m.created_at ASC
       `).all(id);
 
-      res.json({ ticket, messages });
+      res.json({ success: true, ticket, messages });
     } catch (err: any) {
       console.error('[SupportController.getById] Erro:', err);
-      res.status(500).json({ error: 'Erro ao obter detalhes do chamado' });
+      res.status(500).json({ success: false, error: 'Erro ao obter detalhes do chamado' });
     }
   }
 
-  // Criar novo chamado
+  // Criar novo chamado (Exclusivo SuperAdmin)
   static create(req: Request, res: Response): void {
     try {
       const user = req.user;
-      if (!user) {
-        res.status(401).json({ error: 'Usuário não autenticado' });
+      if (!user || user.role !== 'superadmin') {
+        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
         return;
       }
 
       const { title, category, description, priority, attachments, appVersion, platform } = req.body;
 
       if (!title || !description) {
-        res.status(400).json({ error: 'Título e descrição são obrigatórios para abrir um chamado' });
+        res.status(400).json({ success: false, error: 'Título e descrição são obrigatórios para abrir um chamado' });
         return;
       }
 
@@ -162,25 +145,25 @@ export class SupportController {
     }
   }
 
-  // Adicionar mensagem / resposta no chamado
+  // Adicionar mensagem / resposta no chamado (Exclusivo SuperAdmin)
   static addMessage(req: Request, res: Response): void {
     try {
       const { id } = req.params;
       const user = req.user;
-      if (!user) {
-        res.status(401).json({ error: 'Usuário não autenticado' });
+      if (!user || user.role !== 'superadmin') {
+        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
         return;
       }
 
       const { message, attachments, isInternal } = req.body;
       if (!message || !message.trim()) {
-        res.status(400).json({ error: 'Mensagem não pode ser vazia' });
+        res.status(400).json({ success: false, error: 'Mensagem não pode ser vazia' });
         return;
       }
 
       const ticket = db.prepare('SELECT id, status FROM support_tickets WHERE id = ?').get(id) as any;
       if (!ticket) {
-        res.status(404).json({ error: 'Chamado não encontrado' });
+        res.status(404).json({ success: false, error: 'Chamado não encontrado' });
         return;
       }
 
@@ -192,38 +175,28 @@ export class SupportController {
         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(messageId, id, user.userId, message.trim(), attachmentsJson, isInternal ? 1 : 0);
 
-      // Se o chamado estava 'resolved' ou 'closed' e o autor mandou mensagem, reabre como 'analyzing'
-      let newStatus = ticket.status;
-      if (user.role !== 'superadmin' && (ticket.status === 'resolved' || ticket.status === 'closed')) {
-        newStatus = 'analyzing';
-      }
-
-      db.prepare(`
-        UPDATE support_tickets SET updated_at = datetime('now'), status = ? WHERE id = ?
-      `).run(newStatus, id);
-
-      res.status(201).json({ id: messageId, message: 'Resposta registrada com sucesso' });
+      res.status(201).json({ success: true, id: messageId, message: 'Resposta registrada com sucesso' });
     } catch (err: any) {
       console.error('[SupportController.addMessage] Erro:', err);
-      res.status(500).json({ error: 'Erro ao enviar resposta no chamado' });
+      res.status(500).json({ success: false, error: 'Erro ao enviar resposta no chamado' });
     }
   }
 
-  // Atualizar status do chamado (Aberto -> Em análise -> Em atendimento -> Resolvido -> Fechado)
+  // Atualizar status do chamado (Exclusivo SuperAdmin)
   static updateStatus(req: Request, res: Response): void {
     try {
       const { id } = req.params;
       const { status } = req.body;
       const user = req.user;
 
-      if (!user) {
-        res.status(401).json({ error: 'Usuário não autenticado' });
+      if (!user || user.role !== 'superadmin') {
+        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
         return;
       }
 
       const allowedStatuses = ['open', 'analyzing', 'in_progress', 'resolved', 'closed'];
       if (!allowedStatuses.includes(status)) {
-        res.status(400).json({ error: `Status inválido. Permitidos: ${allowedStatuses.join(', ')}` });
+        res.status(400).json({ success: false, error: `Status inválido. Permitidos: ${allowedStatuses.join(', ')}` });
         return;
       }
 
@@ -232,10 +205,10 @@ export class SupportController {
       `).run(status, id);
 
       logAudit(req, 'UPDATE_TICKET_STATUS', 'support_tickets', id, { status });
-      res.json({ message: 'Status do chamado atualizado com sucesso', status });
+      res.json({ success: true, message: 'Status do chamado atualizado com sucesso', status });
     } catch (err: any) {
       console.error('[SupportController.updateStatus] Erro:', err);
-      res.status(500).json({ error: 'Erro ao atualizar status do chamado' });
+      res.status(500).json({ success: false, error: 'Erro ao atualizar status do chamado' });
     }
   }
 }

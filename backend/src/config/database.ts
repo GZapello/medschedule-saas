@@ -537,16 +537,23 @@ export function initializeDatabase(): void {
       { id: 'spec-psi-hospitalar', prof_id: 'prof-psicologo', name: 'Psicologia Hospitalar e da Saúde', slug: 'psicologia-hospitalar', color: '#10b981' },
       { id: 'spec-psi-avaliacao', prof_id: 'prof-psicologo', name: 'Avaliação Psicológica e Psicodiagnóstico', slug: 'avaliacao-psicologica', color: '#f59e0b' },
       { id: 'spec-psi-social', prof_id: 'prof-psicologo', name: 'Psicologia Social e Comunitária', slug: 'psicologia-social', color: '#64748b' },
-      // Fisioterapia
-      { id: 'spec-fisio-ortopedia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Traumato-Ortopédica', slug: 'fisio-ortopedica', color: '#10b981' },
-      { id: 'spec-fisio-neuro', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Neurofuncional (Adulto e Infantil)', slug: 'fisio-neuro', color: '#0ea5e9' },
-      { id: 'spec-fisio-respiratoria', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Respiratória e UTI', slug: 'fisio-respiratoria', color: '#06b6d4' },
-      { id: 'spec-fisio-pediatrica', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Pediátrica e Neonatal', slug: 'fisio-pediatrica', color: '#ec4899' },
-      { id: 'spec-fisio-dermato', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Dermatofuncional', slug: 'fisio-dermatofuncional', color: '#f43f5e' },
-      { id: 'spec-fisio-esportiva', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Esportiva', slug: 'fisio-esportiva', color: '#f97316' },
-      { id: 'spec-fisio-pelvica', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Pélvica / Saúde da Mulher', slug: 'fisio-pelvica', color: '#8b5cf6' },
-      { id: 'spec-fisio-osteopatia', prof_id: 'prof-fisioterapeuta', name: 'Osteopatia e Terapia Manual', slug: 'fisio-osteopatia', color: '#d97706' },
-      { id: 'spec-fisio-quiropraxia', prof_id: 'prof-fisioterapeuta', name: 'Quiropraxia e Coluna Vertebral', slug: 'fisio-quiropraxia', color: '#059669' },
+      // 16 Especialidades Oficiais da Fisioterapia (Regulamentadas pelo COFFITO)
+      { id: 'spec-fisio-acupuntura', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Acupuntura', slug: 'fisioterapia-acupuntura', color: '#0ea5e9' },
+      { id: 'spec-fisio-respiratoria', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Respiratória', slug: 'fisioterapia-respiratoria', color: '#06b6d4' },
+      { id: 'spec-fisio-neuro', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Neurofuncional', slug: 'fisioterapia-neurofuncional', color: '#6366f1' },
+      { id: 'spec-fisio-osteopatia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Osteopatia', slug: 'fisioterapia-osteopatia', color: '#d97706' },
+      { id: 'spec-fisio-quiropraxia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Quiropraxia', slug: 'fisioterapia-quiropraxia', color: '#059669' },
+      { id: 'spec-fisio-ortopedia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Traumato-Ortopédica', slug: 'fisioterapia-traumato-ortopedica', color: '#10b981' },
+      { id: 'spec-fisio-esportiva', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Esportiva', slug: 'fisioterapia-esportiva', color: '#f97316' },
+      { id: 'spec-fisio-trabalho', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia do Trabalho', slug: 'fisioterapia-trabalho', color: '#64748b' },
+      { id: 'spec-fisio-dermato', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Dermatofuncional', slug: 'fisioterapia-dermatofuncional', color: '#f43f5e' },
+      { id: 'spec-fisio-mulher', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Saúde da Mulher', slug: 'fisioterapia-saude-mulher', color: '#ec4899' },
+      { id: 'spec-fisio-oncologia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Oncologia', slug: 'fisioterapia-oncologia', color: '#8b5cf6' },
+      { id: 'spec-fisio-uti', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Terapia Intensiva', slug: 'fisioterapia-terapia-intensiva', color: '#ef4444' },
+      { id: 'spec-fisio-aquatica', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Aquática', slug: 'fisioterapia-aquatica', color: '#0284c7' },
+      { id: 'spec-fisio-cardiovascular', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Cardiovascular', slug: 'fisioterapia-cardiovascular', color: '#e11d48' },
+      { id: 'spec-fisio-gerontologia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Gerontologia', slug: 'fisioterapia-gerontologia', color: '#78716c' },
+      { id: 'spec-fisio-reumatologia', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia em Reumatologia', slug: 'fisioterapia-reumatologia', color: '#f59e0b' },
       // Medicina
       { id: 'spec-med-geral', prof_id: 'prof-medico', name: 'Clínica Médica / Medicina Geral', slug: 'clinica-medica', color: '#3b82f6' },
       { id: 'spec-med-cardio', prof_id: 'prof-medico', name: 'Cardiologia', slug: 'cardiologia', color: '#ef4444' },
@@ -842,6 +849,79 @@ export function initializeDatabase(): void {
       );
       CREATE INDEX IF NOT EXISTS idx_payrolls_month ON professional_payrolls (tenant_id, period_month, status);
       CREATE INDEX IF NOT EXISTS idx_payrolls_prof ON professional_payrolls (tenant_id, professional_id);
+    `);
+
+    // 7. Prontuário Fisioterapêutico Modular (ZemdaFisio: Avaliações e Evoluções)
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS physiotherapy_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        specialty_id TEXT,
+        chief_complaint TEXT,
+        hpi TEXT,
+        past_medical_history TEXT,
+        medical_diagnosis TEXT,
+        physio_diagnosis TEXT,
+        pain_score INTEGER DEFAULT 0,
+        pain_location TEXT,
+        pain_characteristics TEXT,
+        inspection_palpation TEXT,
+        range_of_motion TEXT,
+        muscle_strength TEXT,
+        posture_balance TEXT,
+        gait_mobility TEXT,
+        functional_limitations TEXT,
+        specific_tests TEXT,
+        short_term_goals TEXT,
+        long_term_goals TEXT,
+        treatment_plan TEXT,
+        conducts_exercises TEXT,
+        guidelines TEXT,
+        is_sealed INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT,
+        updated_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_physio_assess_patient ON physiotherapy_assessments (tenant_id, patient_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_physio_assess_prof ON physiotherapy_assessments (tenant_id, professional_id);
+
+      CREATE TABLE IF NOT EXISTS physiotherapy_evolutions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        appointment_id TEXT,
+        specialty_id TEXT,
+        session_date TEXT NOT NULL,
+        session_time TEXT,
+        patient_condition TEXT,
+        procedures_performed TEXT,
+        exercises_performed TEXT,
+        techniques_used TEXT,
+        clinical_evolution TEXT NOT NULL,
+        treatment_response TEXT,
+        complications TEXT,
+        guidelines TEXT,
+        next_session_plan TEXT,
+        notes TEXT,
+        is_sealed INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT,
+        updated_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_physio_evol_patient ON physiotherapy_evolutions (tenant_id, patient_id, session_date);
+      CREATE INDEX IF NOT EXISTS idx_physio_evol_prof ON physiotherapy_evolutions (tenant_id, professional_id);
     `);
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);
