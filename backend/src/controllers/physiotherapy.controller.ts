@@ -5,63 +5,73 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 
 /**
- * Validação de acesso exclusivo para Fisioterapia (Regras 1, 3, 4, 8)
+ * Validação de acesso exclusivo para Fisioterapia (Itens 8, 9, 10, 11, 13)
  * Bloqueio REAL no backend:
- * - SuperAdmin: Acesso global de manutenção
- * - ClinicAdmin: Acesso ao ZemdaFisio SOMENTE SE possuir área de atuação ou profissão em Fisioterapia
- * - Professional: Acesso SOMENTE SE for Fisioterapeuta
- * - Outras profissões (médicos, psicólogos, fonoaudiólogos, recepcionistas, etc.): BLOQUEADOS (403)
+ * 1. O usuário deve pertencer à profissão / área de atuação de Fisioterapia
+ * 2. O acesso deve ser explicitamente liberado pelo gestor da clínica (permissão access_zemda_fisio ou flag zemda_fisio_enabled)
+ * 3. SuperAdmin, Recepção, Financeiro e outras profissões (psicólogos, médicos, etc.): BLOQUEADOS (403)
+ * 4. Gerente que também é Fisioterapeuta: PERMITIDO desde que liberado
  */
 export function isPhysiotherapistOrClinicManager(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
-  // 1. Administrador Global / Sistema NUNCA pode acessar recursos do ZemdaFisio (Regras 1, 3 e 6)
+
+  // 1. Administrador Global / Sistema NUNCA pode acessar recursos clínicos do ZemdaFisio (Itens 10 e 15)
   if (req.user.role === 'superadmin') return false;
 
-  // Busca dados em professionals (se houver cadastro profissional do usuário)
+  // 2. Cargos estritamente não-clínicos (Recepção, Financeiro, Secretária, etc.) são bloqueados
+  const roleStr = req.user.role as string;
+  if (roleStr === 'receptionist' || roleStr === 'financial' || roleStr === 'secretary' || roleStr === 'assistant') {
+    return false;
+  }
+
+  // 3. Busca vínculo do usuário na clínica
+  const clinicUser = db.prepare(`
+    SELECT cu.role, cu.is_manager, cu.permissions_json, cu.profession_custom, cu.practice_areas as cu_practice_areas,
+           u.profession_name, u.practice_areas as u_practice_areas
+    FROM users u
+    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+    WHERE u.id = ?
+  `).get(req.tenantId, req.user.userId) as any;
+
+  // Busca dados de professional se houver
   const prof = db.prepare(`
-    SELECT p.id, p.practice_areas, prof.slug as profession_slug, prof.name as profession_name
+    SELECT p.id, p.practice_areas, p.specialty_custom, p.zemda_fisio_enabled,
+           prof.slug as profession_slug, prof.name as profession_name
     FROM professionals p
     LEFT JOIN professions prof ON prof.id = p.profession_id
     WHERE p.user_id = ? AND p.tenant_id = ?
   `).get(req.user.userId, req.tenantId) as any;
 
-  if (prof) {
-    const slug = (prof.profession_slug || '').toLowerCase();
-    const name = (prof.profession_name || '').toLowerCase();
-    const areas = (prof.practice_areas || '').toLowerCase();
-    if (slug.includes('fisio') || name.includes('fisio') || slug.includes('physio') || name.includes('physio') || areas.includes('fisio')) {
-      return true;
-    }
+  // 4. Critério 1: Profissão / Área clínica deve ser Fisioterapia
+  const combinedProfessionText = [
+    prof?.profession_slug,
+    prof?.profession_name,
+    prof?.practice_areas,
+    prof?.specialty_custom,
+    clinicUser?.profession_custom,
+    clinicUser?.cu_practice_areas,
+    clinicUser?.profession_name,
+    clinicUser?.u_practice_areas
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  const isPhysioArea = combinedProfessionText.includes('fisio') || combinedProfessionText.includes('physio');
+  if (!isPhysioArea) {
+    return false; // Não é da área de Fisioterapia -> BLOQUEADO
   }
 
-  // Se for clinic_admin, verifica se há profissão/área de atuação registrada em users, clinic_users ou tenants
-  if (req.user.role === 'clinic_admin') {
-    const userClinic = db.prepare(`
-      SELECT u.profession_name, u.practice_areas as user_practice_areas,
-             cu.profession_custom, cu.practice_areas as cu_practice_areas,
-             t.manager_profession, t.manager_practice_areas
-      FROM users u
-      LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
-      LEFT JOIN tenants t ON t.id = ?
-      WHERE u.id = ?
-    `).get(req.tenantId, req.tenantId, req.user.userId) as any;
-
-    if (userClinic) {
-      const combined = [
-        userClinic.profession_custom,
-        userClinic.cu_practice_areas,
-        userClinic.profession_name,
-        userClinic.user_practice_areas,
-        userClinic.manager_profession,
-        userClinic.manager_practice_areas
-      ].filter(Boolean).join(' ').toLowerCase();
-
-      return combined.includes('fisio') || combined.includes('physio');
+  // 5. Critério 2: Liberação explícita pelo gestor da clínica (access_zemda_fisio ou zemda_fisio_enabled)
+  let perms: string[] = [];
+  try {
+    if (clinicUser?.permissions_json) {
+      perms = JSON.parse(clinicUser.permissions_json);
     }
-    return false;
-  }
+  } catch {}
 
-  return false;
+  const isAuthorizedByManager =
+    perms.includes('access_zemda_fisio') ||
+    Number(prof?.zemda_fisio_enabled) === 1;
+
+  return isAuthorizedByManager;
 }
 
 export class PhysiotherapyController {

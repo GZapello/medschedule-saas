@@ -160,6 +160,15 @@ export class AuthController {
 
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
 
+      let userPermissions: string[] = [];
+      if (user.tenant_id) {
+        const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        if (cuRow?.permissions_json) {
+          try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
+        }
+      }
+      const zemdaFisioEnabled = userPermissions.includes('access_zemda_fisio') || Number(profDetails?.zemda_fisio_enabled) === 1;
+
       res.json({
         token,
         user: {
@@ -180,7 +189,9 @@ export class AuthController {
           registrationNumber: profDetails?.registration_number,
           specialtyName: profDetails?.specialty_name,
           professionalSlug: profDetails?.professional_slug,
-          practiceAreas: profDetails?.practice_areas
+          practiceAreas: profDetails?.practice_areas,
+          permissions: userPermissions,
+          zemdaFisioEnabled
         },
         tenant: tenantData
       });
@@ -260,7 +271,15 @@ export class AuthController {
         }
       }
 
+      let userPermissions: string[] = [];
+      if (user.tenant_id) {
+        const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        if (cuRow?.permissions_json) {
+          try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
+        }
+      }
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
+      const zemdaFisioEnabled = userPermissions.includes('access_zemda_fisio') || Number(profDetails?.zemda_fisio_enabled) === 1;
 
       res.json({
         user: {
@@ -281,7 +300,9 @@ export class AuthController {
           registrationNumber: profDetails?.registration_number,
           specialtyName: profDetails?.specialty_name,
           professionalSlug: profDetails?.professional_slug,
-          practiceAreas: profDetails?.practice_areas
+          practiceAreas: profDetails?.practice_areas,
+          permissions: userPermissions,
+          zemdaFisioEnabled
         },
         tenant: tenantData
       });

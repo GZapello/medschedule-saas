@@ -237,25 +237,28 @@ export class AppointmentController {
         return;
       }
 
+      const normalizedStartTime = String(startTime).trim().replace(' ', 'T');
+      const normalizedEndTime = String(endTime).trim().replace(' ', 'T');
+
       // 0. Validação dos horários de funcionamento da clínica (Item 3)
-      const hoursCheck = validateClinicBusinessHours(tenantId, startTime, endTime);
+      const hoursCheck = validateClinicBusinessHours(tenantId, normalizedStartTime, normalizedEndTime);
       if (!hoursCheck.valid) {
         res.status(400).json({ error: hoursCheck.error });
         return;
       }
 
-      // 1. Verifica concorrência do PROFISSIONAL
+      // 1. Verifica concorrência do PROFISSIONAL (Item 7)
       const profConflict = db.prepare(`
         SELECT id FROM appointments
         WHERE tenant_id = ?
           AND professional_id = ?
           AND status NOT IN ('cancelled')
-          AND start_time < ? AND end_time > ?
-      `).get(tenantId, professionalId, endTime, startTime);
+          AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
+      `).get(tenantId, professionalId, normalizedEndTime, normalizedStartTime);
 
       if (profConflict) {
         res.status(409).json({
-          error: 'Este horário acabou de ser reservado para este profissional. Por favor, escolha outro slot.',
+          error: 'Este horário não está mais disponível. Escolha outro horário.',
           code: 'PROFESSIONAL_SLOT_OCCUPIED'
         });
         return;
@@ -270,8 +273,8 @@ export class AppointmentController {
         WHERE a.tenant_id = ?
           AND a.patient_id = ?
           AND a.status NOT IN ('cancelled')
-          AND a.start_time < ? AND a.end_time > ?
-      `).get(tenantId, resolvedPatientId, endTime, startTime) as any;
+          AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+      `).get(tenantId, resolvedPatientId, normalizedEndTime, normalizedStartTime) as any;
 
       if (patientConflict) {
         res.status(409).json({
@@ -297,8 +300,8 @@ export class AppointmentController {
           WHERE a.tenant_id = ?
             AND a.room_id = ?
             AND a.status NOT IN ('cancelled')
-            AND a.start_time < ? AND a.end_time > ?
-        `).get(tenantId, roomId, endTime, startTime) as any;
+            AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+        `).get(tenantId, roomId, normalizedEndTime, normalizedStartTime) as any;
 
         if (roomConflict) {
           res.status(409).json({
@@ -340,8 +343,8 @@ export class AppointmentController {
         professionalId,
         serviceId,
         roomId || null,
-        startTime,
-        endTime,
+        normalizedStartTime,
+        normalizedEndTime,
         modality || 'presential',
         patientNotes || null,
         internalNotes || null,
@@ -489,25 +492,28 @@ export class AppointmentController {
         return;
       }
 
+      const normalizedStartTime = String(startTime).trim().replace(' ', 'T');
+      const normalizedEndTime = String(endTime).trim().replace(' ', 'T');
+
       // 0. Validação dos horários de funcionamento da clínica (Item 3)
-      const hoursCheck = validateClinicBusinessHours(tenantId, startTime, endTime);
+      const hoursCheck = validateClinicBusinessHours(tenantId, normalizedStartTime, normalizedEndTime);
       if (!hoursCheck.valid) {
         res.status(400).json({ error: hoursCheck.error });
         return;
       }
 
-      // 1. Conflito de profissional
+      // 1. Conflito de profissional (Item 7)
       const conflict = db.prepare(`
         SELECT id FROM appointments
         WHERE tenant_id = ?
           AND professional_id = ?
           AND id != ?
           AND status NOT IN ('cancelled')
-          AND start_time < ? AND end_time > ?
-      `).get(tenantId, appt.professional_id, id, endTime, startTime);
+          AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
+      `).get(tenantId, appt.professional_id, id, normalizedEndTime, normalizedStartTime);
 
       if (conflict) {
-        res.status(409).json({ error: 'O novo horário escolhido já está ocupado para este profissional' });
+        res.status(409).json({ error: 'Este horário não está mais disponível. Escolha outro horário.' });
         return;
       }
 
@@ -522,8 +528,8 @@ export class AppointmentController {
             AND a.patient_id = ?
             AND a.id != ?
             AND a.status NOT IN ('cancelled')
-            AND a.start_time < ? AND a.end_time > ?
-        `).get(tenantId, appt.patient_id, id, endTime, startTime) as any;
+            AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+        `).get(tenantId, appt.patient_id, id, normalizedEndTime, normalizedStartTime) as any;
 
         if (patientConflict) {
           res.status(409).json({
@@ -551,8 +557,8 @@ export class AppointmentController {
             AND a.room_id = ?
             AND a.id != ?
             AND a.status NOT IN ('cancelled')
-            AND a.start_time < ? AND a.end_time > ?
-        `).get(tenantId, appt.room_id, id, endTime, startTime) as any;
+            AND REPLACE(a.start_time, ' ', 'T') < ? AND REPLACE(a.end_time, ' ', 'T') > ?
+        `).get(tenantId, appt.room_id, id, normalizedEndTime, normalizedStartTime) as any;
 
         if (roomConflict) {
           res.status(409).json({
@@ -570,7 +576,7 @@ export class AppointmentController {
           status = 'rescheduled',
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
-      `).run(startTime, endTime, id, tenantId);
+      `).run(normalizedStartTime, normalizedEndTime, id, tenantId);
 
       db.prepare(`
         INSERT INTO appointment_status_history (id, appointment_id, previous_status, new_status, changed_by, reason)
@@ -581,7 +587,7 @@ export class AppointmentController {
       NotificationService.cancelAppointmentReminders(id as string);
       NotificationService.scheduleAppointmentReminder(id as string);
 
-      logAudit(req, 'RESCHEDULE_APPOINTMENT', 'appointments', id, { newStart: startTime, newEnd: endTime });
+      logAudit(req, 'RESCHEDULE_APPOINTMENT', 'appointments', id, { newStart: normalizedStartTime, newEnd: normalizedEndTime });
       res.json({ message: 'Atendimento remarcado com sucesso' });
     } catch (err: any) {
       console.error('[AppointmentController.reschedule] Erro:', err);

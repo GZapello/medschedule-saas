@@ -256,9 +256,9 @@ api.get('/v1/professionals', requireTenant, ProfessionalController.list);
 api.get('/v1/professionals/:id', requireTenant, ProfessionalController.getById);
 api.post('/v1/professionals', requireTenant, requireRole('clinic_admin'), ProfessionalController.create);
 api.put('/v1/professionals/:id', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalController.update);
-api.put('/v1/professionals/:id/schedules', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalController.updateSchedules);
-api.post('/v1/professionals/blocks', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalController.createBlockedTime);
-api.delete('/v1/professionals/blocks/:blockId', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalController.deleteBlockedTime);
+api.put('/v1/professionals/:id/schedules', requireTenant, requireRole('clinic_admin'), ProfessionalController.updateSchedules);
+api.post('/v1/professionals/blocks', requireTenant, requireRole('clinic_admin'), ProfessionalController.createBlockedTime);
+api.delete('/v1/professionals/blocks/:blockId', requireTenant, requireRole('clinic_admin'), ProfessionalController.deleteBlockedTime);
 
 // Serviços e Salas
 api.get('/v1/services', requireTenant, ServiceController.list);

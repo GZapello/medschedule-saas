@@ -144,6 +144,28 @@ export function initializeDatabase(): void {
     // Coluna opcional de CID em exames a receber
     addColIfMissing('pending_exams', 'cid_code', 'TEXT');
 
+    // Desativação e exclusão agendada em 30 dias (Item 3)
+    addColIfMissing('users', 'deactivated_at', 'DATETIME');
+    addColIfMissing('users', 'scheduled_deletion_at', 'DATETIME');
+    addColIfMissing('clinic_users', 'deactivated_at', 'DATETIME');
+    addColIfMissing('clinic_users', 'scheduled_deletion_at', 'DATETIME');
+
+    // Convênio no cadastro do paciente (Item 4)
+    addColIfMissing('patients', 'health_insurance_provider', 'TEXT');
+    addColIfMissing('patients', 'health_insurance_card', 'TEXT');
+    addColIfMissing('patients', 'health_insurance_plan', 'TEXT');
+
+    // Liberação explícita do ZemdaFisio no profissional (Item 9)
+    addColIfMissing('professionals', 'zemda_fisio_enabled', 'INTEGER DEFAULT 0');
+
+    // Padronização de datas nos agendamentos para conformidade ISO e precisão matemática de slots
+    try {
+      rawDb.exec(`
+        UPDATE appointments SET start_time = REPLACE(start_time, ' ', 'T') WHERE start_time LIKE '% %';
+        UPDATE appointments SET end_time = REPLACE(end_time, ' ', 'T') WHERE end_time LIKE '% %';
+      `);
+    } catch (e) {}
+
     // Criação das novas tabelas clínicas, de convênios, documentos e caixa
     rawDb.exec(`
       CREATE TABLE IF NOT EXISTS patient_allergies (

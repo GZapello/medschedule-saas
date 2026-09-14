@@ -66,20 +66,28 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
     }
   }, [isOpen]);
 
-  // Consulta slots livres
+  // Consulta slots livres imediatamente ao alterar profissional, serviço, data ou sala
   useEffect(() => {
     if (professionalId && serviceId && date) {
+      setAvailableSlots([]);
+      setSelectedSlot(null);
       setLoadingSlots(true);
       setConflictError(null);
-      ApiClient.get<any>(`/v1/slots/available?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}`)
+
+      const roomParam = roomId ? `&roomId=${encodeURIComponent(roomId)}` : '';
+      ApiClient.get<any>(`/v1/slots/available?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}${roomParam}`)
         .then(data => {
           setAvailableSlots(data.slots || []);
-          setSelectedSlot(null);
         })
-        .catch(() => {})
+        .catch(() => {
+          setAvailableSlots([]);
+        })
         .finally(() => setLoadingSlots(false));
+    } else {
+      setAvailableSlots([]);
+      setSelectedSlot(null);
     }
-  }, [professionalId, serviceId, date]);
+  }, [professionalId, serviceId, date, roomId]);
 
   if (!isOpen) return null;
 
@@ -108,12 +116,26 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       onSuccess();
       onClose();
     } catch (err: any) {
+      const errorMsg = err.error || err.message || 'Este horário não está mais disponível. Escolha outro horário.';
       if (err.conflict) {
-        setConflictError(`${err.message} (${err.conflict.professionalName} - ${err.conflict.serviceName || ''})`);
+        setConflictError(`${errorMsg} (${err.conflict.professionalName} - ${err.conflict.serviceName || ''})`);
       } else {
-        setConflictError(err.message || 'Erro ao registrar agendamento');
+        setConflictError(errorMsg);
       }
-      showToast(err.message || 'Conflito de horário detectado', 'error');
+      showToast(errorMsg, 'error');
+
+      // Recalcula imediatamente os horários disponíveis para remover o horário conflitante
+      if (professionalId && serviceId && date) {
+        setLoadingSlots(true);
+        const roomParam = roomId ? `&roomId=${encodeURIComponent(roomId)}` : '';
+        ApiClient.get<any>(`/v1/slots/available?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}${roomParam}`)
+          .then(data => {
+            setAvailableSlots(data.slots || []);
+            setSelectedSlot(null);
+          })
+          .catch(() => {})
+          .finally(() => setLoadingSlots(false));
+      }
     } finally {
       setLoading(false);
     }

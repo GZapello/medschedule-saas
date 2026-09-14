@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Patient } from '../../types';
 import { PatientProfileModal } from './PatientProfileModal';
+import { EditPatientModal } from './EditPatientModal';
 import {
   Users,
   Search,
@@ -16,7 +17,8 @@ import {
   X,
   CheckCircle2,
   FileText,
-  UploadCloud
+  UploadCloud,
+  Edit3
 } from 'lucide-react';
 
 interface PatientsViewProps {
@@ -31,6 +33,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, on
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
 
   // Notifica o contexto da IA quando um paciente é selecionado/desselecionado
   useEffect(() => {
@@ -160,15 +163,28 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, on
                       {p.total_appointments || 0}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenDetail(p.id);
-                        }}
-                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-                      >
-                        Ver Detalhes
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingPatientId(p.id);
+                          }}
+                          className="text-xs font-semibold text-slate-600 hover:text-indigo-600 px-2 py-1 rounded-lg hover:bg-slate-100 cursor-pointer flex items-center gap-1 transition-colors"
+                          title="Editar Cadastro"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          Editar
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenDetail(p.id);
+                          }}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                        >
+                          Ver Detalhes
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -184,6 +200,18 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, on
           patientId={selectedPatientId}
           onClose={() => setSelectedPatientId(null)}
           onUpdated={fetchPatients}
+        />
+      )}
+
+      {/* Modal de Edição do Paciente */}
+      {editingPatientId && (
+        <EditPatientModal
+          isOpen={Boolean(editingPatientId)}
+          patientId={editingPatientId}
+          onClose={() => setEditingPatientId(null)}
+          onSuccess={() => {
+            fetchPatients();
+          }}
         />
       )}
     </div>

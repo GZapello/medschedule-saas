@@ -4,7 +4,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import {
   Users,
-  UserPlus,
   Check,
   X,
   Lock,
@@ -35,7 +34,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'manage_staff', label: 'Gerenciar equipe e funcionários' },
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas' },
   { id: 'view_reports', label: 'Acessar relatórios e exportar planilhas' },
-  { id: 'manage_settings', label: 'Alterar configurações da clínica' }
+  { id: 'manage_settings', label: 'Alterar configurações da clínica' },
+  { id: 'access_zemda_fisio', label: 'ZemdaFisio: Acesso permitido' }
 ];
 
 const PERMISSION_PRESETS = [
@@ -91,6 +91,26 @@ const PROFESSIONS_LIST = [
   'Outro'
 ];
 
+const formatDeletionDate = (scheduledAt?: string, deactivatedAt?: string) => {
+  let targetDate: Date;
+  if (scheduledAt) {
+    targetDate = new Date(scheduledAt);
+  } else if (deactivatedAt) {
+    targetDate = new Date(new Date(deactivatedAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+  } else {
+    targetDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  }
+
+  if (isNaN(targetDate.getTime())) {
+    targetDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  }
+
+  const day = String(targetDate.getDate()).padStart(2, '0');
+  const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const year = targetDate.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 export const StaffManagementView: React.FC = () => {
   const { isClinicAdmin } = useAuth();
   const { showToast } = useToast();
@@ -102,7 +122,6 @@ export const StaffManagementView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Modais
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingPermissionsUser, setEditingPermissionsUser] = useState<any>(null);
   const [editingRoleUser, setEditingRoleUser] = useState<any>(null);
 
@@ -111,21 +130,6 @@ export const StaffManagementView: React.FC = () => {
     role: 'professional',
     professionName: '',
     practiceAreas: ''
-  });
-
-  // Formulário de novo funcionário (Item 9: Sexo e Dr./Dra.)
-  const [formData, setFormData] = useState({
-    name: '',
-    gender: 'M' as 'M' | 'F',
-    email: '',
-    phone: '',
-    password: '',
-    role: 'receptionist',
-    professionName: 'Recepcionista / Atendimento',
-    practiceAreas: '',
-    registrationType: 'CRP',
-    registrationNumber: '',
-    selectedPermissions: ['view_schedule', 'create_appointment', 'edit_appointment', 'create_patient', 'edit_patient']
   });
 
   const loadStaff = async () => {
@@ -177,50 +181,6 @@ export const StaffManagementView: React.FC = () => {
       loadStaff();
     } catch (err: any) {
       showToast(err.message || 'Erro ao alterar status', 'error');
-    }
-  };
-
-  const handleCreateStaff = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!formData.name || !formData.email) {
-      showToast('Nome e e-mail são obrigatórios', 'error');
-      return;
-    }
-
-    try {
-      await ApiClient.post('/v1/staff/invite', {
-        name: formData.name,
-        gender: formData.gender,
-        email: formData.email,
-        phone: formData.phone,
-        password: formData.password || '123456',
-        role: formData.role,
-        professionName: formData.professionName,
-        practiceAreas: formData.practiceAreas,
-        registrationType: formData.registrationType,
-        registrationNumber: formData.registrationNumber || null,
-        permissions: formData.selectedPermissions
-      });
-
-      showToast('Funcionário cadastrado com sucesso!', 'success');
-      setIsAddModalOpen(false);
-      setFormData({
-        name: '',
-        gender: 'M',
-        email: '',
-        phone: '',
-        password: '',
-        role: 'receptionist',
-        professionName: 'Recepcionista / Atendimento',
-        practiceAreas: '',
-        registrationType: 'CRP',
-        registrationNumber: '',
-        selectedPermissions: ['view_schedule', 'create_appointment', 'edit_appointment', 'create_patient', 'edit_patient']
-      });
-      loadStaff();
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao cadastrar funcionário', 'error');
     }
   };
 
@@ -312,16 +272,6 @@ export const StaffManagementView: React.FC = () => {
             Aprove solicitações de novos membros, gerencie funções, áreas de atuação e permissões individuais.
           </p>
         </div>
-
-        {isClinicAdmin && (
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            + Adicionar Membro
-          </button>
-        )}
       </div>
 
       {/* Abas e Busca */}
@@ -441,7 +391,7 @@ export const StaffManagementView: React.FC = () => {
                       ? 'bg-amber-100 text-amber-800 border border-amber-300 animate-pulse'
                       : member.status === 'rejected'
                       ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                      : 'bg-slate-100 text-slate-700 border border-slate-200'
+                      : 'bg-rose-50 text-rose-700 border border-rose-200'
                   }`}
                 >
                   {member.status === 'active'
@@ -450,7 +400,7 @@ export const StaffManagementView: React.FC = () => {
                     ? 'Aguardando Aprovação'
                     : member.status === 'rejected'
                     ? 'Recusado'
-                    : 'Desativado / Bloqueado'}
+                    : 'Desativada'}
                 </span>
               </div>
 
@@ -492,6 +442,21 @@ export const StaffManagementView: React.FC = () => {
                   <div className="text-[11px] text-slate-400 italic flex items-center gap-1 pt-1">
                     <FileText className="w-3 h-3" />
                     <span>Nenhuma área de atuação preenchida</span>
+                  </div>
+                )}
+
+                {/* Alerta de Desativação e Exclusão Programada (Item 3) */}
+                {(member.status === 'blocked' || member.scheduled_deletion_at) && (
+                  <div className="mt-2.5 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-[11px] flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-bold text-rose-900 leading-snug">
+                        Conta desativada. Exclusão programada para {formatDeletionDate(member.scheduled_deletion_at, member.deactivated_at)}.
+                      </p>
+                      <p className="text-[10px] text-rose-700">
+                        O acesso está bloqueado. Reative a qualquer momento para cancelar a exclusão mantendo todos os prontuários e históricos preservados.
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
@@ -574,209 +539,7 @@ export const StaffManagementView: React.FC = () => {
         )}
       </div>
 
-      {/* ========================================================== */}
-      {/* MODAL 1: Cadastrar Novo Membro */}
-      {/* ========================================================== */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
-            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-extrabold">Adicionar Membro à Equipe</h3>
-                <p className="text-xs text-slate-400">
-                  Cadastre um colaborador ou profissional e atribua suas permissões no ambiente da clínica.
-                </p>
-              </div>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreateStaff} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block font-bold text-slate-700 mb-1">Nome Completo *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={e => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Ex: Ana Paula Ribeiro"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Sexo / Prefixo</label>
-                    <select
-                      value={formData.gender || 'M'}
-                      onChange={e => setFormData({ ...formData, gender: e.target.value as 'M' | 'F' })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-semibold"
-                    >
-                      <option value="M">Masculino (Dr.)</option>
-                      <option value="F">Feminino (Dra.)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">E-mail de Acesso *</label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="anapaula@clinica.com"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Telefone / WhatsApp</label>
-                  <input
-                    type="text"
-                    value={formData.phone}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="(11) 98888-0000"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Perfil no Sistema *</label>
-                  <select
-                    value={formData.role}
-                    onChange={e => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                  >
-                    <option value="professional">Profissional de Atendimento / Saúde</option>
-                    <option value="receptionist">Recepcionista / Atendimento</option>
-                    <option value="secretary">Secretária(o)</option>
-                    <option value="financial">Financeiro</option>
-                    <option value="assistant">Auxiliar Administrativo</option>
-                    <option value="clinic_admin">Administrador da Clínica</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Profissão / Função</label>
-                  <select
-                    value={formData.professionName}
-                    onChange={e => setFormData({ ...formData, professionName: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                  >
-                    {PROFESSIONS_LIST.map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {formData.role === 'professional' && (
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Registro Profissional</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formData.registrationType}
-                        onChange={e => setFormData({ ...formData, registrationType: e.target.value.toUpperCase() })}
-                        placeholder="CRM/CRP"
-                        className="w-20 px-2 py-2 border border-slate-200 rounded-xl bg-slate-50 text-center"
-                      />
-                      <input
-                        type="text"
-                        value={formData.registrationNumber}
-                        onChange={e => setFormData({ ...formData, registrationNumber: e.target.value })}
-                        placeholder="12345"
-                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Campo aberto: Atendimentos e áreas de atuação */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-700">Atendimentos e áreas de atuação</label>
-                  <span className="text-[10px] text-slate-400">Texto livre</span>
-                </div>
-                <textarea
-                  value={formData.practiceAreas}
-                  onChange={e => setFormData({ ...formData, practiceAreas: e.target.value })}
-                  placeholder="Ex: TEA, TDAH, Ansiedade, Depressão, Orientação de Pais, Avaliação Neuropsicológica..."
-                  rows={2}
-                  className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50 resize-none"
-                />
-              </div>
-
-              {/* Permissões Granulares e Perfis Pré-Programados (Item 18) */}
-              <div className="pt-3 border-t border-slate-100 space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <span className="font-bold text-slate-800 block">Permissões do Membro</span>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase">Modelos Prontos:</span>
-                    {PERMISSION_PRESETS.map(preset => (
-                      <button
-                        type="button"
-                        key={preset.id}
-                        onClick={() => setFormData({ ...formData, selectedPermissions: preset.perms })}
-                        className="px-2 py-0.5 text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg cursor-pointer transition-all"
-                        title={preset.desc}
-                      >
-                        ⚡ {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                  {AVAILABLE_PERMISSIONS.map(p => {
-                    const isChecked = formData.selectedPermissions.includes(p.id);
-                    return (
-                      <label key={p.id} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={e => {
-                            if (e.target.checked) {
-                              setFormData({
-                                ...formData,
-                                selectedPermissions: [...formData.selectedPermissions, p.id]
-                              });
-                            } else {
-                              setFormData({
-                                ...formData,
-                                selectedPermissions: formData.selectedPermissions.filter(id => id !== p.id)
-                              });
-                            }
-                          }}
-                          className="rounded text-indigo-600 focus:ring-indigo-500"
-                        />
-                        <span className="text-[11px] text-slate-700">{p.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 font-bold text-slate-600 hover:text-slate-800"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md cursor-pointer"
-                >
-                  Confirmar Cadastro
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ========================================================== */}
       {/* MODAL 2: Editar Cargo, Profissão e Áreas de Atuação */}
@@ -905,6 +668,43 @@ export const StaffManagementView: React.FC = () => {
                 {AVAILABLE_PERMISSIONS.map(p => {
                   const currentPerms = editingPermissionsUser.permissions || [];
                   const isChecked = currentPerms.includes(p.id);
+
+                  if (p.id === 'access_zemda_fisio') {
+                    return (
+                      <div
+                        key={p.id}
+                        className="p-3 bg-teal-50 border border-teal-200 rounded-2xl space-y-1.5 my-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-extrabold uppercase tracking-wide text-teal-900">
+                            Módulo Fisioterapia (ZemdaFisio)
+                          </span>
+                        </div>
+                        <label className="flex items-center gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={e => {
+                              const updated = e.target.checked
+                                ? [...currentPerms, p.id]
+                                : currentPerms.filter((id: string) => id !== p.id);
+                              setEditingPermissionsUser({
+                                ...editingPermissionsUser,
+                                permissions: updated
+                              });
+                            }}
+                            className="rounded text-teal-600 focus:ring-teal-500 w-4 h-4 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-teal-950">
+                            ZemdaFisio: Acesso permitido
+                          </span>
+                        </label>
+                        <p className="text-[11px] text-teal-700 pl-6.5 leading-relaxed">
+                          Habilita prontuário de fisioterapia, escalas de dor, goniometria, testes ortopédicos e evoluções clínicas exclusivas (exige profissão Fisioterapia).
+                        </p>
+                      </div>
+                    );
+                  }
 
                   return (
                     <label

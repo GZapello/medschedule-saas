@@ -8,11 +8,47 @@ export interface AvailableSlot {
   bufferMinutes: number;
 }
 
+/**
+ * Converte qualquer string de data/hora (ex: '2026-09-15 09:00:00' ou '2026-09-15T09:00:00')
+ * no minuto do dia correspondente para uma data alvo específica.
+ */
+function parseDateTimeToMinuteOfDay(dtStr: string, targetDateStr: string): number {
+  if (!dtStr) return 0;
+  const s = dtStr.trim().replace(' ', 'T');
+  const datePart = s.substring(0, 10);
+
+  if (datePart < targetDateStr) {
+    return 0; // Começou antes do dia alvo
+  }
+  if (datePart > targetDateStr) {
+    return 24 * 60; // Termina após o dia alvo
+  }
+
+  const timePart = s.length >= 16 ? s.substring(11, 16) : s.substring(11);
+  const [h, m] = timePart.split(':').map(Number);
+  const hour = isNaN(h) ? 0 : h;
+  const minute = isNaN(m) ? 0 : m;
+  return hour * 60 + minute;
+}
+
+const timeToMinutes = (t: string): number => {
+  if (!t) return 0;
+  const [h, m] = t.split(':').map(Number);
+  return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+};
+
+const minutesToTime = (m: number): string => {
+  const h = Math.floor(m / 60).toString().padStart(2, '0');
+  const min = (m % 60).toString().padStart(2, '0');
+  return `${h}:${min}`;
+};
+
 export function calculateAvailableSlots(
   tenantId: string,
   professionalId: string,
   serviceId: string,
-  dateStr: string // 'YYYY-MM-DD'
+  dateStr: string, // 'YYYY-MM-DD'
+  roomId?: string
 ): AvailableSlot[] {
   // 1. Busca dados do serviço
   const serviceStmt = db.prepare(`
@@ -30,13 +66,19 @@ export function calculateAvailableSlots(
   if (!service) return [];
 
   const duration = service.duration_minutes || 50;
-  const buffer = service.buffer_minutes || 10;
+  // Preserva 0 se o serviço não tiver buffer cadastrado
+  const buffer = (service.buffer_minutes !== undefined && service.buffer_minutes !== null)
+    ? service.buffer_minutes
+    : 0;
   const totalSlotDuration = duration + buffer;
 
   // 2. Valida datas no passado ou muito no futuro
+  const [targetYear, targetMonth, targetDay] = dateStr.split('-').map(Number);
+  if (!targetYear || !targetMonth || !targetDay) return [];
+
   const now = new Date();
-  const targetDate = new Date(`${dateStr}T00:00:00`);
   const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetDate = new Date(targetYear, targetMonth - 1, targetDay);
 
   if (targetDate < todayOnly) {
     return []; // Não permite agendar em dias passados
@@ -61,7 +103,7 @@ export function calculateAvailableSlots(
   // 4. Obtém o dia da semana (0 = Domingo, 1 = Segunda, ..., 6 = Sábado)
   const dayOfWeek = targetDate.getDay();
 
-  // 4b. Checa horários de funcionamento da clínica (Item 3)
+  // 4b. Checa horários de funcionamento da clínica
   const tenantRow = db.prepare('SELECT business_hours_json FROM tenants WHERE id = ?').get(tenantId) as { business_hours_json?: string } | undefined;
   let clinicDayConfig: { isOpen?: boolean; active?: boolean; startTime?: string; endTime?: string; breakStart?: string; breakEnd?: string } | null = null;
   if (tenantRow?.business_hours_json) {
@@ -79,7 +121,7 @@ export function calculateAvailableSlots(
     } catch (e) {}
   }
 
-  // 5. Busca todas as grades de trabalho do profissional para este dia da semana (suporte a múltiplos períodos)
+  // 5. Busca todas as grades de trabalho ativas do profissional para este dia da semana
   const schedStmt = db.prepare(`
     SELECT start_time, end_time, break_start, break_end
     FROM schedules
@@ -95,19 +137,36 @@ export function calculateAvailableSlots(
 
   if (!activeSchedules || activeSchedules.length === 0) return [];
 
-  // 6. Busca agendamentos já existentes neste dia (que não estejam cancelados)
+  // 6. Busca agendamentos ativos neste dia (que não estejam cancelados)
+  // Checa tanto consultas do profissional quanto da sala selecionada (se houver)
   const apptStmt = db.prepare(`
-    SELECT start_time, end_time
+    SELECT start_time, end_time, room_id
     FROM appointments
     WHERE tenant_id = ?
-      AND professional_id = ?
+      AND (professional_id = ? OR (? IS NOT NULL AND room_id = ?))
       AND status NOT IN ('cancelled')
-      AND start_time LIKE ?
+      AND (
+        REPLACE(start_time, ' ', 'T') LIKE ?
+        OR REPLACE(end_time, ' ', 'T') LIKE ?
+        OR (REPLACE(start_time, ' ', 'T') <= ? AND REPLACE(end_time, ' ', 'T') >= ?)
+      )
   `);
-  const existingAppts = apptStmt.all(tenantId, professionalId, `${dateStr}%`) as {
-    start_time: string;
-    end_time: string;
-  }[];
+
+  const rawAppts = apptStmt.all(
+    tenantId,
+    professionalId,
+    roomId || null,
+    roomId || null,
+    `${dateStr}%`,
+    `${dateStr}%`,
+    `${dateStr}T23:59:59`,
+    `${dateStr}T00:00:00`
+  ) as { start_time: string; end_time: string }[];
+
+  const existingApptIntervals = rawAppts.map(appt => ({
+    startMin: parseDateTimeToMinuteOfDay(appt.start_time, dateStr),
+    endMin: parseDateTimeToMinuteOfDay(appt.end_time, dateStr)
+  }));
 
   // 7. Busca bloqueios, férias e ausências pontuais neste dia
   const blockStmt = db.prepare(`
@@ -115,26 +174,22 @@ export function calculateAvailableSlots(
     FROM blocked_times
     WHERE tenant_id = ?
       AND (professional_id = ? OR professional_id IS NULL)
-      AND (start_datetime <= ? AND end_datetime >= ?)
+      AND (
+        REPLACE(start_datetime, ' ', 'T') <= ?
+        AND REPLACE(end_datetime, ' ', 'T') >= ?
+      )
   `);
   const endOfDay = `${dateStr}T23:59:59`;
   const startOfDay = `${dateStr}T00:00:00`;
-  const blockedTimes = blockStmt.all(tenantId, professionalId, endOfDay, startOfDay) as {
+  const rawBlocked = blockStmt.all(tenantId, professionalId, endOfDay, startOfDay) as {
     start_datetime: string;
     end_datetime: string;
   }[];
 
-  // Converte 'HH:mm' em minutos desde a meia-noite
-  const timeToMinutes = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    return h * 60 + m;
-  };
-
-  const minutesToTime = (m: number) => {
-    const h = Math.floor(m / 60).toString().padStart(2, '0');
-    const min = (m % 60).toString().padStart(2, '0');
-    return `${h}:${min}`;
-  };
+  const blockedIntervals = rawBlocked.map(blk => ({
+    startMin: parseDateTimeToMinuteOfDay(blk.start_datetime, dateStr),
+    endMin: parseDateTimeToMinuteOfDay(blk.end_datetime, dateStr)
+  }));
 
   // Interseção entre o expediente da clínica e a escala
   let clinicStartMin = 0;
@@ -151,6 +206,8 @@ export function calculateAvailableSlots(
   const isToday = targetDate.getTime() === todayOnly.getTime();
   const currentTotalMinutes = now.getHours() * 60 + now.getMinutes() + (minLeadHours * 60);
 
+  const slotStep = totalSlotDuration > 0 ? totalSlotDuration : duration;
+
   // 8. Itera sobre cada período/turno de trabalho configurado para o profissional
   for (const schedule of activeSchedules) {
     const workStartMin = timeToMinutes(schedule.start_time);
@@ -161,7 +218,7 @@ export function calculateAvailableSlots(
     const effectiveStartMin = Math.max(workStartMin, clinicStartMin);
     const effectiveEndMin = Math.min(workEndMin, clinicEndMin);
 
-    for (let current = effectiveStartMin; current + duration <= effectiveEndMin; current += totalSlotDuration) {
+    for (let current = effectiveStartMin; current + duration <= effectiveEndMin; current += slotStep) {
       const slotEndMin = current + duration;
 
       // Se for hoje, checa a antecedência mínima
@@ -171,44 +228,36 @@ export function calculateAvailableSlots(
 
       // Checa conflito com intervalo de descanso deste turno
       if (breakStartMin !== null && breakEndMin !== null) {
-        if (
-          (current >= breakStartMin && current < breakEndMin) ||
-          (slotEndMin > breakStartMin && slotEndMin <= breakEndMin) ||
-          (current <= breakStartMin && slotEndMin >= breakEndMin)
-        ) {
+        if (current < breakEndMin && slotEndMin > breakStartMin) {
           continue;
         }
       }
 
       // Checa conflito com intervalo da clínica
       if (clinicBreakStartMin !== null && clinicBreakEndMin !== null) {
-        if (
-          (current >= clinicBreakStartMin && current < clinicBreakEndMin) ||
-          (slotEndMin > clinicBreakStartMin && slotEndMin <= clinicBreakEndMin) ||
-          (current <= clinicBreakStartMin && slotEndMin >= clinicBreakEndMin)
-        ) {
+        if (current < clinicBreakEndMin && slotEndMin > clinicBreakStartMin) {
           continue;
         }
       }
+
+      // Checa conflito com agendamentos existentes (interseção de intervalos)
+      const hasApptConflict = existingApptIntervals.some(appt => {
+        return current < appt.endMin && slotEndMin > appt.startMin;
+      });
+      if (hasApptConflict) continue;
+
+      // Checa conflito com bloqueios pontuais, férias e ausências
+      const hasBlockConflict = blockedIntervals.some(blk => {
+        return current < blk.endMin && slotEndMin > blk.startMin;
+      });
+      if (hasBlockConflict) continue;
 
       const slotStartIso = `${dateStr}T${minutesToTime(current)}:00`;
       const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;
 
       if (seenTimes.has(slotStartIso)) continue;
-
-      // Checa conflito com agendamentos existentes
-      const hasApptConflict = existingAppts.some(appt => {
-        return (slotStartIso < appt.end_time && slotEndIso > appt.start_time);
-      });
-      if (hasApptConflict) continue;
-
-      // Checa conflito com bloqueios pontuais, férias e ausências
-      const hasBlockConflict = blockedTimes.some(blk => {
-        return (slotStartIso < blk.end_datetime && slotEndIso > blk.start_datetime);
-      });
-      if (hasBlockConflict) continue;
-
       seenTimes.add(slotStartIso);
+
       slots.push({
         time: minutesToTime(current),
         startTime: slotStartIso,
@@ -223,3 +272,4 @@ export function calculateAvailableSlots(
   slots.sort((a, b) => a.startTime.localeCompare(b.startTime));
   return slots;
 }
+

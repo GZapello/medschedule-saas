@@ -24,9 +24,11 @@ import {
   Mail,
   User,
   ExternalLink,
-  Printer
+  Printer,
+  Edit3
 } from 'lucide-react';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
+import { EditPatientModal } from './EditPatientModal';
 
 interface PatientProfileModalProps {
   patientId: string;
@@ -48,6 +50,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   const [loading, setLoading] = useState<boolean>(true);
   const [patientData, setPatientData] = useState<any>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
   // Timeline state
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -483,6 +486,14 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setIsEditModalOpen(true)}
+              title="Editar Cadastro do Paciente"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition-all shadow-xs cursor-pointer"
+            >
+              <Edit3 className="w-4 h-4 text-white" />
+              Editar Paciente
+            </button>
+            <button
               onClick={handleExportDocx}
               title="Exportar Prontuário em Word (.docx)"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all shadow-xs"
@@ -492,7 +503,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition-all"
+              className="p-1.5 text-slate-400 hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -1771,6 +1782,20 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
           documentType={printDoc.type}
           documentId={printDoc.id}
           onClose={() => setPrintDoc(null)}
+        />
+      )}
+
+      {/* Modal de Edição do Cadastro do Paciente */}
+      {isEditModalOpen && (
+        <EditPatientModal
+          isOpen={isEditModalOpen}
+          patientId={patientId}
+          initialData={patientData?.patient}
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={() => {
+            loadPatientBase();
+            if (onUpdated) onUpdated();
+          }}
         />
       )}
     </div>

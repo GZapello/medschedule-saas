@@ -50,7 +50,9 @@ export class PatientController {
         SELECT 
           id, tenant_id, full_name, social_name, birth_date, cpf, email, phone, whatsapp,
           address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
-          notes_admin, is_child, pet_metadata_json, active, allergies_status, created_at, updated_at
+          notes_admin, is_child, pet_metadata_json, active, allergies_status,
+          health_insurance_provider, health_insurance_card, health_insurance_plan,
+          created_at, updated_at
         FROM patients
         WHERE id = ? AND tenant_id = ?
       `);
@@ -194,7 +196,9 @@ export class PatientController {
       const {
         fullName, socialName, birthDate, cpf, email, phone, whatsapp,
         address, city, state, zipCode, photoUrl, emergencyContact, emergencyPhone,
-        notesAdmin, isChild, active
+        notesAdmin, isChild, active,
+        healthInsuranceProvider, healthInsuranceCard, healthInsurancePlan,
+        guardians
       } = req.body;
 
       const updateStmt = db.prepare(`
@@ -216,6 +220,9 @@ export class PatientController {
           notes_admin = COALESCE(?, notes_admin),
           is_child = COALESCE(?, is_child),
           active = COALESCE(?, active),
+          health_insurance_provider = COALESCE(?, health_insurance_provider),
+          health_insurance_card = COALESCE(?, health_insurance_card),
+          health_insurance_plan = COALESCE(?, health_insurance_plan),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -238,9 +245,37 @@ export class PatientController {
         notesAdmin || null,
         isChild !== undefined ? (isChild ? 1 : 0) : null,
         active !== undefined ? (active ? 1 : 0) : null,
+        healthInsuranceProvider !== undefined ? healthInsuranceProvider : null,
+        healthInsuranceCard !== undefined ? healthInsuranceCard : null,
+        healthInsurancePlan !== undefined ? healthInsurancePlan : null,
         id,
         tenantId
       );
+
+      // Atualiza responsáveis se informados
+      if (Array.isArray(guardians)) {
+        db.prepare('DELETE FROM guardians WHERE patient_id = ? AND tenant_id = ?').run(id, tenantId);
+        const insertGrd = db.prepare(`
+          INSERT INTO guardians (id, tenant_id, patient_id, full_name, relationship, cpf, phone, email, is_primary, authorization_signed)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `);
+        for (const g of guardians) {
+          const gName = g.full_name || g.fullName;
+          if (gName) {
+            insertGrd.run(
+              'grd-' + uuidv4().slice(0, 8),
+              tenantId,
+              id,
+              gName,
+              g.relationship || 'Responsável',
+              g.cpf || null,
+              g.phone || null,
+              g.email || null,
+              g.is_primary !== undefined ? (g.is_primary ? 1 : 0) : 1
+            );
+          }
+        }
+      }
 
       logAudit(req, 'UPDATE_PATIENT', 'patients', id);
       res.json({ message: 'Cadastro atualizado com sucesso' });

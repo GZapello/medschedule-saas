@@ -142,12 +142,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('fisio') ||
     practiceAreas.includes('physio');
 
-  // Regra Estrita de Acesso ao ZemdaFisio:
-  // Administrador Global (superadmin) NUNCA tem acesso ao ZemdaFisio (Regras 1 e 3)
-  // Gerenciador da Clínica (clinic_admin) ou Profissional (professional) SOMENTE se tiver profissão/área de atuação em Fisioterapia (Regras 2 e 3)
-  const isPhysiotherapist = !isSuperAdmin && ((isProfessional || isClinicAdmin) && hasPhysioArea);
+  const userPermissions = (currentUser as any)?.permissions || [];
+  const isZemdaFisioAuthorized = userPermissions.includes('access_zemda_fisio') || !!(currentUser as any)?.zemdaFisioEnabled;
 
-  // Ambiente ZemdaFisio ativo EXCLUSIVAMENTE quando o usuário possuir área de atuação em Fisioterapia
+  // Regra Estrita de Acesso ao ZemdaFisio (Itens 8, 9, 10, 11, 15):
+  // 1. Administrador Global NUNCA tem uso clínico do ZemdaFisio
+  // 2. Deve pertencer à profissão / área de atuação de Fisioterapia
+  // 3. Deve possuir liberação explícita do gestor da clínica
+  const isPhysiotherapist = !isSuperAdmin && (isProfessional || isClinicAdmin) && hasPhysioArea && isZemdaFisioAuthorized;
+
+  // Ambiente ZemdaFisio ativo EXCLUSIVAMENTE para fisioterapeutas liberados
   const isZemdaFisio = isPhysiotherapist;
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';

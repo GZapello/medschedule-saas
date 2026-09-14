@@ -4,6 +4,42 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hashPassword } from '../utils/password';
 
+/**
+ * Purga com segurança colaboradores desativados há mais de 30 dias (Item 3).
+ * Preserva prontuários, documentos, registros financeiros e histórico de atendimentos
+ * através da anonimização de dados pessoais e desvinculação da clínica.
+ */
+function purgeExpiredDeactivatedAccounts(tenantId: string): void {
+  try {
+    const expiredUsers = db.prepare(`
+      SELECT u.id, u.name, u.email
+      FROM users u
+      JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+      WHERE (u.status IN ('inactive', 'blocked') OR cu.status IN ('inactive', 'blocked'))
+        AND (
+          (u.scheduled_deletion_at IS NOT NULL AND u.scheduled_deletion_at <= datetime('now'))
+          OR (cu.scheduled_deletion_at IS NOT NULL AND cu.scheduled_deletion_at <= datetime('now'))
+        )
+    `).all(tenantId) as { id: string; name: string; email: string }[];
+
+    for (const exp of expiredUsers) {
+      const anonEmail = `anon_${exp.id}@zemda.internal`;
+      const anonName = '[Colaborador Excluído]';
+      db.prepare(`
+        UPDATE users SET
+          name = ?, email = ?, phone = NULL, avatar_url = NULL,
+          status = 'deleted', updated_at = datetime('now')
+        WHERE id = ?
+      `).run(anonName, anonEmail, exp.id);
+
+      db.prepare("UPDATE professionals SET active = 0 WHERE user_id = ?").run(exp.id);
+      db.prepare("DELETE FROM clinic_users WHERE user_id = ? AND tenant_id = ?").run(exp.id, tenantId);
+    }
+  } catch (err) {
+    console.error('[purgeExpiredDeactivatedAccounts] Erro ao purgar contas expiradas:', err);
+  }
+}
+
 export class StaffController {
   // Lista todos os funcionários e profissionais vinculados à clínica
   static listStaff(req: Request, res: Response): void {
@@ -14,15 +50,21 @@ export class StaffController {
         return;
       }
 
-      // 1. Busca usuários vinculados à clínica
+      // 0. Executa purga de contas desativadas há mais de 30 dias (Item 3)
+      purgeExpiredDeactivatedAccounts(tenantId);
+
+      // 1. Busca usuários vinculados à clínica via clinic_users
       const usersStmt = db.prepare(`
         SELECT 
           u.id, u.tenant_id, u.name, u.email, u.role, u.phone, u.avatar_url,
           COALESCE(cu.status, u.status) as status, u.created_at,
+          COALESCE(cu.deactivated_at, u.deactivated_at) as deactivated_at,
+          COALESCE(cu.scheduled_deletion_at, u.scheduled_deletion_at) as scheduled_deletion_at,
           cu.is_manager, cu.permissions_json, cu.approved_at, cu.approved_by,
           COALESCE(cu.profession_custom, prof.name, u.role) as profession_name,
           COALESCE(cu.practice_areas, p.practice_areas, p.bio) as practice_areas,
           p.id as professional_id, p.registration_type, p.registration_number,
+          p.zemda_fisio_enabled,
           spec.name as specialty_name
         FROM users u
         JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
@@ -72,94 +114,12 @@ export class StaffController {
     }
   }
 
-  // Cria e envia convite / cadastra novo funcionário com status pendente de aceite
+  // Criação direta de membro descontinuada (Item 2)
   static async invite(req: Request, res: Response): Promise<void> {
-    try {
-      const tenantId = req.tenantId;
-      if (!tenantId) {
-        res.status(400).json({ error: 'Identificação de clínica obrigatória' });
-        return;
-      }
-
-      const {
-        name, email, phone, role, password,
-        professionId, specialtyId, registrationNumber, registrationType,
-        gender, permissions
-      } = req.body;
-
-      if (!name || !email) {
-        res.status(400).json({ error: 'Nome e e-mail do funcionário são obrigatórios' });
-        return;
-      }
-
-      const userRole = role || 'receptionist';
-      const cleanEmail = email.trim().toLowerCase();
-
-      // Verifica se usuário já existe
-      const existingUser = db.prepare('SELECT id, tenant_id FROM users WHERE email = ?').get(cleanEmail) as any;
-      if (existingUser) {
-        if (existingUser.tenant_id === tenantId) {
-          res.status(409).json({ error: 'Este e-mail já pertence a um usuário desta clínica' });
-          return;
-        } else {
-          res.status(409).json({ error: 'Este e-mail já está em uso na plataforma' });
-          return;
-        }
-      }
-
-      const userId = 'usr-' + uuidv4().slice(0, 8);
-      const hashedPassword = await hashPassword(password || '123456');
-      const defaultPerms = Array.isArray(permissions) ? JSON.stringify(permissions) : JSON.stringify([
-        'view_schedule', 'create_appointment', 'edit_appointment', 'create_patient', 'edit_patient'
-      ]);
-
-      // Insere usuário já vinculado à clínica
-      const insertUser = db.prepare(`
-        INSERT INTO users (id, tenant_id, name, email, password_hash, role, phone, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
-      `);
-      insertUser.run(userId, tenantId, name, cleanEmail, hashedPassword, userRole, phone || null);
-
-      // Insere na tabela de clinic_users
-      const insertClinicUser = db.prepare(`
-        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, approved_by, approved_at)
-        VALUES (?, ?, ?, ?, 'active', 0, ?, ?, datetime('now'))
-      `);
-      insertClinicUser.run('cu-' + uuidv4().slice(0, 8), tenantId, userId, userRole, defaultPerms, req.user?.userId || null);
-
-      // Se for profissional de saúde ou atendimento, registra na tabela professionals
-      if (userRole === 'professional' || professionId) {
-        const profId = 'pro-' + uuidv4().slice(0, 8);
-        db.prepare(`
-          INSERT INTO professionals (
-            id, tenant_id, user_id, name, profession_id, specialty_id,
-            registration_type, registration_number, gender, active
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-        `).run(
-          profId, tenantId, userId, name, professionId || null, specialtyId || null,
-          registrationType || 'CRP', registrationNumber || null,
-          gender === 'F' ? 'F' : 'M'
-        );
-
-        // Grade padrão segunda a sexta 08:00 às 18:00
-        for (let d = 1; d <= 5; d++) {
-          db.prepare(`
-            INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, break_start, break_end, is_active)
-            VALUES (?, ?, ?, ?, '08:00', '18:00', '12:00', '13:00', 1)
-          `).run('sch-' + uuidv4().slice(0, 8), tenantId, profId, d);
-        }
-      }
-
-      logAudit(req, 'ADD_STAFF', 'users', userId, { name, email: cleanEmail, role: userRole });
-
-      res.status(201).json({
-        message: 'Funcionário cadastrado e vinculado com sucesso à clínica',
-        userId
-      });
-    } catch (err: any) {
-      console.error('[StaffController.invite] Erro:', err);
-      res.status(500).json({ error: 'Erro ao cadastrar funcionário' });
-    }
+    res.status(403).json({
+      error: 'A criação direta de usuários pelo gerente foi descontinuada. Novos usuários devem se cadastrar na plataforma, selecionar a clínica e aguardar aprovação da solicitação.',
+      code: 'DIRECT_MEMBER_CREATION_DISABLED'
+    });
   }
 
   // Aprova a solicitação de acesso de um funcionário pendente
@@ -313,6 +273,10 @@ export class StaffController {
           permissions_json = excluded.permissions_json
       `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, permsJson);
 
+      // Sincroniza flag zemda_fisio_enabled no cadastro profissional (Item 9)
+      const zemdaFisioActive = permissions.includes('access_zemda_fisio') ? 1 : 0;
+      db.prepare("UPDATE professionals SET zemda_fisio_enabled = ? WHERE user_id = ? AND tenant_id = ?").run(zemdaFisioActive, id, tenantId);
+
       logAudit(req, 'UPDATE_STAFF_PERMISSIONS', 'users', id, { permissionsCount: permissions.length });
       res.json({ message: 'Permissões do funcionário atualizadas com sucesso' });
     } catch (err: any) {
@@ -321,7 +285,7 @@ export class StaffController {
     }
   }
 
-  // Bloqueia ou desbloqueia um funcionário
+  // Desativa ou reativa um funcionário com agendamento de exclusão em 30 dias (Item 3)
   static toggleStatus(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
@@ -333,17 +297,54 @@ export class StaffController {
         return;
       }
 
-      const newStatus = user.status === 'active' ? 'blocked' : 'active';
-      db.prepare("UPDATE users SET status = ?, updated_at = datetime('now') WHERE id = ?").run(newStatus, id);
-      db.prepare("UPDATE clinic_users SET status = ? WHERE user_id = ? AND tenant_id = ?").run(newStatus, id, tenantId);
+      const isCurrentlyActive = user.status === 'active';
+      const newStatus = isCurrentlyActive ? 'inactive' : 'active';
 
-      // Sincroniza active em professionals
-      const profActive = newStatus === 'active' ? 1 : 0;
-      db.prepare("UPDATE professionals SET active = ? WHERE user_id = ? AND tenant_id = ?").run(profActive, id, tenantId);
+      if (newStatus === 'inactive') {
+        // Bloqueia o acesso imediatamente, registra data e agenda exclusão para +30 dias
+        db.prepare(`
+          UPDATE users SET
+            status = 'inactive',
+            deactivated_at = datetime('now'),
+            scheduled_deletion_at = datetime('now', '+30 days'),
+            updated_at = datetime('now')
+          WHERE id = ?
+        `).run(id);
+
+        db.prepare(`
+          UPDATE clinic_users SET
+            status = 'inactive',
+            deactivated_at = datetime('now'),
+            scheduled_deletion_at = datetime('now', '+30 days')
+          WHERE user_id = ? AND tenant_id = ?
+        `).run(id, tenantId);
+
+        db.prepare("UPDATE professionals SET active = 0 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
+      } else {
+        // Reativação durante os 30 dias: cancela exclusão automaticamente e restaura acesso
+        db.prepare(`
+          UPDATE users SET
+            status = 'active',
+            deactivated_at = NULL,
+            scheduled_deletion_at = NULL,
+            updated_at = datetime('now')
+          WHERE id = ?
+        `).run(id);
+
+        db.prepare(`
+          UPDATE clinic_users SET
+            status = 'active',
+            deactivated_at = NULL,
+            scheduled_deletion_at = NULL
+          WHERE user_id = ? AND tenant_id = ?
+        `).run(id, tenantId);
+
+        db.prepare("UPDATE professionals SET active = 1 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
+      }
 
       logAudit(req, 'TOGGLE_STAFF_STATUS', 'users', id, { newStatus });
       res.json({
-        message: `Status do funcionário alterado para ${newStatus === 'active' ? 'Ativo' : 'Bloqueado'}`,
+        message: newStatus === 'active' ? 'Conta reativada com sucesso' : 'Conta desativada. Exclusão programada para 30 dias.',
         status: newStatus
       });
     } catch (err: any) {

@@ -278,6 +278,16 @@ export const WorkSchedulesView: React.FC = () => {
         </div>
       </div>
 
+      {/* Alerta de Perfil: Funcionários não podem editar escala (Item 1) */}
+      {!isClinicAdmin && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-xs font-medium flex items-center gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>
+            <strong>Modo de Visualização:</strong> Apenas o Gerente / Administrador da Clínica pode criar, editar ou alterar a escala de trabalho e disponibilidade.
+          </span>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
         <button
@@ -340,14 +350,20 @@ export const WorkSchedulesView: React.FC = () => {
                 Configure os dias em que <strong>{selectedProf?.name || 'o profissional'}</strong> atende na clínica e adicione quantos turnos forem necessários (ex: manhã, tarde, noite).
               </span>
             </div>
-            <button
-              onClick={handleSaveSchedules}
-              disabled={saving}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 text-xs"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Salvando...' : 'Salvar Grade de Horários'}
-            </button>
+            {isClinicAdmin ? (
+              <button
+                onClick={handleSaveSchedules}
+                disabled={saving}
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 text-xs"
+              >
+                <Save className="w-4 h-4" />
+                {saving ? 'Salvando...' : 'Salvar Grade de Horários'}
+              </button>
+            ) : (
+              <span className="text-xs font-bold text-slate-500 bg-slate-200/70 px-3.5 py-2 rounded-xl">
+                Visualização da Escala
+              </span>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -370,8 +386,9 @@ export const WorkSchedulesView: React.FC = () => {
                       <input
                         type="checkbox"
                         checked={hasActiveShift}
+                        disabled={!isClinicAdmin}
                         onChange={() => handleToggleDay(dayIndex, hasActiveShift)}
-                        className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
+                        className="w-4 h-4 text-indigo-600 rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         id={`day-${dayIndex}`}
                       />
                       <label htmlFor={`day-${dayIndex}`} className="font-bold text-slate-800 text-sm cursor-pointer select-none">
@@ -384,7 +401,7 @@ export const WorkSchedulesView: React.FC = () => {
                       </span>
                     </div>
 
-                    {hasActiveShift && (
+                    {isClinicAdmin && hasActiveShift && (
                       <button
                         type="button"
                         onClick={() => handleAddShift(dayIndex)}
@@ -414,15 +431,17 @@ export const WorkSchedulesView: React.FC = () => {
                               <input
                                 type="time"
                                 value={shift.start_time}
+                                disabled={!isClinicAdmin}
                                 onChange={e => handleUpdateShift(originalIndex, { start_time: e.target.value })}
-                                className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-semibold text-slate-800 text-xs"
+                                className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-semibold text-slate-800 text-xs disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                               />
                               <span className="text-slate-500 font-medium">às</span>
                               <input
                                 type="time"
                                 value={shift.end_time}
+                                disabled={!isClinicAdmin}
                                 onChange={e => handleUpdateShift(originalIndex, { end_time: e.target.value })}
-                                className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-semibold text-slate-800 text-xs"
+                                className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-semibold text-slate-800 text-xs disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                               />
                             </div>
 
@@ -433,31 +452,35 @@ export const WorkSchedulesView: React.FC = () => {
                               <input
                                 type="time"
                                 value={shift.break_start || ''}
+                                disabled={!isClinicAdmin}
                                 onChange={e => handleUpdateShift(originalIndex, { break_start: e.target.value || null })}
                                 placeholder="--:--"
-                                className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-xs"
+                                className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-xs disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                               />
                               <span className="text-slate-400">até</span>
                               <input
                                 type="time"
                                 value={shift.break_end || ''}
+                                disabled={!isClinicAdmin}
                                 onChange={e => handleUpdateShift(originalIndex, { break_end: e.target.value || null })}
                                 placeholder="--:--"
-                                className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-xs"
+                                className="border border-slate-200 rounded-lg px-2 py-1 bg-white text-xs disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                               />
                             </div>
 
                             {/* Remover turno */}
-                            <div className="lg:ml-auto flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveShift(originalIndex)}
-                                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
-                                title="Remover turno"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                            {isClinicAdmin && (
+                              <div className="lg:ml-auto flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveShift(originalIndex)}
+                                  className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                                  title="Remover turno"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))
                       )}
@@ -480,13 +503,15 @@ export const WorkSchedulesView: React.FC = () => {
                 Horários ou dias inteiros bloqueados em que novos agendamentos não serão permitidos para {selectedProf?.name}.
               </p>
             </div>
-            <button
-              onClick={() => setShowBlockModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              Registrar Ausência / Férias
-            </button>
+            {isClinicAdmin && (
+              <button
+                onClick={() => setShowBlockModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Registrar Ausência / Férias
+              </button>
+            )}
           </div>
 
           {blockedTimes.length === 0 ? (
@@ -505,13 +530,15 @@ export const WorkSchedulesView: React.FC = () => {
                       </span>
                       <h4 className="font-bold text-slate-900 text-sm mt-1">{block.title}</h4>
                     </div>
-                    <button
-                      onClick={() => handleDeleteBlock(block.id)}
-                      className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition-all cursor-pointer"
-                      title="Excluir bloqueio"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isClinicAdmin && (
+                      <button
+                        onClick={() => handleDeleteBlock(block.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition-all cursor-pointer"
+                        title="Excluir bloqueio"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
                   <div className="text-xs text-slate-600 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-100">

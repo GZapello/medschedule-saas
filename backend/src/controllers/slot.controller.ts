@@ -6,7 +6,7 @@ export class SlotController {
   static getAvailableSlots(req: Request, res: Response): void {
     try {
       let tenantId = req.tenantId;
-      const { tenantSlug, professionalId, serviceId, date } = req.query;
+      const { tenantSlug, professionalId, serviceId, date, roomId } = req.query;
 
       if (!tenantId && tenantSlug) {
         const tenantRow = db.prepare("SELECT id FROM tenants WHERE slug = ? AND status = 'active'").get(tenantSlug) as { id: string } | undefined;
@@ -27,7 +27,8 @@ export class SlotController {
         tenantId,
         String(professionalId),
         String(serviceId),
-        String(date)
+        String(date),
+        roomId ? String(roomId) : undefined
       );
 
       res.json({

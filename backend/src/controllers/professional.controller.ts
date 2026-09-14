@@ -281,9 +281,9 @@ export class ProfessionalController {
         return;
       }
 
-      // Se for profissional logado, garante que só pode alterar a sua própria grade
-      if (req.user?.role === 'professional' && prof.user_id && prof.user_id !== req.user.userId) {
-        res.status(403).json({ error: 'Você só pode alterar sua própria grade de horários' });
+      // Apenas o Gerente/Gerenciador da Clínica pode alterar a escala de trabalho (Item 1)
+      if (req.user?.role !== 'clinic_admin' && req.user?.role !== 'superadmin') {
+        res.status(403).json({ error: 'Apenas o Gerente/Gerenciador da Clínica pode editar a escala de trabalho.' });
         return;
       }
 
@@ -533,6 +533,11 @@ export class ProfessionalController {
 
   static createBlockedTime(req: Request, res: Response): void {
     try {
+      if (req.user?.role !== 'clinic_admin' && req.user?.role !== 'superadmin') {
+        res.status(403).json({ error: 'Apenas o Gerente/Gerenciador da Clínica pode gerenciar bloqueios de horários.' });
+        return;
+      }
+
       const tenantId = req.tenantId;
       const { professionalId, roomId, title, startDatetime, endDatetime, reason, type } = req.body;
 
@@ -569,6 +574,11 @@ export class ProfessionalController {
 
   static deleteBlockedTime(req: Request, res: Response): void {
     try {
+      if (req.user?.role !== 'clinic_admin' && req.user?.role !== 'superadmin') {
+        res.status(403).json({ error: 'Apenas o Gerente/Gerenciador da Clínica pode remover bloqueios de horários.' });
+        return;
+      }
+
       const { blockId } = req.params;
       const tenantId = req.tenantId;
 
