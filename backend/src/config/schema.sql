@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   responsible_phone TEXT,
   responsible_role TEXT,
   -- Status e Controle de Onboarding
-  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'active', 'blocked', 'rejected', 'suspended')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'active', 'blocked', 'rejected', 'suspended', 'banned')),
   rejection_reason TEXT,
   onboarding_completed INTEGER NOT NULL DEFAULT 0,
   onboarding_step INTEGER NOT NULL DEFAULT 1,

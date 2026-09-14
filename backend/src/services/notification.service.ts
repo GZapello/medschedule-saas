@@ -68,7 +68,7 @@ export class NotificationService {
         JOIN professionals p ON p.id = a.professional_id
         JOIN services s ON s.id = a.service_id
         JOIN tenants t ON t.id = a.tenant_id
-        WHERE a.id = ?
+        WHERE a.id = ? AND t.status = 'active'
       `).get(appointmentId) as any;
 
       if (!appt || ['cancelled', 'completed', 'no_show'].includes(appt.status)) {
@@ -181,6 +181,7 @@ export class NotificationService {
 
       for (const item of pendingList) {
         try {
+          if (!db.prepare("SELECT 1 FROM notifications n JOIN tenants t ON t.id = n.tenant_id WHERE n.id = ? AND n.status = 'pending' AND t.status = 'active'").get(item.id)) continue;
           // Marca temporariamente como processando
           db.prepare("UPDATE notifications SET status = 'processing' WHERE id = ?").run(item.id);
 

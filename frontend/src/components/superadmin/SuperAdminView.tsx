@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 
 export const SuperAdminView: React.FC = () => {
-  const { switchTenant } = useAuth();
+  const { switchTenant, currentUser: user } = useAuth();
   const { showToast } = useToast();
 
   // Navegação Principal do SuperAdmin
@@ -42,6 +42,33 @@ export const SuperAdminView: React.FC = () => {
   const [selectedClinic, setSelectedClinic] = useState<any>(null);
   const [rejectingClinic, setRejectingClinic] = useState<any>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+
+  const [control, setControl] = useState<{ clinic: any; action: 'ban' | 'delete' } | null>(null);
+  const [controlReason, setControlReason] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [controlBusy, setControlBusy] = useState(false);
+  const [controlError, setControlError] = useState('');
+  const closeControl = () => { setControl(null); setControlReason(''); setConfirmation(''); setAdminPassword(''); setControlError(''); };
+  const submitControl = async (event: React.FormEvent) => {
+    event.preventDefault(); if (!control || controlBusy) return;
+    setControlBusy(true); setControlError('');
+    try {
+      if (control.action === 'delete') await ApiClient.post(`/v1/admin/tenants/${control.clinic.id}/delete-permanently`, { reason: controlReason, confirmation, password: adminPassword });
+      else await ApiClient.put(`/v1/admin/tenants/${control.clinic.id}/ban`, { reason: controlReason });
+      showToast(control.action === 'delete' ? 'Clínica excluída definitivamente' : 'Clínica banida', 'success');
+      closeControl(); setSelectedClinic(null); await loadAll();
+    } catch (error: any) { setControlError(error.message || 'Operação não concluída.'); }
+    finally { setControlBusy(false); setAdminPassword(''); }
+  };
+  const updateControl = async (clinic: any, action: 'unban' | 'toggle-registrations') => {
+    if (controlBusy) return; setControlBusy(true);
+    try {
+      const result = await ApiClient.put<{ message: string }>(`/v1/admin/tenants/${clinic.id}/${action}`, { blocked: !clinic.registrations_blocked });
+      showToast(result.message, 'success'); await loadAll();
+    } catch (error: any) { showToast(error.message, 'error'); }
+    finally { setControlBusy(false); }
+  };
 
   // Profissões Globais
   const [professions, setProfessions] = useState<any[]>([]);
@@ -258,7 +285,7 @@ export const SuperAdminView: React.FC = () => {
   const filteredTenants = tenants.filter(t => {
     if (activeTab === 'pending') return t.status === 'pending';
     if (activeTab === 'active') return t.status === 'active';
-    if (activeTab === 'blocked') return t.status === 'blocked' || t.status === 'suspended';
+    if (activeTab === 'blocked') return t.status === 'blocked' || t.status === 'suspended' || t.status === 'banned';
     return true;
   }).filter(t => {
     if (!searchTerm) return true;
@@ -291,8 +318,34 @@ export const SuperAdminView: React.FC = () => {
     );
   });
 
+  if (user?.role !== 'superadmin') return null;
   return (
     <div className="space-y-6">
+      {control && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <form onSubmit={submitControl} role="dialog" aria-modal="true" aria-labelledby="clinic-control-title" className="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4">
+            <h3 id="clinic-control-title" className="font-bold text-lg">{control.action === 'delete' ? 'Excluir clínica definitivamente' : 'Banir clínica'}</h3>
+            <p>Clínica: <strong>{control.clinic.name}</strong></p>
+            <p className="text-red-700">{control.action === 'delete' ? 'Esta ação apagará permanentemente a clínica e todos os dados vinculados. Esta operação não poderá ser desfeita.' : 'O acesso será bloqueado imediatamente. Os dados serão preservados.'}</p>
+            <label className="block">{control.action === 'delete' ? 'Motivo da exclusão:' : 'Motivo do banimento:'}
+              <textarea autoFocus required maxLength={2000} value={controlReason} onChange={e => setControlReason(e.target.value)} className="border rounded-lg p-2 w-full" disabled={controlBusy} />
+            </label>
+            {control.action === 'delete' && <>
+              <label className="block">Digite EXCLUIR
+                <input required value={confirmation} onChange={e => setConfirmation(e.target.value)} className="border rounded-lg p-2 w-full" disabled={controlBusy} autoComplete="off" />
+              </label>
+              <label className="block">Senha atual do Administrador do Sistema:
+                <input type="password" required autoComplete="current-password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="border rounded-lg p-2 w-full" disabled={controlBusy} />
+              </label>
+            </>}
+            {controlError && <p role="alert" className="text-red-700">{controlError}</p>}
+            <div className="flex justify-end gap-3">
+              <button type="button" disabled={controlBusy} onClick={closeControl} className="border rounded-lg px-4 py-2">CANCELAR</button>
+              <button type="submit" disabled={controlBusy || !controlReason.trim() || (control.action === 'delete' && (confirmation !== 'EXCLUIR' || !adminPassword))} className="bg-red-700 text-white rounded-lg px-4 py-2 disabled:opacity-50">{controlBusy ? 'Processando…' : control.action === 'delete' ? 'EXCLUIR DEFINITIVAMENTE' : 'BANIR CLÍNICA'}</button>
+            </div>
+          </form>
+        </div>
+      )}
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border border-white/10">
         <div className="flex items-center gap-4">
@@ -497,7 +550,7 @@ export const SuperAdminView: React.FC = () => {
                               : 'bg-slate-100 text-slate-700 border border-slate-200'
                           }`}
                         >
-                          {t.status === 'active' ? 'Ativa' : t.status === 'pending' ? 'Pendente' : t.status === 'rejected' ? 'Recusada' : 'Bloqueada'}
+                          {t.status === 'active' ? 'Ativa' : t.status === 'pending' ? 'Pendente' : t.status === 'rejected' ? 'Recusada' : t.status === 'banned' ? 'Banida' : t.status === 'cleanup_pending' ? 'Limpeza pendente — repetir exclusão' : 'Bloqueada'}
                         </span>
                       </td>
                       <td className="py-3 px-3">
@@ -568,6 +621,11 @@ export const SuperAdminView: React.FC = () => {
                             </button>
                           )}
 
+                          {t.status === 'banned' ? (
+                            <button disabled={controlBusy} onClick={() => updateControl(t, 'unban')} className="p-2 text-green-700">Remover banimento</button>
+                          ) : <button disabled={controlBusy} onClick={() => { closeControl(); setControl({ clinic: t, action: 'ban' }); }} className="p-2 text-red-700">Banir clínica</button>}
+                          <button disabled={controlBusy} onClick={() => updateControl(t, 'toggle-registrations')} className="p-2 text-amber-800">{t.registrations_blocked ? 'Liberar novos cadastros' : 'Bloquear novos cadastros'}</button>
+                          <button disabled={controlBusy} onClick={() => { closeControl(); setControl({ clinic: t, action: 'delete' }); }} className="p-2 text-red-700 font-bold">Excluir clínica definitivamente</button>
                           <button
                             onClick={() => setSelectedClinic(t)}
                             className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 cursor-pointer"

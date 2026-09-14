@@ -127,6 +127,12 @@ export function initializeDatabase(): void {
     addColIfMissing('tenants', 'website', 'TEXT');
     addColIfMissing('tenants', 'description', 'TEXT');
 
+    // Controle Administrativo Global (Banimento e Bloqueio de Cadastros)
+    addColIfMissing('tenants', 'registrations_blocked', 'INTEGER DEFAULT 0');
+    addColIfMissing('tenants', 'banned_at', 'TEXT');
+    addColIfMissing('tenants', 'banned_by', 'TEXT');
+    addColIfMissing('tenants', 'banned_reason', 'TEXT');
+
     // Novas colunas para profissão estruturada e atendimentos/áreas de atuação livres
     addColIfMissing('clinic_users', 'profession_custom', 'TEXT');
     addColIfMissing('clinic_users', 'practice_areas', 'TEXT');
@@ -704,7 +710,7 @@ export function initializeDatabase(): void {
         responsible_name = COALESCE(responsible_name, 'Dra. Camila Santos'),
         responsible_email = COALESCE(responsible_email, 'diretoria@viverbem.com'),
         responsible_phone = COALESCE(responsible_phone, '(11) 3344-5566')
-      WHERE slug = 'clinica-viver-bem';
+      WHERE slug = 'clinica-viver-bem' AND status = 'active';
     `);
 
     // Inicializa configuração de recibos padrão para tenants ativos se inexistente
@@ -1026,6 +1032,44 @@ export function initializeDatabase(): void {
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);
   }
+
+  // SQLite requires a table rebuild to extend an existing CHECK constraint.
+  const tenantSql = rawDb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tenants'").get() as { sql: string };
+  if (!tenantSql.sql.includes("'banned'")) {
+    const indexes = rawDb.prepare("SELECT sql FROM sqlite_master WHERE tbl_name = 'tenants' AND type IN ('index', 'trigger') AND sql IS NOT NULL").all() as { sql: string }[];
+    const replacement = tenantSql.sql.replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`\[]?tenants["`\]]?/i, 'CREATE TABLE tenants_control_migration')
+      .replace(/CHECK\s*\(\s*status\s+IN\s*\(([^)]+)\)\s*\)/i, "CHECK(status IN ($1, 'banned'))");
+    rawDb.exec('PRAGMA foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        rawDb.exec(replacement);
+        rawDb.exec('INSERT INTO tenants_control_migration SELECT * FROM tenants');
+        rawDb.exec('DROP TABLE tenants');
+        rawDb.exec('ALTER TABLE tenants_control_migration RENAME TO tenants');
+        for (const index of indexes) rawDb.exec(index.sql);
+        if (rawDb.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Integridade inválida na migração administrativa');
+      })();
+    } finally { rawDb.exec('PRAGMA foreign_keys = ON'); }
+  }
+  // Administrative controls must be available before accepting requests.
+  if (!rawDb.prepare('PRAGMA table_info(tenants)').all().some((c: any) => c.name === 'session_version')) {
+    rawDb.exec('ALTER TABLE tenants ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!rawDb.prepare('PRAGMA table_info(tenants)').all().some((c: any) => c.name === 'pre_ban_status')) {
+    rawDb.exec('ALTER TABLE tenants ADD COLUMN pre_ban_status TEXT');
+  }
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS global_clinic_audit (
+      id TEXT PRIMARY KEY, clinic_id TEXT NOT NULL, clinic_name TEXT NOT NULL,
+      admin_id TEXT NOT NULL, action TEXT NOT NULL, reason TEXT NOT NULL,
+      reauthenticated INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS clinic_deletion_jobs (
+      clinic_id TEXT PRIMARY KEY, files_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
 
   // Executa seed caso não existam categorias cadastradas
   try {

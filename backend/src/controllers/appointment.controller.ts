@@ -201,6 +201,9 @@ export class AppointmentController {
         return;
       }
 
+      if (!db.prepare("SELECT 1 FROM tenants WHERE id = ? AND status = 'active'").get(tenantId)) {
+        res.status(403).json({ error: 'O acesso a esta clínica está bloqueado.' }); return;
+      }
       // Resolve ou cria o paciente
       let resolvedPatientId = patientId;
       if (!resolvedPatientId && newPatientData) {

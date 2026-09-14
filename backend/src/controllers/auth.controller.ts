@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { requireOpenRegistration } from '../services/clinic-control.service';
 import { db } from '../config/database';
 import { comparePassword, hashPassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
@@ -74,7 +75,7 @@ export class AuthController {
         const tenantStmt = db.prepare(`
           SELECT 
             id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-            primary_color, client_term_label, status,
+            primary_color, client_term_label, status, banned_reason, registrations_blocked,
             onboarding_completed, onboarding_step, manager_confirmed
           FROM tenants
           WHERE id = ?
@@ -82,6 +83,15 @@ export class AuthController {
         tenantData = tenantStmt.get(user.tenant_id);
 
         if (tenantData) {
+          if (tenantData.status === 'banned') {
+            res.status(403).json({
+              error: 'Esta clínica foi banida pelo Administrador do Sistema. O acesso está permanentemente bloqueado.',
+              code: 'CLINIC_BANNED',
+              banned_reason: tenantData.banned_reason
+            });
+            return;
+          }
+
           if (tenantData.status === 'pending') {
             res.status(403).json({
               error: 'O cadastro da sua clínica está em análise e pendente de aprovação pelo Administrador do SaaS. Você será notificado assim que o acesso for liberado.',
@@ -417,6 +427,7 @@ export class AuthController {
       }
 
       const hashedPassword = await hashPassword(password);
+      try { requireOpenRegistration(tenantId); } catch { res.status(403).json({ error: 'Novos cadastros estão bloqueados para esta clínica.' }); return; }
       const userId = 'usr-' + uuidv4().slice(0, 8);
 
       // Mapeamento de papel
@@ -643,7 +654,8 @@ export class AuthController {
         SELECT 
           ci.id, ci.tenant_id, ci.token, ci.role, ci.expires_at, ci.status,
           ci.max_uses, ci.used_count, ci.created_at,
-          t.name as clinic_name, t.slug as clinic_slug, t.logo_url as clinic_logo_url, t.status as clinic_status
+          t.name as clinic_name, t.slug as clinic_slug, t.logo_url as clinic_logo_url,
+          t.status as clinic_status, t.registrations_blocked
         FROM clinic_invites ci
         JOIN tenants t ON t.id = ci.tenant_id
         WHERE ci.token = ?
@@ -654,6 +666,26 @@ export class AuthController {
           valid: false,
           code: 'INVITE_NOT_FOUND',
           error: 'Convite não encontrado ou inválido.'
+        });
+        return;
+      }
+
+      // Verifica banimento da clínica
+      if (invite.clinic_status === 'banned') {
+        res.status(403).json({
+          valid: false,
+          code: 'CLINIC_BANNED',
+          error: 'A clínica associada a este convite foi banida pelo Administrador do Sistema.'
+        });
+        return;
+      }
+
+      // Verifica bloqueio de novos cadastros
+      if (invite.registrations_blocked === 1) {
+        res.status(403).json({
+          valid: false,
+          code: 'REGISTRATIONS_BLOCKED',
+          error: 'Novos cadastros estão temporariamente bloqueados para esta clínica pelo Administrador do Sistema.'
         });
         return;
       }
@@ -763,7 +795,8 @@ export class AuthController {
         const invite = db.prepare(`
           SELECT 
             ci.id, ci.tenant_id, ci.token, ci.role, ci.expires_at, ci.status,
-            ci.max_uses, ci.used_count, t.name as clinic_name, t.status as clinic_status
+            ci.max_uses, ci.used_count, t.name as clinic_name, t.status as clinic_status,
+            t.registrations_blocked
           FROM clinic_invites ci
           JOIN tenants t ON t.id = ci.tenant_id
           WHERE ci.token = ?
@@ -771,6 +804,14 @@ export class AuthController {
 
         if (!invite) {
           throw new Error('INVITE_NOT_FOUND: Convite não encontrado ou inválido.');
+        }
+
+        if (invite.clinic_status === 'banned') {
+          throw new Error('CLINIC_BANNED: A clínica associada a este convite foi banida pelo Administrador do Sistema.');
+        }
+
+        if (invite.registrations_blocked === 1) {
+          throw new Error('REGISTRATIONS_BLOCKED: Novos cadastros estão temporariamente bloqueados para esta clínica pelo Administrador do Sistema.');
         }
 
         if (invite.clinic_status !== 'active') {
@@ -807,6 +848,14 @@ export class AuthController {
         inviteData = transaction();
       } catch (txErr: any) {
         const msg = txErr.message || '';
+        if (msg.startsWith('CLINIC_BANNED:')) {
+          res.status(403).json({ error: 'A clínica associada a este convite foi banida pelo Administrador do Sistema.' });
+          return;
+        }
+        if (msg.startsWith('REGISTRATIONS_BLOCKED:')) {
+          res.status(403).json({ error: 'Novos cadastros estão temporariamente bloqueados para esta clínica pelo Administrador do Sistema.' });
+          return;
+        }
         if (msg.startsWith('INVITE_EXPIRED:')) {
           res.status(410).json({ error: 'Este convite expirou. Solicite um novo convite à clínica.' });
           return;
@@ -837,6 +886,9 @@ export class AuthController {
 
       // Mapeamento de cargo
       let userRole = inviteData.role || 'professional';
+      if (userRole === 'superadmin') {
+        res.status(403).json({ error: 'Convites de clínica não podem conceder administração global.' }); return;
+      }
       const profLower = (professionName || '').toLowerCase();
       if (profLower.includes('médic') || profLower.includes('psic') || profLower.includes('fono') ||
           profLower.includes('fisio') || profLower.includes('terap') || profLower.includes('nutri') ||
@@ -861,6 +913,9 @@ export class AuthController {
 
       // Executa inserções e consome o convite em transação
       const completeRegister = db.transaction(() => {
+        requireOpenRegistration(tenantId);
+        const currentInvite = db.prepare('SELECT status, used_count, max_uses, expires_at FROM clinic_invites WHERE token = ?').get(token);
+        if (!currentInvite || currentInvite.status !== 'pending' || currentInvite.used_count >= currentInvite.max_uses || new Date(currentInvite.expires_at) < new Date()) throw new Error('Convite indisponível.');
         // 1. users (ativo, já aprovado via convite oficial da clínica)
         db.prepare(`
           INSERT INTO users (

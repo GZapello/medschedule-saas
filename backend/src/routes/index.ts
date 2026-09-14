@@ -224,6 +224,10 @@ api.put('/v1/admin/tenants/:id/approve', requireRole('superadmin'), TenantContro
 api.put('/v1/admin/tenants/:id/reject', requireRole('superadmin'), TenantController.adminReject);
 api.put('/v1/admin/tenants/:id/block', requireRole('superadmin'), TenantController.adminBlock);
 api.put('/v1/admin/tenants/:id/unblock', requireRole('superadmin'), TenantController.adminUnblock);
+api.put('/v1/admin/tenants/:id/ban', requireRole('superadmin'), TenantController.adminBan);
+api.put('/v1/admin/tenants/:id/unban', requireRole('superadmin'), TenantController.adminUnban);
+api.put('/v1/admin/tenants/:id/toggle-registrations', requireRole('superadmin'), TenantController.adminToggleRegistrations);
+api.post('/v1/admin/tenants/:id/delete-permanently', requireRole('superadmin'), TenantController.adminDeletePermanently);
 
 // Onboarding e Assistente de Configuração da Clínica (Gestor)
 api.get('/v1/onboarding/status', requireTenant, OnboardingController.getStatus);

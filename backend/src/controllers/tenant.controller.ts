@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
-import { hashPassword } from '../utils/password';
+import { hashPassword, comparePassword } from '../utils/password';
 import { v4 as uuidv4 } from 'uuid';
+import { globalAudit, purgeClinic } from '../services/clinic-control.service';
 
 export class TenantController {
   // 0. Lista pública de clínicas ativas para seleção no cadastro de usuários ("Clínica que deseja integrar")
@@ -11,7 +12,7 @@ export class TenantController {
       const stmt = db.prepare(`
         SELECT id, name, trade_name, city, state, slug, logo_url, client_term_label
         FROM tenants
-        WHERE status = 'active'
+        WHERE status = 'active' AND COALESCE(registrations_blocked, 0) = 0
         ORDER BY name ASC
       `);
       const clinics = stmt.all();
@@ -77,6 +78,11 @@ export class TenantController {
       const tenantId = 'ten-' + uuidv4().slice(0, 8);
       const userId = 'usr-' + uuidv4().slice(0, 8);
       const hashedPassword = await hashPassword(password);
+      const identity = String(cnpjCpf || '').replace(/\D/g, '');
+      const banned = db.prepare("SELECT slug, cnpj_cpf, email, responsible_email FROM tenants WHERE status = 'banned'").all();
+      if (banned.some(t => t.slug === baseSlug || (identity && String(t.cnpj_cpf || '').replace(/\D/g, '') === identity) || t.email === cleanEmail || t.responsible_email === cleanEmail)) {
+        res.status(403).json({ error: 'Esta clínica está banida. Somente o Administrador do Sistema pode liberar seu cadastro.' }); return;
+      }
 
       const {
         managerProfession,
@@ -200,6 +206,8 @@ export class TenantController {
         return;
       }
 
+      if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
+
       // 1. Atualiza clínica para 'active'
       db.prepare("UPDATE tenants SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
 
@@ -235,11 +243,13 @@ export class TenantController {
       const { id } = req.params;
       const { reason } = req.body;
 
-      const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(id) as any;
+      const tenant = db.prepare('SELECT id, name, status FROM tenants WHERE id = ?').get(id) as any;
       if (!tenant) {
         res.status(404).json({ error: 'Clínica não encontrada' });
         return;
       }
+
+      if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
 
       db.prepare("UPDATE tenants SET status = 'rejected', rejection_reason = ?, updated_at = datetime('now') WHERE id = ?").run(reason || 'Não atende aos critérios da plataforma', id);
       db.prepare("UPDATE users SET status = 'rejected', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
@@ -258,11 +268,13 @@ export class TenantController {
   static adminBlock(req: Request, res: Response): void {
     try {
       const { id } = req.params;
-      const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(id) as any;
+      const tenant = db.prepare('SELECT id, name, status FROM tenants WHERE id = ?').get(id) as any;
       if (!tenant) {
         res.status(404).json({ error: 'Clínica não encontrada' });
         return;
       }
+
+      if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
 
       db.prepare("UPDATE tenants SET status = 'blocked', updated_at = datetime('now') WHERE id = ?").run(id);
       db.prepare("UPDATE users SET status = 'blocked', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
@@ -279,11 +291,13 @@ export class TenantController {
   static adminUnblock(req: Request, res: Response): void {
     try {
       const { id } = req.params;
-      const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(id) as any;
+      const tenant = db.prepare('SELECT id, name, status FROM tenants WHERE id = ?').get(id) as any;
       if (!tenant) {
         res.status(404).json({ error: 'Clínica não encontrada' });
         return;
       }
+
+      if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
 
       db.prepare("UPDATE tenants SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
       db.prepare("UPDATE users SET status = 'active', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
@@ -296,6 +310,135 @@ export class TenantController {
     }
   }
 
+  // 5.1 Banimento de Clínica pelo ADM do SaaS
+  static adminBan(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const adminId = (req as any).user?.userId;
+
+      if (typeof reason !== 'string' || !reason.trim()) {
+        res.status(400).json({ error: 'O motivo do banimento é obrigatório.' });
+        return;
+      }
+
+      const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      db.transaction(() => {
+        db.prepare(`UPDATE tenants SET pre_ban_status = CASE WHEN status = 'banned' THEN pre_ban_status ELSE status END,
+          status = 'banned', banned_at = datetime('now'), banned_by = ?, banned_reason = ?,
+          session_version = session_version + 1, updated_at = datetime('now') WHERE id = ?`).run(adminId, reason.trim(), id);
+        globalAudit(adminId, String(id), tenant.name, 'BAN', reason.trim());
+      })();
+      res.json({ message: `Clínica "${tenant.name}" foi banida com sucesso.`, status: 'banned' });
+    } catch (err: any) {
+      console.error('[TenantController.adminBan] Erro:', err);
+      res.status(500).json({ error: 'Erro ao banir clínica' });
+    }
+  }
+
+  // 5.2 Remoção de Banimento de Clínica pelo ADM do SaaS
+  static adminUnban(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      db.transaction(() => {
+        db.prepare(`UPDATE tenants SET status = COALESCE(pre_ban_status, 'active'), pre_ban_status = NULL,
+          banned_at = NULL, banned_by = NULL, banned_reason = NULL, updated_at = datetime('now') WHERE id = ? AND status = 'banned'`).run(id);
+        globalAudit(req.user!.userId, String(id), tenant.name, 'UNBAN', 'Banimento removido');
+      })();
+      res.json({ message: `Banimento da clínica "${tenant.name}" foi removido com sucesso.`, status: 'active' });
+    } catch (err: any) {
+      console.error('[TenantController.adminUnban] Erro:', err);
+      res.status(500).json({ error: 'Erro ao remover banimento da clínica' });
+    }
+  }
+
+  // 5.3 Bloquear / Liberar Novos Cadastros da Clínica
+  static adminToggleRegistrations(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenant = db.prepare('SELECT id, name, registrations_blocked FROM tenants WHERE id = ?').get(id) as any;
+      if (!tenant) {
+        res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      if (typeof req.body.blocked !== 'boolean') { res.status(400).json({ error: 'Informe blocked como booleano.' }); return; }
+      const nextState = req.body.blocked ? 1 : 0;
+      db.prepare("UPDATE tenants SET registrations_blocked = ?, updated_at = datetime('now') WHERE id = ?").run(nextState, id);
+
+      globalAudit(req.user!.userId, String(id), tenant.name, nextState ? 'BLOCK_REGISTRATIONS' : 'ALLOW_REGISTRATIONS', 'Controle de novos cadastros');
+      res.json({
+        message: nextState === 1
+          ? `Novos cadastros foram bloqueados para a clínica "${tenant.name}".`
+          : `Novos cadastros foram liberados para a clínica "${tenant.name}".`,
+        registrations_blocked: nextState
+      });
+    } catch (err: any) {
+      console.error('[TenantController.adminToggleRegistrations] Erro:', err);
+      res.status(500).json({ error: 'Erro ao alternar bloqueio de cadastros da clínica' });
+    }
+  }
+
+  // 5.4 Exclusão Rápida e DEFINITIVA de uma Clínica (Exclusivo SuperAdmin com validação de senha real)
+  static async adminDeletePermanently(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { password, confirmation, reason } = req.body;
+      const currentUserId = (req as any).user?.userId;
+
+      if (!currentUserId) {
+        res.status(401).json({ error: 'Usuário não autenticado.' });
+        return;
+      }
+
+      // Valida credenciais do SuperAdmin no banco de dados
+      const adminUser = db.prepare('SELECT id, email, password_hash, role FROM users WHERE id = ?').get(currentUserId) as any;
+      if (!adminUser || adminUser.role !== 'superadmin') {
+        res.status(403).json({ error: 'Acesso negado. Apenas o Administrador do Sistema pode executar esta operação.' });
+        return;
+      }
+
+      // Validação rigorosa da senha atual do administrador
+      const isPasswordValid = await comparePassword(typeof password === 'string' ? password : '', adminUser.password_hash || '');
+      if (!isPasswordValid) {
+        res.status(403).json({ error: 'Senha do Administrador inválida. Nenhuma alteração foi realizada.' });
+        return;
+      }
+      const freshAdmin = db.prepare('SELECT role, status, password_hash FROM users WHERE id = ?').get(currentUserId);
+      if (!freshAdmin || freshAdmin.role !== 'superadmin' || freshAdmin.status !== 'active' || freshAdmin.password_hash !== adminUser.password_hash) {
+        res.status(403).json({ error: 'Reautenticação inválida. Entre novamente.' }); return;
+      }
+
+      // Validação da confirmação por texto explícito e motivo
+      if (typeof reason !== 'string' || !reason.trim()) {
+        res.status(400).json({ error: 'O motivo da exclusão definitiva é obrigatório.' });
+        return;
+      }
+
+      if (confirmation !== 'EXCLUIR') {
+        res.status(400).json({ error: 'Confirmação inválida. Digite exatamente a palavra EXCLUIR para confirmar.' });
+        return;
+      }
+
+      purgeClinic(String(id), adminUser.id, reason.trim());
+      res.json({ message: 'Clínica excluída definitivamente', deleted_clinic_id: id });
+    } catch (err: any) {
+      console.error('[TenantController.adminDeletePermanently] Erro:', err);
+      res.status(500).json({ error: 'Exclusão não concluída. Corrija a falha e repita a operação para concluir a limpeza.' });
+    }
+  }
+
   // 6. Métricas Globais do SaaS para o Dashboard do SuperAdmin
   static adminMetrics(req: Request, res: Response): void {
     try {
@@ -303,6 +446,7 @@ export class TenantController {
       const pendingClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'pending'").get() as any).c;
       const activeClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'active'").get() as any).c;
       const blockedClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'blocked'").get() as any).c;
+      const bannedClinics = (db.prepare("SELECT COUNT(*) as c FROM tenants WHERE status = 'banned'").get() as any).c;
       const totalUsers = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any).c;
       const totalProfessionals = (db.prepare('SELECT COUNT(*) as c FROM professionals WHERE active = 1').get() as any).c;
       const totalAppointments = (db.prepare('SELECT COUNT(*) as c FROM appointments').get() as any).c;
@@ -310,8 +454,8 @@ export class TenantController {
 
       // Últimos logs de auditoria administrativa
       const recentLogs = db.prepare(`
-        SELECT id, action, entity, entity_id, ip_address, created_at
-        FROM audit_logs
+        SELECT id, action, clinic_id AS entity_id, clinic_name, reason, reauthenticated, created_at
+        FROM global_clinic_audit
         ORDER BY created_at DESC
         LIMIT 10
       `).all();
@@ -330,6 +474,7 @@ export class TenantController {
         pendingClinics,
         activeClinics,
         blockedClinics,
+        bannedClinics,
         totalUsers,
         totalProfessionals,
         totalAppointments,
@@ -352,6 +497,7 @@ export class TenantController {
         SELECT 
           t.id, t.slug, t.name, t.corporate_name, t.trade_name, t.cnpj_cpf, t.email, t.phone, 
           t.city, t.state, t.logo_url, t.status, t.onboarding_completed, t.manager_confirmed,
+          t.registrations_blocked, t.banned_at, t.banned_by, t.banned_reason,
           t.responsible_name, t.responsible_email, t.created_at,
           p.name as plan_name, p.slug as plan_slug,
           (SELECT COUNT(*) FROM professionals WHERE tenant_id = t.id AND active = 1) as total_professionals,
@@ -378,6 +524,9 @@ export class TenantController {
 
       const stmt = db.prepare(query);
       const tenants = stmt.all(...params);
+      const pendingCleanup = db.prepare(`SELECT j.clinic_id AS id, a.clinic_name AS name, 'cleanup_pending' AS status
+        FROM clinic_deletion_jobs j JOIN global_clinic_audit a ON a.clinic_id = j.clinic_id AND a.action = 'DELETE_REQUESTED'`).all();
+      tenants.push(...pendingCleanup);
       res.json(tenants);
     } catch (err: any) {
       console.error('[TenantController.listAll] Erro:', err);

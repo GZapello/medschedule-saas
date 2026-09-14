@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { requireOpenRegistration } from '../services/clinic-control.service';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
@@ -126,6 +127,7 @@ export class StaffController {
   // Aprova a solicitação de acesso de um funcionário pendente
   static approve(req: Request, res: Response): void {
     try {
+      requireOpenRegistration(req.tenantId!);
       const tenantId = req.tenantId;
       const { id } = req.params;
 
@@ -208,6 +210,9 @@ export class StaffController {
       }
 
       const newRole = role || user.role;
+      if (newRole === 'superadmin' || user.role === 'superadmin') {
+        res.status(403).json({ error: 'O Administrador do Sistema não pode ser criado ou alterado pelo controle de funcionários.' }); return;
+      }
 
       // Atualiza usuário
       db.prepare("UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?").run(newRole, id);
@@ -374,11 +379,24 @@ export class StaffController {
       }
 
       const { role = 'professional', validityDays = 7, maxUses = 1 } = req.body;
+      if (role === 'superadmin') {
+        res.status(403).json({ error: 'Convites de clínica não podem conceder administração global.' }); return;
+      }
 
       // Busca dados do tenant para compor o slug e URL
-      const tenant = db.prepare('SELECT id, name, slug FROM tenants WHERE id = ?').get(tenantId) as any;
+      const tenant = db.prepare('SELECT id, name, slug, status, registrations_blocked FROM tenants WHERE id = ?').get(tenantId) as any;
       if (!tenant) {
         res.status(404).json({ error: 'Clínica não encontrada' });
+        return;
+      }
+
+      if (tenant.status === 'banned') {
+        res.status(403).json({ error: 'Esta clínica está banida pelo Administrador do Sistema. A geração de novos convites está bloqueada.' });
+        return;
+      }
+
+      if (tenant.registrations_blocked === 1) {
+        res.status(403).json({ error: 'Novos cadastros e convites estão bloqueados para esta clínica pelo Administrador do Sistema.' });
         return;
       }
 
