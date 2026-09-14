@@ -25,6 +25,11 @@ import { InsuranceController } from '../controllers/insurance.controller';
 import { ImportController } from '../controllers/import.controller';
 import { NotificationController } from '../controllers/notification.controller';
 import { ReferralController } from '../controllers/referral.controller';
+import { SupportController } from '../controllers/support.controller';
+import { PendingExamController } from '../controllers/pending-exam.controller';
+import { InventoryController } from '../controllers/inventory.controller';
+import { BudgetController } from '../controllers/budget.controller';
+import { PayrollController } from '../controllers/payroll.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -61,6 +66,10 @@ api.get('/v1/taxonomy/specialties', TaxonomyController.listSpecialties);
 api.get('/v1/public/tenants/:slug', TenantController.getPublicProfile);
 api.get('/v1/public/slots/available', SlotController.getAvailableSlots);
 api.post('/v1/public/appointments', AppointmentController.create);
+
+// Página Pública do Profissional & Agendamento Direto (/agendar/:slug)
+api.get('/v1/public/professionals/:slug', ProfessionalController.getPublicProfile);
+api.get('/v1/public/professionals/:slug/slots', ProfessionalController.getPublicSlots);
 
 // Verificação de Versão da Aplicação (Mecanismo de Auto-Update / Notificação)
 api.get('/v1/public/app-version', (req, res) => {
@@ -372,6 +381,39 @@ api.post('/v1/import/execute', requireTenant, requireRole('clinic_admin'), Impor
 api.get('/v1/import/batches', requireTenant, requireRole('clinic_admin'), ImportController.listBatches);
 api.post('/v1/import/batches/:id/rollback', requireTenant, requireRole('clinic_admin'), ImportController.rollbackBatch);
 api.post('/v1/import/export-custom-docx', requireTenant, ImportController.exportCustomDocx);
+
+// Central de Chamados & Suporte (para qualquer usuário autenticado e SuperAdmin)
+api.get('/v1/support/tickets', SupportController.list);
+api.get('/v1/support/tickets/:id', SupportController.getById);
+api.post('/v1/support/tickets', SupportController.create);
+api.post('/v1/support/tickets/:id/messages', SupportController.addMessage);
+api.put('/v1/support/tickets/:id/status', SupportController.updateStatus);
+
+// Exames a Receber
+api.get('/v1/pending-exams', requireTenant, PendingExamController.list);
+api.post('/v1/pending-exams', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), PendingExamController.create);
+api.put('/v1/pending-exams/:id', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), PendingExamController.update);
+api.delete('/v1/pending-exams/:id', requireTenant, requireRole('clinic_admin'), PendingExamController.delete);
+
+// Estoque de Insumos e Produtos (Exclusivo Gerenciador da Clínica)
+api.get('/v1/inventory/items', requireTenant, requireRole('clinic_admin'), InventoryController.list);
+api.post('/v1/inventory/items', requireTenant, requireRole('clinic_admin'), InventoryController.createItem);
+api.put('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin'), InventoryController.updateItem);
+api.post('/v1/inventory/movements', requireTenant, requireRole('clinic_admin'), InventoryController.recordMovement);
+api.get('/v1/inventory/movements', requireTenant, requireRole('clinic_admin'), InventoryController.listMovements);
+
+// Orçamentos (Pacientes e Insumos/Fornecedores)
+api.get('/v1/budgets', requireTenant, BudgetController.list);
+api.get('/v1/budgets/:id', requireTenant, BudgetController.getById);
+api.post('/v1/budgets', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.create);
+api.put('/v1/budgets/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.updateStatus);
+api.post('/v1/budgets/:id/convert-to-inventory', requireTenant, requireRole('clinic_admin'), BudgetController.convertToInventory);
+
+// Pagamentos, Comissões e Salário dos Profissionais (Exclusivo Gerenciador da Clínica)
+api.get('/v1/payrolls', requireTenant, requireRole('clinic_admin'), PayrollController.list);
+api.post('/v1/payrolls/calculate', requireTenant, requireRole('clinic_admin'), PayrollController.calculate);
+api.post('/v1/payrolls', requireTenant, requireRole('clinic_admin'), PayrollController.save);
+api.put('/v1/payrolls/:id/status', requireTenant, requireRole('clinic_admin'), PayrollController.updateStatus);
 
 // Trilha de Auditoria (LGPD Compliance) — Exclusivo SuperAdmin do SaaS (Item 20)
 api.get('/v1/audit', requireRole('superadmin'), AuditController.list);

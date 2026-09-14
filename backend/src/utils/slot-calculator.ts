@@ -79,20 +79,21 @@ export function calculateAvailableSlots(
     } catch (e) {}
   }
 
-  // 5. Busca a grade de trabalho do profissional para este dia da semana
+  // 5. Busca todas as grades de trabalho do profissional para este dia da semana (suporte a múltiplos períodos)
   const schedStmt = db.prepare(`
     SELECT start_time, end_time, break_start, break_end
     FROM schedules
     WHERE tenant_id = ? AND professional_id = ? AND day_of_week = ? AND is_active = 1
+    ORDER BY start_time ASC
   `);
-  const schedule = schedStmt.get(tenantId, professionalId, dayOfWeek) as {
+  const activeSchedules = schedStmt.all(tenantId, professionalId, dayOfWeek) as {
     start_time: string;
     end_time: string;
     break_start: string | null;
     break_end: string | null;
-  } | undefined;
+  }[];
 
-  if (!schedule) return [];
+  if (!activeSchedules || activeSchedules.length === 0) return [];
 
   // 6. Busca agendamentos já existentes neste dia (que não estejam cancelados)
   const apptStmt = db.prepare(`
@@ -108,7 +109,7 @@ export function calculateAvailableSlots(
     end_time: string;
   }[];
 
-  // 7. Busca bloqueios e ausências pontuais neste dia
+  // 7. Busca bloqueios, férias e ausências pontuais neste dia
   const blockStmt = db.prepare(`
     SELECT start_datetime, end_datetime
     FROM blocked_times
@@ -135,83 +136,90 @@ export function calculateAvailableSlots(
     return `${h}:${min}`;
   };
 
-  const workStartMin = timeToMinutes(schedule.start_time);
-  const workEndMin = timeToMinutes(schedule.end_time);
-  const breakStartMin = schedule.break_start ? timeToMinutes(schedule.break_start) : null;
-  const breakEndMin = schedule.break_end ? timeToMinutes(schedule.break_end) : null;
-
-  // Interseção entre o expediente da clínica e a escala do profissional
+  // Interseção entre o expediente da clínica e a escala
   let clinicStartMin = 0;
   let clinicEndMin = 24 * 60;
   if (clinicDayConfig?.startTime) clinicStartMin = timeToMinutes(clinicDayConfig.startTime);
   if (clinicDayConfig?.endTime) clinicEndMin = timeToMinutes(clinicDayConfig.endTime);
 
-  const effectiveStartMin = Math.max(workStartMin, clinicStartMin);
-  const effectiveEndMin = Math.min(workEndMin, clinicEndMin);
-
   const clinicBreakStartMin = clinicDayConfig?.breakStart ? timeToMinutes(clinicDayConfig.breakStart) : null;
   const clinicBreakEndMin = clinicDayConfig?.breakEnd ? timeToMinutes(clinicDayConfig.breakEnd) : null;
 
   const slots: AvailableSlot[] = [];
+  const seenTimes = new Set<string>();
   const minLeadHours = service.min_lead_time_hours || 2;
   const isToday = targetDate.getTime() === todayOnly.getTime();
   const currentTotalMinutes = now.getHours() * 60 + now.getMinutes() + (minLeadHours * 60);
 
-  // 8. Itera sobre os minutos de trabalho gerando intervalos
-  for (let current = effectiveStartMin; current + duration <= effectiveEndMin; current += totalSlotDuration) {
-    const slotEndMin = current + duration;
+  // 8. Itera sobre cada período/turno de trabalho configurado para o profissional
+  for (const schedule of activeSchedules) {
+    const workStartMin = timeToMinutes(schedule.start_time);
+    const workEndMin = timeToMinutes(schedule.end_time);
+    const breakStartMin = schedule.break_start ? timeToMinutes(schedule.break_start) : null;
+    const breakEndMin = schedule.break_end ? timeToMinutes(schedule.break_end) : null;
 
-    // Se for hoje, checa a antecedência mínima
-    if (isToday && current < currentTotalMinutes) {
-      continue;
-    }
+    const effectiveStartMin = Math.max(workStartMin, clinicStartMin);
+    const effectiveEndMin = Math.min(workEndMin, clinicEndMin);
 
-    // Checa conflito com intervalo de almoço do profissional
-    if (breakStartMin !== null && breakEndMin !== null) {
-      if (
-        (current >= breakStartMin && current < breakEndMin) ||
-        (slotEndMin > breakStartMin && slotEndMin <= breakEndMin) ||
-        (current <= breakStartMin && slotEndMin >= breakEndMin)
-      ) {
+    for (let current = effectiveStartMin; current + duration <= effectiveEndMin; current += totalSlotDuration) {
+      const slotEndMin = current + duration;
+
+      // Se for hoje, checa a antecedência mínima
+      if (isToday && current < currentTotalMinutes) {
         continue;
       }
-    }
 
-    // Checa conflito com intervalo da clínica
-    if (clinicBreakStartMin !== null && clinicBreakEndMin !== null) {
-      if (
-        (current >= clinicBreakStartMin && current < clinicBreakEndMin) ||
-        (slotEndMin > clinicBreakStartMin && slotEndMin <= clinicBreakEndMin) ||
-        (current <= clinicBreakStartMin && slotEndMin >= clinicBreakEndMin)
-      ) {
-        continue;
+      // Checa conflito com intervalo de descanso deste turno
+      if (breakStartMin !== null && breakEndMin !== null) {
+        if (
+          (current >= breakStartMin && current < breakEndMin) ||
+          (slotEndMin > breakStartMin && slotEndMin <= breakEndMin) ||
+          (current <= breakStartMin && slotEndMin >= breakEndMin)
+        ) {
+          continue;
+        }
       }
+
+      // Checa conflito com intervalo da clínica
+      if (clinicBreakStartMin !== null && clinicBreakEndMin !== null) {
+        if (
+          (current >= clinicBreakStartMin && current < clinicBreakEndMin) ||
+          (slotEndMin > clinicBreakStartMin && slotEndMin <= clinicBreakEndMin) ||
+          (current <= clinicBreakStartMin && slotEndMin >= clinicBreakEndMin)
+        ) {
+          continue;
+        }
+      }
+
+      const slotStartIso = `${dateStr}T${minutesToTime(current)}:00`;
+      const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;
+
+      if (seenTimes.has(slotStartIso)) continue;
+
+      // Checa conflito com agendamentos existentes
+      const hasApptConflict = existingAppts.some(appt => {
+        return (slotStartIso < appt.end_time && slotEndIso > appt.start_time);
+      });
+      if (hasApptConflict) continue;
+
+      // Checa conflito com bloqueios pontuais, férias e ausências
+      const hasBlockConflict = blockedTimes.some(blk => {
+        return (slotStartIso < blk.end_datetime && slotEndIso > blk.start_datetime);
+      });
+      if (hasBlockConflict) continue;
+
+      seenTimes.add(slotStartIso);
+      slots.push({
+        time: minutesToTime(current),
+        startTime: slotStartIso,
+        endTime: slotEndIso,
+        durationMinutes: duration,
+        bufferMinutes: buffer
+      });
     }
-
-    const slotStartIso = `${dateStr}T${minutesToTime(current)}:00`;
-    const slotEndIso = `${dateStr}T${minutesToTime(slotEndMin)}:00`;
-
-    // Checa conflito com agendamentos existentes
-    const hasApptConflict = existingAppts.some(appt => {
-      // Sobreposição de intervalos: Max(StartA, StartB) < Min(EndA, EndB)
-      return (slotStartIso < appt.end_time && slotEndIso > appt.start_time);
-    });
-    if (hasApptConflict) continue;
-
-    // Checa conflito com bloqueios pontuais
-    const hasBlockConflict = blockedTimes.some(blk => {
-      return (slotStartIso < blk.end_datetime && slotEndIso > blk.start_datetime);
-    });
-    if (hasBlockConflict) continue;
-
-    slots.push({
-      time: minutesToTime(current),
-      startTime: slotStartIso,
-      endTime: slotEndIso,
-      durationMinutes: duration,
-      bufferMinutes: buffer
-    });
   }
 
+  // Ordena por horário crescente
+  slots.sort((a, b) => a.startTime.localeCompare(b.startTime));
   return slots;
 }

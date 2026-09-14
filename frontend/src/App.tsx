@@ -21,6 +21,13 @@ import { SettingsView } from './components/settings/SettingsView';
 import { SuperAdminView } from './components/superadmin/SuperAdminView';
 import { OnboardingWizardView } from './components/onboarding/OnboardingWizardView';
 import { PublicBookingView } from './components/public-booking/PublicBookingView';
+import { PublicProfessionalBookingView } from './components/public-booking/PublicProfessionalBookingView';
+import { WorkSchedulesView } from './components/schedules/WorkSchedulesView';
+import { SupportTicketsView } from './components/support/SupportTicketsView';
+import { PendingExamsView } from './components/exams/PendingExamsView';
+import { InventoryView } from './components/inventory/InventoryView';
+import { BudgetsView } from './components/budgets/BudgetsView';
+import { ProfessionalPayrollView } from './components/payroll/ProfessionalPayrollView';
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
 import { SEO_PAGES } from './data/seoPagesData';
@@ -44,6 +51,13 @@ const AppContent: React.FC = () => {
     return cleanPath && SEO_PAGES[cleanPath] ? cleanPath : null;
   };
   const [activeSeoSlug, setActiveSeoSlug] = useState<string | null>(getInitialSeoSlug);
+
+  // Roteamento para agendamento individual de profissional (/agendar/:slug)
+  const getInitialProfSlug = (): string | null => {
+    const match = window.location.pathname.match(/^\/agendar\/([^/]+)/);
+    return match ? match[1] : null;
+  };
+  const [activeProfSlug, setActiveProfSlug] = useState<string | null>(getInitialProfSlug);
 
   const navigateToSeoPage = (slug: string) => {
     if (SEO_PAGES[slug]) {
@@ -144,17 +158,23 @@ const AppContent: React.FC = () => {
         modalClose.click();
         return;
       }
-      // 3. Se estiver em página de SEO de nicho, retorna para a home pública
+      // 3. Se estiver na página pública individual do profissional, volta para a home
+      if (activeProfSlug) {
+        setActiveProfSlug(null);
+        window.history.pushState(null, '', '/');
+        return;
+      }
+      // 4. Se estiver em página de SEO de nicho, retorna para a home pública
       if (!currentUser && activeSeoSlug) {
         navigateToHome();
         return;
       }
-      // 4. Se estiver na tela de login deslogado, volta para a landing page institucional Zemda
+      // 5. Se estiver na tela de login deslogado, volta para a landing page institucional Zemda
       if (!currentUser && publicView === 'login') {
         setPublicView('landing');
         return;
       }
-      // 5. Se estiver em visualização secundária, retorna ao dashboard
+      // 6. Se estiver em visualização secundária, retorna ao dashboard
       if (currentView !== 'dashboard' && currentUser?.role !== 'superadmin') {
         setCurrentView('dashboard');
         return;
@@ -168,6 +188,9 @@ const AppContent: React.FC = () => {
       } else {
         setActiveSeoSlug(null);
       }
+
+      const match = window.location.pathname.match(/^\/agendar\/([^/]+)/);
+      setActiveProfSlug(match ? match[1] : null);
     };
 
     window.addEventListener('android-back-button', handleBackButton);
@@ -231,6 +254,24 @@ const AppContent: React.FC = () => {
             setCurrentView('dashboard');
           } else {
             setCurrentView('dashboard');
+            setPublicView('landing');
+          }
+        }}
+      />
+    );
+  }
+
+  // Se o usuário está acessando a página pública individual do profissional (/agendar/:slug)
+  if (activeProfSlug) {
+    return (
+      <PublicProfessionalBookingView
+        slug={activeProfSlug}
+        onBackToApp={() => {
+          setActiveProfSlug(null);
+          window.history.pushState(null, '', '/');
+          if (currentUser) {
+            setCurrentView('dashboard');
+          } else {
             setPublicView('landing');
           }
         }}
@@ -347,11 +388,21 @@ const AppContent: React.FC = () => {
 
           {currentView === 'clinical' && <ClinicalRecordsView />}
 
+          {currentView === 'pending-exams' && <PendingExamsView />}
+
           {currentView === 'professionals' && <ProfessionalsView />}
+
+          {currentView === 'work-schedules' && <WorkSchedulesView />}
 
           {currentView === 'services' && <ServicesView />}
 
+          {currentView === 'inventory' && <InventoryView />}
+
+          {currentView === 'budgets' && <BudgetsView />}
+
           {currentView === 'financial' && <FinancialView />}
+
+          {currentView === 'payroll' && <ProfessionalPayrollView />}
 
           {currentView === 'receipts' && <ReceiptsView />}
 
@@ -360,6 +411,8 @@ const AppContent: React.FC = () => {
           {currentView === 'taxonomy' && <TaxonomyView />}
 
           {currentView === 'reports' && <ReportsView />}
+
+          {currentView === 'support-tickets' && <SupportTicketsView />}
 
           {currentView === 'import' && <ImportDataView onNavigate={setCurrentView} />}
 

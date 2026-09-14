@@ -81,6 +81,8 @@ export interface Professional {
   tenant_id: string;
   user_id?: string;
   name: string;
+  slug?: string;
+  public_booking_enabled?: number;
   photo_url?: string;
   profession_id?: string;
   profession_name?: string;
@@ -93,6 +95,10 @@ export interface Professional {
   practice_areas?: string;
   buffer_minutes: number;
   gender?: 'M' | 'F';
+  remuneration_type?: 'commission' | 'salary' | 'both';
+  commission_percentage?: number;
+  fixed_salary?: number;
+  payment_day?: number;
   active: number;
   email?: string;
   phone?: string;
@@ -269,4 +275,161 @@ export interface AvailableSlot {
   endTime: string;
   durationMinutes: number;
   bufferMinutes: number;
+}
+
+// 1. Central de Chamados & Suporte
+export interface SupportTicket {
+  id: string;
+  tenant_id?: string;
+  user_id: string;
+  title: string;
+  category: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  attachments_json?: string;
+  app_version?: string;
+  platform?: string;
+  status: 'open' | 'analyzing' | 'in_progress' | 'resolved' | 'closed';
+  created_at: string;
+  updated_at: string;
+  user_name?: string;
+  user_email?: string;
+  user_role?: string;
+  clinic_name?: string;
+}
+
+export interface SupportTicketMessage {
+  id: string;
+  ticket_id: string;
+  user_id: string;
+  message: string;
+  attachments_json?: string;
+  is_internal?: number;
+  created_at: string;
+  sender_name?: string;
+  sender_role?: string;
+}
+
+// 2. Exames a Receber
+export interface PendingExam {
+  id: string;
+  tenant_id: string;
+  patient_id: string;
+  professional_id?: string;
+  exam_name: string;
+  request_date: string;
+  expected_date?: string;
+  received_date?: string;
+  status: 'waiting' | 'received' | 'delayed' | 'cancelled';
+  notes?: string;
+  patient_name?: string;
+  patient_phone?: string;
+  professional_name?: string;
+  is_delayed?: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+// 3. Estoque de Insumos & Produtos
+export interface InventoryItem {
+  id: string;
+  tenant_id: string;
+  name: string;
+  category?: string;
+  product_type?: string;
+  brand?: string;
+  presentation?: string;
+  volume_ml?: number;
+  quantity: number;
+  unit: string;
+  batch_number?: string;
+  expiration_date?: string;
+  unit_cost: number;
+  supplier?: string;
+  min_stock: number;
+  notes?: string;
+  active: number;
+  is_low_stock?: boolean;
+  is_zero_stock?: boolean;
+  is_expiring_soon?: boolean;
+  is_expired?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InventoryMovement {
+  id: string;
+  tenant_id: string;
+  item_id: string;
+  item_name?: string;
+  unit?: string;
+  movement_type: 'in' | 'out' | 'adjustment';
+  quantity: number;
+  previous_quantity: number;
+  new_quantity: number;
+  reason?: string;
+  document_reference?: string;
+  user_id?: string;
+  user_name?: string;
+  created_at: string;
+}
+
+// 4. Orçamentos
+export interface Budget {
+  id: string;
+  tenant_id: string;
+  budget_type: 'patient' | 'supplier';
+  budget_number: string;
+  patient_id?: string;
+  patient_name?: string;
+  patient_phone?: string;
+  patient_cpf?: string;
+  supplier_name?: string;
+  supplier_contact?: string;
+  discount: number;
+  total_amount: number;
+  validity_date?: string;
+  delivery_deadline?: string;
+  status: 'draft' | 'sent' | 'approved' | 'rejected' | 'expired';
+  notes?: string;
+  converted_to_inventory?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BudgetItem {
+  id: string;
+  budget_id: string;
+  item_type: 'service' | 'product' | 'custom';
+  reference_id?: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+// 5. Folha de Pagamentos e Comissões
+export interface ProfessionalPayroll {
+  id: string;
+  tenant_id: string;
+  professional_id: string;
+  professional_name?: string;
+  professional_photo?: string;
+  specialty_name?: string;
+  period_month: string;
+  remuneration_type: 'commission' | 'salary' | 'both';
+  appointments_count: number;
+  produced_amount: number;
+  commission_percentage: number;
+  commission_amount: number;
+  fixed_salary: number;
+  adjustments: number;
+  adjustment_notes?: string;
+  total_payable: number;
+  due_date?: string;
+  paid_date?: string;
+  status: 'pending' | 'paid' | 'delayed';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
 }

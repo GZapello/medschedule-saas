@@ -13,7 +13,11 @@ import {
   CheckCircle2,
   Mail,
   Phone,
-  Edit3
+  Edit3,
+  Share2,
+  Link,
+  Wallet,
+  DollarSign
 } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
 
@@ -39,6 +43,12 @@ export const ProfessionalsView: React.FC = () => {
   const [bio, setBio] = useState<string>('');
   const [practiceAreas, setPracticeAreas] = useState<string>('');
   const [bufferMinutes, setBufferMinutes] = useState<number>(10);
+  const [slug, setSlug] = useState<string>('');
+  const [publicBookingEnabled, setPublicBookingEnabled] = useState<boolean>(true);
+  const [remunerationType, setRemunerationType] = useState<'commission' | 'salary' | 'both'>('commission');
+  const [commissionPercentage, setCommissionPercentage] = useState<number>(50);
+  const [fixedSalary, setFixedSalary] = useState<number>(0);
+  const [paymentDay, setPaymentDay] = useState<number>(5);
 
   // Modal Editar Profissional
   const [editingProf, setEditingProf] = useState<Professional | null>(null);
@@ -52,6 +62,19 @@ export const ProfessionalsView: React.FC = () => {
   const [editBio, setEditBio] = useState<string>('');
   const [editPracticeAreas, setEditPracticeAreas] = useState<string>('');
   const [editBufferMinutes, setEditBufferMinutes] = useState<number>(10);
+  const [editSlug, setEditSlug] = useState<string>('');
+  const [editPublicBookingEnabled, setEditPublicBookingEnabled] = useState<boolean>(true);
+  const [editRemunerationType, setEditRemunerationType] = useState<'commission' | 'salary' | 'both'>('commission');
+  const [editCommissionPercentage, setEditCommissionPercentage] = useState<number>(0);
+  const [editFixedSalary, setEditFixedSalary] = useState<number>(0);
+  const [editPaymentDay, setEditPaymentDay] = useState<number>(5);
+
+  const handleCopyBookingLink = (prof: Professional) => {
+    const slugVal = prof.slug || (prof.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + prof.id.slice(-4));
+    const url = `${window.location.origin}/agendar/${slugVal}`;
+    navigator.clipboard.writeText(url);
+    showToast(`Link de agendamento copiado: ${url}`, 'success');
+  };
 
   // Modal Bloqueio de Horário
   const [showBlockModal, setShowBlockModal] = useState<boolean>(false);
@@ -107,7 +130,13 @@ export const ProfessionalsView: React.FC = () => {
         bio: bio || null,
         practiceAreas: practiceAreas || null,
         bufferMinutes: Number(bufferMinutes),
-        gender
+        gender,
+        slug: slug.trim() || null,
+        publicBookingEnabled,
+        remunerationType,
+        commissionPercentage: Number(commissionPercentage),
+        fixedSalary: Number(fixedSalary),
+        paymentDay: Number(paymentDay)
       });
 
       showToast('Profissional cadastrado com sucesso!', 'success');
@@ -120,6 +149,7 @@ export const ProfessionalsView: React.FC = () => {
       setRegistrationNumber('');
       setBio('');
       setPracticeAreas('');
+      setSlug('');
       fetchData();
     } catch (err: any) {
       showToast(err.message || 'Erro ao cadastrar profissional', 'error');
@@ -144,7 +174,13 @@ export const ProfessionalsView: React.FC = () => {
         registrationNumber: editRegistrationNumber || null,
         bio: editBio || null,
         practiceAreas: editPracticeAreas || null,
-        bufferMinutes: Number(editBufferMinutes)
+        bufferMinutes: Number(editBufferMinutes),
+        slug: editSlug.trim() || null,
+        publicBookingEnabled: editPublicBookingEnabled,
+        remunerationType: editRemunerationType,
+        commissionPercentage: Number(editCommissionPercentage),
+        fixedSalary: Number(editFixedSalary),
+        paymentDay: Number(editPaymentDay)
       });
 
       showToast('Profissional atualizado com sucesso!', 'success');
@@ -187,7 +223,7 @@ export const ProfessionalsView: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Equipe de Profissionais</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Cadastre os profissionais, defina especialidades, horários de atendimento e bloqueios.
+            Cadastre os profissionais, defina especialidades, regras de remuneração, escala e links de agendamento online.
           </p>
         </div>
 
@@ -245,19 +281,33 @@ export const ProfessionalsView: React.FC = () => {
                   <span className="leading-snug">{p.practice_areas}</span>
                 </div>
               )}
-            </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Buffer: <strong>{p.buffer_minutes} min</strong></span>
-                </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                  <Calendar className="w-3 h-3 text-slate-400" />
-                  <span>Seg a Sex (08:00 - 18:00)</span>
+              {/* Informações de Remuneração e Link Público */}
+              <div className="mt-3 pt-3 border-t border-slate-100 space-y-1 text-xs">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span className="text-[11px] text-slate-400">Remuneração:</span>
+                  <span className="font-semibold text-slate-700">
+                    {p.remuneration_type === 'salary'
+                      ? `Fixo: R$ ${Number(p.fixed_salary || 0).toFixed(2)}`
+                      : p.remuneration_type === 'both'
+                      ? `${p.commission_percentage || 0}% + R$ ${Number(p.fixed_salary || 0).toFixed(2)}`
+                      : `${p.commission_percentage || 0}% de comissão`}
+                  </span>
                 </div>
               </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs text-slate-500">
+              <button
+                type="button"
+                onClick={() => handleCopyBookingLink(p)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl transition-all shadow-2xs cursor-pointer text-xs"
+                title="Copiar link público individual do profissional para agendamento"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Copiar link</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -273,6 +323,12 @@ export const ProfessionalsView: React.FC = () => {
                   setEditBio(p.bio || '');
                   setEditPracticeAreas(p.practice_areas || '');
                   setEditBufferMinutes(p.buffer_minutes || 10);
+                  setEditSlug(p.slug || '');
+                  setEditPublicBookingEnabled(p.public_booking_enabled !== 0);
+                  setEditRemunerationType(p.remuneration_type || 'commission');
+                  setEditCommissionPercentage(p.commission_percentage || 0);
+                  setEditFixedSalary(p.fixed_salary || 0);
+                  setEditPaymentDay(p.payment_day || 5);
                 }}
                 className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl transition-all shadow-2xs cursor-pointer text-xs"
               >
@@ -423,6 +479,109 @@ export const ProfessionalsView: React.FC = () => {
                 />
               </div>
 
+              {/* Seção de Remuneração e Financeiro (Exclusivo Gerenciador) */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-4 h-4 text-indigo-600" />
+                  <span className="font-bold text-slate-800 text-xs">Remuneração e Pagamento (Gestão da Clínica)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Modalidade de Remuneração</label>
+                    <select
+                      value={remunerationType}
+                      onChange={e => setRemunerationType(e.target.value as any)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                    >
+                      <option value="commission">Comissão (% por atendimento)</option>
+                      <option value="salary">Salário Fixo Mensal</option>
+                      <option value="both">Fixo + Comissão</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Dia Previsto de Pagamento</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={paymentDay}
+                      onChange={e => setPaymentDay(Number(e.target.value))}
+                      placeholder="Ex: 5"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                    />
+                  </div>
+                </div>
+
+                {(remunerationType === 'commission' || remunerationType === 'both') && (
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Percentual de Comissão Individual (%)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        value={commissionPercentage}
+                        onChange={e => setCommissionPercentage(Number(e.target.value))}
+                        placeholder="Ex: 50"
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                      />
+                      <span className="absolute right-3 top-2 text-slate-400 font-bold">%</span>
+                    </div>
+                  </div>
+                )}
+
+                {(remunerationType === 'salary' || remunerationType === 'both') && (
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Salário Fixo Mensal (R$)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={50}
+                      value={fixedSalary}
+                      onChange={e => setFixedSalary(Number(e.target.value))}
+                      placeholder="Ex: 3500.00"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Seção Página Pública e Link de Agendamento */}
+              <div className="bg-teal-50/70 border border-teal-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Share2 className="w-4 h-4 text-teal-700" />
+                    <span className="font-bold text-teal-900 text-xs">Página Pública de Agendamento</span>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-teal-800">
+                    <input
+                      type="checkbox"
+                      checked={publicBookingEnabled}
+                      onChange={e => setPublicBookingEnabled(e.target.checked)}
+                      className="rounded text-teal-600 focus:ring-teal-500"
+                    />
+                    <span>Ativar link público</span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-teal-900 mb-1">Identificador no Link (Slug opcional)</label>
+                  <div className="flex items-center bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs">
+                    <span className="text-slate-400 select-none">zemda.com.br/agendar/</span>
+                    <input
+                      type="text"
+                      value={slug}
+                      onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                      placeholder="nome-do-profissional"
+                      className="flex-1 border-0 p-0 text-xs font-semibold text-teal-700 focus:ring-0 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   onClick={() => setShowNewModal(false)}
@@ -569,6 +728,106 @@ export const ProfessionalsView: React.FC = () => {
                   onChange={e => setEditBufferMinutes(Number(e.target.value))}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
+              </div>
+
+              {/* Seção Regras de Remuneração e Repasse */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <span className="font-bold text-slate-900 text-xs">Regras de Remuneração e Pagamento</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Modalidade *</label>
+                    <select
+                      value={editRemunerationType}
+                      onChange={e => setEditRemunerationType(e.target.value as any)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                    >
+                      <option value="commission">Apenas Comissão (%)</option>
+                      <option value="salary">Apenas Salário Fixo (R$)</option>
+                      <option value="both">Salário Fixo + Comissão</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Dia do Pagamento</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={editPaymentDay}
+                      onChange={e => setEditPaymentDay(Number(e.target.value))}
+                      placeholder="Ex: 5"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                    />
+                  </div>
+                </div>
+
+                {(editRemunerationType === 'commission' || editRemunerationType === 'both') && (
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Comissão sobre Consultas / Procedimentos (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={editCommissionPercentage}
+                      onChange={e => setEditCommissionPercentage(Number(e.target.value))}
+                      placeholder="Ex: 50"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                    />
+                  </div>
+                )}
+
+                {(editRemunerationType === 'salary' || editRemunerationType === 'both') && (
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Salário Fixo Mensal (R$)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={50}
+                      value={editFixedSalary}
+                      onChange={e => setEditFixedSalary(Number(e.target.value))}
+                      placeholder="Ex: 3500.00"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Seção Página Pública e Link de Agendamento */}
+              <div className="bg-teal-50/70 border border-teal-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Share2 className="w-4 h-4 text-teal-700" />
+                    <span className="font-bold text-teal-900 text-xs">Página Pública de Agendamento</span>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-teal-800">
+                    <input
+                      type="checkbox"
+                      checked={editPublicBookingEnabled}
+                      onChange={e => setEditPublicBookingEnabled(e.target.checked)}
+                      className="rounded text-teal-600 focus:ring-teal-500"
+                    />
+                    <span>Ativar link público</span>
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-teal-900 mb-1">Identificador no Link (Slug)</label>
+                  <div className="flex items-center bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs">
+                    <span className="text-slate-400 select-none">zemda.com.br/agendar/</span>
+                    <input
+                      type="text"
+                      value={editSlug}
+                      onChange={e => setEditSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                      placeholder="nome-do-profissional"
+                      className="flex-1 border-0 p-0 text-xs font-semibold text-teal-700 focus:ring-0 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">

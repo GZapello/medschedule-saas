@@ -639,6 +639,210 @@ export function initializeDatabase(): void {
       FROM tenants
       WHERE status = 'active';
     `);
+
+    // =========================================================================
+    // NOVAS MIGRAÇÕES INCREMENTAIS: 8 MÓDULOS (Página Pública, Suporte, Exames,
+    // Estoque, Orçamentos, Folha/Comissões, Escala)
+    // =========================================================================
+    
+    // 1. Colunas em professionals para página pública e remuneração
+    addColIfMissing('professionals', 'slug', 'TEXT');
+    addColIfMissing('professionals', 'public_booking_enabled', 'INTEGER DEFAULT 1');
+    addColIfMissing('professionals', 'remuneration_type', "TEXT DEFAULT 'commission'");
+    addColIfMissing('professionals', 'commission_percentage', 'REAL DEFAULT 0');
+    addColIfMissing('professionals', 'fixed_salary', 'REAL DEFAULT 0');
+    addColIfMissing('professionals', 'payment_day', 'INTEGER DEFAULT 5');
+
+    // Gera slugs únicos para profissionais existentes que estejam com slug nulo
+    try {
+      const profsWithoutSlug = rawDb.prepare("SELECT id, name FROM professionals WHERE slug IS NULL OR slug = ''").all() as { id: string; name: string }[];
+      const updateSlugStmt = rawDb.prepare("UPDATE professionals SET slug = ? WHERE id = ?");
+      for (const p of profsWithoutSlug) {
+        const baseSlug = (p.name || 'profissional')
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '');
+        const finalSlug = `${baseSlug}-${p.id.slice(-4)}`;
+        updateSlugStmt.run(finalSlug, p.id);
+      }
+    } catch (slugErr) {
+      console.warn('[Migration] Aviso ao gerar slugs de profissionais:', slugErr);
+    }
+
+    // 2. Central de Chamados & Suporte
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS support_tickets (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'duvida',
+        description TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high', 'urgent')),
+        attachments_json TEXT,
+        app_version TEXT,
+        platform TEXT,
+        status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'analyzing', 'in_progress', 'resolved', 'closed')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_support_tickets_tenant ON support_tickets (tenant_id, status);
+      CREATE INDEX IF NOT EXISTS idx_support_tickets_user ON support_tickets (user_id, status);
+
+      CREATE TABLE IF NOT EXISTS support_ticket_messages (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        attachments_json TEXT,
+        is_internal INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ticket_messages ON support_ticket_messages (ticket_id, created_at);
+    `);
+
+    // 3. Exames a Receber
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS pending_exams (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        exam_name TEXT NOT NULL,
+        request_date TEXT NOT NULL,
+        expected_date TEXT,
+        received_date TEXT,
+        status TEXT NOT NULL DEFAULT 'waiting' CHECK(status IN ('waiting', 'received', 'delayed', 'cancelled')),
+        notes TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pending_exams_status ON pending_exams (tenant_id, status);
+      CREATE INDEX IF NOT EXISTS idx_pending_exams_patient ON pending_exams (tenant_id, patient_id);
+    `);
+
+    // 4. Estoque de Insumos e Produtos & Movimentações
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS inventory_items (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT,
+        product_type TEXT,
+        brand TEXT,
+        presentation TEXT DEFAULT 'unidade',
+        volume_ml REAL,
+        quantity REAL NOT NULL DEFAULT 0,
+        unit TEXT NOT NULL DEFAULT 'un',
+        batch_number TEXT,
+        expiration_date TEXT,
+        unit_cost REAL DEFAULT 0,
+        supplier TEXT,
+        min_stock REAL DEFAULT 5,
+        notes TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_inventory_items_tenant ON inventory_items (tenant_id, active);
+
+      CREATE TABLE IF NOT EXISTS inventory_movements (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        movement_type TEXT NOT NULL CHECK(movement_type IN ('in', 'out', 'adjustment')),
+        quantity REAL NOT NULL,
+        previous_quantity REAL NOT NULL,
+        new_quantity REAL NOT NULL,
+        reason TEXT,
+        document_reference TEXT,
+        user_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_inventory_movements ON inventory_movements (tenant_id, item_id, created_at);
+    `);
+
+    // 5. Orçamentos (Pacientes e Fornecedores)
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS budgets (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        budget_type TEXT NOT NULL CHECK(budget_type IN ('patient', 'supplier')),
+        budget_number TEXT NOT NULL,
+        patient_id TEXT,
+        supplier_name TEXT,
+        supplier_contact TEXT,
+        discount REAL DEFAULT 0,
+        total_amount REAL NOT NULL DEFAULT 0,
+        validity_date TEXT,
+        delivery_deadline TEXT,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'sent', 'approved', 'rejected', 'expired')),
+        notes TEXT,
+        converted_to_inventory INTEGER DEFAULT 0,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_budgets_tenant_type ON budgets (tenant_id, budget_type, status);
+
+      CREATE TABLE IF NOT EXISTS budget_items (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        budget_id TEXT NOT NULL,
+        item_type TEXT DEFAULT 'service',
+        reference_id TEXT,
+        description TEXT NOT NULL,
+        quantity REAL NOT NULL DEFAULT 1,
+        unit_price REAL NOT NULL DEFAULT 0,
+        total_price REAL NOT NULL DEFAULT 0,
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_budget_items ON budget_items (budget_id);
+    `);
+
+    // 6. Pagamentos, Comissões e Salários dos Profissionais
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS professional_payrolls (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        period_month TEXT NOT NULL,
+        remuneration_type TEXT NOT NULL DEFAULT 'commission',
+        appointments_count INTEGER DEFAULT 0,
+        produced_amount REAL DEFAULT 0,
+        commission_percentage REAL DEFAULT 0,
+        commission_amount REAL DEFAULT 0,
+        fixed_salary REAL DEFAULT 0,
+        adjustments REAL DEFAULT 0,
+        adjustment_notes TEXT,
+        total_payable REAL NOT NULL DEFAULT 0,
+        due_date TEXT,
+        paid_date TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'paid', 'delayed')),
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_payrolls_month ON professional_payrolls (tenant_id, period_month, status);
+      CREATE INDEX IF NOT EXISTS idx_payrolls_prof ON professional_payrolls (tenant_id, professional_id);
+    `);
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);
   }
