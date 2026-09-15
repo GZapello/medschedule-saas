@@ -87,7 +87,13 @@ export function mountBillingRoutes(api:Router) {
   api.post(['/subscriptions/change-plan','/v1/subscriptions/change-plan'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.changePlan(req.tenantId!,req.body.planCode,req.user!.userId))));
   api.post(['/subscriptions/cancel','/v1/subscriptions/cancel'],...guard,manager,handler(async(req,res)=>{
     if(req.body.confirmation!=='CANCELAR') throw new BillingError('CONFIRMATION_REQUIRED','Digite CANCELAR para confirmar.',400);
-    res.json(await BillingService.cancel(req.tenantId!,req.user!.userId,typeof req.body.reason==='string'?req.body.reason.slice(0,1000):''));
+    try { res.json(await BillingService.cancel(req.tenantId!,req.user!.userId,typeof req.body.reason==='string'?req.body.reason.slice(0,1000):'')); }
+    catch(e) {
+      if(e instanceof AsaasError) {
+        res.status(502).json({success:false,code:'SUBSCRIPTION_CANCELLATION_FAILED',error:'Não foi possível cancelar a assinatura.'});return;
+      }
+      throw e;
+    }
   }));
   api.get(['/admin/subscriptions','/v1/admin/subscriptions'],...guard,requireRole('superadmin'),handler((req,res)=>{
     BillingService.expireGrace();

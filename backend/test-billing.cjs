@@ -36,6 +36,7 @@ global.fetch=async(url,options={})=>{
   }
   if(/^\/checkouts\/.+\/cancel$/.test(resource))return reply({deleted:true});
   if(resource==='/payments')return reply({data:[...payments.values()].filter(p=>p.checkoutSession===u.searchParams.get('checkoutSession'))});
+  if(resource==='/subscriptions' && options.method==='GET') return reply({data:[...remoteSubscriptions.values()].filter(s=>s.customer===u.searchParams.get('customer') && s.externalReference===u.searchParams.get('externalReference'))});
   if(/^\/payments\//.test(resource)){const p=payments.get(decodeURIComponent(resource.split('/')[2]));return p?reply(p):reply({},404);}
   const subId=resource.split('/')[2];
   if(resource.endsWith('/payments'))return reply({data:[...payments.values()].filter(p=>p.subscription===subId)});
@@ -131,7 +132,17 @@ let server,eventCounter=0;
   db.prepare("UPDATE tenants SET status='banned' WHERE id=?").run(clinic);
   await event('PAYMENT_RECEIVED',{payment:renewal});assert.equal(db.prepare('SELECT status FROM tenants WHERE id=?').get(clinic).status,'banned');assert.equal(canOperate(clinic),false);
   db.prepare("UPDATE tenants SET status='active' WHERE id=?").run(clinic);
-  assert.equal((await call('/subscriptions/cancel',{confirmation:'CANCELAR',reason:'test'},freshToken)).status,200);assert.equal(sub().status,'CANCELED');
+  // Cancellation reconciles a missing gateway ID by the bound customer/reference,
+  // then deletes only that remote subscription. It never updates customer data.
+  db.prepare('UPDATE subscriptions SET asaas_subscription_id=NULL WHERE id=?').run(sid);
+  const updatesBeforeCancel=calls.filter(c=>/^\/customers\//.test(c.resource) && c.method==='PUT').length;
+  const cancelled=await call('/subscriptions/cancel',{confirmation:'CANCELAR',reason:'test'},freshToken);
+  assert.equal(cancelled.status,200);assert.equal(sub().status,'CANCELED');assert.equal(sub().asaas_subscription_id,'sub_real');
+  assert.equal(updatesBeforeCancel,calls.filter(c=>/^\/customers\//.test(c.resource) && c.method==='PUT').length);
+  assert.ok(calls.some(c=>c.resource==='/subscriptions' && c.method==='GET'));
+  assert.ok(calls.some(c=>c.resource==='/subscriptions/sub_real' && c.method==='DELETE'));
+  assert.ok(!calls.some(c=>/^\/checkouts\/.+\/cancel$/.test(c.resource) && c.method==='POST'));
+  assert.equal(db.prepare("SELECT cancelled_by FROM subscriptions WHERE id=?").get(sid).cancelled_by,ownerId);
   await event('PAYMENT_CONFIRMED',{payment:renewal});assert.equal(sub().status,'CANCELED');assert.ok(db.prepare('SELECT id FROM tenants WHERE id=?').get(clinic));
   db.prepare("UPDATE subscriptions SET status='ACTIVE',current_period_end=? WHERE id='team'").run(addMonth(currentDay()));
   const admin=token('root',null,'superadmin');r=await call('/admin/subscriptions',null,admin);assert.equal(r.status,200);assert.equal(r.body.mrr,359.9);assert.equal(r.body.total,2);

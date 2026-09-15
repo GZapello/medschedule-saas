@@ -183,20 +183,28 @@ export class BillingService {
   }
   static async cancel(clinic:string,user:string,reason:string) {
     return withOperation(clinic,async()=>{
-      const s=currentSubscription(clinic);if(!s?.managed) throw new BillingError('SUBSCRIPTION_NOT_FOUND','Assinatura não encontrada.',404);
+      const s=db.prepare('SELECT * FROM subscriptions WHERE clinic_id=? AND is_current=1').get(clinic);
+      if(!s?.managed) throw new BillingError('SUBSCRIPTION_NOT_FOUND','Assinatura não encontrada.',404);
       if(s.gateway_environment!==AsaasService.getEnvironment()) throw new BillingError('ENVIRONMENT_MISMATCH','Ambiente incompatível.');
       if(s.cancelled_at) return {message:'Assinatura já cancelada.'};
-      const open=db.prepare("SELECT * FROM billing_checkouts WHERE subscription_id=? AND state IN ('REQUESTED','UNKNOWN','OPEN')").get(s.id);
-      if(open && !open.asaas_checkout_id) throw new BillingError('CHECKOUT_UNKNOWN','A criação do checkout aguarda conciliação com o gateway.');
-      if(open) await AsaasService.request(`/checkouts/${encodeURIComponent(open.asaas_checkout_id)}/cancel`,{method:'POST'});
-      if(s.asaas_subscription_id) {
-        try { await AsaasService.request(`/subscriptions/${encodeURIComponent(s.asaas_subscription_id)}`,{method:'DELETE'}); }
-        catch(e) { if(!(e instanceof AsaasError && e.status===404)) throw e; }
+      let subscriptionId=s.asaas_subscription_id as string|null;
+      if(!subscriptionId) {
+        if(!s.asaas_customer_id || !s.external_reference) throw new BillingError('SUBSCRIPTION_RECONCILIATION_REQUIRED','Não foi possível localizar a assinatura no gateway. Solicite uma conferência antes de cancelar.',409);
+        const list=await AsaasService.request(`/subscriptions?customer=${encodeURIComponent(s.asaas_customer_id)}&externalReference=${encodeURIComponent(s.external_reference)}&limit=100`);
+        const matches=(list.data || []).filter((remote:any)=>remote && typeof remote.id==='string' && remote.customer===s.asaas_customer_id && remote.externalReference===s.external_reference && !remote.deleted);
+        if(matches.length!==1) throw new BillingError('SUBSCRIPTION_RECONCILIATION_REQUIRED','Não foi possível localizar uma única assinatura no gateway. Solicite uma conferência antes de cancelar.',409);
+        subscriptionId=matches[0].id;
+        db.prepare('UPDATE subscriptions SET asaas_subscription_id=?,updated_at=datetime(\'now\') WHERE id=? AND clinic_id=?').run(subscriptionId,s.id,clinic);
+      }
+      const gatewaySubscriptionId=subscriptionId!;
+      try { await AsaasService.request(`/subscriptions/${encodeURIComponent(gatewaySubscriptionId)}`,{method:'DELETE'}); }
+      catch(e) {
+        if(e instanceof AsaasError) console.warn('[Billing cancellation] gateway failure',JSON.stringify({status:e.status,code:e.providerCode || null,subscriptionId:gatewaySubscriptionId}));
+        throw e;
       }
       db.transaction(()=>{
         db.prepare("UPDATE subscriptions SET status='CANCELED',cancelled_at=datetime('now'),cancelled_by=?,cancel_reason=?,pending_plan_id=NULL,pending_plan_effective_on=NULL,updated_at=datetime('now') WHERE id=?").run(user,reason,s.id);
-        if(open) db.prepare("UPDATE billing_checkouts SET state='CANCELED' WHERE id=?").run(open.id);
-        billingAudit(s,'CANCELED',s.status,'CANCELED',user,{planId:s.plan_id,reason});
+        billingAudit(s,'CANCELED',s.status,'CANCELED',user,{planId:s.plan_id,reason,subscriptionId:gatewaySubscriptionId});
       })();
       return {message:'Renovação cancelada. Os dados serão preservados e o acesso pago permanece até o fim do período.'};
     });

@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export class AsaasError extends Error {
-  constructor(public status: number, public ambiguous = false) { super(`Não foi possível concluir a comunicação com Asaas (${status || 'conexão'}).`); }
+  constructor(public status: number, public ambiguous = false, public providerCode?: string) { super(`Não foi possível concluir a comunicação com Asaas (${status || 'conexão'}).`); }
 }
 export interface AsaasStatusResult { connected: boolean; environment: string; error?: string; }
 export class AsaasService {
@@ -43,8 +43,13 @@ export class AsaasService {
         headers: {access_token:config.key,'Content-Type':'application/json','User-Agent':'Zemda/1.0'},
         body:options.body === undefined ? undefined : JSON.stringify(options.body)
       });
-      // Provider error bodies may contain credentials or PII; never return or log them.
-      if (!response.ok) throw new AsaasError(response.status, response.status >= 500);
+      // Provider error bodies may contain credentials or PII. Retain only the first
+      // short machine code for server-side diagnostics; never expose the body.
+      if (!response.ok) {
+        let providerCode:string|undefined;
+        try { const body:any=await response.clone().json(); const value=body?.errors?.[0]?.code; if(typeof value==='string' && /^[A-Z0-9_-]{1,80}$/i.test(value)) providerCode=value; } catch {}
+        throw new AsaasError(response.status, response.status >= 500, providerCode);
+      }
       if(response.status===204) return {} as T;
       if(!(response.headers.get('content-type') || '').toLowerCase().includes('application/json')) throw new AsaasError(response.status,true);
       const text = await response.text(); return (text ? JSON.parse(text) : {}) as T;
