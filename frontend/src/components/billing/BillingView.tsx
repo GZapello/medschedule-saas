@@ -5,6 +5,7 @@ import { CreditCard, Users, CheckCircle2, AlertCircle, ArrowUpRight } from 'luci
 
 const money=(v:number)=>Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const date=(v:string)=>v?new Date(v.slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—';
+const emptyProfile={name:'',cpfCnpj:'',email:'',phone:'',postalCode:'',address:'',addressNumber:'',province:'',complement:''};
 const statuses:Record<string,string>={ACTIVE:'Ativo',PENDING_PAYMENT:'Aguardando pagamento',PAST_DUE:'Pagamento pendente',SUSPENDED:'Suspenso',CANCELED:'Cancelado',NOT_SUBSCRIBED:'Escolha seu plano',CONFIRMED:'Pago',RECEIVED:'Pago',OVERDUE:'Vencido',PENDING:'Pendente',REFUNDED:'Estornado',DELETED:'Removido'};
 export function useBillingSummary(includeGlobal=false) {
   const {currentUser,currentTenant}=useAuth();
@@ -26,10 +27,10 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string;onBack?:
   const [plans,setPlans]=useState<any[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [showPlans,setShowPlans]=useState(publicPage),[cancelOpen,setCancelOpen]=useState(false),[confirmation,setConfirmation]=useState(''),[reason,setReason]=useState('');
   const [historyOpen,setHistoryOpen]=useState(false);
-  const [profileOpen,setProfileOpen]=useState(false),[profile,setProfile]=useState({name:'',cpfCnpj:'',email:'',phone:''});
+  const [profileOpen,setProfileOpen]=useState(false),[profile,setProfile]=useState(emptyProfile);
   const canManage=summary?.canManage ?? (!currentUser || ['superadmin','clinic_admin'].includes(currentUser.role) || (currentUser as any).permissions?.includes('manage_subscription'));
   useEffect(()=>{ApiClient.get<any[]>('/v1/plans').then(setPlans).catch((e:any)=>setError(e.message));},[]);
-  useEffect(()=>{if(currentUser && canManage) ApiClient.get<any>('/v1/subscriptions/profile').then(p=>{setProfile({name:p.name || '',cpfCnpj:p.cpfCnpj || '',email:p.email || '',phone:p.phone || ''});if(!p.cpfCnpj)setProfileOpen(true);}).catch(()=>{});},[currentUser?.id,canManage]);
+  useEffect(()=>{if(currentUser && canManage) ApiClient.get<any>('/v1/subscriptions/profile').then(p=>{setProfile(Object.fromEntries(Object.keys(emptyProfile).map(k=>[k,p[k] || ''])) as typeof emptyProfile);if(!p.cpfCnpj || !p.postalCode || !p.address || !p.addressNumber || !p.province)setProfileOpen(true);}).catch(()=>{});},[currentUser?.id,canManage]);
   const refresh=async()=>{await reload();window.dispatchEvent(new Event('zemda-billing-refresh'));};
   const choose=async(code:string)=>{
     if(!currentUser){window.location.assign('/assinatura?plan='+encodeURIComponent(code));return;}
@@ -42,7 +43,7 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string;onBack?:
         // Backend validates and returns only an Asaas HTTPS URL.
         window.location.assign(result.url);
       }
-    }catch(e:any){setError(e.message);}finally{setBusy(false);}
+    }catch(e:any){setError(e.message);if(['BILLING_ADDRESS_REQUIRED','ASAAS_VALIDATION_ERROR'].includes(e.code))setProfileOpen(true);}finally{setBusy(false);}
   };
   const cancel=async(e:React.FormEvent)=>{
     e.preventDefault();if(busy)return;setBusy(true);setError('');
@@ -79,7 +80,7 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string;onBack?:
       {!canManage && <p className="text-slate-600 text-sm">Solicite ao responsável da clínica a regularização ou alteração do plano.</p>}
     </div>}
     {currentUser && canManage && profileOpen && <form onSubmit={saveProfile} className="bg-white border rounded-2xl p-6 space-y-4"><h2 className="font-bold">Dados de cobrança</h2><p className="text-sm text-slate-600">Esses dados identificam o pagador no Asaas. Os dados do cartão são informados somente no checkout hospedado.</p><div className="grid sm:grid-cols-2 gap-4">
-      {([['name','Nome do pagador'],['cpfCnpj','CPF/CNPJ'],['email','E-mail'],['phone','Telefone']] as const).map(([key,label])=><label key={key} className="text-sm">{label}<input required={key!=='phone'} type={key==='email'?'email':'text'} maxLength={key==='name'?160:key==='email'?200:30} value={profile[key]} onChange={e=>setProfile({...profile,[key]:e.target.value})} className="w-full block border rounded-lg p-2 mt-1" /></label>)}</div><button disabled={busy} className="bg-indigo-600 text-white px-4 py-2 rounded-xl">Salvar dados de cobrança</button></form>}
+      {([['name','Nome do pagador'],['cpfCnpj','CPF/CNPJ'],['email','E-mail'],['phone','Telefone'],['postalCode','CEP'],['address','Logradouro'],['addressNumber','Número'],['province','Bairro'],['complement','Complemento (opcional)']] as const).map(([key,label])=><label key={key} className="text-sm">{label}<input required={key!=='phone' && key!=='complement'} type={key==='email'?'email':'text'} maxLength={key==='email'?200:key==='postalCode'?9:['phone','cpfCnpj','addressNumber'].includes(key)?30:160} value={profile[key]} onChange={e=>setProfile({...profile,[key]:e.target.value})} className="w-full block border rounded-lg p-2 mt-1" /></label>)}</div><p className="text-sm text-slate-600">Informe o endereço do pagador. A cidade é identificada pelo Asaas a partir do CEP.</p><button disabled={busy} className="bg-indigo-600 text-white px-4 py-2 rounded-xl">Salvar dados de cobrança</button></form>}
     {canManage && (showPlans || !summary?.managed || summary?.status==='PENDING_PAYMENT') && <div className="grid md:grid-cols-3 gap-4">
       {plans.map(plan=><article key={plan.code} className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col gap-5">
         <h2 className="text-xl font-bold">{plan.name}</h2><p className="flex gap-2 items-center text-slate-600"><Users className="w-5 h-5"/>{plan.max_users===1?'1 usuário':`Até ${plan.max_users} usuários`}</p>

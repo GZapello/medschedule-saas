@@ -15,7 +15,8 @@ const OriginalDate=Date;let clock=OriginalDate.now();
 global.Date=class extends OriginalDate {constructor(...args){super(...(args.length?args:[clock]));}static now(){return clock;}};
 const currentDay=()=>new Date().toISOString().slice(0,10);
 const actualFetch=global.fetch,calls=[],customers=new Map(),checkouts=new Map(),remoteSubscriptions=new Map(),payments=new Map();
-let customerCounter=0,checkoutCounter=0,failCheckout=false;
+let customerCounter=0,checkoutCounter=0,failCheckout=false,rejectCheckout=false;
+const testAddress={address:'Rua de Teste',addressNumber:'100',province:'Centro',postalCode:'01310930',complement:''};
 global.fetch=async(url,options={})=>{
   if(!String(url).startsWith('https://api-sandbox.asaas.com/v3')) return actualFetch(url,options);
   assert.equal(options.headers.access_token,process.env.ASAAS_API_KEY);assert.equal(options.headers['User-Agent'],'Zemda/1.0');
@@ -24,8 +25,13 @@ global.fetch=async(url,options={})=>{
   if(resource==='/finance/balance')return reply({balance:0});
   if(resource==='/customers' && options.method==='GET')return reply({data:[...customers.values()].filter(c=>c.externalReference===u.searchParams.get('externalReference'))});
   if(resource==='/customers' && options.method==='POST'){const c={...body,id:'cus_'+(++customerCounter)};customers.set(c.id,c);return reply(c);}
+  if(resource.startsWith('/customers/') && options.method==='PUT') {
+    const c=customers.get(resource.split('/')[2]);Object.assign(c,body,{city:123});return reply(c);
+  }
   if(resource==='/checkouts' && options.method==='POST'){
     if(failCheckout)throw new Error('simulated network loss');
+    if(rejectCheckout)return reply({errors:[{code:'invalid_object',description:'O campo address deve existir para o customer informado. PRIVATE_PROVIDER_DATA'}]},400);
+    const customer=customers.get(body.customer);for(const k of ['address','addressNumber','postalCode','province','city'])assert.ok(customer[k],`Missing customer ${k}`);
     const c={...body,id:'checkout_'+(++checkoutCounter)};checkouts.set(c.id,c);return reply({id:c.id,link:'https://sandbox.asaas.com/checkoutSession/show?id='+c.id});
   }
   if(/^\/checkouts\/.+\/cancel$/.test(resource))return reply({deleted:true});
@@ -66,6 +72,14 @@ let server,eventCounter=0;
   assert.equal((await call('/v1/patients',null,signupToken)).status,402);
   assert.equal((await call('/subscriptions/current',null,signupToken)).status,200);
   assert.equal((await call('/admin/subscriptions',null,signupToken)).status,403);
+  r=await call('/subscriptions/checkout',{planCode:'SOLO'},signupToken);assert.equal(r.status,422);assert.equal(r.body.code,'BILLING_ADDRESS_REQUIRED');assert.equal(customerCounter,0);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM billing_checkouts WHERE clinic_id=?').get(clinic).n,0);
+  const profile={name:'Owner',cpfCnpj:'12345678909',email:'new@test.invalid',phone:'',...testAddress};
+  r=await call('/subscriptions/profile',{...profile,postalCode:'123'},signupToken,'PUT');assert.equal(r.status,422);
+  r=await call('/subscriptions/profile',profile,signupToken,'PUT');assert.equal(r.status,200,JSON.stringify(r));
+  assert.equal((await call('/subscriptions/profile',null,signupToken)).body.address,testAddress.address);
+  rejectCheckout=true;r=await call('/subscriptions/checkout',{planCode:'SOLO'},signupToken);assert.equal(r.status,422);assert.equal(r.body.code,'ASAAS_VALIDATION_ERROR');assert.ok(!JSON.stringify(r.body).includes('PRIVATE_PROVIDER_DATA'));
+  assert.equal(db.prepare('SELECT state FROM billing_checkouts WHERE clinic_id=?').get(clinic).state,'FAILED');rejectCheckout=false;
   r=await call('/subscriptions/checkout',{planCode:'SOLO',price:0.01,maxUsers:999},signupToken);assert.equal(r.status,200,JSON.stringify(r));assert.deepEqual(Object.keys(r.body),['url']);
   const sid=db.prepare('SELECT id FROM subscriptions WHERE clinic_id=? AND managed=1 AND is_current=1').get(clinic).id;
   const sub=()=>db.prepare('SELECT * FROM subscriptions WHERE id=?').get(sid);
@@ -125,7 +139,9 @@ let server,eventCounter=0;
   process.env.ASAAS_ENV='production';assert.throws(()=>AsaasService.config());process.env.ASAAS_ENV='sandbox';
   // New checkout cancellation never grants an active subscription.
   db.prepare("INSERT INTO tenants(id,slug,name,email,cnpj_cpf,status) VALUES('cancel','cancel','Cancel','cancel@test.invalid','12345678909','active')").run();account('cancel-owner','cancel');
-  const cancelToken=token('cancel-owner','cancel');r=await call('/subscriptions/checkout',{planCode:'SOLO'},cancelToken);assert.equal(r.status,200);
+  const cancelToken=token('cancel-owner','cancel');
+  db.prepare('UPDATE tenants SET billing_address_json=? WHERE id=?').run(JSON.stringify(testAddress),'cancel');
+  r=await call('/subscriptions/checkout',{planCode:'SOLO'},cancelToken);assert.equal(r.status,200);
   const cancelSub=db.prepare("SELECT * FROM subscriptions WHERE clinic_id='cancel' AND is_current=1").get();await event('CHECKOUT_CANCELED',{checkout:{id:cancelSub.asaas_checkout_id,customer:cancelSub.asaas_customer_id}});
   assert.equal(db.prepare('SELECT status FROM subscriptions WHERE id=?').get(cancelSub.id).status,'CANCELED');
   // Ambiguous create does not retry POST and create a second checkout.

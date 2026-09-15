@@ -5,6 +5,14 @@ import { AsaasService, AsaasError } from './asaas.service';
 export class BillingError extends Error {
   constructor(public code: string, message: string, public httpStatus = 409) { super(message); }
 }
+export function billingAddress(t:any, required=false) {
+  let saved:any={};try {saved=JSON.parse(t.billing_address_json || '{}');} catch {}
+  const address={address:saved.address ?? t.street ?? t.address ?? '',addressNumber:saved.addressNumber ?? t.number ?? '',
+    postalCode:String(saved.postalCode ?? t.zip_code ?? '').replace(/\D/g,''),province:saved.province ?? t.neighborhood ?? '',complement:saved.complement ?? t.complement ?? ''};
+  if(required && (!/^\d{8}$/.test(address.postalCode) || ['address','addressNumber','province'].some(k=>typeof (address as any)[k]!=='string' || !(address as any)[k].trim())))
+    throw new BillingError('BILLING_ADDRESS_REQUIRED','Complete o endereço nos Dados de cobrança: CEP, logradouro, número e bairro. O Asaas identifica a cidade pelo CEP.',422);
+  return address;
+}
 export const today = () => new Date().toISOString().slice(0,10);
 export function addDays(date: string, days: number): string { const d=new Date(date.slice(0,10)+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+days); return d.toISOString().slice(0,10); }
 export function addMonth(date: string): string {
@@ -112,7 +120,11 @@ export class BillingService {
         if (open.plan_id===plan.id && open.state==='OPEN' && open.expires_at>new Date().toISOString()) return {url:AsaasService.safeUrl(open.url)};
         throw new BillingError('CHECKOUT_PENDING','Há um checkout pendente. Cancele-o ou aguarde a confirmação antes de iniciar outro.');
       }
+      const address=billingAddress(t,true);
       const customerId=await customer(t);
+      // Existing customers may predate address collection. Keep the same gateway ID.
+      const updatedCustomer=await AsaasService.request(`/customers/${encodeURIComponent(customerId)}`,{method:'PUT',body:address});
+      if(!updatedCustomer.city) throw new BillingError('BILLING_ADDRESS_REQUIRED','O Asaas não identificou a cidade. Confira o CEP e o endereço nos Dados de cobrança.',422);
       clinicForBilling(clinic);checkPlanSize(clinic,plan);
       const start=s?.status==='CANCELED' && s.current_period_end>today() ? s.current_period_end : today();
       const sid=randomUUID(),cid=randomUUID(),reference=`ZEMDA_CLINIC_${clinic}_SUB_${sid}`;

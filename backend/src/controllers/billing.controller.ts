@@ -1,7 +1,7 @@
 import { Request,Response,NextFunction,Router } from 'express';
 import { timingSafeEqual } from 'crypto';
 import { db } from '../config/database';
-import { BillingError,BillingService,canOperate } from '../services/billing.service';
+import { BillingError,BillingService,canOperate,billingAddress } from '../services/billing.service';
 import { AsaasService,AsaasError } from '../services/asaas.service';
 import { BillingWebhookService } from '../services/billing-webhook.service';
 import { authMiddleware } from '../middlewares/auth.middleware';
@@ -16,6 +16,9 @@ export function respondBillingError(res:Response,error:any):boolean {
 function handler(fn:(req:Request,res:Response)=>any) {
   return async(req:Request,res:Response)=>{try {await fn(req,res);} catch(e) {
     if(respondBillingError(res,e)) return;
+    if(e instanceof AsaasError && [400,422].includes(e.status)) {
+      res.status(422).json({success:false,code:'ASAAS_VALIDATION_ERROR',error:'O Asaas recusou os dados de cobrança. Confira CPF/CNPJ e endereço completo, incluindo CEP, número e bairro.'});return;
+    }
     res.status(e instanceof AsaasError?502:500).json({code:'BILLING_UNAVAILABLE',error:'Não foi possível concluir a operação. Verifique a integração ou tente novamente após a conciliação.'});
   }};
 }
@@ -48,15 +51,27 @@ export function mountBillingRoutes(api:Router) {
   const guard=[authMiddleware,tenantMiddleware];
   api.get(['/subscriptions/profile','/v1/subscriptions/profile'],...guard,manager,handler((req,res)=>{
     const t=db.prepare('SELECT COALESCE(billing_name,corporate_name,name) AS name,cnpj_cpf AS cpfCnpj,COALESCE(responsible_email,email) AS email,COALESCE(responsible_phone,phone) AS phone FROM tenants WHERE id=?').get(req.tenantId);
-    res.json(t);
+    const address=billingAddress(db.prepare('SELECT billing_address_json,street,address,number,zip_code,neighborhood,complement FROM tenants WHERE id=?').get(req.tenantId));
+    res.json({...t,...address});
   }));
   api.put(['/subscriptions/profile','/v1/subscriptions/profile'],...guard,manager,handler(async(req,res)=>{
     const {name,cpfCnpj,email,phone}=req.body;
     const document=typeof cpfCnpj==='string'?cpfCnpj.replace(/\D/g,''):'';
     if(typeof name!=='string' || !name.trim() || name.length>160 || ![11,14].includes(document.length) || typeof email!=='string' || email.length>200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || typeof phone!=='string' || phone.length>30) throw new BillingError('BILLING_PROFILE_INVALID','Confira nome, CPF/CNPJ, e-mail e telefone.',422);
+    const address:any={};
+    for(const key of ['address','addressNumber','postalCode','province','complement']) {
+      const value=req.body[key];
+      if(typeof value!=='string' || value.length>160) throw new BillingError('BILLING_ADDRESS_REQUIRED','Confira o endereço completo nos Dados de cobrança.',422);
+      address[key]=value.trim();
+    }
+    address.postalCode=address.postalCode.replace(/\D/g,'');
+    billingAddress({billing_address_json:JSON.stringify(address)},true);
     const customer=db.prepare('SELECT asaas_customer_id FROM billing_customers WHERE clinic_id=? AND environment=?').get(req.tenantId,AsaasService.getEnvironment());
-    if(customer?.asaas_customer_id) await AsaasService.request(`/customers/${encodeURIComponent(customer.asaas_customer_id)}`,{method:'PUT',body:{name:name.trim(),cpfCnpj:document,email,mobilePhone:phone.replace(/\D/g,'') || undefined}});
-    db.prepare('UPDATE tenants SET billing_name=?,cnpj_cpf=?,responsible_email=?,responsible_phone=?,updated_at=datetime(\'now\') WHERE id=?').run(name.trim(),document,email.trim().toLowerCase(),phone,req.tenantId);
+    if(customer?.asaas_customer_id) {
+      const updated=await AsaasService.request(`/customers/${encodeURIComponent(customer.asaas_customer_id)}`,{method:'PUT',body:{name:name.trim(),cpfCnpj:document,email,mobilePhone:phone.replace(/\D/g,'') || undefined,...address}});
+      if(!updated.city) throw new BillingError('BILLING_ADDRESS_REQUIRED','O Asaas não identificou a cidade. Confira o CEP informado.',422);
+    }
+    db.prepare('UPDATE tenants SET billing_name=?,cnpj_cpf=?,responsible_email=?,responsible_phone=?,billing_address_json=?,updated_at=datetime(\'now\') WHERE id=?').run(name.trim(),document,email.trim().toLowerCase(),phone,JSON.stringify(address),req.tenantId);
     res.json({message:'Dados de cobrança atualizados.'});
   }));
   api.get(['/subscriptions/current','/v1/subscriptions/current'],...guard,handler((req,res)=>{

@@ -34,6 +34,7 @@ export function migrateBilling(db: DatabaseSync): void {
     }
     add('tenants','billing_required','INTEGER NOT NULL DEFAULT 0');
     add('tenants','billing_name','TEXT');
+    add('tenants','billing_address_json','TEXT');
     for (const [name,def] of Object.entries({clinic_id:'TEXT',asaas_customer_id:'TEXT',asaas_checkout_id:'TEXT',asaas_subscription_id:'TEXT',
       billing_cycle:"TEXT NOT NULL DEFAULT 'MONTHLY'", next_due_date:'TEXT',grace_period_until:'TEXT',updated_at:'TEXT',
       gateway_environment:'TEXT',managed:'INTEGER NOT NULL DEFAULT 0',is_current:'INTEGER NOT NULL DEFAULT 1',checkout_url:'TEXT',external_reference:'TEXT',

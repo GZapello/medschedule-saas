@@ -45,6 +45,8 @@ export class AsaasService {
       });
       // Provider error bodies may contain credentials or PII; never return or log them.
       if (!response.ok) throw new AsaasError(response.status, response.status >= 500);
+      if(response.status===204) return {} as T;
+      if(!(response.headers.get('content-type') || '').toLowerCase().includes('application/json')) throw new AsaasError(response.status,true);
       const text = await response.text(); return (text ? JSON.parse(text) : {}) as T;
     } catch(e) { if (e instanceof AsaasError) throw e; throw new AsaasError(0,true); }
   }
