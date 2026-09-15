@@ -187,6 +187,22 @@ export function initializeDatabase(): void {
     addColIfMissing('clinic_users', 'zemda_odonto_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('users', 'zemda_odonto_enabled', 'INTEGER DEFAULT 0');
 
+    // Liberação explícita de ZemdaNutri, ZemdaTO e ZemdaFono no profissional e na equipe
+    addColIfMissing('professionals', 'zemda_nutri_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_nutri_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_nutri_enabled', 'INTEGER DEFAULT 0');
+
+    addColIfMissing('professionals', 'zemda_to_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_to_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_to_enabled', 'INTEGER DEFAULT 0');
+
+    addColIfMissing('professionals', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
+
+    // Suporte a snapshots de odontograma vinculados a prontuários
+    addColIfMissing('odontograms', 'record_id', 'TEXT');
+
     // Padronização de datas nos agendamentos para conformidade ISO e precisão matemática de slots
     try {
       rawDb.exec(`
@@ -509,6 +525,12 @@ export function initializeDatabase(): void {
     addColIfMissing('records', 'created_by', 'TEXT');
     addColIfMissing('records', 'updated_by', 'TEXT');
     addColIfMissing('records', 'edit_history_json', 'TEXT');
+    addColIfMissing('records', 'session_time', 'TEXT');
+    addColIfMissing('records', 'procedure_name', 'TEXT');
+    addColIfMissing('records', 'conducts', 'TEXT');
+    addColIfMissing('records', 'clinical_data_json', 'TEXT');
+    addColIfMissing('records', 'module_type', 'TEXT');
+    addColIfMissing('records', 'module_data_json', 'TEXT');
 
     addColIfMissing('notifications', 'retry_count', 'INTEGER DEFAULT 0');
     addColIfMissing('notifications', 'last_error', 'TEXT');
@@ -1219,6 +1241,472 @@ export function initializeDatabase(): void {
         FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_hof_patient ON dental_hof (tenant_id, patient_id);
+
+      -- =========================================================================
+      -- 10. MÓDULO CLÍNICO ZEMDANUTRI (NUTRIÇÃO)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS nutrition_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        record_id TEXT,
+        assessment_date TEXT NOT NULL,
+        weight REAL,
+        height REAL,
+        bmi REAL,
+        waist_circ REAL,
+        abdominal_circ REAL,
+        hip_circ REAL,
+        arm_circ REAL,
+        calf_circ REAL,
+        neck_circ REAL,
+        thigh_circ REAL,
+        custom_measures_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_assess_patient ON nutrition_assessments (tenant_id, patient_id, assessment_date);
+
+      CREATE TABLE IF NOT EXISTS nutrition_bioimpedance (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        record_id TEXT,
+        assessment_date TEXT NOT NULL,
+        weight REAL,
+        muscle_mass REAL,
+        fat_mass REAL,
+        fat_percentage REAL,
+        visceral_fat REAL,
+        body_water REAL,
+        bone_mass REAL,
+        bmr REAL,
+        bioimpedance_data_json TEXT,
+        attachment_url TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_bio_patient ON nutrition_bioimpedance (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS nutrition_calculations (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        calculation_date TEXT NOT NULL,
+        bmi REAL,
+        eer REAL,
+        bmr REAL,
+        protein_grams REAL,
+        carbs_grams REAL,
+        fats_grams REAL,
+        water_ml REAL,
+        is_manual_override INTEGER DEFAULT 0,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS nutrition_recalls (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        recall_type TEXT NOT NULL DEFAULT '24h',
+        meals_json TEXT NOT NULL,
+        water_intake_ml REAL,
+        observations TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_recalls_patient ON nutrition_recalls (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS nutrition_food_database (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        portion_size REAL DEFAULT 100,
+        portion_unit TEXT DEFAULT 'g',
+        energy_kcal REAL DEFAULT 0,
+        protein_g REAL DEFAULT 0,
+        carbs_g REAL DEFAULT 0,
+        fat_g REAL DEFAULT 0,
+        fiber_g REAL DEFAULT 0,
+        sodium_mg REAL DEFAULT 0,
+        is_clinic_custom INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS nutrition_meal_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        title TEXT NOT NULL,
+        meals_json TEXT NOT NULL,
+        total_calories REAL,
+        total_protein REAL,
+        total_carbs REAL,
+        total_fat REAL,
+        guidelines TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_meal_plans_patient ON nutrition_meal_plans (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS nutrition_goals (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        title TEXT NOT NULL,
+        category TEXT NOT NULL,
+        target_value TEXT,
+        current_value TEXT,
+        deadline TEXT,
+        status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'in_progress', 'partially_reached', 'reached', 'suspended')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_nutri_goals_patient ON nutrition_goals (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS nutrition_anamnesis (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL UNIQUE,
+        professional_id TEXT,
+        data_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      -- =========================================================================
+      -- 11. MÓDULO CLÍNICO ZEMDATO (TERAPIA OCUPACIONAL)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS to_occupational_profiles (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        routine TEXT,
+        roles TEXT,
+        interests TEXT,
+        habits TEXT,
+        meaningful_activities TEXT,
+        family_context TEXT,
+        school_context TEXT,
+        work_context TEXT,
+        community_context TEXT,
+        physical_env TEXT,
+        social_env TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_profile_patient ON to_occupational_profiles (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS to_avd_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        assessment_type TEXT NOT NULL DEFAULT 'avd',
+        scores_json TEXT NOT NULL,
+        overall_level TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_avd_patient ON to_avd_assessments (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS to_sensory_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        tactile TEXT,
+        auditory TEXT,
+        visual TEXT,
+        vestibular TEXT,
+        proprioceptive TEXT,
+        gustatory TEXT,
+        olfactory TEXT,
+        interoceptive TEXT,
+        notes_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_sensory_patient ON to_sensory_assessments (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS to_motor_cognitive_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        motor_json TEXT,
+        cognitive_json TEXT,
+        child_dev_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS to_treatment_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        goals_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'in_progress', 'partially_reached', 'reached', 'reassess')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_plans_patient ON to_treatment_plans (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS to_assistive_tech (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        device_name TEXT NOT NULL,
+        adaptation_type TEXT,
+        orthosis_type TEXT,
+        resource_details TEXT,
+        photo_url TEXT,
+        indication TEXT,
+        training_notes TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_to_assistive_patient ON to_assistive_tech (tenant_id, patient_id);
+
+      -- =========================================================================
+      -- 12. MÓDULO CLÍNICO ZEMDAFONO (FONOAUDIOLOGIA)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS fono_anamnesis (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL UNIQUE,
+        professional_id TEXT,
+        data_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_language_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        comprehension TEXT,
+        expression TEXT,
+        vocabulary TEXT,
+        semantics TEXT,
+        morphosyntax TEXT,
+        pragmatics TEXT,
+        narrative TEXT,
+        functional_comm TEXT,
+        aac_details TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_lang_patient ON fono_language_assessments (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS fono_speech_phonology (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        phonemes_json TEXT NOT NULL,
+        phonological_processes TEXT,
+        intelligibility TEXT,
+        articulation_notes TEXT,
+        spontaneous_speech TEXT,
+        repetition TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_speech_patient ON fono_speech_phonology (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS fono_orofacial_motricity (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        structures_json TEXT,
+        mobility TEXT,
+        force TEXT,
+        tonus TEXT,
+        breathing TEXT,
+        chewing TEXT,
+        swallowing TEXT,
+        speech_motor TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_mo_patient ON fono_orofacial_motricity (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS fono_voice_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        vocal_quality TEXT,
+        pitch TEXT,
+        loudness TEXT,
+        resonance TEXT,
+        vocal_attack TEXT,
+        pneumophono_coordination TEXT,
+        audio_url TEXT,
+        symptoms TEXT,
+        habits TEXT,
+        professional_use TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_voice_patient ON fono_voice_assessments (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS fono_fluency_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        disfluency_types TEXT,
+        frequency TEXT,
+        tension TEXT,
+        blocks TEXT,
+        prolongations TEXT,
+        repetitions TEXT,
+        associated_behaviors TEXT,
+        impact TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_dysphagia_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        food_consistency TEXT,
+        utensil TEXT,
+        posture TEXT,
+        lip_closure TEXT,
+        chewing TEXT,
+        oral_transit TEXT,
+        clinical_signs TEXT,
+        cough_choke TEXT,
+        wet_voice TEXT,
+        feeding_time TEXT,
+        recommendations TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_audiology_records (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        exam_type TEXT NOT NULL,
+        exam_date TEXT NOT NULL,
+        results_json TEXT,
+        attachment_url TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_learning_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        reading TEXT,
+        writing TEXT,
+        phonological_awareness TEXT,
+        memory TEXT,
+        attention TEXT,
+        comprehension TEXT,
+        text_production TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS fono_treatment_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        short_term_goals_json TEXT,
+        medium_term_goals_json TEXT,
+        long_term_goals_json TEXT,
+        status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'in_progress', 'partially_reached', 'reached', 'reassess')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_fono_plans_patient ON fono_treatment_plans (tenant_id, patient_id);
     `);
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);

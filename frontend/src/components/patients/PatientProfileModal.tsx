@@ -25,7 +25,11 @@ import {
   User,
   ExternalLink,
   Printer,
-  Edit3
+  Edit3,
+  Smile,
+  Apple,
+  Hand,
+  Mic
 } from 'lucide-react';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
@@ -41,11 +45,22 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   onClose,
   onUpdated
 }) => {
-  const { currentUser, isPhysiotherapist } = useAuth();
+  const {
+    currentUser,
+    isPhysiotherapist,
+    isDentist,
+    isZemdaOdonto,
+    isNutritionist,
+    isZemdaNutri,
+    isOccupationalTherapist,
+    isZemdaTO,
+    isSpeechTherapist,
+    isZemdaFono
+  } = useAuth();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'timeline' | 'allergies_meds' | 'records' | 'physiotherapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
+    'overview' | 'timeline' | 'allergies_meds' | 'records' | 'physiotherapy' | 'dentistry' | 'nutrition' | 'occupational_therapy' | 'speech_therapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
   >('overview');
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -116,6 +131,66 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
       console.warn('Fisioterapia não disponível para este usuário ou sem registros:', err);
     } finally {
       setLoadingPhysio(false);
+    }
+  };
+
+  // Dentistry state (ZemdaOdonto)
+  const [dentistryData, setDentistryData] = useState<any>(null);
+  const [loadingDentistry, setLoadingDentistry] = useState<boolean>(false);
+  const loadDentistryData = async () => {
+    try {
+      setLoadingDentistry(true);
+      const res = await ApiClient.get<any>(`/v1/dentistry/odontograms/${patientId}`);
+      setDentistryData(res);
+    } catch (e) {
+      console.warn('ZemdaOdonto: Não disponível ou sem dados:', e);
+    } finally {
+      setLoadingDentistry(false);
+    }
+  };
+
+  // Nutrition state (ZemdaNutri)
+  const [nutritionAssessments, setNutritionAssessments] = useState<any[]>([]);
+  const [loadingNutri, setLoadingNutri] = useState<boolean>(false);
+  const loadNutritionData = async () => {
+    try {
+      setLoadingNutri(true);
+      const res = await ApiClient.get<any[]>(`/v1/nutrition/assessments/patient/${patientId}`);
+      setNutritionAssessments(res || []);
+    } catch (e) {
+      console.warn('ZemdaNutri: Não disponível ou sem dados:', e);
+    } finally {
+      setLoadingNutri(false);
+    }
+  };
+
+  // Occupational Therapy state (ZemdaTO)
+  const [otAssessments, setOtAssessments] = useState<any[]>([]);
+  const [loadingOT, setLoadingOT] = useState<boolean>(false);
+  const loadOTData = async () => {
+    try {
+      setLoadingOT(true);
+      const res = await ApiClient.get<any[]>(`/v1/occupational-therapy/assessments/patient/${patientId}`);
+      setOtAssessments(res || []);
+    } catch (e) {
+      console.warn('ZemdaTO: Não disponível ou sem dados:', e);
+    } finally {
+      setLoadingOT(false);
+    }
+  };
+
+  // Speech Therapy state (ZemdaFono)
+  const [stAssessments, setStAssessments] = useState<any[]>([]);
+  const [loadingST, setLoadingST] = useState<boolean>(false);
+  const loadSTData = async () => {
+    try {
+      setLoadingST(true);
+      const res = await ApiClient.get<any[]>(`/v1/speech-therapy/assessments/patient/${patientId}`);
+      setStAssessments(res || []);
+    } catch (e) {
+      console.warn('ZemdaFono: Não disponível ou sem dados:', e);
+    } finally {
+      setLoadingST(false);
     }
   };
 
@@ -228,6 +303,10 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     if (activeTab === 'allergies_meds') loadAllergiesAndMeds();
     if (activeTab === 'records') loadRecords();
     if (activeTab === 'physiotherapy') loadPhysiotherapyData();
+    if (activeTab === 'dentistry') loadDentistryData();
+    if (activeTab === 'nutrition') loadNutritionData();
+    if (activeTab === 'occupational_therapy') loadOTData();
+    if (activeTab === 'speech_therapy') loadSTData();
     if (activeTab === 'anamnesis') loadAnamnesis();
     if (activeTab === 'exams') loadExams();
     if (activeTab === 'insurances') loadInsurances();
@@ -519,6 +598,18 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
             { id: 'records', label: 'Prontuário & Evolução', icon: FileText },
             ...(isPhysiotherapist
               ? [{ id: 'physiotherapy', label: 'ZemdaFisio', icon: Activity }]
+              : []),
+            ...(isDentist || isZemdaOdonto
+              ? [{ id: 'dentistry', label: 'ZemdaOdonto', icon: Smile }]
+              : []),
+            ...(isNutritionist || isZemdaNutri
+              ? [{ id: 'nutrition', label: 'ZemdaNutri', icon: Apple }]
+              : []),
+            ...(isOccupationalTherapist || isZemdaTO
+              ? [{ id: 'occupational_therapy', label: 'ZemdaTO', icon: Hand }]
+              : []),
+            ...(isSpeechTherapist || isZemdaFono
+              ? [{ id: 'speech_therapy', label: 'ZemdaFono', icon: Mic }]
               : []),
             { id: 'anamnesis', label: 'Anamneses', icon: Activity },
             { id: 'exams', label: 'Exames & Laudos IA', icon: FileUp },
@@ -1771,6 +1862,276 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* TAB: ZEMDAODONTO (ODONTOLOGIA) */}
+          {activeTab === 'dentistry' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-cyan-500/10 via-sky-500/5 to-transparent p-5 rounded-2xl border border-cyan-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-cyan-950">ZemdaOdonto — Prontuário Odontológico</h3>
+                      <span className="bg-cyan-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Especializado
+                      </span>
+                    </div>
+                    <p className="text-xs text-cyan-700 mt-1">
+                      Odontograma anatômico FDI permanente, status por dente, histórico de cáries, restaurações e snapshots.
+                    </p>
+                  </div>
+                  <button
+                    onClick={loadDentistryData}
+                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold text-cyan-700 bg-white hover:bg-cyan-50 border border-cyan-200 rounded-xl transition-all shadow-xs cursor-pointer"
+                  >
+                    Atualizar Odontograma
+                  </button>
+                </div>
+              </div>
+
+              {loadingDentistry ? (
+                <div className="bg-white p-8 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                  Carregando dados odontológicos...
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                      <Smile className="w-4 h-4 text-cyan-600" />
+                      Status do Odontograma Permanente
+                    </h4>
+                    {dentistryData?.current?.status_data ? (
+                      <div className="space-y-2 text-xs">
+                        <p className="text-slate-600">
+                          Odontograma ativo atualizado em {dentistryData.current.updated_at ? new Date(dentistryData.current.updated_at).toLocaleString('pt-BR') : 'recente'}.
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                          <div className="p-3 bg-cyan-50 rounded-xl border border-cyan-100 text-cyan-950 text-center">
+                            <span className="text-[10px] uppercase font-bold block text-cyan-600">Dentes Mapeados</span>
+                            <span className="text-lg font-black">{Object.keys(dentistryData.current.status_data).length}</span>
+                          </div>
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-900 text-center">
+                            <span className="text-[10px] uppercase font-bold block text-slate-500">Snapshots Históricos</span>
+                            <span className="text-lg font-black">{dentistryData.snapshots?.length || 0}</span>
+                          </div>
+                          <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-950 text-center">
+                            <span className="text-[10px] uppercase font-bold block text-emerald-600">Procedimentos</span>
+                            <span className="text-lg font-black">{dentistryData.procedures?.length || 0}</span>
+                          </div>
+                          <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 text-amber-950 text-center">
+                            <span className="text-[10px] uppercase font-bold block text-amber-600">Histórico de Dentes</span>
+                            <span className="text-lg font-black">{dentistryData.toothHistory?.length || 0}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">
+                        Nenhum odontograma registrado ainda. Realize uma consulta no módulo <strong>ZemdaOdonto</strong> para registrar.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: ZEMDANUTRI (NUTRIÇÃO) */}
+          {activeTab === 'nutrition' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-lime-500/10 via-emerald-500/5 to-transparent p-5 rounded-2xl border border-lime-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-lime-950">ZemdaNutri — Prontuário Nutricional</h3>
+                      <span className="bg-lime-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Especializado
+                      </span>
+                    </div>
+                    <p className="text-xs text-lime-700 mt-1">
+                      Avaliações antropométricas, bioimpedância, evolução de IMC, recordatórios e planos alimentares.
+                    </p>
+                  </div>
+                  <button
+                    onClick={loadNutritionData}
+                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold text-lime-700 bg-white hover:bg-lime-50 border border-lime-200 rounded-xl transition-all shadow-xs cursor-pointer"
+                  >
+                    Atualizar Dados
+                  </button>
+                </div>
+              </div>
+
+              {loadingNutri ? (
+                <div className="bg-white p-8 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                  Carregando avaliações nutricionais...
+                </div>
+              ) : nutritionAssessments.length === 0 ? (
+                <div className="bg-white p-6 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                  Nenhuma avaliação nutricional registrada. Registre consultas no módulo <strong>ZemdaNutri</strong>.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {nutritionAssessments.map((item: any) => (
+                    <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 hover:border-lime-300 shadow-xs transition-all space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-lime-600" />
+                          {item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : 'Data n/d'}
+                        </span>
+                        {item.bmi && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-lime-50 text-lime-800 border border-lime-200">
+                            IMC: {item.bmi} kg/m²
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 pt-1 text-slate-700">
+                        {item.weight && <div><strong>Peso:</strong> {item.weight} kg</div>}
+                        {item.height && <div><strong>Altura:</strong> {item.height} cm</div>}
+                        {item.waist_circ && <div><strong>Cintura:</strong> {item.waist_circ} cm</div>}
+                        {item.hip_circ && <div><strong>Quadril:</strong> {item.hip_circ} cm</div>}
+                        {item.body_fat_pct && <div><strong>% Gordura:</strong> {item.body_fat_pct}%</div>}
+                      </div>
+
+                      {item.notes && (
+                        <p className="text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100 line-clamp-2">
+                          {item.notes}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: ZEMDATO (TERAPIA OCUPACIONAL) */}
+          {activeTab === 'occupational_therapy' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent p-5 rounded-2xl border border-amber-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-amber-950">ZemdaTO — Prontuário de Terapia Ocupacional</h3>
+                      <span className="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Especializado
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-700 mt-1">
+                      Escala funcional de 6 níveis de independência, perfil sensorial, treino de AVDs e Plano Terapêutico Singular.
+                    </p>
+                  </div>
+                  <button
+                    onClick={loadOTData}
+                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold text-amber-700 bg-white hover:bg-amber-50 border border-amber-200 rounded-xl transition-all shadow-xs cursor-pointer"
+                  >
+                    Atualizar Dados
+                  </button>
+                </div>
+              </div>
+
+              {loadingOT ? (
+                <div className="bg-white p-8 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                  Carregando avaliações de Terapia Ocupacional...
+                </div>
+              ) : otAssessments.length === 0 ? (
+                <div className="bg-white p-6 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                  Nenhuma avaliação de TO registrada para este paciente. Registre sessões no módulo <strong>ZemdaTO</strong>.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {otAssessments.map((item: any) => (
+                    <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 hover:border-amber-300 shadow-xs transition-all space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                          {item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : 'Data n/d'}
+                        </span>
+                        {item.total_score && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            Pontuação: {item.total_score}
+                          </span>
+                        )}
+                      </div>
+                      {item.scale_type && (
+                        <p className="text-slate-800 font-semibold">
+                          Escala: {item.scale_type}
+                        </p>
+                      )}
+                      {item.summary && (
+                        <p className="text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          {item.summary}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: ZEMDAFONO (FONOAUDIOLOGIA) */}
+          {activeTab === 'speech_therapy' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent p-5 rounded-2xl border border-purple-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-purple-950">ZemdaFono — Prontuário de Fonoaudiologia</h3>
+                      <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Especializado
+                      </span>
+                    </div>
+                    <p className="text-xs text-purple-700 mt-1">
+                      Avaliações fonêmicas, análise vocal RASATI, motricidade orofacial, fluência e plano fonoaudiológico.
+                    </p>
+                  </div>
+                  <button
+                    onClick={loadSTData}
+                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold text-purple-700 bg-white hover:bg-purple-50 border border-purple-200 rounded-xl transition-all shadow-xs cursor-pointer"
+                  >
+                    Atualizar Dados
+                  </button>
+                </div>
+              </div>
+
+              {loadingST ? (
+                <div className="bg-white p-8 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                  Carregando avaliações fonoaudiológicas...
+                </div>
+              ) : stAssessments.length === 0 ? (
+                <div className="bg-white p-6 text-center rounded-2xl border border-slate-200 text-xs text-slate-400">
+                  Nenhuma avaliação fonoaudiológica registrada para este paciente. Registre sessões no módulo <strong>ZemdaFono</strong>.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {stAssessments.map((item: any) => (
+                    <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 hover:border-purple-300 shadow-xs transition-all space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                          {item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : 'Data n/d'}
+                        </span>
+                        {item.assessment_type && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200">
+                            {item.assessment_type}
+                          </span>
+                        )}
+                      </div>
+                      {item.findings && (
+                        <p className="text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          <strong>Achados:</strong> {item.findings}
+                        </p>
+                      )}
+                      {item.conduct && (
+                        <p className="text-purple-900 bg-purple-50/50 p-2 rounded-lg border border-purple-100">
+                          <strong>Conduta:</strong> {item.conduct}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

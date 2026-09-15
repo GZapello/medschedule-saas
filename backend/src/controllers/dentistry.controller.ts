@@ -127,6 +127,8 @@ export class DentistryController {
         return;
       }
 
+      const recordIdQuery = req.query.recordId ? String(req.query.recordId) : null;
+
       const rows = db.prepare(`
         SELECT * FROM odontograms 
         WHERE patient_id = ? AND tenant_id = ? 
@@ -134,12 +136,27 @@ export class DentistryController {
       `).all(patientId, tenantId) as any[];
 
       const initial = rows.find(r => r.type === 'initial') || null;
-      const current = rows.find(r => r.type === 'current') || rows[0] || null;
+      let current = rows.find(r => r.type === 'current') || rows[0] || null;
+
+      if (recordIdQuery) {
+        const snap = rows.find(r => r.record_id === recordIdQuery || r.appointment_id === recordIdQuery);
+        if (snap) {
+          current = snap;
+        }
+      }
+
+      const snapshots = rows
+        .filter(r => r.type === 'consultation_snapshot')
+        .map(r => ({
+          ...r,
+          status_data: JSON.parse(r.status_data_json || '{}')
+        }));
 
       logAudit(req, 'GET_ODONTOGRAM', 'odontograms', patientId);
       res.json({
         initial: initial ? { ...initial, status_data: JSON.parse(initial.status_data_json || '{}') } : null,
         current: current ? { ...current, status_data: JSON.parse(current.status_data_json || '{}') } : null,
+        snapshots,
         all: rows.map(r => ({ ...r, status_data: JSON.parse(r.status_data_json || '{}') }))
       });
     } catch (err: any) {
@@ -938,7 +955,8 @@ export class DentistryController {
 
       const {
         patientId, appointmentId, clinicalEvolution, proceduresPerformed,
-        odontogramData, toothChanges, isSealed
+        odontogramData, toothChanges, isSealed, sessionDate, sessionTime,
+        procedureName, title, technicalNotes, conducts, clinicalData
       } = req.body;
 
       if (!patientId || !clinicalEvolution) {
@@ -954,54 +972,113 @@ export class DentistryController {
         profId = req.body.professionalId;
       }
 
+      // Se tiver appointmentId, busca dados complementares
+      let apptRow: any = null;
+      if (appointmentId) {
+        apptRow = db.prepare('SELECT start_time, professional_id, service_id FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId);
+        if (!profId && apptRow?.professional_id) profId = apptRow.professional_id;
+      }
+
       const creatorName = req.user?.name || req.user?.email || 'Cirurgião-Dentista';
       const recordId = 'rec-odo-' + uuidv4().slice(0, 8);
 
-      const summaryText = `[ZemdaOdonto — Atendimento Odontológico]\n${clinicalEvolution}\nProcedimentos Realizados: ${proceduresPerformed || '-'}`;
-      db.prepare(`
-        INSERT INTO records (
-          id, tenant_id, patient_id, appointment_id, professional_id,
-          session_date, title, clinical_evolution, technical_notes, is_sealed, created_by
-        ) VALUES (?, ?, ?, ?, ?, date('now'), 'Atendimento Odontológico', ?, ?, ?, ?)
-      `).run(
-        recordId, tenantId, patientId, appointmentId || null, profId,
-        summaryText, proceduresPerformed ? `Procedimentos: ${proceduresPerformed}` : null,
-        isSealed ? 1 : 0, creatorName
-      );
+      // Data e hora de Brasília
+      const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const recDate = sessionDate || (apptRow?.start_time ? apptRow.start_time.split('T')[0] : spDateStr);
+      const recTime = sessionTime || (apptRow?.start_time?.includes('T') ? apptRow.start_time.split('T')[1].slice(0, 5) : null);
+      const recProc = procedureName || proceduresPerformed || (apptRow ? (db.prepare('SELECT name FROM services WHERE id = ?').get(apptRow.service_id) as any)?.name : 'Procedimento Odontológico');
+      const recTitle = title || 'Atendimento Odontológico (ZemdaOdonto)';
 
-      if (odontogramData) {
-        const statusJson = typeof odontogramData === 'string' ? odontogramData : JSON.stringify(odontogramData);
-        const existingOdo = db.prepare('SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = ?').get(patientId, tenantId, 'current') as any;
-        if (existingOdo) {
-          db.prepare(`UPDATE odontograms SET status_data_json = ?, updated_at = datetime('now') WHERE id = ?`).run(statusJson, existingOdo.id);
-        } else {
-          const newOdoId = 'odo-' + uuidv4().slice(0, 8);
+      const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;
+      const odontoModuleData = {
+        proceduresPerformed: proceduresPerformed || null,
+        toothChanges: toothChanges || [],
+        odontogramData: odontogramData || null
+      };
+
+      // Inicia transação atômica segura (Regra 56)
+      db.exec('BEGIN TRANSACTION');
+      let transactionCommitted = false;
+
+      try {
+        db.prepare(`
+          INSERT INTO records (
+            id, tenant_id, patient_id, appointment_id, professional_id,
+            session_date, session_time, procedure_name, title, clinical_evolution,
+            technical_notes, conducts, clinical_data_json, module_type, module_data_json,
+            is_sealed, created_by, updated_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ZemdaOdonto', ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(
+          recordId, tenantId, patientId, appointmentId || null, profId,
+          recDate, recTime, recProc, recTitle, clinicalEvolution,
+          technicalNotes || (proceduresPerformed ? `Procedimentos: ${proceduresPerformed}` : null),
+          conducts || null, clinicalDataJson, JSON.stringify(odontoModuleData),
+          isSealed ? 1 : 0, creatorName, creatorName
+        );
+
+        if (odontogramData) {
+          const statusJson = typeof odontogramData === 'string' ? odontogramData : JSON.stringify(odontogramData);
+
+          // 1. Grava odontograma inicial se for a primeira consulta do paciente (Regra 53)
+          const hasInitial = db.prepare("SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'initial'").get(patientId, tenantId);
+          if (!hasInitial) {
+            const initOdoId = 'odo-init-' + uuidv4().slice(0, 8);
+            db.prepare(`
+              INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+              VALUES (?, ?, ?, ?, ?, ?, 'initial', ?, 'Odontograma Inicial do Paciente')
+            `).run(initOdoId, tenantId, patientId, profId, appointmentId || null, recordId, statusJson);
+          }
+
+          // 2. Atualiza ou cria odontograma ATUAL do paciente
+          const existingOdo = db.prepare('SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = ?').get(patientId, tenantId, 'current') as any;
+          if (existingOdo) {
+            db.prepare(`UPDATE odontograms SET status_data_json = ?, record_id = ?, updated_at = datetime('now') WHERE id = ?`).run(statusJson, recordId, existingOdo.id);
+          } else {
+            const newOdoId = 'odo-' + uuidv4().slice(0, 8);
+            db.prepare(`
+              INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json)
+              VALUES (?, ?, ?, ?, ?, ?, 'current', ?)
+            `).run(newOdoId, tenantId, patientId, profId, appointmentId || null, recordId, statusJson);
+          }
+
+          // 3. Grava SNAPSHOT histórico imutável vinculado a este atendimento (Regras 52 e 53)
+          const snapOdoId = 'odo-snap-' + uuidv4().slice(0, 8);
           db.prepare(`
-            INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, type, status_data_json)
-            VALUES (?, ?, ?, ?, ?, 'current', ?)
-          `).run(newOdoId, tenantId, patientId, profId, appointmentId || null, statusJson);
+            INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+            VALUES (?, ?, ?, ?, ?, ?, 'consultation_snapshot', ?, ?)
+          `).run(snapOdoId, tenantId, patientId, profId, appointmentId || null, recordId, statusJson, `Snapshot do atendimento ${recDate} ${recTime || ''}`);
         }
-      }
 
-      if (Array.isArray(toothChanges) && toothChanges.length > 0) {
-        const insertToothStmt = db.prepare(`
-          INSERT INTO dental_tooth_records (
-            id, tenant_id, patient_id, professional_id, appointment_id,
-            tooth_number, face, condition, previous_condition, procedure_name, notes
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
+        // 4. Registra histórico detalhado por dente e face (Regra 52)
+        if (Array.isArray(toothChanges) && toothChanges.length > 0) {
+          const insertToothStmt = db.prepare(`
+            INSERT INTO dental_tooth_records (
+              id, tenant_id, patient_id, professional_id, appointment_id,
+              tooth_number, face, condition, previous_condition, procedure_name, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
 
-        for (const change of toothChanges) {
-          insertToothStmt.run(
-            'dtr-' + uuidv4().slice(0, 8), tenantId, patientId, profId, appointmentId || null,
-            change.toothNumber, change.face || 'whole', change.condition,
-            change.previousCondition || null, change.procedureName || null, change.notes || null
-          );
+          for (const change of toothChanges) {
+            insertToothStmt.run(
+              'dtr-' + uuidv4().slice(0, 8), tenantId, patientId, profId, appointmentId || null,
+              change.toothNumber, change.face || 'whole', change.condition,
+              change.previousCondition || null, change.procedureName || proceduresPerformed || null, change.notes || null
+            );
+          }
         }
-      }
 
-      if (appointmentId) {
-        db.prepare(`UPDATE appointments SET status = 'completed', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(appointmentId, tenantId);
+        // 5. Marca agendamento como finalizado após todos os registros clínicos estarem garantidos
+        if (appointmentId) {
+          db.prepare(`UPDATE appointments SET status = 'completed', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(appointmentId, tenantId);
+        }
+
+        db.exec('COMMIT');
+        transactionCommitted = true;
+      } catch (innerErr) {
+        if (!transactionCommitted) {
+          try { db.exec('ROLLBACK'); } catch (_) {}
+        }
+        throw innerErr;
       }
 
       logAudit(req, 'FINISH_DENTAL_CONSULTATION', 'records', recordId, { patientId, appointmentId });

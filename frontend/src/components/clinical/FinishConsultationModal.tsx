@@ -26,12 +26,24 @@ interface FinishConsultationModalProps {
     service_name?: string;
     start_time: string;
   };
+  clinicalData?: {
+    title?: string;
+    clinicalEvolution?: string;
+    technicalNotes?: string;
+    isSealed?: boolean;
+    odontogramData?: any;
+    toothChanges?: any[];
+    moduleType?: string;
+    moduleData?: any;
+    assessmentData?: any;
+  };
   onClose: () => void;
   onFinished: () => void;
 }
 
 export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = ({
   appointment,
+  clinicalData,
   onClose,
   onFinished
 }) => {
@@ -48,10 +60,10 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
   // Dados do formulário
   const [evolution, setEvolution] = useState({
-    title: `Consulta de ${appointment.service_name || 'Rotina'}`,
-    clinicalEvolution: '',
-    technicalNotes: '',
-    isSealed: false
+    title: clinicalData?.title || `Consulta de ${appointment.service_name || 'Rotina'}`,
+    clinicalEvolution: clinicalData?.clinicalEvolution || '',
+    technicalNotes: clinicalData?.technicalNotes || '',
+    isSealed: !!clinicalData?.isSealed
   });
 
   const [certificate, setCertificate] = useState({
@@ -156,7 +168,36 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
       const payload: any = {};
 
       if (includeEvolution && evolution.clinicalEvolution.trim()) {
-        payload.evolution = evolution;
+        payload.evolution = {
+          ...evolution,
+          odontogramData: clinicalData?.odontogramData,
+          toothChanges: clinicalData?.toothChanges,
+          moduleType: clinicalData?.moduleType,
+          moduleData: clinicalData?.moduleData,
+          assessmentData: clinicalData?.assessmentData
+        };
+      }
+
+      if (clinicalData?.odontogramData || (clinicalData?.toothChanges && clinicalData.toothChanges.length > 0) || clinicalData?.moduleType) {
+        if (!payload.evolution) {
+          payload.evolution = {
+            title: evolution.title || `Consulta de ${appointment.service_name || 'Rotina'}`,
+            clinicalEvolution: evolution.clinicalEvolution.trim() || 'Atendimento clínico concluído.',
+            technicalNotes: evolution.technicalNotes || '',
+            isSealed: evolution.isSealed,
+            odontogramData: clinicalData?.odontogramData,
+            toothChanges: clinicalData?.toothChanges,
+            moduleType: clinicalData?.moduleType,
+            moduleData: clinicalData?.moduleData,
+            assessmentData: clinicalData?.assessmentData
+          };
+        } else {
+          payload.evolution.odontogramData = clinicalData?.odontogramData;
+          payload.evolution.toothChanges = clinicalData?.toothChanges;
+          payload.evolution.moduleType = clinicalData?.moduleType;
+          payload.evolution.moduleData = clinicalData?.moduleData;
+          payload.evolution.assessmentData = clinicalData?.assessmentData;
+        }
       }
 
       if (includeCertificate) {

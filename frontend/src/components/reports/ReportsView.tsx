@@ -9,7 +9,8 @@ import {
   CheckCircle2,
   DollarSign,
   TrendingUp,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Activity
 } from 'lucide-react';
 
 export const ReportsView: React.FC = () => {
@@ -124,6 +125,31 @@ export const ReportsView: React.FC = () => {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Produção por Módulo Clínico Especializado */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 lg:col-span-2">
+          <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+            <Activity className="w-4 h-4 text-emerald-600" /> Produção por Especialidade / Módulo Clínico
+          </h3>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+            {(attendanceData?.byModule || []).length > 0 ? (
+              (attendanceData?.byModule || []).map((mod: any, i: number) => (
+                <div key={i} className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">{mod.module_type || 'Geral'}</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-xl font-black text-slate-900">{mod.total}</span>
+                    <span className="text-[11px] text-slate-500 font-medium">prontuários</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full py-4 text-center text-slate-400">
+                Nenhum prontuário especializado registrado no período.
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -10,6 +10,9 @@ import { PatientsView } from './components/patients/PatientsView';
 import { ClinicalRecordsView } from './components/clinical/ClinicalRecordsView';
 import { PhysiotherapyRecordsView } from './components/physiotherapy/PhysiotherapyRecordsView';
 import { DentistryWorkspace } from './components/dentistry/DentistryWorkspace';
+import { NutritionWorkspace } from './components/nutrition/NutritionWorkspace';
+import { OccupationalTherapyWorkspace } from './components/occupational-therapy/OccupationalTherapyWorkspace';
+import { SpeechTherapyWorkspace } from './components/speech-therapy/SpeechTherapyWorkspace';
 import { ProfessionalsView } from './components/professionals/ProfessionalsView';
 import { ServicesView } from './components/services/ServicesView';
 import { FinancialView } from './components/financial/FinancialView';
@@ -43,7 +46,22 @@ import { UpdateNotificationModal } from './components/common/UpdateNotificationM
 import { Sparkles, AlertCircle } from 'lucide-react';
 
 const AppContent: React.FC = () => {
-  const { currentUser, currentTenant, loading, reloadSession, isPhysiotherapist, isZemdaFisio, isDentist, isZemdaOdonto } = useAuth();
+  const {
+    currentUser,
+    currentTenant,
+    loading,
+    reloadSession,
+    isPhysiotherapist,
+    isZemdaFisio,
+    isDentist,
+    isZemdaOdonto,
+    isNutritionist,
+    isZemdaNutri,
+    isOccupationalTherapist,
+    isZemdaTO,
+    isSpeechTherapist,
+    isZemdaFono
+  } = useAuth();
 
   const [currentView, setCurrentView] = useState<string>('dashboard');
   const [publicView, setPublicView] = useState<'landing' | 'login'>('landing');
@@ -452,6 +470,54 @@ const AppContent: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaOdonto</h2>
                 <p className="text-sm text-slate-600 mb-4">
                   Este módulo clínico é de uso exclusivo para cirurgiões-dentistas e gestores autorizados com área de atuação em <strong>Odontologia</strong>.
+                </p>
+              </div>
+            )
+          )}
+
+          {currentView === 'zemda-nutri' && (
+            (isNutritionist || isZemdaNutri) ? (
+              <NutritionWorkspace />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaNutri</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Este módulo clínico é de uso exclusivo para nutricionistas e profissionais autorizados com área de atuação em <strong>Nutrição</strong>.
+                </p>
+              </div>
+            )
+          )}
+
+          {currentView === 'zemda-to' && (
+            (isOccupationalTherapist || isZemdaTO) ? (
+              <OccupationalTherapyWorkspace />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaTO</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Este módulo clínico é de uso exclusivo para terapeutas ocupacionais com área de atuação em <strong>Terapia Ocupacional</strong>.
+                </p>
+              </div>
+            )
+          )}
+
+          {currentView === 'zemda-fono' && (
+            (isSpeechTherapist || isZemdaFono) ? (
+              <SpeechTherapyWorkspace />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaFono</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Este módulo clínico é de uso exclusivo para fonoaudiólogos e profissionais com área de atuação em <strong>Fonoaudiologia</strong>.
                 </p>
               </div>
             )

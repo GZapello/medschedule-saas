@@ -23,6 +23,9 @@ export interface User {
   practiceAreas?: string;
   zemdaFisioEnabled?: boolean;
   zemdaOdontoEnabled?: boolean;
+  zemdaNutriEnabled?: boolean;
+  zemdaToEnabled?: boolean;
+  zemdaFonoEnabled?: boolean;
   permissions?: string[];
 }
 
@@ -248,11 +251,18 @@ export interface ClinicalRecord {
   professional_id: string;
   professional_name?: string;
   registration_number?: string;
+  registration_type?: string;
   session_date: string;
+  session_time?: string;
+  procedure_name?: string;
   title: string;
   clinical_evolution?: string;
   technical_notes?: string;
   private_notes?: string;
+  conducts?: string;
+  clinical_data_json?: string;
+  module_type?: string;
+  module_data_json?: string;
   is_sealed: number;
   created_by?: string;
   updated_by?: string;

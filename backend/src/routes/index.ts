@@ -32,6 +32,9 @@ import { BudgetController } from '../controllers/budget.controller';
 import { PayrollController } from '../controllers/payroll.controller';
 import { PhysiotherapyController } from '../controllers/physiotherapy.controller';
 import { DentistryController } from '../controllers/dentistry.controller';
+import { NutritionController } from '../controllers/nutrition.controller';
+import { OccupationalTherapyController } from '../controllers/occupational-therapy.controller';
+import { SpeechTherapyController } from '../controllers/speech-therapy.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -290,6 +293,7 @@ api.put('/v1/patients/:id', requireTenant, requireRole('clinic_admin', 'receptio
 api.get('/v1/appointments', requireTenant, AppointmentController.list);
 api.get('/v1/appointments/:id', requireTenant, AppointmentController.getById);
 api.post('/v1/appointments', requireTenant, AppointmentController.create);
+api.put('/v1/appointments/:id', requireTenant, AppointmentController.update);
 api.put('/v1/appointments/:id/status', requireTenant, AppointmentController.updateStatus);
 api.put('/v1/appointments/:id/reschedule', requireTenant, AppointmentController.reschedule);
 api.get('/v1/slots/available', requireTenant, SlotController.getAvailableSlots);
@@ -344,6 +348,88 @@ api.get('/v1/dentistry/hof/:patientId', requireTenant, requireRole('clinic_admin
 api.post('/v1/dentistry/hof', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveHof);
 
 api.post('/v1/dentistry/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.finishConsultation);
+
+// ==========================================
+// MÓDULO CLÍNICO ZEMDANUTRI (NUTRIÇÃO)
+// ==========================================
+api.get('/v1/nutrition/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.getAnamnesis);
+api.post('/v1/nutrition/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveAnamnesis);
+
+api.get('/v1/nutrition/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listAssessments);
+api.post('/v1/nutrition/assessments', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveAssessment);
+
+api.get('/v1/nutrition/bioimpedance/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listBioimpedance);
+api.post('/v1/nutrition/bioimpedance', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveBioimpedance);
+
+api.get('/v1/nutrition/recalls/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listRecalls);
+api.post('/v1/nutrition/recalls', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveRecall);
+
+api.get('/v1/nutrition/foods', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listFoodDatabase);
+api.post('/v1/nutrition/foods', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveCustomFood);
+
+api.get('/v1/nutrition/meal-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listMealPlans);
+api.post('/v1/nutrition/meal-plans', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveMealPlan);
+
+api.get('/v1/nutrition/goals/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.listGoals);
+api.post('/v1/nutrition/goals', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.saveGoal);
+api.put('/v1/nutrition/goals/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.updateGoalStatus);
+
+api.post('/v1/nutrition/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), NutritionController.finishConsultation);
+
+// ==========================================
+// MÓDULO CLÍNICO ZEMDATO (TERAPIA OCUPACIONAL)
+// ==========================================
+api.get('/v1/occupational-therapy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getProfile);
+api.post('/v1/occupational-therapy/profile', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveProfile);
+
+api.get('/v1/occupational-therapy/avd/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listAvd);
+api.post('/v1/occupational-therapy/avd', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveAvd);
+
+api.get('/v1/occupational-therapy/sensory/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getSensory);
+api.post('/v1/occupational-therapy/sensory', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveSensory);
+
+api.get('/v1/occupational-therapy/motor-cognitive/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getMotorCognitive);
+api.post('/v1/occupational-therapy/motor-cognitive', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveMotorCognitive);
+
+api.get('/v1/occupational-therapy/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listTreatmentPlans);
+api.post('/v1/occupational-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveTreatmentPlan);
+
+api.get('/v1/occupational-therapy/assistive-tech/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listAssistiveTech);
+api.post('/v1/occupational-therapy/assistive-tech', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveAssistiveTech);
+
+api.post('/v1/occupational-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.finishConsultation);
+
+// ==========================================
+// MÓDULO CLÍNICO ZEMDAFONO (FONOAUDIOLOGIA)
+// ==========================================
+api.get('/v1/speech-therapy/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getAnamnesis);
+api.post('/v1/speech-therapy/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAnamnesis);
+
+api.get('/v1/speech-therapy/language/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getLanguage);
+api.post('/v1/speech-therapy/language', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveLanguage);
+
+api.get('/v1/speech-therapy/phonemes/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getSpeechPhonology);
+api.post('/v1/speech-therapy/phonemes', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveSpeechPhonology);
+
+api.get('/v1/speech-therapy/orofacial/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getOrofacialMotricity);
+api.post('/v1/speech-therapy/orofacial', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveOrofacialMotricity);
+
+api.get('/v1/speech-therapy/voice/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getVoice);
+api.post('/v1/speech-therapy/voice', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveVoice);
+
+api.get('/v1/speech-therapy/fluency/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getFluency);
+api.post('/v1/speech-therapy/fluency', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveFluency);
+
+api.get('/v1/speech-therapy/dysphagia/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getDysphagia);
+api.post('/v1/speech-therapy/dysphagia', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveDysphagia);
+
+api.get('/v1/speech-therapy/audiology/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listAudiology);
+api.post('/v1/speech-therapy/audiology', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAudiology);
+
+api.get('/v1/speech-therapy/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listTreatmentPlans);
+api.post('/v1/speech-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveTreatmentPlan);
+
+api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.finishConsultation);
 
 // Encaminhamentos entre Profissionais da Clínica (Item 6)
 api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);

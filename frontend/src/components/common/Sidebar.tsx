@@ -27,7 +27,10 @@ import {
   LifeBuoy,
   ChevronDown,
   ChevronRight,
-  Smile
+  Smile,
+  Apple,
+  Hand,
+  Mic
 } from 'lucide-react';
 import { openZemdaAI } from '../../utils/aiHelper';
 
@@ -57,7 +60,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose
 }) => {
-  const { isSuperAdmin, isClinicAdmin, isProfessional, isPhysiotherapist, isDentist, clientTermLabel } = useAuth();
+  const {
+    isSuperAdmin,
+    isClinicAdmin,
+    isProfessional,
+    isPhysiotherapist,
+    isDentist,
+    isNutritionist,
+    isZemdaNutri,
+    isOccupationalTherapist,
+    isZemdaTO,
+    isSpeechTherapist,
+    isZemdaFono,
+    clientTermLabel
+  } = useAuth();
 
   const categories: NavCategory[] = [
     {
@@ -84,6 +100,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'ZemdaOdonto (Odontologia)',
           icon: Smile,
           visible: isDentist
+        },
+        {
+          id: 'zemda-nutri',
+          label: 'ZemdaNutri (Nutrição)',
+          icon: Apple,
+          visible: isNutritionist || isZemdaNutri
+        },
+        {
+          id: 'zemda-to',
+          label: 'ZemdaTO (Terapia Ocupacional)',
+          icon: Hand,
+          visible: isOccupationalTherapist || isZemdaTO
+        },
+        {
+          id: 'zemda-fono',
+          label: 'ZemdaFono (Fonoaudiologia)',
+          icon: Mic,
+          visible: isSpeechTherapist || isZemdaFono
         },
         { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
       ]

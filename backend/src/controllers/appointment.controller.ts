@@ -597,4 +597,58 @@ export class AppointmentController {
       res.status(500).json({ error: 'Erro ao remarcar atendimento' });
     }
   }
+
+  static update(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenantId;
+      const { serviceId, professionalId, roomId, startTime, endTime, notes, modality } = req.body;
+
+      const appt = db.prepare('SELECT * FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!appt) {
+        res.status(404).json({ error: 'Agendamento não encontrado' });
+        return;
+      }
+
+      let newStart = appt.start_time;
+      let newEnd = appt.end_time;
+
+      if (startTime) {
+        newStart = String(startTime).trim().replace(' ', 'T');
+      }
+      if (endTime) {
+        newEnd = String(endTime).trim().replace(' ', 'T');
+      }
+
+      db.prepare(`
+        UPDATE appointments SET
+          service_id = COALESCE(?, service_id),
+          professional_id = COALESCE(?, professional_id),
+          room_id = CASE WHEN ? IS NOT NULL THEN ? ELSE room_id END,
+          start_time = ?,
+          end_time = ?,
+          patient_notes = COALESCE(?, patient_notes),
+          modality = COALESCE(?, modality),
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(
+        serviceId || null,
+        professionalId || null,
+        roomId !== undefined ? roomId : null,
+        roomId || null,
+        newStart,
+        newEnd,
+        notes !== undefined ? notes : null,
+        modality || null,
+        id,
+        tenantId
+      );
+
+      logAudit(req, 'UPDATE_APPOINTMENT', 'appointments', id, { serviceId, professionalId, newStart, newEnd });
+      res.json({ message: 'Dados do atendimento atualizados com sucesso' });
+    } catch (err: any) {
+      console.error('[AppointmentController.update] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar dados do atendimento' });
+    }
+  }
 }

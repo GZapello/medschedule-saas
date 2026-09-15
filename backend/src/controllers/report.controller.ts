@@ -48,7 +48,19 @@ export class ReportController {
       `);
       const byService = byServiceStmt.all(...params);
 
-      res.json({ byProfessional, byService });
+      // Por Módulo Clínico Especializado (ZemdaOdonto, ZemdaNutri, ZemdaTO, ZemdaFono, ZemdaFisio)
+      const byModuleStmt = db.prepare(`
+        SELECT 
+          COALESCE(r.module_type, 'Geral') as module_type,
+          COUNT(*) as total
+        FROM records r
+        WHERE r.tenant_id = ?
+        GROUP BY r.module_type
+        ORDER BY total DESC
+      `);
+      const byModule = byModuleStmt.all(tenantId);
+
+      res.json({ byProfessional, byService, byModule });
     } catch (err: any) {
       console.error('[ReportController.getAttendanceReport] Erro:', err);
       res.status(500).json({ error: 'Erro ao gerar relatório de atendimentos' });

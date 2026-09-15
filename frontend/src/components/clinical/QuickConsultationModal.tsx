@@ -35,7 +35,11 @@ import {
   ChevronDown,
   ChevronUp,
   History,
-  Smile
+  Smile,
+  Apple,
+  Scale,
+  Hand,
+  Brain
 } from 'lucide-react';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { ReferralModal } from './ReferralModal';
@@ -68,7 +72,16 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   onClose,
   onFinished
 }) => {
-  const { currentTenant, clientTermLabel, isPhysiotherapist, isDentist, currentUser } = useAuth();
+  const {
+    currentTenant,
+    clientTermLabel,
+    isPhysiotherapist,
+    isDentist,
+    isNutritionist,
+    isOccupationalTherapist,
+    isSpeechTherapist,
+    currentUser
+  } = useAuth();
   const { showToast } = useToast();
 
   const [loadingPatient, setLoadingPatient] = useState<boolean>(true);
@@ -94,6 +107,32 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [zemdaOdontoExpanded, setZemdaOdontoExpanded] = useState<boolean>(true);
   const [odontogramData, setOdontogramData] = useState<OdontogramData>({});
   const [pendingToothChanges, setPendingToothChanges] = useState<any[]>([]);
+
+  // ZemdaNutri - Nutrição & Antropometria Rápida
+  const [isAppointmentNutri, setIsAppointmentNutri] = useState<boolean>(() => !!isNutritionist);
+  const [zemdaNutriExpanded, setZemdaNutriExpanded] = useState<boolean>(true);
+  const [nutriWeight, setNutriWeight] = useState<string>('');
+  const [nutriHeight, setNutriHeight] = useState<string>('');
+  const [nutriWaistCirc, setNutriWaistCirc] = useState<string>('');
+  const [nutriAbdominalCirc, setNutriAbdominalCirc] = useState<string>('');
+  const [nutriHipCirc, setNutriHipCirc] = useState<string>('');
+  const [nutriNotes, setNutriNotes] = useState<string>('');
+
+  // ZemdaTO - Terapia Ocupacional
+  const [isAppointmentTO, setIsAppointmentTO] = useState<boolean>(() => !!isOccupationalTherapist);
+  const [zemdaTOExpanded, setZemdaTOExpanded] = useState<boolean>(true);
+  const [toIndependenceLevel, setToIndependenceLevel] = useState<number>(5);
+  const [toMainOccupation, setToMainOccupation] = useState<string>('Autocuidado e rotina diária');
+  const [toSensoryStatus, setToSensoryStatus] = useState<string>('Típico / Sem desvios evidentes');
+  const [toNotes, setToNotes] = useState<string>('');
+
+  // ZemdaFono - Fonoaudiologia
+  const [isAppointmentFono, setIsAppointmentFono] = useState<boolean>(() => !!isSpeechTherapist);
+  const [zemdaFonoExpanded, setZemdaFonoExpanded] = useState<boolean>(true);
+  const [fonoPhonemeAltered, setFonoPhonemeAltered] = useState<string>('');
+  const [fonoVoiceQuality, setFonoVoiceQuality] = useState<string>('Adequada');
+  const [fonoOrofacialHabit, setFonoOrofacialHabit] = useState<string>('Nenhum');
+  const [fonoNotes, setFonoNotes] = useState<string>('');
 
   // Campos clínicos
   const [title, setTitle] = useState<string>(
@@ -322,6 +361,33 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     setIsAppointmentDentist(true);
   }, [isDentist]);
 
+  // Verifica autorização estrita para exibir ZemdaNutri
+  useEffect(() => {
+    if (!isNutritionist) {
+      setIsAppointmentNutri(false);
+      return;
+    }
+    setIsAppointmentNutri(true);
+  }, [isNutritionist]);
+
+  // Verifica autorização estrita para exibir ZemdaTO
+  useEffect(() => {
+    if (!isOccupationalTherapist) {
+      setIsAppointmentTO(false);
+      return;
+    }
+    setIsAppointmentTO(true);
+  }, [isOccupationalTherapist]);
+
+  // Verifica autorização estrita para exibir ZemdaFono
+  useEffect(() => {
+    if (!isSpeechTherapist) {
+      setIsAppointmentFono(false);
+      return;
+    }
+    setIsAppointmentFono(true);
+  }, [isSpeechTherapist]);
+
   // Carrega odontograma do paciente
   useEffect(() => {
     async function loadOdontogram() {
@@ -547,69 +613,125 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     }
   };
 
-  // 6. Finalizar Atendimento diretamente com persistência de evolução e ZemdaFisio (Regra 6)
+  // 6. Finalizar Atendimento diretamente com persistência garantida em cada módulo especializado
   const handleFinalizeAttendance = async () => {
     try {
       setSavingRecord(true);
       const sessionDate = appointment.start_time ? appointment.start_time.split('T')[0] : new Date().toISOString().split('T')[0];
       const finalEvolution = clinicalEvolution.trim() || (isAppointmentPhysio
         ? `Atendimento fisioterapêutico realizado. Queixa álgica EVA: ${painScore}/10. ${painLocation ? 'Local: ' + painLocation + '.' : ''} ${conductsExercises ? 'Condutas: ' + conductsExercises : ''}`
+        : isAppointmentDentist
+        ? `Atendimento odontológico realizado. Procedimentos e odontograma registrados.`
+        : isAppointmentNutri
+        ? `Atendimento nutricional realizado. Avaliação e condutas dietoterápicas registradas.`
+        : isAppointmentTO
+        ? `Atendimento de terapia ocupacional realizado. Nível funcional e condutas registradas.`
+        : isAppointmentFono
+        ? `Atendimento fonoaudiológico realizado. Estimulação e condutas fonoaudiológicas registradas.`
         : 'Atendimento concluído.');
 
-      await ApiClient.post('/v1/clinical-records', {
-        patientId: appointment.patient_id,
-        appointmentId: appointment.id,
-        professionalId: appointment.professional_id,
-        sessionDate,
-        title: title.trim() || (isAppointmentPhysio ? 'Atendimento Fisioterapêutico (ZemdaFisio)' : `Consulta de ${appointment.service_name || 'Rotina'}`),
-        clinicalEvolution: finalEvolution,
-        technicalNotes: technicalNotes.trim() || null,
-        isSealed
-      });
-
-      if (isAppointmentPhysio) {
-        try {
-          const existingForAppt = physioAssessments.find(a => a.appointment_id === appointment.id);
-          const physioPayload = {
-            patientId: appointment.patient_id,
-            appointmentId: appointment.id,
-            professionalId: appointment.professional_id,
-            chiefComplaint: title || 'Atendimento de Fisioterapia',
-            painScore,
-            painLocation: painLocation.trim() || undefined,
-            painCharacteristics: painCharacteristics.trim() || undefined,
-            conductsExercises: conductsExercises.trim() || undefined,
-            bodyMapJson: bodyMapJson || undefined,
-            bodyMapImage: bodyMapImage || undefined
-          };
-          if (existingForAppt) {
-            await ApiClient.put(`/v1/physiotherapy/assessments/${existingForAppt.id}`, physioPayload);
-          } else {
-            await ApiClient.post('/v1/physiotherapy/assessments', physioPayload);
-          }
-        } catch (e) {
-          console.warn('Erro ao sincronizar avaliação ZemdaFisio:', e);
-        }
-      }
-
       if (isAppointmentDentist) {
-        try {
-          await ApiClient.post('/v1/dentistry/odontograms', {
-            patientId: appointment.patient_id,
-            appointmentId: appointment.id,
-            type: 'current',
-            statusData: odontogramData,
-            toothChanges: pendingToothChanges
-          });
-        } catch (e) {
-          console.warn('Erro ao sincronizar odontograma ZemdaOdonto:', e);
-        }
-      }
+        // ZEMDAODONTO: Finalização Atômica com Odontograma Inicial, Atual, Snapshot e Dentes
+        await ApiClient.post('/v1/dentistry/consultations/finish', {
+          appointmentId: appointment.id,
+          patientId: appointment.patient_id,
+          title: title.trim() || 'Consulta Odontológica (ZemdaOdonto)',
+          clinicalEvolution: finalEvolution,
+          technicalNotes: technicalNotes.trim() || undefined,
+          sessionDate,
+          odontogramData,
+          toothChanges: pendingToothChanges,
+          isSealed
+        });
+      } else if (isAppointmentNutri) {
+        // ZEMDANUTRI: Finalização Atômica com Avaliação Antropométrica e Módulo
+        await ApiClient.post('/v1/nutrition/consultations/finish', {
+          appointmentId: appointment.id,
+          patientId: appointment.patient_id,
+          title: title.trim() || 'Consulta Nutricional (ZemdaNutri)',
+          clinicalEvolution: finalEvolution,
+          technicalNotes: technicalNotes.trim() || undefined,
+          sessionDate,
+          assessmentData: nutriWeight ? {
+            weight: parseFloat(nutriWeight.replace(',', '.')),
+            height: nutriHeight ? parseFloat(nutriHeight.replace(',', '.')) : null,
+            waistCirc: nutriWaistCirc ? parseFloat(nutriWaistCirc.replace(',', '.')) : null,
+            abdominalCirc: nutriAbdominalCirc ? parseFloat(nutriAbdominalCirc.replace(',', '.')) : null,
+            hipCirc: nutriHipCirc ? parseFloat(nutriHipCirc.replace(',', '.')) : null,
+            notes: nutriNotes || null
+          } : null,
+          isSealed
+        });
+      } else if (isAppointmentTO) {
+        // ZEMDATO: Finalização Atômica com Perfil e AVDs
+        await ApiClient.post('/v1/occupational-therapy/consultations/finish', {
+          appointmentId: appointment.id,
+          patientId: appointment.patient_id,
+          title: title.trim() || 'Atendimento Terapia Ocupacional (ZemdaTO)',
+          clinicalEvolution: finalEvolution,
+          technicalNotes: technicalNotes.trim() || undefined,
+          sessionDate,
+          adlData: { independenceLevel: toIndependenceLevel, mainOccupation: toMainOccupation },
+          sensoryData: { status: toSensoryStatus, notes: toNotes },
+          isSealed
+        });
+      } else if (isAppointmentFono) {
+        // ZEMDAFONO: Finalização Atômica com Fonética e Voz
+        await ApiClient.post('/v1/speech-therapy/consultations/finish', {
+          appointmentId: appointment.id,
+          patientId: appointment.patient_id,
+          title: title.trim() || 'Consulta Fonoaudiológica (ZemdaFono)',
+          clinicalEvolution: finalEvolution,
+          technicalNotes: technicalNotes.trim() || undefined,
+          sessionDate,
+          phonemesData: { phonemeAltered: fonoPhonemeAltered },
+          voiceData: { quality: fonoVoiceQuality },
+          orofacialData: { habit: fonoOrofacialHabit, notes: fonoNotes },
+          isSealed
+        });
+      } else {
+        // ZEMDAFISIO OU ATENDIMENTO GERAL
+        await ApiClient.post('/v1/clinical-records', {
+          patientId: appointment.patient_id,
+          appointmentId: appointment.id,
+          professionalId: appointment.professional_id,
+          sessionDate,
+          title: title.trim() || (isAppointmentPhysio ? 'Atendimento Fisioterapêutico (ZemdaFisio)' : `Consulta de ${appointment.service_name || 'Rotina'}`),
+          clinicalEvolution: finalEvolution,
+          technicalNotes: technicalNotes.trim() || null,
+          isSealed
+        });
 
-      // Conclui o agendamento
-      await ApiClient.put(`/v1/appointments/${appointment.id}/status`, {
-        status: 'completed'
-      });
+        if (isAppointmentPhysio) {
+          try {
+            const existingForAppt = physioAssessments.find(a => a.appointment_id === appointment.id);
+            const physioPayload = {
+              patientId: appointment.patient_id,
+              appointmentId: appointment.id,
+              professionalId: appointment.professional_id,
+              chiefComplaint: title || 'Atendimento de Fisioterapia',
+              painScore,
+              painLocation: painLocation.trim() || undefined,
+              painCharacteristics: painCharacteristics.trim() || undefined,
+              conductsExercises: conductsExercises.trim() || undefined,
+              bodyMapJson: bodyMapJson || undefined,
+              bodyMapImage: bodyMapImage || undefined
+            };
+            if (existingForAppt) {
+              await ApiClient.put(`/v1/physiotherapy/assessments/${existingForAppt.id}`, physioPayload);
+            } else {
+              await ApiClient.post('/v1/physiotherapy/assessments', physioPayload);
+            }
+          } catch (e) {
+            console.warn('Erro ao sincronizar avaliação ZemdaFisio:', e);
+          }
+        }
+
+        // Conclui o agendamento
+        await ApiClient.put(`/v1/appointments/${appointment.id}/status`, {
+          status: 'completed'
+        });
+      }
 
       try {
         localStorage.removeItem(DRAFT_KEY);
@@ -620,6 +742,12 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           ? 'Atendimento ZemdaOdonto finalizado com sucesso!'
           : isAppointmentPhysio
           ? 'Atendimento ZemdaFisio finalizado com sucesso!'
+          : isAppointmentNutri
+          ? 'Atendimento ZemdaNutri finalizado com sucesso!'
+          : isAppointmentTO
+          ? 'Atendimento ZemdaTO finalizado com sucesso!'
+          : isAppointmentFono
+          ? 'Atendimento ZemdaFono finalizado com sucesso!'
           : 'Atendimento finalizado com sucesso!',
         'success'
       );
@@ -668,8 +796,20 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${isAppointmentPhysio ? 'bg-emerald-400' : isAppointmentDentist ? 'bg-cyan-400' : 'bg-teal-400'}`} />
-              <span className={`text-xs font-black tracking-wider uppercase flex items-center gap-1.5 ${isAppointmentPhysio ? 'text-emerald-400' : isAppointmentDentist ? 'text-cyan-400' : 'text-teal-400'}`}>
+              <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+                isAppointmentPhysio ? 'bg-emerald-400' :
+                isAppointmentDentist ? 'bg-cyan-400' :
+                isAppointmentNutri ? 'bg-lime-400' :
+                isAppointmentTO ? 'bg-amber-400' :
+                isAppointmentFono ? 'bg-purple-400' : 'bg-teal-400'
+              }`} />
+              <span className={`text-xs font-black tracking-wider uppercase flex items-center gap-1.5 ${
+                isAppointmentPhysio ? 'text-emerald-400' :
+                isAppointmentDentist ? 'text-cyan-400' :
+                isAppointmentNutri ? 'text-lime-400' :
+                isAppointmentTO ? 'text-amber-400' :
+                isAppointmentFono ? 'text-purple-400' : 'text-teal-400'
+              }`}>
                 {isAppointmentDentist ? (
                   <>
                     <Smile className="w-4 h-4 text-cyan-400" />
@@ -679,6 +819,21 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   <>
                     <Activity className="w-4 h-4 text-emerald-400" />
                     <span>ZemdaFisio — Atendimento Fisioterapêutico</span>
+                  </>
+                ) : isAppointmentNutri ? (
+                  <>
+                    <Apple className="w-4 h-4 text-lime-400" />
+                    <span>ZemdaNutri — Atendimento Nutricional</span>
+                  </>
+                ) : isAppointmentTO ? (
+                  <>
+                    <Hand className="w-4 h-4 text-amber-400" />
+                    <span>ZemdaTO — Terapia Ocupacional</span>
+                  </>
+                ) : isAppointmentFono ? (
+                  <>
+                    <Mic className="w-4 h-4 text-purple-400" />
+                    <span>ZemdaFono — Fonoaudiologia</span>
                   </>
                 ) : (
                   <span>Atendimento Rápido</span>
@@ -1304,6 +1459,384 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               </div>
             )}
 
+            {/* ZEMDANUTRI: MÓDULO EXCLUSIVO DE NUTRIÇÃO & ANTROPOMETRIA */}
+            {isAppointmentNutri && (
+              <div className="bg-gradient-to-br from-lime-50/80 via-emerald-50/30 to-slate-50 border-2 border-lime-200/90 rounded-2xl p-5 shadow-xs transition-all">
+                <div className="flex items-center justify-between pb-3 border-b border-lime-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-lime-600 text-white flex items-center justify-center shadow-xs">
+                      <Apple className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-800">ZemdaNutri: Antropometria & Metas Rápidas</h4>
+                        <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-lime-100 text-lime-800 border border-lime-200">
+                          Exclusivo Nutrição
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Cálculo automático de IMC, RCQ e registro de circunferências corporais.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setZemdaNutriExpanded(!zemdaNutriExpanded)}
+                    className="p-1.5 rounded-xl text-lime-700 hover:bg-lime-100 transition-colors cursor-pointer"
+                    title={zemdaNutriExpanded ? 'Recolher módulo' : 'Expandir módulo'}
+                  >
+                    {zemdaNutriExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {zemdaNutriExpanded && (
+                  <div className="pt-4 space-y-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-white p-3 rounded-xl border border-lime-100 shadow-2xs">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Peso Atual (kg) *</label>
+                        <input
+                          type="text"
+                          value={nutriWeight}
+                          onChange={e => setNutriWeight(e.target.value)}
+                          placeholder="Ex: 72.5"
+                          className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500"
+                        />
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-lime-100 shadow-2xs">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Altura (cm ou m) *</label>
+                        <input
+                          type="text"
+                          value={nutriHeight}
+                          onChange={e => setNutriHeight(e.target.value)}
+                          placeholder="Ex: 175 ou 1.75"
+                          className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500"
+                        />
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-lime-100 shadow-2xs">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Cintura (cm)</label>
+                        <input
+                          type="text"
+                          value={nutriWaistCirc}
+                          onChange={e => setNutriWaistCirc(e.target.value)}
+                          placeholder="Ex: 82"
+                          className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500"
+                        />
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-lime-100 shadow-2xs">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Quadril (cm)</label>
+                        <input
+                          type="text"
+                          value={nutriHipCirc}
+                          onChange={e => setNutriHipCirc(e.target.value)}
+                          placeholder="Ex: 98"
+                          className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Resumo Antropométrico Calculado Dinamicamente */}
+                    {(() => {
+                      const w = parseFloat(nutriWeight.replace(',', '.'));
+                      const rawH = parseFloat(nutriHeight.replace(',', '.'));
+                      const h = rawH > 3 ? rawH / 100 : rawH;
+                      const imc = (w > 0 && h > 0) ? (w / (h * h)).toFixed(1) : null;
+                      const wc = parseFloat(nutriWaistCirc.replace(',', '.'));
+                      const hc = parseFloat(nutriHipCirc.replace(',', '.'));
+                      const rcq = (wc > 0 && hc > 0) ? (wc / hc).toFixed(2) : null;
+
+                      let imcClass = '';
+                      let imcColor = 'bg-slate-100 text-slate-700';
+                      if (imc) {
+                        const imcNum = parseFloat(imc);
+                        if (imcNum < 18.5) { imcClass = 'Abaixo do peso'; imcColor = 'bg-amber-100 text-amber-800'; }
+                        else if (imcNum < 25) { imcClass = 'Eutrofia (Peso normal)'; imcColor = 'bg-emerald-100 text-emerald-800'; }
+                        else if (imcNum < 30) { imcClass = 'Sobrepeso (Pré-obesidade)'; imcColor = 'bg-amber-100 text-amber-800'; }
+                        else if (imcNum < 35) { imcClass = 'Obesidade Grau I'; imcColor = 'bg-orange-100 text-orange-800'; }
+                        else { imcClass = 'Obesidade Grau II / III'; imcColor = 'bg-rose-100 text-rose-800'; }
+                      }
+
+                      return (
+                        <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-xl border border-lime-100 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-700">IMC Calculado:</span>
+                            {imc ? (
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-xs ${imcColor}`}>
+                                {imc} kg/m² — {imcClass}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">Informe peso e altura</span>
+                            )}
+                          </div>
+                          {rcq && (
+                            <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+                              <span className="font-bold text-slate-700">Relação Cintura-Quadril (RCQ):</span>
+                              <span className="px-2 py-0.5 rounded-md bg-lime-100 text-lime-900 font-bold text-xs">
+                                {rcq}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Conduta Nutricional & Prescrições Rápidas
+                      </label>
+                      <input
+                        type="text"
+                        value={nutriNotes}
+                        onChange={e => setNutriNotes(e.target.value)}
+                        placeholder="Ex: Ajuste de macronutrientes, aumento de ingestão hídrica, plano hiperproteico..."
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-lime-500 bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ZEMDATO: MÓDULO EXCLUSIVO DE TERAPIA OCUPACIONAL & FUNCIONALIDADE */}
+            {isAppointmentTO && (
+              <div className="bg-gradient-to-br from-amber-50/80 via-orange-50/30 to-slate-50 border-2 border-amber-200/90 rounded-2xl p-5 shadow-xs transition-all">
+                <div className="flex items-center justify-between pb-3 border-b border-amber-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-xs">
+                      <Hand className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-800">ZemdaTO: Nível de Independência & Perfil Funcional</h4>
+                        <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                          Exclusivo Terapia Ocupacional
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Escala funcional de 6 níveis de independência e foco de treino de AVDs.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setZemdaTOExpanded(!zemdaTOExpanded)}
+                    className="p-1.5 rounded-xl text-amber-700 hover:bg-amber-100 transition-colors cursor-pointer"
+                    title={zemdaTOExpanded ? 'Recolher módulo' : 'Expandir módulo'}
+                  >
+                    {zemdaTOExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {zemdaTOExpanded && (
+                  <div className="pt-4 space-y-4">
+                    {/* Escala de 6 Níveis de Independência Funcional */}
+                    <div className="bg-white p-3 rounded-xl border border-amber-100 shadow-2xs">
+                      <label className="block text-xs font-bold text-slate-700 mb-2">
+                        Escala de Independência Funcional para AVDs / AIVDs:
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                        {[
+                          { level: 1, label: 'Nível 1', desc: 'Dep. Total (0-24%)' },
+                          { level: 2, label: 'Nível 2', desc: 'Dep. Máxima (25-49%)' },
+                          { level: 3, label: 'Nível 3', desc: 'Dep. Moderada (50-74%)' },
+                          { level: 4, label: 'Nível 4', desc: 'Dep. Mínima (75-99%)' },
+                          { level: 5, label: 'Nível 5', desc: 'Supervisão / Preparo' },
+                          { level: 6, label: 'Nível 6', desc: 'Independência Completa' },
+                        ].map(item => (
+                          <button
+                            key={item.level}
+                            type="button"
+                            onClick={() => setToIndependenceLevel(item.level)}
+                            className={`p-2.5 rounded-xl text-center border transition-all cursor-pointer ${
+                              toIndependenceLevel === item.level
+                                ? 'bg-amber-500 text-white border-amber-600 shadow-xs font-bold'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50'
+                            }`}
+                          >
+                            <div className="text-xs font-black">{item.label}</div>
+                            <div className={`text-[10px] leading-tight mt-0.5 ${toIndependenceLevel === item.level ? 'text-amber-100' : 'text-slate-500'}`}>
+                              {item.desc}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="bg-white p-3 rounded-xl border border-amber-100 shadow-2xs">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Ocupação Principal / Foco de Intervenção
+                        </label>
+                        <input
+                          type="text"
+                          value={toMainOccupation}
+                          onChange={e => setToMainOccupation(e.target.value)}
+                          placeholder="Ex: Alimentação autônoma, vestuário, escrita, integração sensorial..."
+                          className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-amber-100 shadow-2xs">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Status do Processamento Sensorial
+                        </label>
+                        <select
+                          value={toSensoryStatus}
+                          onChange={e => setToSensoryStatus(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white"
+                        >
+                          <option value="Típico / Sem desvios evidentes">Típico / Sem desvios evidentes</option>
+                          <option value="Hiperresponsivo (Hipersensibilidade tátil/auditiva)">Hiperresponsivo (Hipersensibilidade)</option>
+                          <option value="Hiporesponsivo (Sub-registro sensorial)">Hiporesponsivo (Sub-registro sensorial)</option>
+                          <option value="Busca Sensorial / Desregulação motora">Busca Sensorial / Desregulação motora</option>
+                          <option value="Transtorno do Processamento Sensorial (TPS) em investigação">TPS em investigação</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Conduta de TO, Adaptações & Tecnologia Assistiva
+                      </label>
+                      <input
+                        type="text"
+                        value={toNotes}
+                        onChange={e => setToNotes(e.target.value)}
+                        placeholder="Ex: Prescrição de engrossador de talheres, treino motor fino, plano terapêutico singular..."
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ZEMDAFONO: MÓDULO EXCLUSIVO DE FONOAUDIOLOGIA */}
+            {isAppointmentFono && (
+              <div className="bg-gradient-to-br from-purple-50/80 via-violet-50/30 to-slate-50 border-2 border-purple-200/90 rounded-2xl p-5 shadow-xs transition-all">
+                <div className="flex items-center justify-between pb-3 border-b border-purple-100">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                      <Mic className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-800">ZemdaFono: Triagem Fonêmica, Voz & Motricidade</h4>
+                        <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                          Exclusivo Fonoaudiologia
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Marcação de fonemas alterados, parâmetros de voz (RASATI) e hábitos miofuncionais.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setZemdaFonoExpanded(!zemdaFonoExpanded)}
+                    className="p-1.5 rounded-xl text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer"
+                    title={zemdaFonoExpanded ? 'Recolher módulo' : 'Expandir módulo'}
+                  >
+                    {zemdaFonoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {zemdaFonoExpanded && (
+                  <div className="pt-4 space-y-4">
+                    {/* Fonemas Alterados com Seleção Rápida */}
+                    <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Fonemas Alterados / Trocas Fonêmicas na Fala:
+                      </label>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {['/r/', '/s/', '/l/', '/ʃ/ (ch)', '/ʒ/ (j)', '/k/', '/g/', '/t/', '/d/', '/p/', '/b/'].map(ph => {
+                          const isSelected = fonoPhonemeAltered.includes(ph);
+                          return (
+                            <button
+                              key={ph}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setFonoPhonemeAltered(prev => prev.replace(ph, '').replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, '').trim());
+                                } else {
+                                  setFonoPhonemeAltered(prev => prev ? `${prev}, ${ph}` : ph);
+                                }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-purple-600 text-white shadow-xs'
+                                  : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
+                              }`}
+                            >
+                              {ph}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <input
+                        type="text"
+                        value={fonoPhonemeAltered}
+                        onChange={e => setFonoPhonemeAltered(e.target.value)}
+                        placeholder="Ex: /r/ brando (ceceio ou substituição por /l/), /s/ anteriorizado..."
+                        className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Qualidade Vocal (Escala RASATI / Auditiva)
+                        </label>
+                        <select
+                          value={fonoVoiceQuality}
+                          onChange={e => setFonoVoiceQuality(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                        >
+                          <option value="Adequada">Adequada / Neutra</option>
+                          <option value="Rouca (Grau leve/moderado)">Rouca (Grau leve/moderado)</option>
+                          <option value="Soprosa (Incompetência glótica)">Soprosa (Incompetência glótica)</option>
+                          <option value="Áspera / Tensa (Hiperfunção vocal)">Áspera / Tensa (Hiperfunção)</option>
+                          <option value="Astenia vocal (Voz fraca/fadiga)">Astenia vocal (Voz fraca)</option>
+                          <option value="Instável (Tremor ou quebras)">Instável (Tremor vocal)</option>
+                        </select>
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-purple-100 shadow-2xs">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Hábitos Miofuncionais Orofaciais
+                        </label>
+                        <select
+                          value={fonoOrofacialHabit}
+                          onChange={e => setFonoOrofacialHabit(e.target.value)}
+                          className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+                        >
+                          <option value="Nenhum">Nenhum / Padrão típico</option>
+                          <option value="Respiração Oral">Respiração Oral</option>
+                          <option value="Deglutição Atípica com interposição lingual">Deglutição Atípica</option>
+                          <option value="Bruxismo / Apertamento dental">Bruxismo / Apertamento</option>
+                          <option value="Sucção digital / Chupeta prolongada">Sucção de Polegar / Chupeta</option>
+                          <option value="Mastigação unilateral viciosa">Mastigação unilateral</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Conduta Fonoaudiológica & Exercícios Miofuncionais
+                      </label>
+                      <input
+                        type="text"
+                        value={fonoNotes}
+                        onChange={e => setFonoNotes(e.target.value)}
+                        placeholder="Ex: Exercício de vibração de língua e lábios, treino de ponto articulatório, higiene vocal..."
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Campo Principal de Evolução */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -1391,7 +1924,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               Fechar
             </button>
 
-            {isAppointmentPhysio ? (
+            {(isAppointmentPhysio || isAppointmentDentist || isAppointmentNutri || isAppointmentTO || isAppointmentFono) ? (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1453,6 +1986,27 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             service_id: appointment.service_id,
             service_name: appointment.service_name,
             start_time: appointment.start_time
+          }}
+          clinicalData={{
+            title,
+            clinicalEvolution,
+            technicalNotes,
+            isSealed,
+            odontogramData: isAppointmentDentist ? odontogramData : undefined,
+            toothChanges: isAppointmentDentist ? pendingToothChanges : undefined,
+            moduleType: isAppointmentDentist ? 'ZemdaOdonto' : isAppointmentNutri ? 'ZemdaNutri' : isAppointmentTO ? 'ZemdaTO' : isAppointmentFono ? 'ZemdaFono' : isAppointmentPhysio ? 'ZemdaFisio' : undefined,
+            moduleData: isAppointmentTO ? { independenceLevel: toIndependenceLevel, mainOccupation: toMainOccupation, sensoryStatus: toSensoryStatus, notes: toNotes }
+              : isAppointmentFono ? { phonemeAltered: fonoPhonemeAltered, voiceQuality: fonoVoiceQuality, orofacialHabit: fonoOrofacialHabit, notes: fonoNotes }
+              : isAppointmentPhysio ? { painScore, painLocation, painCharacteristics, conductsExercises, bodyMapJson, bodyMapImage }
+              : undefined,
+            assessmentData: isAppointmentNutri && nutriWeight ? {
+              weight: parseFloat(nutriWeight.replace(',', '.')),
+              height: nutriHeight ? parseFloat(nutriHeight.replace(',', '.')) : null,
+              waistCirc: nutriWaistCirc ? parseFloat(nutriWaistCirc.replace(',', '.')) : null,
+              abdominalCirc: nutriAbdominalCirc ? parseFloat(nutriAbdominalCirc.replace(',', '.')) : null,
+              hipCirc: nutriHipCirc ? parseFloat(nutriHipCirc.replace(',', '.')) : null,
+              notes: nutriNotes || null
+            } : undefined
           }}
           onClose={() => setShowFinishModal(false)}
           onFinished={() => {

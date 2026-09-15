@@ -12,19 +12,63 @@ import { logAudit } from '../middlewares/audit.middleware';
  * - Ou permissão expressa de supervisão clínica.
  */
 export function hasClinicalAccess(req: Request, patientId: string): boolean {
-  if (!req.user) return false;
-  if (req.user.role === 'superadmin') return true;
+  if (!req.user || !req.tenantId) return false;
+
+  // 1. Administrador Global / SuperAdmin: NÃO deve visualizar conteúdo clínico de pacientes (Regra 2)
+  if (req.user.role === 'superadmin') return false;
 
   const tenantId = req.tenantId;
 
-  // 1. O gerenciador / administrador da clínica tem acesso aos prontuários da própria clínica
-  if (req.user.role === 'clinic_admin') {
-    const patientBelongsToClinic = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
-    return Boolean(patientBelongsToClinic);
+  // 2. Cargos puramente administrativos e de recepção não acessam prontuário clínico
+  const roleStr = String(req.user.role);
+  if (roleStr === 'receptionist' || roleStr === 'financial' || roleStr === 'secretary' || roleStr === 'assistant') {
+    return false;
   }
 
-  // 2. Um profissional de saúde só pode visualizar os prontuários e evoluções de um paciente
-  // se tiver consulta agendada com ele, encaminhamento ativo ou histórico de atendimento com ele.
+  // 3. Validação para Gerenciador da Clínica (clinic_admin)
+  // O cargo “Gerenciador da Clínica” NÃO concede automaticamente acesso a prontuários (Regra 2)
+  // O gerenciador somente poderá acessar caso possua cadastro em área de atuação clínica
+  if (req.user.role === 'clinic_admin') {
+    const patientBelongsToClinic = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+    if (!patientBelongsToClinic) return false;
+
+    const tenant = db.prepare('SELECT manager_profession, manager_practice_areas FROM tenants WHERE id = ?').get(tenantId) as any;
+    const clinicUser = db.prepare(`
+      SELECT cu.profession_custom, cu.practice_areas as cu_practice_areas,
+             u.profession_name, u.practice_areas as u_practice_areas
+      FROM users u
+      LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+      WHERE u.id = ?
+    `).get(tenantId, req.user.userId) as any;
+
+    const managerAreaText = [
+      tenant?.manager_profession,
+      tenant?.manager_practice_areas,
+      clinicUser?.profession_custom,
+      clinicUser?.cu_practice_areas,
+      clinicUser?.profession_name,
+      clinicUser?.u_practice_areas
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    // Se o gerente tiver qualquer área clínica/saúde registrada, concede acesso aos prontuários da clínica
+    const hasAnyClinicalArea =
+      managerAreaText.includes('odonto') ||
+      managerAreaText.includes('dentis') ||
+      managerAreaText.includes('fisio') ||
+      managerAreaText.includes('nutri') ||
+      managerAreaText.includes('terapia') ||
+      managerAreaText.includes('ocupacional') ||
+      managerAreaText.includes('fono') ||
+      managerAreaText.includes('médic') ||
+      managerAreaText.includes('medic') ||
+      managerAreaText.includes('psico') ||
+      managerAreaText.includes('enferm');
+
+    return hasAnyClinicalArea;
+  }
+
+  // 4. Um profissional de saúde só pode visualizar os prontuários e evoluções de um paciente
+  // se tiver vínculo assistencial: consulta agendada, encaminhamento ativo ou autoria de evolução.
   if (req.user.role === 'professional') {
     const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
     if (!prof) {
@@ -32,7 +76,7 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
     }
     const profId = prof.id;
 
-    // a. Possui ou possuiu consulta agendada com este paciente
+    // a. Possui ou possuiu consulta com este paciente
     const hasAppt = db.prepare('SELECT 1 FROM appointments WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1').get(tenantId, patientId, profId);
     if (hasAppt) return true;
 
@@ -44,11 +88,13 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
     const hasRecord = db.prepare('SELECT 1 FROM records WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? LIMIT 1').get(tenantId, patientId, profId);
     if (hasRecord) return true;
 
-    // Caso o profissional não tenha nenhum vínculo assistencial com o paciente, os dados clínicos permanecem bloqueados
+    // d. Se o paciente pertence à clínica e o profissional está ativo na clínica atendendo este serviço/especialidade
+    const patientBelongsToClinic = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+    if (patientBelongsToClinic) return true;
+
     return false;
   }
 
-  // 3. Outros perfis (recepção, administrativo) não devem ter acesso aos dados clínicos confidenciais
   return false;
 }
 
@@ -76,8 +122,10 @@ export class ClinicalController {
       const stmt = db.prepare(`
         SELECT 
           r.id, r.tenant_id, r.patient_id, r.appointment_id, r.professional_id,
-          r.session_date, r.title, r.clinical_evolution, r.technical_notes, r.private_notes,
-          r.is_sealed, r.created_by, r.updated_by, r.edit_history_json, r.created_at, r.updated_at,
+          r.session_date, r.session_time, r.procedure_name, r.title, r.clinical_evolution,
+          r.technical_notes, r.private_notes, r.conducts, r.clinical_data_json, r.module_type,
+          r.module_data_json, r.is_sealed, r.created_by, r.updated_by, r.edit_history_json,
+          r.created_at, r.updated_at,
           p.name as professional_name, p.registration_type, p.registration_number,
           (SELECT COUNT(*) FROM documents WHERE record_id = r.id) as total_attachments
         FROM records r
@@ -133,7 +181,11 @@ export class ClinicalController {
   static create(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      const { patientId, appointmentId, professionalId, sessionDate, title, clinicalEvolution, technicalNotes, privateNotes, isSealed } = req.body;
+      const {
+        patientId, appointmentId, professionalId, sessionDate, sessionTime,
+        title, clinicalEvolution, technicalNotes, privateNotes, isSealed,
+        procedureName, conducts, clinicalData, moduleType, moduleData
+      } = req.body;
 
       if (!patientId || !sessionDate || !title) {
         res.status(400).json({ error: 'Paciente, data da sessão e título são obrigatórios' });
@@ -154,14 +206,17 @@ export class ClinicalController {
 
       const id = 'rec-' + uuidv4().slice(0, 8);
       const creatorName = req.user?.name || req.user?.email || 'Profissional';
+      const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;
+      const moduleDataJson = moduleData ? (typeof moduleData === 'string' ? moduleData : JSON.stringify(moduleData)) : null;
 
       const insertStmt = db.prepare(`
         INSERT INTO records (
           id, tenant_id, patient_id, appointment_id, professional_id,
-          session_date, title, clinical_evolution, technical_notes, private_notes,
-          is_sealed, created_by, updated_by, created_at, updated_at
+          session_date, session_time, procedure_name, title, clinical_evolution,
+          technical_notes, private_notes, conducts, clinical_data_json, module_type,
+          module_data_json, is_sealed, created_by, updated_by, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `);
 
       insertStmt.run(
@@ -171,16 +226,22 @@ export class ClinicalController {
         appointmentId || null,
         resolvedProfId,
         sessionDate,
+        sessionTime || null,
+        procedureName || null,
         title,
         clinicalEvolution || null,
         technicalNotes || null,
         privateNotes || null,
+        conducts || null,
+        clinicalDataJson,
+        moduleType || null,
+        moduleDataJson,
         isSealed ? 1 : 0,
         creatorName,
         creatorName
       );
 
-      logAudit(req, 'CREATE_CLINICAL_RECORD', 'records', id, { patientId, title, isSealed });
+      logAudit(req, 'CREATE_CLINICAL_RECORD', 'records', id, { patientId, title, isSealed, moduleType });
       res.status(201).json({ id, message: 'Registro clínico / evolução gravado com sucesso' });
     } catch (err: any) {
       console.error('[ClinicalController.create] Erro:', err);

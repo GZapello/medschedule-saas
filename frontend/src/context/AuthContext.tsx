@@ -22,6 +22,12 @@ interface AuthContextType {
   isZemdaFisio: boolean;
   isDentist: boolean;
   isZemdaOdonto: boolean;
+  isNutritionist: boolean;
+  isZemdaNutri: boolean;
+  isOccupationalTherapist: boolean;
+  isZemdaTO: boolean;
+  isSpeechTherapist: boolean;
+  isZemdaFono: boolean;
   clientTermLabel: string;
 }
 
@@ -194,8 +200,73 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     userPermissions.includes('access_zemda_odonto') ||
     !!(currentUser as any)?.zemdaOdontoEnabled;
 
-  const isDentist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') && hasOdontoArea && isZemdaOdontoAuthorized;
+  const isDentist = !isSuperAdmin && (isProfessional || (currentUser?.role === 'clinic_admin' && hasOdontoArea)) && hasOdontoArea && isZemdaOdontoAuthorized;
   const isZemdaOdonto = isDentist;
+
+  // Regra Estrita de Acesso ao ZemdaNutri:
+  // 1. Administrador Global NUNCA tem uso clínico
+  // 2. Deve pertencer à profissão / área de Nutrição
+  // 3. Deve possuir liberação do gestor (ou ser gestor com formação em Nutrição)
+  const hasNutriArea =
+    profId === 'prof-nutricionista' ||
+    profId === 'prof-nutricao' ||
+    profId.includes('nutri') ||
+    profSlug.includes('nutri') ||
+    profName.includes('nutri') ||
+    practiceAreas.includes('nutri') ||
+    practiceAreas.includes('crn');
+
+  const isZemdaNutriAuthorized =
+    (currentUser?.role === 'clinic_admin' && hasNutriArea) ||
+    userPermissions.includes('access_zemda_nutri') ||
+    !!(currentUser as any)?.zemdaNutriEnabled;
+
+  const isNutritionist = !isSuperAdmin && (isProfessional || (currentUser?.role === 'clinic_admin' && hasNutriArea)) && hasNutriArea && isZemdaNutriAuthorized;
+  const isZemdaNutri = isNutritionist;
+
+  // Regra Estrita de Acesso ao ZemdaTO (Terapia Ocupacional):
+  // 1. Administrador Global NUNCA tem uso clínico
+  // 2. Deve pertencer à profissão / área de Terapia Ocupacional
+  // 3. Deve possuir liberação do gestor (ou ser gestor com formação em TO)
+  const hasTOArea =
+    profId === 'prof-terapeuta-ocupacional' ||
+    profId === 'prof-terapia-ocupacional' ||
+    profId.includes('terapia-ocupacional') ||
+    profId.includes('terapeuta-ocupacional') ||
+    profSlug.includes('ocupacional') ||
+    profSlug.includes('terapia_ocupacional') ||
+    profName.includes('ocupacional') ||
+    practiceAreas.includes('ocupacional') ||
+    (practiceAreas.includes('to') && practiceAreas.includes('terapia'));
+
+  const isZemdaTOAuthorized =
+    (currentUser?.role === 'clinic_admin' && hasTOArea) ||
+    userPermissions.includes('access_zemda_to') ||
+    !!(currentUser as any)?.zemdaToEnabled;
+
+  const isOccupationalTherapist = !isSuperAdmin && (isProfessional || (currentUser?.role === 'clinic_admin' && hasTOArea)) && hasTOArea && isZemdaTOAuthorized;
+  const isZemdaTO = isOccupationalTherapist;
+
+  // Regra Estrita de Acesso ao ZemdaFono (Fonoaudiologia):
+  // 1. Administrador Global NUNCA tem uso clínico
+  // 2. Deve pertencer à profissão / área de Fonoaudiologia
+  // 3. Deve possuir liberação do gestor (ou ser gestor com formação em Fono)
+  const hasFonoArea =
+    profId === 'prof-fonoaudiologo' ||
+    profId === 'prof-fonoaudiologia' ||
+    profId.includes('fono') ||
+    profSlug.includes('fono') ||
+    profName.includes('fono') ||
+    practiceAreas.includes('fono') ||
+    practiceAreas.includes('crfa');
+
+  const isZemdaFonoAuthorized =
+    (currentUser?.role === 'clinic_admin' && hasFonoArea) ||
+    userPermissions.includes('access_zemda_fono') ||
+    !!(currentUser as any)?.zemdaFonoEnabled;
+
+  const isSpeechTherapist = !isSuperAdmin && (isProfessional || (currentUser?.role === 'clinic_admin' && hasFonoArea)) && hasFonoArea && isZemdaFonoAuthorized;
+  const isZemdaFono = isSpeechTherapist;
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
 
@@ -221,6 +292,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaFisio,
         isDentist,
         isZemdaOdonto,
+        isNutritionist,
+        isZemdaNutri,
+        isOccupationalTherapist,
+        isZemdaTO,
+        isSpeechTherapist,
+        isZemdaFono,
         clientTermLabel
       }}
     >

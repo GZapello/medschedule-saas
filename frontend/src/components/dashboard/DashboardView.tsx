@@ -47,7 +47,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const fetchMetrics = async () => {
     try {
       setLoading(true);
-      const data = await ApiClient.get<any>('/v1/dashboard/metrics');
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const data = await ApiClient.get<any>(`/v1/dashboard/metrics?date=${todayStr}`);
       setMetrics(data);
     } catch (err: any) {
       showToast(err.message || 'Erro ao carregar indicadores', 'error');

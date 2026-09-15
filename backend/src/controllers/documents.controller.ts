@@ -398,21 +398,109 @@ export class DocumentsController {
       if (evolution && evolution.clinicalEvolution && evolution.clinicalEvolution.trim()) {
         currentStage = 'SAVE_EVOLUTION';
         const recId = 'rec-' + uuidv4().slice(0, 8);
+        const srvName = (db.prepare('SELECT name FROM services WHERE id = ?').get(appt.service_id) as any)?.name || 'Atendimento Geral';
+        const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+        const sessionDate = appt.start_time ? appt.start_time.split('T')[0] : spDateStr;
+        const sessionTime = appt.start_time?.includes('T') ? appt.start_time.split('T')[1].slice(0, 5) : null;
+        const clinicalDataJson = evolution.clinicalData ? (typeof evolution.clinicalData === 'string' ? evolution.clinicalData : JSON.stringify(evolution.clinicalData)) : null;
+        const moduleDataJson = evolution.moduleData ? (typeof evolution.moduleData === 'string' ? evolution.moduleData : JSON.stringify(evolution.moduleData)) : null;
+
         db.prepare(`
           INSERT INTO records (
             id, tenant_id, patient_id, appointment_id, professional_id,
-            session_date, title, clinical_evolution, technical_notes, is_sealed
+            session_date, session_time, procedure_name, title, clinical_evolution,
+            technical_notes, conducts, clinical_data_json, module_type, module_data_json,
+            is_sealed, created_by, updated_by, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `).run(
           recId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
-          appt.start_time ? appt.start_time.split('T')[0] : new Date().toISOString().split('T')[0],
-          evolution.title || 'Evolução da Consulta',
+          sessionDate, sessionTime, evolution.procedureName || srvName,
+          evolution.title || `Consulta de ${srvName}`,
           evolution.clinicalEvolution,
           evolution.technicalNotes || null,
-          evolution.isSealed ? 1 : 0
+          evolution.conducts || null,
+          clinicalDataJson,
+          evolution.moduleType || null,
+          moduleDataJson,
+          evolution.isSealed ? 1 : 0,
+          req.user?.name || 'Profissional',
+          req.user?.name || 'Profissional'
         );
         generatedDocs.recordId = recId;
+
+        // Persistência especializada por módulo clínico (Garantia de que nada é perdido)
+        const parsedModuleData = evolution.moduleData ? (typeof evolution.moduleData === 'string' ? JSON.parse(evolution.moduleData) : evolution.moduleData) : {};
+
+        // A. ZEMDAODONTO: Salva Odontograma inicial, atual, snapshot e alterações de dentes
+        if (evolution.moduleType === 'ZemdaOdonto' || parsedModuleData.odontogramData || evolution.odontogramData) {
+          const odoData = evolution.odontogramData || parsedModuleData.odontogramData;
+          if (odoData) {
+            const statusJson = typeof odoData === 'string' ? odoData : JSON.stringify(odoData);
+            
+            // 1. Initial se ainda não existir
+            const hasInitial = db.prepare("SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'initial'").get(appt.patient_id, tenantId);
+            if (!hasInitial) {
+              db.prepare(`
+                INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+                VALUES (?, ?, ?, ?, ?, ?, 'initial', ?, 'Odontograma Inicial do Paciente')
+              `).run('odo-init-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId, recId, statusJson);
+            }
+
+            // 2. Atualiza ou cria odontograma atual
+            const existingCurrent = db.prepare("SELECT id FROM odontograms WHERE patient_id = ? AND tenant_id = ? AND type = 'current'").get(appt.patient_id, tenantId) as any;
+            if (existingCurrent) {
+              db.prepare("UPDATE odontograms SET status_data_json = ?, record_id = ?, updated_at = datetime('now') WHERE id = ?").run(statusJson, recId, existingCurrent.id);
+            } else {
+              db.prepare(`
+                INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json)
+                VALUES (?, ?, ?, ?, ?, ?, 'current', ?)
+              `).run('odo-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId, recId, statusJson);
+            }
+
+            // 3. Snapshot imutável do atendimento
+            db.prepare(`
+              INSERT INTO odontograms (id, tenant_id, patient_id, professional_id, appointment_id, record_id, type, status_data_json, notes)
+              VALUES (?, ?, ?, ?, ?, ?, 'consultation_snapshot', ?, ?)
+            `).run('odo-snap-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId, recId, statusJson, `Snapshot do atendimento em ${sessionDate}`);
+          }
+
+          const toothChanges = evolution.toothChanges || parsedModuleData.toothChanges;
+          if (Array.isArray(toothChanges) && toothChanges.length > 0) {
+            const insertToothStmt = db.prepare(`
+              INSERT INTO dental_tooth_records (
+                id, tenant_id, patient_id, professional_id, appointment_id,
+                tooth_number, face, condition, previous_condition, procedure_name, notes
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            for (const change of toothChanges) {
+              insertToothStmt.run(
+                'dtr-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+                change.toothNumber, change.face || 'whole', change.condition,
+                change.previousCondition || null, change.procedureName || srvName, change.notes || null
+              );
+            }
+          }
+        }
+
+        // B. ZEMDANUTRI: Salva avaliação antropométrica se presente
+        if (evolution.moduleType === 'ZemdaNutri' || parsedModuleData.assessment) {
+          const ass = parsedModuleData.assessment || evolution.assessmentData;
+          if (ass && ass.weight) {
+            db.prepare(`
+              INSERT INTO nutrition_assessments (
+                id, tenant_id, patient_id, professional_id, appointment_id, record_id,
+                assessment_date, weight, height, bmi, waist_circ, abdominal_circ, hip_circ,
+                arm_circ, calf_circ, neck_circ, thigh_circ, notes
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              'n-ass-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId, recId,
+              sessionDate, ass.weight, ass.height || null, ass.bmi || null,
+              ass.waistCirc || null, ass.abdominalCirc || null, ass.hipCirc || null,
+              ass.armCirc || null, ass.calfCirc || null, ass.neckCirc || null, ass.thighCirc || null, ass.notes || null
+            );
+          }
+        }
       }
 
       // 2. Emite Atestado, se preenchido

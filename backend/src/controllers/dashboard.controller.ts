@@ -10,10 +10,13 @@ export class DashboardController {
         return;
       }
 
-      const today = new Date().toISOString().split('T')[0];
+      // Determina a data de hoje respeitando o fuso de Brasília (ou query param opcional ?date=YYYY-MM-DD)
+      const requestedDate = req.query.date ? String(req.query.date).trim() : null;
+      const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const today = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : spDateStr;
       const monthStart = `${today.slice(0, 7)}-01`;
 
-      // 1. Atendimentos de hoje
+      // 1. Atendimentos de hoje (inclui completed, in_progress, scheduled, etc. - nunca exclui atendimentos finalizados)
       const todayApptsStmt = db.prepare(`
         SELECT 
           a.id, a.patient_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality,

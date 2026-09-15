@@ -72,17 +72,21 @@ export function calculateAvailableSlots(
     : 0;
   const totalSlotDuration = duration + buffer;
 
-  // 2. Valida datas no passado ou muito no futuro
+  // 2. Valida datas no passado ou muito no futuro (utilizando fuso oficial do Brasil)
   const [targetYear, targetMonth, targetDay] = dateStr.split('-').map(Number);
   if (!targetYear || !targetMonth || !targetDay) return [];
 
-  const now = new Date();
-  const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const targetDate = new Date(targetYear, targetMonth - 1, targetDay);
+  // Data atual no fuso de Brasília
+  const spDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const todayStr = spDateFormatter.format(new Date()); // 'YYYY-MM-DD'
 
-  if (targetDate < todayOnly) {
+  if (dateStr < todayStr) {
     return []; // Não permite agendar em dias passados
   }
+
+  const [tY, tM, tD] = todayStr.split('-').map(Number);
+  const todayOnly = new Date(tY, tM - 1, tD);
+  const targetDate = new Date(targetYear, targetMonth - 1, targetDay);
 
   const maxDate = new Date(todayOnly);
   maxDate.setDate(maxDate.getDate() + (service.max_advance_days || 60));
@@ -202,9 +206,25 @@ export function calculateAvailableSlots(
 
   const slots: AvailableSlot[] = [];
   const seenTimes = new Set<string>();
-  const minLeadHours = service.min_lead_time_hours || 2;
-  const isToday = targetDate.getTime() === todayOnly.getTime();
-  const currentTotalMinutes = now.getHours() * 60 + now.getMinutes() + (minLeadHours * 60);
+  
+  // Antecedência mínima configurada no serviço (se 0 ou não definido, respeita apenas o minuto atual)
+  const minLeadHours = (service.min_lead_time_hours !== undefined && service.min_lead_time_hours !== null)
+    ? Number(service.min_lead_time_hours)
+    : 0;
+
+  const isToday = dateStr === todayStr;
+
+  // Calcula os minutos atuais no fuso de Brasília (America/Sao_Paulo)
+  const spParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  }).formatToParts(new Date());
+  const spHour = Number(spParts.find(p => p.type === 'hour')?.value || 0);
+  const spMin = Number(spParts.find(p => p.type === 'minute')?.value || 0);
+  const currentMinutesInDay = spHour * 60 + spMin;
+  const currentTotalMinutes = currentMinutesInDay + (minLeadHours * 60);
 
   const slotStep = totalSlotDuration > 0 ? totalSlotDuration : duration;
 

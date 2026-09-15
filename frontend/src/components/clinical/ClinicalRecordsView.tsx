@@ -18,7 +18,12 @@ import {
   Edit3,
   Printer,
   Download,
-  History
+  History,
+  Smile,
+  Apple,
+  Hand,
+  Mic,
+  Activity
 } from 'lucide-react';
 
 export const ClinicalRecordsView: React.FC = () => {
@@ -250,6 +255,31 @@ export const ClinicalRecordsView: React.FC = () => {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-bold text-slate-900 text-base">{r.title}</h4>
+                        {r.module_type === 'ZemdaOdonto' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200">
+                            <Smile className="w-3 h-3 text-cyan-700" /> ZemdaOdonto
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaNutri' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-lime-100 text-lime-800 border border-lime-200">
+                            <Apple className="w-3 h-3 text-lime-700" /> ZemdaNutri
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaTO' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                            <Hand className="w-3 h-3 text-amber-700" /> ZemdaTO
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaFono' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                            <Mic className="w-3 h-3 text-purple-700" /> ZemdaFono
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaFisio' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                            <Activity className="w-3 h-3 text-teal-700" /> ZemdaFisio
+                          </span>
+                        )}
                         {r.is_sealed === 1 && (
                           <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                             <Lock className="w-3 h-3" /> Prontuário Lacrado
@@ -292,6 +322,68 @@ export const ClinicalRecordsView: React.FC = () => {
                         </p>
                       </div>
                     )}
+
+                    {r.module_data_json && (() => {
+                      try {
+                        const mod = JSON.parse(r.module_data_json);
+                        return (
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-700">
+                            <h6 className="font-bold text-[11px] uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
+                              <span>Registro Especializado: {r.module_type || 'Clínico'}</span>
+                            </h6>
+                            <div className="flex flex-wrap gap-2.5">
+                              {mod.weight && (
+                                <span className="bg-lime-50 text-lime-900 px-2 py-0.5 rounded-md border border-lime-200">
+                                  <strong>Peso:</strong> {mod.weight} kg
+                                </span>
+                              )}
+                              {mod.height && (
+                                <span className="bg-lime-50 text-lime-900 px-2 py-0.5 rounded-md border border-lime-200">
+                                  <strong>Altura:</strong> {mod.height} m
+                                </span>
+                              )}
+                              {mod.waistCirc && (
+                                <span className="bg-lime-50 text-lime-900 px-2 py-0.5 rounded-md border border-lime-200">
+                                  <strong>Cintura:</strong> {mod.waistCirc} cm
+                                </span>
+                              )}
+                              {mod.independenceLevel && (
+                                <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
+                                  <strong>Funcionalidade:</strong> Nível {mod.independenceLevel}
+                                </span>
+                              )}
+                              {mod.mainOccupation && (
+                                <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
+                                  <strong>Foco:</strong> {mod.mainOccupation}
+                                </span>
+                              )}
+                              {mod.phonemeAltered && (
+                                <span className="bg-purple-50 text-purple-900 px-2 py-0.5 rounded-md border border-purple-200">
+                                  <strong>Fonemas:</strong> {mod.phonemeAltered}
+                                </span>
+                              )}
+                              {mod.voiceQuality && (
+                                <span className="bg-purple-50 text-purple-900 px-2 py-0.5 rounded-md border border-purple-200">
+                                  <strong>Voz:</strong> {mod.voiceQuality}
+                                </span>
+                              )}
+                              {mod.painScore !== undefined && (
+                                <span className="bg-teal-50 text-teal-900 px-2 py-0.5 rounded-md border border-teal-200">
+                                  <strong>EVA:</strong> {mod.painScore} / 10
+                                </span>
+                              )}
+                              {mod.painLocation && (
+                                <span className="bg-teal-50 text-teal-900 px-2 py-0.5 rounded-md border border-teal-200">
+                                  <strong>Local:</strong> {mod.painLocation}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      } catch (e) {
+                        return null;
+                      }
+                    })()}
                   </div>
 
                   {/* AÇÕES CLÍNICAS: VISUALIZAR, EDITAR, BAIXAR PDF, IMPRIMIR */}
