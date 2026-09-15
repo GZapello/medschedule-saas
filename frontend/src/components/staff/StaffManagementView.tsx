@@ -1,3 +1,4 @@
+import { useBillingSummary } from '../billing/BillingView';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -27,6 +28,7 @@ import {
 import { formatDoctorName } from '../../utils/formatters';
 
 const AVAILABLE_PERMISSIONS = [
+  { id: 'manage_subscription', label: 'Gerenciar assinatura e plano da clínica' },
   { id: 'view_schedule', label: 'Visualizar agenda da clínica' },
   { id: 'create_appointment', label: 'Criar agendamentos' },
   { id: 'edit_appointment', label: 'Editar e remarcar agendamentos' },
@@ -125,6 +127,7 @@ const formatDeletionDate = (scheduledAt?: string, deactivatedAt?: string) => {
 };
 
 export const StaffManagementView: React.FC = () => {
+  const {summary: billingSummary}=useBillingSummary();
   const { isClinicAdmin, reloadSession } = useAuth();
   const { showToast } = useToast();
 
@@ -340,6 +343,7 @@ export const StaffManagementView: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {billingSummary?.plan && <div className="bg-indigo-50 rounded-xl p-4 flex justify-between gap-3"><span>{billingSummary.plan.name} · {billingSummary.activeUsers} de {billingSummary.maxUsers} usuários</span><button className="font-bold text-indigo-700" onClick={()=>window.dispatchEvent(new CustomEvent('zemda-navigate',{detail:{view:'subscription'}}))}>Fazer upgrade</button></div>}
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

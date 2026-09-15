@@ -82,6 +82,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
 
           {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-7 text-xs font-medium text-slate-400">
+            <a href="/planos" className="hover:text-teal-300 transition-colors">Planos</a>
             <a href="#fluxo" className="hover:text-teal-300 transition-colors">Fluxo Integrado</a>
             <a href="#ia" className="hover:text-teal-300 transition-colors">IA Zemda</a>
             <a href="#importacao" className="hover:text-teal-300 transition-colors">Importação</a>
@@ -119,6 +120,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </div>
 
           {/* Mensagem Central Obrigatória */}
+          <a href="/planos" className="inline-block text-teal-300 underline text-sm font-semibold">Conheça os planos Zemda Solo, Equipe e Clínica</a>
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-white tracking-tight leading-[1.1]">
             Escale sua equipe.{' '}
             <span className="bg-gradient-to-r from-teal-400 via-emerald-300 to-teal-200 bg-clip-text text-transparent">

@@ -1,3 +1,5 @@
+import { respondBillingError } from './billing.controller';
+import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
@@ -18,6 +20,7 @@ export class TenantController {
       const clinics = stmt.all();
       res.json(clinics);
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.listPublic] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar clínicas disponíveis' });
     }
@@ -177,6 +180,7 @@ export class TenantController {
         );
       }
 
+      db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
       logAudit(req, 'REGISTER_CLINIC_REQUEST', 'tenants', tenantId, {
         clinicName,
         responsibleName,
@@ -184,12 +188,13 @@ export class TenantController {
       });
 
       res.status(201).json({
-        message: 'Cadastro da clínica recebido com sucesso! Seu acesso está pendente de aprovação pelo Administrador do SaaS.',
+        message: 'Clínica cadastrada. Entre com seu e-mail e senha para escolher o plano e concluir a assinatura.',
         clinicId: tenantId,
         slug,
         status: 'pending'
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.registerPublic] Erro:', err);
       res.status(500).json({ error: 'Erro ao cadastrar nova clínica' });
     }
@@ -208,6 +213,7 @@ export class TenantController {
 
       if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
 
+      requireCapacity(String(id), (db.prepare("SELECT COUNT(*) n FROM users WHERE tenant_id=? AND status='pending' AND role!='superadmin'").get(id) as any).n);
       // 1. Atualiza clínica para 'active'
       db.prepare("UPDATE tenants SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
 
@@ -232,6 +238,7 @@ export class TenantController {
         status: 'active'
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminApprove] Erro:', err);
       res.status(500).json({ error: 'Erro ao aprovar clínica' });
     }
@@ -259,6 +266,7 @@ export class TenantController {
 
       res.json({ message: `Cadastro da clínica "${tenant.name}" foi recusado.`, status: 'rejected' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminReject] Erro:', err);
       res.status(500).json({ error: 'Erro ao recusar clínica' });
     }
@@ -282,6 +290,7 @@ export class TenantController {
       logAudit(req, 'ADMIN_BLOCK_CLINIC', 'tenants', id);
       res.json({ message: `Clínica "${tenant.name}" bloqueada com sucesso.` });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminBlock] Erro:', err);
       res.status(500).json({ error: 'Erro ao bloquear clínica' });
     }
@@ -300,11 +309,13 @@ export class TenantController {
       if (tenant.status === 'banned') { res.status(409).json({ error: 'Remova o banimento antes de alterar o status da clínica.' }); return; }
 
       db.prepare("UPDATE tenants SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
+      requireCapacity(String(id), (db.prepare("SELECT COUNT(*) n FROM users WHERE tenant_id=? AND status!='active' AND role!='superadmin'").get(id) as any).n);
       db.prepare("UPDATE users SET status = 'active', updated_at = datetime('now') WHERE tenant_id = ?").run(id);
 
       logAudit(req, 'ADMIN_UNBLOCK_CLINIC', 'tenants', id);
       res.json({ message: `Clínica "${tenant.name}" desbloqueada com sucesso.` });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminUnblock] Erro:', err);
       res.status(500).json({ error: 'Erro ao desbloquear clínica' });
     }
@@ -336,6 +347,7 @@ export class TenantController {
       })();
       res.json({ message: `Clínica "${tenant.name}" foi banida com sucesso.`, status: 'banned' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminBan] Erro:', err);
       res.status(500).json({ error: 'Erro ao banir clínica' });
     }
@@ -358,6 +370,7 @@ export class TenantController {
       })();
       res.json({ message: `Banimento da clínica "${tenant.name}" foi removido com sucesso.`, status: 'active' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminUnban] Erro:', err);
       res.status(500).json({ error: 'Erro ao remover banimento da clínica' });
     }
@@ -385,6 +398,7 @@ export class TenantController {
         registrations_blocked: nextState
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminToggleRegistrations] Erro:', err);
       res.status(500).json({ error: 'Erro ao alternar bloqueio de cadastros da clínica' });
     }
@@ -431,9 +445,13 @@ export class TenantController {
         return;
       }
 
+      if (db.prepare('SELECT 1 FROM billing_operations WHERE clinic_id=?').get(id)) { res.status(409).json({error:'Aguarde a operação de assinatura em andamento antes de excluir a clínica.'}); return; }
+      const billing = db.prepare('SELECT managed,status FROM subscriptions WHERE clinic_id=? AND is_current=1').get(id);
+      if (billing?.managed && billing.status !== 'CANCELED') await BillingService.cancel(String(id), adminUser.id, 'Exclusão administrativa da clínica');
       purgeClinic(String(id), adminUser.id, reason.trim());
       res.json({ message: 'Clínica excluída definitivamente', deleted_clinic_id: id });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminDeletePermanently] Erro:', err);
       res.status(500).json({ error: 'Exclusão não concluída. Corrija a falha e repita a operação para concluir a limpeza.' });
     }
@@ -483,6 +501,7 @@ export class TenantController {
         alerts
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminMetrics] Erro:', err);
       res.status(500).json({ error: 'Erro ao calcular métricas do SaaS' });
     }
@@ -529,6 +548,7 @@ export class TenantController {
       tenants.push(...pendingCleanup);
       res.json(tenants);
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.listAll] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar clínicas' });
     }
@@ -581,6 +601,7 @@ export class TenantController {
         receiptsConfigured: rec?.is_configured === 1
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.getCurrent] Erro:', err);
       res.status(500).json({ error: 'Erro ao consultar dados da clínica' });
     }
@@ -702,6 +723,7 @@ export class TenantController {
       logAudit(req, 'UPDATE_TENANT_SETTINGS', 'tenants', req.tenantId);
       res.json({ message: 'Configurações atualizadas com sucesso' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.updateCurrent] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar dados da clínica' });
     }
@@ -757,6 +779,7 @@ export class TenantController {
         services
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[TenantController.getPublicProfile] Erro:', err);
       res.status(500).json({ error: 'Erro ao carregar página pública da clínica' });
     }

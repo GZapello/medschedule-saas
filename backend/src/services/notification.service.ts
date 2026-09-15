@@ -1,3 +1,4 @@
+import { canOperate } from './billing.service';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -71,7 +72,7 @@ export class NotificationService {
         WHERE a.id = ? AND t.status = 'active'
       `).get(appointmentId) as any;
 
-      if (!appt || ['cancelled', 'completed', 'no_show'].includes(appt.status)) {
+      if (!appt || !canOperate(appt.tenant_id) || ['cancelled', 'completed', 'no_show'].includes(appt.status)) {
         return;
       }
 
@@ -180,6 +181,7 @@ export class NotificationService {
       if (pendingList.length === 0) return 0;
 
       for (const item of pendingList) {
+        if (!canOperate(item.tenant_id)) continue;
         try {
           if (!db.prepare("SELECT 1 FROM notifications n JOIN tenants t ON t.id = n.tenant_id WHERE n.id = ? AND n.status = 'pending' AND t.status = 'active'").get(item.id)) continue;
           // Marca temporariamente como processando

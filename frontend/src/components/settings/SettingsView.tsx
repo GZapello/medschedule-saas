@@ -1,3 +1,4 @@
+import { BillingView } from '../billing/BillingView';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -47,7 +48,7 @@ export const SettingsView: React.FC = () => {
   const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession } = useAuth();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile'>(
+  const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing'>(
     isClinicAdmin ? 'clinic' : 'profile'
   );
 
@@ -400,6 +401,7 @@ export const SettingsView: React.FC = () => {
           </p>
         </div>
 
+        <button type="button" onClick={()=>setActiveTab(activeTab==='billing'?'profile':'billing')} className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm">{activeTab==='billing'?'Minha conta':'Assinatura e Plano'}</button>
         {/* Abas se for gestor/admin */}
         {isClinicAdmin && (
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
@@ -451,6 +453,7 @@ export const SettingsView: React.FC = () => {
       </div>
 
       {/* ABA 1: Configurações da Clínica (Apenas Gestores / Admins) */}
+      {activeTab === 'billing' && <BillingView />}
       {isClinicAdmin && activeTab === 'clinic' && (
         <form onSubmit={handleSaveClinic} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
           {/* Seção Vocabulário */}
@@ -1206,7 +1209,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ABA: Minha Conta & Segurança (Disponível para TODOS os usuários) */}
-      {(!isClinicAdmin || activeTab === 'profile') && (
+      {((!isClinicAdmin && activeTab !== 'billing') || activeTab === 'profile') && (
         <div className="space-y-6">
           {/* Card de Alteração de E-mail */}
           <form onSubmit={handleUpdateProfileEmail} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4 text-xs">

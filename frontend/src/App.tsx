@@ -1,3 +1,4 @@
+import { BillingView, BillingBanner, useBillingSummary } from './components/billing/BillingView';
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
@@ -63,8 +64,9 @@ const AppContent: React.FC = () => {
     isZemdaFono
   } = useAuth();
 
+  const { summary: billingSummary, reload: reloadBilling } = useBillingSummary();
   const [currentView, setCurrentView] = useState<string>('dashboard');
-  const [publicView, setPublicView] = useState<'landing' | 'login'>('landing');
+  const [publicView, setPublicView] = useState<'landing' | 'login'>(window.location.pathname.startsWith('/assinatura') ? 'login' : 'landing');
 
   // Roteamento de páginas públicas de nicho (SEO)
   const getInitialSeoSlug = (): string | null => {
@@ -334,6 +336,8 @@ const AppContent: React.FC = () => {
     );
   }
 
+  const callback = window.location.pathname.match(/^\/assinatura\/(sucesso|cancelada|expirada)\/?$/)?.[1];
+  if (callback || window.location.pathname === '/planos') return <BillingView publicPage={window.location.pathname === '/planos' || !currentUser} callback={callback} onBack={()=>window.location.assign('/')} />;
   // Se não estiver logado, exibe páginas de SEO de nicho, Landing Page ou Login
   if (!currentUser) {
     if (activeSeoSlug && SEO_PAGES[activeSeoSlug]) {
@@ -387,6 +391,8 @@ const AppContent: React.FC = () => {
     );
   }
 
+  if (currentUser.role !== 'superadmin' && billingSummary && !billingSummary.canOperate) return <BillingView onBack={()=>{void reloadBilling();void reloadSession();}} />;
+  if (currentView === 'subscription' || window.location.pathname === '/assinatura') return <BillingView onBack={()=>{window.history.replaceState(null,'','/');setCurrentView('dashboard');}} />;
   // Se o gestor precisa concluir o Onboarding obrigatório da clínica
   if (currentUser.needsOnboarding) {
     return (
@@ -404,6 +410,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
+      <BillingBanner summary={billingSummary} />
       {/* Top Navbar */}
       <Navbar
         onToggleSidebar={() => setSidebarOpen(prev => !prev)}

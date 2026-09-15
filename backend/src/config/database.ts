@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { runSeed } from './seed';
+import { migrateBilling } from './billing-migration';
 
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
 const dbDir = path.dirname(dbPath);
@@ -1762,4 +1763,5 @@ export function initializeDatabase(): void {
   } catch (err) {
     console.error('[Database] Erro ao inicializar banco de dados:', err);
   }
+  migrateBilling(rawDb);
 }

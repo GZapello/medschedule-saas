@@ -1,3 +1,5 @@
+import { respondBillingError } from './billing.controller';
+import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { requireOpenRegistration } from '../services/clinic-control.service';
 import { db } from '../config/database';
@@ -111,6 +113,7 @@ export class StaffController {
         invites
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.listStaff] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar funcionários da clínica' });
     }
@@ -142,6 +145,7 @@ export class StaffController {
         return;
       }
 
+      requireCapacity(tenantId!, 1, String(id));
       db.prepare("UPDATE users SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
       db.prepare(`
         UPDATE clinic_users SET
@@ -157,6 +161,7 @@ export class StaffController {
       logAudit(req, 'APPROVE_STAFF', 'users', id, { name: user.name });
       res.json({ message: `Acesso do funcionário ${user.name} aprovado com sucesso.` });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.approve] Erro:', err);
       res.status(500).json({ error: 'Erro ao aprovar funcionário' });
     }
@@ -186,6 +191,7 @@ export class StaffController {
       logAudit(req, 'REJECT_STAFF', 'users', id, { name: user.name });
       res.json({ message: `Solicitação de ${user.name} foi recusada.` });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.reject] Erro:', err);
       res.status(500).json({ error: 'Erro ao recusar funcionário' });
     }
@@ -248,6 +254,7 @@ export class StaffController {
       logAudit(req, 'UPDATE_ROLE_PROFESSION', 'users', id, { role: newRole, professionName, practiceAreas });
       res.json({ message: 'Cargo, profissão e áreas de atuação atualizados com sucesso' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.updateRoleProfession] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar cargo e profissão do membro da equipe' });
     }
@@ -290,6 +297,7 @@ export class StaffController {
       logAudit(req, 'UPDATE_STAFF_PERMISSIONS', 'users', id, { permissionsCount: permissions.length });
       res.json({ message: 'Permissões do funcionário atualizadas com sucesso' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.updatePermissions] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar permissões do funcionário' });
     }
@@ -309,6 +317,7 @@ export class StaffController {
 
       const isCurrentlyActive = user.status === 'active';
       const newStatus = isCurrentlyActive ? 'inactive' : 'active';
+      if (newStatus === 'active') requireCapacity(tenantId!, 1, String(id));
 
       if (newStatus === 'inactive') {
         // Bloqueia o acesso imediatamente, registra data e agenda exclusão para +30 dias
@@ -358,6 +367,7 @@ export class StaffController {
         status: newStatus
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.toggleStatus] Erro:', err);
       res.status(500).json({ error: 'Erro ao alterar status do funcionário' });
     }
@@ -438,6 +448,7 @@ export class StaffController {
         }
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.createInvite] Erro:', err);
       res.status(500).json({ error: 'Erro ao gerar link de convite' });
     }
@@ -486,6 +497,7 @@ export class StaffController {
 
       res.json({ invites: formatted });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.listInvites] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar links de convite' });
     }
@@ -525,6 +537,7 @@ export class StaffController {
 
       res.json({ message: 'Convite cancelado com sucesso' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[StaffController.cancelInvite] Erro:', err);
       res.status(500).json({ error: 'Erro ao cancelar convite' });
     }

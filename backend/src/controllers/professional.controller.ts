@@ -1,3 +1,5 @@
+import { respondBillingError } from './billing.controller';
+import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -33,6 +35,7 @@ export class ProfessionalController {
       const professionals = stmt.all(tenantId);
       res.json(professionals);
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.list] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar profissionais' });
     }
@@ -92,6 +95,7 @@ export class ProfessionalController {
         blockedTimes
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.getById] Erro:', err);
       res.status(500).json({ error: 'Erro ao buscar detalhes do profissional' });
     }
@@ -186,6 +190,7 @@ export class ProfessionalController {
       logAudit(req, 'CREATE_PROFESSIONAL', 'professionals', profId, { name, email, slug: finalSlug });
       res.status(201).json({ id: profId, name, slug: finalSlug, message: 'Profissional cadastrado com sucesso' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.create] Erro:', err);
       res.status(500).json({ error: 'Erro ao cadastrar profissional' });
     }
@@ -253,6 +258,7 @@ export class ProfessionalController {
       logAudit(req, 'UPDATE_PROFESSIONAL', 'professionals', id);
       res.json({ message: 'Profissional atualizado com sucesso' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.update] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar profissional' });
     }
@@ -398,6 +404,7 @@ export class ProfessionalController {
         conflicts: conflicts.length > 0 ? conflicts : []
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.updateSchedules] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar horários' });
     }
@@ -472,6 +479,7 @@ export class ProfessionalController {
         services
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.getPublicProfile] Erro:', err);
       res.status(500).json({ error: 'Erro ao carregar página pública do profissional' });
     }
@@ -526,6 +534,7 @@ export class ProfessionalController {
         slots
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.getPublicSlots] Erro:', err);
       res.status(500).json({ error: 'Erro ao consultar horários livres do profissional' });
     }
@@ -567,6 +576,7 @@ export class ProfessionalController {
       logAudit(req, 'CREATE_BLOCKED_TIME', 'blocked_times', id, { title, startDatetime, endDatetime });
       res.status(201).json({ id, message: 'Bloqueio de horário registrado com sucesso' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.createBlockedTime] Erro:', err);
       res.status(500).json({ error: 'Erro ao criar bloqueio' });
     }
@@ -586,6 +596,7 @@ export class ProfessionalController {
       logAudit(req, 'DELETE_BLOCKED_TIME', 'blocked_times', blockId);
       res.json({ message: 'Bloqueio removido com sucesso' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.deleteBlockedTime] Erro:', err);
       res.status(500).json({ error: 'Erro ao remover bloqueio' });
     }

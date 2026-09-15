@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { mountBillingRoutes, subscriptionGate } from '../controllers/billing.controller';
 import path from 'path';
 import fs from 'fs';
 import { AuthController } from '../controllers/auth.controller';
@@ -42,6 +43,7 @@ import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middlewar
 import { requireRole } from '../middlewares/rbac.middleware';
 
 const api = Router();
+mountBillingRoutes(api);
 
 // ==========================================
 // 1. ROTAS PÚBLICAS
@@ -212,6 +214,7 @@ api.get('/v1/public/download-android', (req, res) => {
 // ==========================================
 api.use(authMiddleware);
 api.use(tenantMiddleware);
+api.use(subscriptionGate);
 
 // Perfil autenticado (Acesso pessoal para qualquer usuário do sistema)
 api.get('/v1/auth/me', AuthController.me);

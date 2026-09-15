@@ -1,3 +1,5 @@
+import { respondBillingError } from './billing.controller';
+import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { requireOpenRegistration } from '../services/clinic-control.service';
 import { db } from '../config/database';
@@ -45,7 +47,7 @@ export class AuthController {
       }
 
       // Validação de status do usuário
-      if (user.status === 'pending') {
+      if (user.status === 'pending' && !pendingBillingManager(user)) {
         res.status(403).json({
           error: 'Sua solicitação de acesso está aguardando aprovação pelo gestor da clínica.',
           code: 'USER_PENDING'
@@ -92,7 +94,7 @@ export class AuthController {
             return;
           }
 
-          if (tenantData.status === 'pending') {
+          if (tenantData.status === 'pending' && !pendingBillingManager(user)) {
             res.status(403).json({
               error: 'O cadastro da sua clínica está em análise e pendente de aprovação pelo Administrador do SaaS. Você será notificado assim que o acesso for liberado.',
               code: 'CLINIC_PENDING'
@@ -163,6 +165,9 @@ export class AuthController {
             let deducedProfId: string | undefined = undefined;
             if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
             else if (pName.toLowerCase().includes('odonto') || pName.toLowerCase().includes('dentis')) deducedProfId = 'prof-dentista';
+            else if (pName.toLowerCase().includes('nutri')) deducedProfId = 'prof-nutricionista';
+            else if (pName.toLowerCase().includes('ocupacional') || pName.toLowerCase().includes('to')) deducedProfId = 'prof-terapeuta-ocupacional';
+            else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
 
             profDetails = {
               profession_id: deducedProfId,
@@ -172,7 +177,10 @@ export class AuthController {
               registration_type: cu?.registration_type,
               registration_number: cu?.registration_number,
               zemda_fisio_enabled: cu?.zemda_fisio_enabled ?? 1,
-              zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 1
+              zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 1,
+              zemda_nutri_enabled: cu?.zemda_nutri_enabled ?? 1,
+              zemda_to_enabled: cu?.zemda_to_enabled ?? 1,
+              zemda_fono_enabled: cu?.zemda_fono_enabled ?? 1
             };
           }
         }
@@ -183,7 +191,7 @@ export class AuthController {
       let userPermissions: string[] = [];
       let cuRow: any = null;
       if (user.tenant_id) {
-        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
@@ -210,6 +218,24 @@ export class AuthController {
         checkProfText.includes('odonto') ||
         checkProfText.includes('dentis');
 
+      const isNutriUser =
+        profDetails?.profession_id === 'prof-nutricionista' ||
+        profDetails?.profession_id === 'prof-nutricao' ||
+        checkProfText.includes('nutri') ||
+        checkProfText.includes('crn');
+
+      const isTOUser =
+        profDetails?.profession_id === 'prof-terapeuta-ocupacional' ||
+        profDetails?.profession_id === 'prof-terapia-ocupacional' ||
+        checkProfText.includes('ocupacional') ||
+        (checkProfText.includes('to') && checkProfText.includes('terapia'));
+
+      const isFonoUser =
+        profDetails?.profession_id === 'prof-fonoaudiologo' ||
+        profDetails?.profession_id === 'prof-fonoaudiologia' ||
+        checkProfText.includes('fono') ||
+        checkProfText.includes('crfa');
+
       const isManagerUser = user.role === 'clinic_admin';
 
       const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (
@@ -224,6 +250,27 @@ export class AuthController {
         userPermissions.includes('access_zemda_odonto') ||
         Number(profDetails?.zemda_odonto_enabled) === 1 ||
         Number(cuRow?.zemda_odonto_enabled) === 1
+      );
+
+      const zemdaNutriEnabled = user.role !== 'superadmin' && isNutriUser && (
+        isManagerUser ||
+        userPermissions.includes('access_zemda_nutri') ||
+        Number(profDetails?.zemda_nutri_enabled) === 1 ||
+        Number(cuRow?.zemda_nutri_enabled) === 1
+      );
+
+      const zemdaToEnabled = user.role !== 'superadmin' && isTOUser && (
+        isManagerUser ||
+        userPermissions.includes('access_zemda_to') ||
+        Number(profDetails?.zemda_to_enabled) === 1 ||
+        Number(cuRow?.zemda_to_enabled) === 1
+      );
+
+      const zemdaFonoEnabled = user.role !== 'superadmin' && isFonoUser && (
+        isManagerUser ||
+        userPermissions.includes('access_zemda_fono') ||
+        Number(profDetails?.zemda_fono_enabled) === 1 ||
+        Number(cuRow?.zemda_fono_enabled) === 1
       );
 
       res.json({
@@ -249,11 +296,15 @@ export class AuthController {
           practiceAreas: profDetails?.practice_areas,
           permissions: userPermissions,
           zemdaFisioEnabled,
-          zemdaOdontoEnabled
+          zemdaOdontoEnabled,
+          zemdaNutriEnabled,
+          zemdaToEnabled,
+          zemdaFonoEnabled
         },
         tenant: tenantData
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[AuthController.login] Erro:', err);
       res.status(500).json({ error: 'Erro interno ao realizar login' });
     }
@@ -324,6 +375,9 @@ export class AuthController {
             let deducedProfId: string | undefined = undefined;
             if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
             else if (pName.toLowerCase().includes('odonto') || pName.toLowerCase().includes('dentis')) deducedProfId = 'prof-dentista';
+            else if (pName.toLowerCase().includes('nutri')) deducedProfId = 'prof-nutricionista';
+            else if (pName.toLowerCase().includes('ocupacional') || pName.toLowerCase().includes('to')) deducedProfId = 'prof-terapeuta-ocupacional';
+            else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
 
             profDetails = {
               profession_id: deducedProfId,
@@ -333,7 +387,10 @@ export class AuthController {
               registration_type: cu?.registration_type,
               registration_number: cu?.registration_number,
               zemda_fisio_enabled: cu?.zemda_fisio_enabled ?? 1,
-              zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 1
+              zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 1,
+              zemda_nutri_enabled: cu?.zemda_nutri_enabled ?? 1,
+              zemda_to_enabled: cu?.zemda_to_enabled ?? 1,
+              zemda_fono_enabled: cu?.zemda_fono_enabled ?? 1
             };
           }
         }
@@ -342,7 +399,7 @@ export class AuthController {
       let userPermissions: string[] = [];
       let cuRow: any = null;
       if (user.tenant_id) {
-        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
@@ -370,6 +427,24 @@ export class AuthController {
         checkProfText.includes('odonto') ||
         checkProfText.includes('dentis');
 
+      const isNutriUser =
+        profDetails?.profession_id === 'prof-nutricionista' ||
+        profDetails?.profession_id === 'prof-nutricao' ||
+        checkProfText.includes('nutri') ||
+        checkProfText.includes('crn');
+
+      const isTOUser =
+        profDetails?.profession_id === 'prof-terapeuta-ocupacional' ||
+        profDetails?.profession_id === 'prof-terapia-ocupacional' ||
+        checkProfText.includes('ocupacional') ||
+        (checkProfText.includes('to') && checkProfText.includes('terapia'));
+
+      const isFonoUser =
+        profDetails?.profession_id === 'prof-fonoaudiologo' ||
+        profDetails?.profession_id === 'prof-fonoaudiologia' ||
+        checkProfText.includes('fono') ||
+        checkProfText.includes('crfa');
+
       const isManagerUser = user.role === 'clinic_admin';
 
       const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (
@@ -384,6 +459,27 @@ export class AuthController {
         userPermissions.includes('access_zemda_odonto') ||
         Number(profDetails?.zemda_odonto_enabled) === 1 ||
         Number(cuRow?.zemda_odonto_enabled) === 1
+      );
+
+      const zemdaNutriEnabled = user.role !== 'superadmin' && isNutriUser && (
+        isManagerUser ||
+        userPermissions.includes('access_zemda_nutri') ||
+        Number(profDetails?.zemda_nutri_enabled) === 1 ||
+        Number(cuRow?.zemda_nutri_enabled) === 1
+      );
+
+      const zemdaToEnabled = user.role !== 'superadmin' && isTOUser && (
+        isManagerUser ||
+        userPermissions.includes('access_zemda_to') ||
+        Number(profDetails?.zemda_to_enabled) === 1 ||
+        Number(cuRow?.zemda_to_enabled) === 1
+      );
+
+      const zemdaFonoEnabled = user.role !== 'superadmin' && isFonoUser && (
+        isManagerUser ||
+        userPermissions.includes('access_zemda_fono') ||
+        Number(profDetails?.zemda_fono_enabled) === 1 ||
+        Number(cuRow?.zemda_fono_enabled) === 1
       );
 
       res.json({
@@ -408,11 +504,15 @@ export class AuthController {
           practiceAreas: profDetails?.practice_areas,
           permissions: userPermissions,
           zemdaFisioEnabled,
-          zemdaOdontoEnabled
+          zemdaOdontoEnabled,
+          zemdaNutriEnabled,
+          zemdaToEnabled,
+          zemdaFonoEnabled
         },
         tenant: tenantData
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[AuthController.me] Erro:', err);
       res.status(500).json({ error: 'Erro ao consultar usuário autenticado' });
     }
@@ -465,7 +565,7 @@ export class AuthController {
       }
 
       const hashedPassword = await hashPassword(password);
-      try { requireOpenRegistration(tenantId); } catch { res.status(403).json({ error: 'Novos cadastros estão bloqueados para esta clínica.' }); return; }
+      try { requireOpenRegistration(tenantId); requireCapacity(tenantId); } catch (err) { if (respondBillingError(res,err)) return; res.status(403).json({ error: 'Novos cadastros estão bloqueados para esta clínica.' }); return; }
       const userId = 'usr-' + uuidv4().slice(0, 8);
 
       // Mapeamento de papel
@@ -562,6 +662,7 @@ export class AuthController {
         userId
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[AuthController.register] Erro:', err);
       res.status(500).json({ error: 'Erro ao cadastrar usuário' });
     }
@@ -602,6 +703,7 @@ export class AuthController {
       logAudit(req, 'UPDATE_OWN_PASSWORD', 'users', user.id);
       res.json({ message: 'Sua senha foi alterada com sucesso!' });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[AuthController.updateProfilePassword] Erro:', err);
       res.status(500).json({ error: 'Erro ao alterar senha' });
     }
@@ -663,6 +765,7 @@ export class AuthController {
         email: cleanEmail
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[AuthController.updateProfileEmail] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar e-mail' });
     }
@@ -786,6 +889,7 @@ export class AuthController {
         expiresAt: invite.expires_at
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[AuthController.validateInvite] Erro:', err);
       res.status(500).json({ valid: false, error: 'Erro ao validar convite' });
     }
@@ -951,7 +1055,7 @@ export class AuthController {
 
       // Executa inserções e consome o convite em transação
       const completeRegister = db.transaction(() => {
-        requireOpenRegistration(tenantId);
+        requireOpenRegistration(tenantId); requireCapacity(tenantId);
         const currentInvite = db.prepare('SELECT status, used_count, max_uses, expires_at FROM clinic_invites WHERE token = ?').get(token);
         if (!currentInvite || currentInvite.status !== 'pending' || currentInvite.used_count >= currentInvite.max_uses || new Date(currentInvite.expires_at) < new Date()) throw new Error('Convite indisponível.');
         // 1. users (ativo, já aprovado via convite oficial da clínica)
@@ -1061,6 +1165,7 @@ export class AuthController {
         }
       });
     } catch (err: any) {
+      if (respondBillingError(res, err)) return;
       console.error('[AuthController.registerWithInvite] Erro:', err);
       res.status(500).json({ error: 'Erro ao concluir cadastro por convite' });
     }

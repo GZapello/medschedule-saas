@@ -1,150 +1,55 @@
 import dotenv from 'dotenv';
-
 dotenv.config();
 
-// ============================================================================
-// ASAAS SERVICE — Serviço Centralizado de Integração com Asaas (Sandbox/Prod)
-// ============================================================================
-// Encapsula chamadas HTTP para o Asaas utilizando:
-// Base URL: process.env.ASAAS_API_URL
-// Header: access_token: process.env.ASAAS_API_KEY
-// NUNCA expor ASAAS_API_KEY no frontend, respostas da API, logs ou código público.
-// ============================================================================
-
-export interface AsaasStatusResult {
-  connected: boolean;
-  environment: string;
-  error?: string;
+export class AsaasError extends Error {
+  constructor(public status: number, public ambiguous = false) { super(`Não foi possível concluir a comunicação com Asaas (${status || 'conexão'}).`); }
 }
-
+export interface AsaasStatusResult { connected: boolean; environment: string; error?: string; }
 export class AsaasService {
-  private static getBaseUrl(): string {
-    const rawUrl = process.env.ASAAS_API_URL || 'https://sandbox.asaas.com/api/v3';
-    return rawUrl.trim().replace(/\/+$/, '');
-  }
-
-  private static getApiKey(): string {
-    return (process.env.ASAAS_API_KEY || '').trim();
-  }
-
-  public static getEnvironment(): string {
-    return (process.env.ASAAS_ENV || 'sandbox').trim().toLowerCase();
-  }
-
-  /**
-   * Executa uma requisição HTTP genérica à API do Asaas garantindo segurança de credenciais.
-   */
-  public static async request<T = any>(
-    endpoint: string,
-    options: {
-      method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
-      body?: any;
-      timeoutMs?: number;
-    } = {}
-  ): Promise<T> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      throw new Error('Chave de API do Asaas (ASAAS_API_KEY) não configurada no ambiente.');
-    }
-
-    const baseUrl = this.getBaseUrl();
-    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = `${baseUrl}${cleanEndpoint}`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 10000);
-
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'access_token': apiKey,
-        'User-Agent': 'Zemda-SaaS-Integration/1.0'
-      };
-
-      const fetchOptions: RequestInit = {
-        method: options.method || 'GET',
-        headers,
-        signal: controller.signal
-      };
-
-      if (options.body && ['POST', 'PUT', 'PATCH'].includes(fetchOptions.method || '')) {
-        fetchOptions.body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
-      }
-
-      const response = await fetch(url, fetchOptions);
-
-      if (!response.ok) {
-        let safeErrorMessage = `Erro na API do Asaas (HTTP ${response.status})`;
-        try {
-          const errorBody = (await response.json()) as any;
-          if (errorBody && Array.isArray(errorBody.errors) && errorBody.errors.length > 0) {
-            safeErrorMessage = errorBody.errors.map((e: any) => e.description || e.code).join('; ');
-          } else if (errorBody && errorBody.message) {
-            safeErrorMessage = errorBody.message;
-          }
-        } catch {
-          // Se não for JSON, mantém o status HTTP genérico
-        }
-
-        // Sanitização preventiva: nunca permitir que qualquer trecho da chave apareça na mensagem
-        safeErrorMessage = safeErrorMessage.replace(new RegExp(apiKey, 'gi'), '[REDACTED]');
-        throw new Error(safeErrorMessage);
-      }
-
-      return (await response.json()) as T;
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        throw new Error('Tempo limite de conexão esgotado ao contatar o Asaas.');
-      }
-      // Sanitização de chave em eventuais mensagens de exceção de rede
-      const safeMsg = (err.message || 'Falha de comunicação com o Asaas').replace(
-        new RegExp(apiKey, 'gi'),
-        '[REDACTED]'
-      );
-      throw new Error(safeMsg);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  /**
-   * Testa a conexão real e autenticação com o Asaas Sandbox através de uma chamada segura e leve.
-   * Endpoint consultado: GET /finance/balance ou GET /customers?limit=1
-   */
-  public static async checkConnection(): Promise<AsaasStatusResult> {
+  static getEnvironment(): string { return (process.env.ASAAS_ENV || 'sandbox').trim().toLowerCase(); }
+  static config() {
     const environment = this.getEnvironment();
-    const apiKey = this.getApiKey();
-
-    if (!apiKey) {
-      return {
-        connected: false,
-        environment,
-        error: 'Chave de API do Asaas não configurada'
-      };
-    }
-
+    if (!['sandbox','production'].includes(environment)) throw new Error('ASAAS_ENV inválido.');
+    const base = new URL((process.env.ASAAS_API_URL || '').trim());
+    const allowed = environment === 'sandbox' ? ['api-sandbox.asaas.com','sandbox.asaas.com'] : ['api.asaas.com','www.asaas.com'];
+    if (base.protocol !== 'https:' || base.port || base.username || base.password || base.search || base.hash || !allowed.includes(base.hostname) || !['/v3','/api/v3'].includes(base.pathname.replace(/\/$/,''))) throw new Error('Ambiente e URL do Asaas incompatíveis.');
+    const key = (process.env.ASAAS_API_KEY || '').trim();
+    if (!key) throw new Error('Integração Asaas ainda não configurada.');
+    if ((key.includes('_hmlg_') && environment !== 'sandbox') || (key.includes('_prod_') && environment !== 'production')) throw new Error('Chave e ambiente do Asaas incompatíveis.');
+    return { environment, base: base.toString().replace(/\/$/,''), key };
+  }
+  static appUrl(): string {
+    const url = new URL(process.env.APP_URL || '');
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('Configure APP_URL com a URL pública HTTPS do Zemda.');
+    return url.toString().replace(/\/$/,'');
+  }
+  static safeUrl(value: string): string {
+    const url = new URL(value);
+    const hosts = this.getEnvironment() === 'sandbox' ? ['sandbox.asaas.com'] : ['asaas.com','www.asaas.com'];
+    if (url.protocol !== 'https:' || url.port || url.username || url.password || !hosts.includes(url.hostname)) throw new Error('Link de pagamento inválido.');
+    return url.toString();
+  }
+  static checkoutUrl(id: string, link?: string): string {
+    if (link) return this.safeUrl(link);
+    const host = this.getEnvironment() === 'sandbox' ? 'sandbox.asaas.com' : 'asaas.com';
+    return this.safeUrl(`https://${host}/checkoutSession/show?id=${encodeURIComponent(id)}`);
+  }
+  static async request<T=any>(endpoint: string, options: {method?:'GET'|'POST'|'PUT'|'DELETE';body?:any;timeoutMs?:number} = {}): Promise<T> {
+    const config = this.config();
+    if (!endpoint.startsWith('/') || endpoint.startsWith('//') || endpoint.includes('://')) throw new Error('Recurso Asaas inválido.');
     try {
-      // Faz uma requisição real de validação simples e rápida (saldo financeiro da conta)
-      await this.request('/finance/balance', { method: 'GET', timeoutMs: 8000 });
-
-      return {
-        connected: true,
-        environment
-      };
-    } catch (err: any) {
-      // Log seguro no backend sem expor chave nem cabeçalhos sensíveis
-      console.error('[AsaasService] Falha na validação de conexão com Asaas Sandbox:', {
-        environment,
-        baseUrl: this.getBaseUrl(),
-        errorMessage: err.message || 'Erro desconhecido'
+      const response = await fetch(config.base + endpoint, {
+        method: options.method || 'GET', redirect:'error', signal:AbortSignal.timeout(options.timeoutMs || 15000),
+        headers: {access_token:config.key,'Content-Type':'application/json','User-Agent':'Zemda/1.0'},
+        body:options.body === undefined ? undefined : JSON.stringify(options.body)
       });
-
-      return {
-        connected: false,
-        environment,
-        error: err.message || 'Falha ao autenticar na API do Asaas'
-      };
-    }
+      // Provider error bodies may contain credentials or PII; never return or log them.
+      if (!response.ok) throw new AsaasError(response.status, response.status >= 500);
+      const text = await response.text(); return (text ? JSON.parse(text) : {}) as T;
+    } catch(e) { if (e instanceof AsaasError) throw e; throw new AsaasError(0,true); }
+  }
+  static async checkConnection(): Promise<AsaasStatusResult> {
+    try { await this.request('/finance/balance',{timeoutMs:8000}); return {connected:true,environment:this.getEnvironment()}; }
+    catch { return {connected:false,environment:this.getEnvironment(),error:'Verifique a configuração e as credenciais do ambiente no servidor.'}; }
   }
 }

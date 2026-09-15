@@ -276,18 +276,18 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                 <CheckCircle2 className="w-10 h-10" />
               </div>
               <h3 className="text-xl font-extrabold text-slate-800">
-                Solicitação de Cadastro Enviada!
+                Clínica cadastrada!
               </h3>
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-left text-xs text-amber-900 space-y-2">
                 <p className="font-bold flex items-center gap-1.5 text-amber-800">
                   <ShieldCheck className="w-4 h-4 text-amber-600" />
-                  Status: Pendente de Aprovação
+                  Próximo passo: escolher o plano
                 </p>
                 <p>
-                  Sua clínica foi cadastrada no sistema. Por questões de governança, segurança e conformidade, novos cadastros passam por análise da equipe de administração da plataforma Zemda.
+                  Entre com o e-mail e a senha cadastrados para escolher o plano e concluir o pagamento no checkout seguro do Asaas.
                 </p>
                 <p className="font-semibold text-slate-700">
-                  Assim que for aprovada, você poderá fazer login com o e-mail cadastrado e será direcionado ao assistente de configuração inicial.
+                  Após a confirmação do pagamento, seu acesso será liberado e você poderá concluir a configuração inicial da clínica.
                 </p>
               </div>
 
@@ -298,10 +298,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
               </div>
 
               <button
-                onClick={onClose}
+                onClick={()=>window.location.assign('/assinatura')}
                 className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all"
               >
-                Entendido e Voltar ao Início
+                Entrar e escolher o plano
               </button>
             </div>
           ) : (

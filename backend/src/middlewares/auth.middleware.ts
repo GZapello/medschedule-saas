@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { pendingBillingManager } from '../services/billing.service';
 import { db } from '../config/database';
 import { verifyToken, TokenPayload } from '../utils/jwt';
 
@@ -33,15 +34,15 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  const account = db.prepare('SELECT role, status, tenant_id FROM users WHERE id = ?').get(payload.userId);
-  if (!account || account.status !== 'active' || account.role !== payload.role) {
+  const account = db.prepare('SELECT id, role, status, tenant_id FROM users WHERE id = ?').get(payload.userId);
+  if (!account || (account.status !== 'active' && !pendingBillingManager(account)) || account.role !== payload.role) {
     res.status(401).json({ error: 'Sessão inválida. Entre novamente.' }); return;
   }
   if (payload.role !== 'superadmin') {
     const tenant = db.prepare('SELECT status, session_version FROM tenants WHERE id = ?').get(payload.tenantId);
     const membership = db.prepare('SELECT status FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(payload.userId, payload.tenantId);
-    if (!tenant || tenant.status !== 'active' || (payload.sessionVersion || 0) !== tenant.session_version ||
-      (membership ? membership.status !== 'active' : account.tenant_id !== payload.tenantId)) {
+    if (!tenant || (tenant.status !== 'active' && !(tenant.status === 'pending' && pendingBillingManager(account))) || (payload.sessionVersion || 0) !== tenant.session_version ||
+      (membership ? (membership.status !== 'active' && !pendingBillingManager(account)) : account.tenant_id !== payload.tenantId)) {
       res.status(403).json({ error: 'Acesso à clínica bloqueado ou sessão invalidada.' }); return;
     }
   }

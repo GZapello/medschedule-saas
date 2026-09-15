@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { BillingWebhookService } from './services/billing-webhook.service';
 import { initializeDatabase } from './config/database';
 import apiRoutes from './routes';
 
@@ -42,6 +43,7 @@ app.use((req, res, next) => {
 
 // Inicializa tabelas e seeds do banco de dados relacional
 initializeDatabase();
+BillingWebhookService.start();
 
 // Inicia o motor de segundo plano para lembretes automáticos (Zemda Notifications API)
 import { NotificationService } from './services/notification.service';

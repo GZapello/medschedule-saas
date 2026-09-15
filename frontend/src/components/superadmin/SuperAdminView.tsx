@@ -1,3 +1,4 @@
+import { GlobalBillingView } from '../billing/GlobalBillingView';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -29,7 +30,7 @@ export const SuperAdminView: React.FC = () => {
   const { showToast } = useToast();
 
   // Navegação Principal do SuperAdmin
-  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories'>('tenants');
+  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations'>('tenants');
 
   // Clínicas
   const [metrics, setMetrics] = useState<any>(null);
@@ -365,6 +366,8 @@ export const SuperAdminView: React.FC = () => {
 
         {/* Menu Superior de Módulos Globais */}
         <div className="flex items-center gap-1.5 p-1.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-xs font-bold">
+          <button onClick={()=>setMainSection('subscriptions')} className="px-3 py-2 rounded-xl hover:bg-white/10">Assinaturas</button>
+          <button onClick={()=>setMainSection('integrations')} className="px-3 py-2 rounded-xl hover:bg-white/10">Integrações</button>
           <button
             onClick={() => setMainSection('tenants')}
             className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -406,6 +409,8 @@ export const SuperAdminView: React.FC = () => {
       {/* ========================================================================= */}
       {/* SEÇÃO 1: CLÍNICAS & MODERAÇÃO */}
       {/* ========================================================================= */}
+      {mainSection === 'subscriptions' && <GlobalBillingView />}
+      {mainSection === 'integrations' && <GlobalBillingView integration />}
       {mainSection === 'tenants' && (
         <div className="space-y-6">
           {/* Alertas do Sistema */}

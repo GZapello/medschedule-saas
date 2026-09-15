@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { canOperate, BillingService } from '../services/billing.service';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
@@ -204,6 +205,8 @@ export class AppointmentController {
       if (!db.prepare("SELECT 1 FROM tenants WHERE id = ? AND status = 'active'").get(tenantId)) {
         res.status(403).json({ error: 'O acesso a esta clínica está bloqueado.' }); return;
       }
+      BillingService.expireGrace();
+      if (!canOperate(tenantId)) { res.status(402).json({code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
       // Resolve ou cria o paciente
       let resolvedPatientId = patientId;
       if (!resolvedPatientId && newPatientData) {
