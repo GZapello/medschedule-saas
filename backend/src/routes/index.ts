@@ -35,6 +35,7 @@ import { DentistryController } from '../controllers/dentistry.controller';
 import { NutritionController } from '../controllers/nutrition.controller';
 import { OccupationalTherapyController } from '../controllers/occupational-therapy.controller';
 import { SpeechTherapyController } from '../controllers/speech-therapy.controller';
+import { IntegrationsController } from '../controllers/integrations.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -224,6 +225,8 @@ api.get('/v1/tenants', requireRole('superadmin'), TenantController.listAll);
 
 // Gestão Global do SaaS (Exclusivo SuperAdmin / ADM do SaaS)
 api.get('/v1/admin/metrics', requireRole('superadmin'), TenantController.adminMetrics);
+api.get('/v1/admin/integrations/asaas/status', requireRole('superadmin'), IntegrationsController.getAsaasStatus);
+api.get('/admin/integrations/asaas/status', requireRole('superadmin'), IntegrationsController.getAsaasStatus);
 api.put('/v1/admin/tenants/:id/approve', requireRole('superadmin'), TenantController.adminApprove);
 api.put('/v1/admin/tenants/:id/reject', requireRole('superadmin'), TenantController.adminReject);
 api.put('/v1/admin/tenants/:id/block', requireRole('superadmin'), TenantController.adminBlock);
