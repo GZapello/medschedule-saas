@@ -12,6 +12,11 @@ export interface User {
   tenantId?: string | null;
   status?: string;
   needsOnboarding?: boolean;
+  needsLegalAcceptance?: boolean;
+  termsVersionAccepted?: string | null;
+  privacyVersionAccepted?: string | null;
+  termsAcceptedAt?: string | null;
+  privacyAcceptedAt?: string | null;
   professionalId?: string;
   professionId?: string;
   professionName?: string;

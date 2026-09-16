@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { openCookiePreferencesModal } from '../../utils/cookieConsent';
 import {
   Calendar,
   DollarSign,
@@ -613,11 +614,19 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
               <span>• Tecnologia para Gestão em Saúde</span>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+              <a href="/termos-de-uso" className="hover:text-teal-400 transition-colors">Termos de Uso</a>
+              <a href="/privacidade" className="hover:text-teal-400 transition-colors">Política de Privacidade</a>
+              <button
+                type="button"
+                onClick={openCookiePreferencesModal}
+                className="hover:text-teal-400 transition-colors cursor-pointer"
+              >
+                Preferências de Cookies
+              </button>
+              <span className="text-slate-700 hidden sm:inline">|</span>
               <button onClick={onLogin} className="hover:text-teal-400 transition-colors cursor-pointer">Acessar Conta</button>
               <button onClick={onRegisterClinic} className="hover:text-teal-400 transition-colors cursor-pointer">Criar Clínica</button>
-              <span className="text-slate-600">|</span>
-              <span>Conformidade com a LGPD</span>
             </div>
           </div>
 

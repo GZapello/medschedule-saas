@@ -608,3 +608,23 @@ CREATE TABLE IF NOT EXISTS integrations (
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
   UNIQUE(tenant_id, provider)
 );
+
+-- 27. Registro e Prova de Aceite Legal (Termos de Uso e Política de Privacidade / LGPD)
+CREATE TABLE IF NOT EXISTS legal_acceptances (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  clinic_id TEXT NOT NULL,
+  terms_version TEXT NOT NULL,
+  privacy_version TEXT NOT NULL,
+  marketing_opt_in INTEGER DEFAULT 0,
+  accepted_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (clinic_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances (user_id);
+CREATE INDEX IF NOT EXISTS idx_legal_acceptances_clinic ON legal_acceptances (clinic_id);
+

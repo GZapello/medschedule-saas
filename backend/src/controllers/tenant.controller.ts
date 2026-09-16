@@ -1,11 +1,13 @@
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
-import { db } from '../config/database';
+import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hashPassword, comparePassword } from '../utils/password';
+import { generateToken } from '../utils/jwt';
 import { v4 as uuidv4 } from 'uuid';
 import { globalAudit, purgeClinic } from '../services/clinic-control.service';
+
 
 export class TenantController {
   // 0. Lista pública de clínicas ativas para seleção no cadastro de usuários ("Clínica que deseja integrar")
@@ -40,7 +42,9 @@ export class TenantController {
         city,
         state,
         termsAccepted,
-        privacyAccepted
+        privacyAccepted,
+        marketingAccepted,
+        marketingOptIn
       } = req.body;
 
       if (!responsibleName || !email || !password || !clinicName) {
@@ -94,7 +98,7 @@ export class TenantController {
         managerRegistrationNumber
       } = req.body;
 
-      // Insere o tenant com status PENDENTE
+      // Insere o tenant com status PENDENTE e registro dos termos aceitos
       const insertTenant = db.prepare(`
         INSERT INTO tenants (
           id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
@@ -102,6 +106,7 @@ export class TenantController {
           manager_profession, manager_practice_areas,
           status, onboarding_completed, onboarding_step, manager_confirmed,
           terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
+          terms_version, privacy_version,
           created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?,
@@ -109,6 +114,7 @@ export class TenantController {
           ?, ?,
           'pending', 0, 1, 0,
           1, datetime('now'), 1, datetime('now'),
+          ?, ?,
           datetime('now'), datetime('now')
         )
       `);
@@ -128,25 +134,49 @@ export class TenantController {
         cleanEmail,
         phone || null,
         managerProfession || null,
-        managerPracticeAreas || null
+        managerPracticeAreas || null,
+        CURRENT_TERMS_VERSION,
+        CURRENT_PRIVACY_VERSION
       );
 
-      // Insere o usuário gestor com status PENDENTE e role 'clinic_admin'
+      // Insere o usuário gestor com status PENDENTE, role 'clinic_admin' e termos aceitos
       const insertUser = db.prepare(`
         INSERT INTO users (
           id, tenant_id, name, email, password_hash, role, phone, status,
           profession_name, practice_areas, registration_type, registration_number,
+          terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
           created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?, 'clinic_admin', ?, 'pending',
           ?, ?, ?, ?,
+          ?, ?, datetime('now'), datetime('now'),
           datetime('now'), datetime('now')
         )
       `);
 
       insertUser.run(
         userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null,
-        managerProfession || null, managerPracticeAreas || null, managerRegistrationType || null, managerRegistrationNumber || null
+        managerProfession || null, managerPracticeAreas || null, managerRegistrationType || null, managerRegistrationNumber || null,
+        CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION
+      );
+
+      // Salva a prova documental do aceite legal na tabela legal_acceptances
+      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || null;
+      const userAgent = (req.headers['user-agent'] as string) || null;
+      const optInMarketing = (marketingAccepted || marketingOptIn) ? 1 : 0;
+      db.prepare(`
+        INSERT INTO legal_acceptances (
+          id, user_id, clinic_id, terms_version, privacy_version, marketing_opt_in, accepted_at, ip_address, user_agent, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
+      `).run(
+        'la-' + uuidv4().slice(0, 8),
+        userId,
+        tenantId,
+        CURRENT_TERMS_VERSION,
+        CURRENT_PRIVACY_VERSION,
+        optInMarketing,
+        ipAddress,
+        userAgent
       );
 
       // Associa em clinic_users com a profissão e área clínica do gestor
@@ -184,11 +214,66 @@ export class TenantController {
       logAudit(req, 'REGISTER_CLINIC_REQUEST', 'tenants', tenantId, {
         clinicName,
         responsibleName,
-        email: cleanEmail
+        email: cleanEmail,
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION
       });
 
+      // Criação automática de sessão autenticada segura
+      const token = generateToken({
+        userId,
+        tenantId,
+        role: 'clinic_admin',
+        email: cleanEmail,
+        name: responsibleName
+      });
+
+      const tenantData = db.prepare(`
+        SELECT 
+          id, slug, name, corporate_name, trade_name, email, phone, logo_url,
+          primary_color, client_term_label, status, banned_reason, registrations_blocked,
+          onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
+        FROM tenants
+        WHERE id = ?
+      `).get(tenantId);
+
+      const checkProfText = [managerProfession, managerPracticeAreas].filter(Boolean).join(' ').toLowerCase();
+      const isPhysioUser = checkProfText.includes('fisio');
+      const isDentistUser = checkProfText.includes('odonto') || checkProfText.includes('dentis');
+      const isNutriUser = checkProfText.includes('nutri');
+      const isTOUser = checkProfText.includes('ocupacional');
+      const isFonoUser = checkProfText.includes('fono');
+
+      const userPayload = {
+        id: userId,
+        name: responsibleName,
+        email: cleanEmail,
+        role: 'clinic_admin' as const,
+        status: 'pending',
+        phone: phone || null,
+        avatarUrl: null,
+        tenantId: tenantId,
+        needsOnboarding: true,
+        needsLegalAcceptance: false,
+        professionName: managerProfession || null,
+        practiceAreas: managerPracticeAreas || '',
+        registrationType: managerRegistrationType || null,
+        registrationNumber: managerRegistrationNumber || null,
+        termsVersionAccepted: CURRENT_TERMS_VERSION,
+        privacyVersionAccepted: CURRENT_PRIVACY_VERSION,
+        permissions: [],
+        zemdaFisioEnabled: isPhysioUser,
+        zemdaOdontoEnabled: isDentistUser,
+        zemdaNutriEnabled: isNutriUser,
+        zemdaToEnabled: isTOUser,
+        zemdaFonoEnabled: isFonoUser
+      };
+
       res.status(201).json({
-        message: 'Clínica cadastrada. Entre com seu e-mail e senha para escolher o plano e concluir a assinatura.',
+        message: 'Clínica cadastrada com sucesso. Redirecionando para escolha do plano.',
+        token,
+        user: userPayload,
+        tenant: tenantData,
         clinicId: tenantId,
         slug,
         status: 'pending'

@@ -44,6 +44,11 @@ import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
 import { QuickAIAssistantShortcut } from './components/ai-copilot/QuickAIAssistantShortcut';
 import { NetworkOfflineModal } from './components/common/NetworkOfflineModal';
 import { UpdateNotificationModal } from './components/common/UpdateNotificationModal';
+import { TermsOfUseView } from './components/public/TermsOfUseView';
+import { PrivacyPolicyView } from './components/public/PrivacyPolicyView';
+import { CookieBanner } from './components/common/CookieBanner';
+import { CookiePreferencesModal } from './components/common/CookiePreferencesModal';
+import { LegalReacceptanceModal } from './components/common/LegalReacceptanceModal';
 import { trackPageView } from './utils/analytics';
 import { Sparkles, AlertCircle } from 'lucide-react';
 
@@ -92,6 +97,15 @@ const AppContent: React.FC = () => {
     return null;
   };
   const [activeInvite, setActiveInvite] = useState<{ clinicSlug?: string; token: string } | null>(getInitialInvite);
+
+  // Roteamento para páginas legais (/termos-de-uso e /privacidade)
+  const getInitialLegalPage = (): 'terms' | 'privacy' | null => {
+    const cleanPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    if (cleanPath === 'termos-de-uso') return 'terms';
+    if (cleanPath === 'privacidade') return 'privacy';
+    return null;
+  };
+  const [activeLegalPage, setActiveLegalPage] = useState<'terms' | 'privacy' | null>(getInitialLegalPage);
 
   const navigateToSeoPage = (slug: string) => {
     if (SEO_PAGES[slug]) {
@@ -168,6 +182,15 @@ const AppContent: React.FC = () => {
 
   // Google Analytics 4: Rastreamento SPA global de páginas/visualizações (100% livre de PII ou dados clínicos)
   useEffect(() => {
+    if (activeLegalPage === 'terms') {
+      trackPageView('/termos-de-uso', 'Zemda • Termos de Uso');
+      return;
+    }
+    if (activeLegalPage === 'privacy') {
+      trackPageView('/privacidade', 'Zemda • Política de Privacidade e LGPD');
+      return;
+    }
+
     if (currentUser) {
       const viewTitles: Record<string, string> = {
         dashboard: 'Painel Operacional',
@@ -211,7 +234,7 @@ const AppContent: React.FC = () => {
         trackPageView('/', 'Zemda • Sistema de Gestão em Saúde');
       }
     }
-  }, [currentUser, currentView, publicView, activeSeoSlug, activeProfSlug, activeInvite]);
+  }, [currentUser, currentView, publicView, activeSeoSlug, activeProfSlug, activeInvite, activeLegalPage]);
 
   // Tratamento do botão Voltar nativo do Android
   useEffect(() => {
@@ -239,23 +262,29 @@ const AppContent: React.FC = () => {
         modalClose.click();
         return;
       }
-      // 3. Se estiver na página pública individual do profissional, volta para a home
+      // 3. Se estiver em página legal, volta para a tela anterior / home
+      if (activeLegalPage) {
+        setActiveLegalPage(null);
+        window.history.pushState(null, '', '/');
+        return;
+      }
+      // 4. Se estiver na página pública individual do profissional, volta para a home
       if (activeProfSlug) {
         setActiveProfSlug(null);
         window.history.pushState(null, '', '/');
         return;
       }
-      // 4. Se estiver em página de SEO de nicho, retorna para a home pública
+      // 5. Se estiver em página de SEO de nicho, retorna para a home pública
       if (!currentUser && activeSeoSlug) {
         navigateToHome();
         return;
       }
-      // 5. Se estiver na tela de login deslogado, volta para a landing page institucional Zemda
+      // 6. Se estiver na tela de login deslogado, volta para a landing page institucional Zemda
       if (!currentUser && publicView === 'login') {
         setPublicView('landing');
         return;
       }
-      // 6. Se estiver em visualização secundária, retorna ao dashboard
+      // 7. Se estiver em visualização secundária, retorna ao dashboard
       if (currentView !== 'dashboard' && currentUser?.role !== 'superadmin') {
         setCurrentView('dashboard');
         return;
@@ -264,6 +293,14 @@ const AppContent: React.FC = () => {
 
     const handleSyncUrlState = () => {
       const cleanPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
+      if (cleanPath === 'termos-de-uso') {
+        setActiveLegalPage('terms');
+      } else if (cleanPath === 'privacidade') {
+        setActiveLegalPage('privacy');
+      } else {
+        setActiveLegalPage(null);
+      }
+
       if (cleanPath && SEO_PAGES[cleanPath]) {
         setActiveSeoSlug(cleanPath);
       } else {
@@ -282,9 +319,26 @@ const AppContent: React.FC = () => {
       }
     };
 
+    const handleDocumentClick = (e: MouseEvent) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      const target = (e.target as HTMLElement).closest('a');
+      if (!target || target.getAttribute('target') === '_blank') return;
+      const href = target.getAttribute('href');
+      if (href === '/termos-de-uso') {
+        e.preventDefault();
+        window.history.pushState(null, '', '/termos-de-uso');
+        setActiveLegalPage('terms');
+      } else if (href === '/privacidade') {
+        e.preventDefault();
+        window.history.pushState(null, '', '/privacidade');
+        setActiveLegalPage('privacy');
+      }
+    };
+
     window.addEventListener('android-back-button', handleBackButton);
     window.addEventListener('popstate', handleBackButton);
     window.addEventListener('popstate', handleSyncUrlState);
+    document.addEventListener('click', handleDocumentClick);
 
     let cleanupCapacitorListener: (() => void) | null = null;
     try {
@@ -316,11 +370,12 @@ const AppContent: React.FC = () => {
       window.removeEventListener('android-back-button', handleBackButton);
       window.removeEventListener('popstate', handleBackButton);
       window.removeEventListener('popstate', handleSyncUrlState);
+      document.removeEventListener('click', handleDocumentClick);
       if (cleanupCapacitorListener) {
         cleanupCapacitorListener();
       }
     };
-  }, [isNewApptOpen, isNewPatientOpen, isAIOpen, sidebarOpen, currentView, currentUser, publicView, activeSeoSlug]);
+  }, [isNewApptOpen, isNewPatientOpen, isAIOpen, sidebarOpen, currentView, currentUser, publicView, activeSeoSlug, activeLegalPage]);
 
   if (loading) {
     return (
@@ -345,6 +400,55 @@ const AppContent: React.FC = () => {
             setCurrentView('dashboard');
             setPublicView('landing');
           }
+        }}
+      />
+    );
+  }
+
+  // Se o usuário está acessando páginas legais (/termos-de-uso ou /privacidade)
+  if (activeLegalPage === 'terms') {
+    return (
+      <TermsOfUseView
+        onBack={() => {
+          setActiveLegalPage(null);
+          window.history.pushState(null, '', '/');
+          if (!currentUser) setPublicView('landing');
+        }}
+        onLogin={() => {
+          setActiveLegalPage(null);
+          window.history.pushState(null, '', '/');
+          setAuthInitialAction('login');
+          setPublicView('login');
+        }}
+        onRegisterClinic={() => {
+          setActiveLegalPage(null);
+          window.history.pushState(null, '', '/');
+          setAuthInitialAction('create-clinic');
+          setPublicView('login');
+        }}
+      />
+    );
+  }
+
+  if (activeLegalPage === 'privacy') {
+    return (
+      <PrivacyPolicyView
+        onBack={() => {
+          setActiveLegalPage(null);
+          window.history.pushState(null, '', '/');
+          if (!currentUser) setPublicView('landing');
+        }}
+        onLogin={() => {
+          setActiveLegalPage(null);
+          window.history.pushState(null, '', '/');
+          setAuthInitialAction('login');
+          setPublicView('login');
+        }}
+        onRegisterClinic={() => {
+          setActiveLegalPage(null);
+          window.history.pushState(null, '', '/');
+          setAuthInitialAction('create-clinic');
+          setPublicView('login');
         }}
       />
     );
@@ -657,6 +761,9 @@ export const App: React.FC = () => {
     <AuthProvider>
       <ToastProvider>
         <AppContent />
+        <CookieBanner />
+        <CookiePreferencesModal />
+        <LegalReacceptanceModal />
         <NetworkOfflineModal />
         <UpdateNotificationModal />
       </ToastProvider>

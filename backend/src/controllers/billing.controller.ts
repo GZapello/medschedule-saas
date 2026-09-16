@@ -32,7 +32,7 @@ function manager(req:Request,res:Response,next:NextFunction) {
 }
 export function subscriptionGate(req:Request,res:Response,next:NextFunction) {
   if(req.user?.role==='superadmin' && /^\/(?:v1\/)?(?:admin|tenants|taxonomy|audit)(?:\/|$)/.test(req.path)) {next();return;}
-  if(/^\/(?:v1\/)?(?:subscriptions|auth\/me|auth\/logout|auth\/change-password|tenants\/current)(?:\/|$)/.test(req.path) && (req.method==='GET' || req.path.includes('subscriptions') || req.path.includes('auth'))) {next();return;}
+  if(/^\/(?:v1\/)?(?:subscriptions|auth\/me|auth\/accept-legal|auth\/logout|auth\/change-password|tenants\/current)(?:\/|$)/.test(req.path) && (req.method==='GET' || req.path.includes('subscriptions') || req.path.includes('auth'))) {next();return;}
   if(req.tenantId) {
     BillingService.expireGrace();
     const t=db.prepare('SELECT billing_required FROM tenants WHERE id=?').get(req.tenantId);

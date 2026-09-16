@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { openCookiePreferencesModal } from '../../utils/cookieConsent';
 import { SeoPageData, SEO_PAGES } from '../../data/seoPagesData';
 import {
   CheckCircle2,
@@ -376,10 +377,18 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({
             <img src="/brand/zemda-icon.png" alt="Zemda" className="w-6 h-6 object-contain" />
             <span>© {new Date().getFullYear()} Zemda Tecnologia em Saúde. Todos os direitos reservados.</span>
           </div>
-          <div className="flex items-center gap-4 text-[11px]">
-            <span className="text-slate-400">Segurança de Dados LGPD</span>
-            <span>•</span>
-            <span className="text-slate-400">Disponível para Web, Windows e Android</span>
+          <div className="flex flex-wrap items-center gap-4 text-[11px]">
+            <a href="/termos-de-uso" className="hover:text-teal-400 transition-colors">Termos de Uso</a>
+            <a href="/privacidade" className="hover:text-teal-400 transition-colors">Política de Privacidade (LGPD)</a>
+            <button
+              type="button"
+              onClick={openCookiePreferencesModal}
+              className="hover:text-teal-400 transition-colors cursor-pointer"
+            >
+              Preferências de Cookies
+            </button>
+            <span className="text-slate-700 hidden sm:inline">•</span>
+            <span className="text-slate-400">Web, Windows e Android</span>
           </div>
         </div>
       </footer>

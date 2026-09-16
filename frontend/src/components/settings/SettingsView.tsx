@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { openCookiePreferencesModal } from '../../utils/cookieConsent';
 import {
   Settings,
   Building2,
@@ -22,7 +23,11 @@ import {
   Upload,
   Image as ImageIcon,
   Clock,
-  Edit2
+  Edit2,
+  Scale,
+  ExternalLink,
+  Cookie,
+  ShieldCheck
 } from 'lucide-react';
 
 export const COMMON_INSURANCE_PRESETS = [
@@ -48,7 +53,7 @@ export const SettingsView: React.FC = () => {
   const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession } = useAuth();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing'>(
+  const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal'>(
     isClinicAdmin ? 'clinic' : 'profile'
   );
 
@@ -402,54 +407,66 @@ export const SettingsView: React.FC = () => {
         </div>
 
         <button type="button" onClick={()=>setActiveTab(activeTab==='billing'?'profile':'billing')} className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm">{activeTab==='billing'?'Minha conta':'Assinatura e Plano'}</button>
-        {/* Abas se for gestor/admin */}
-        {isClinicAdmin && (
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
-            <button
-              type="button"
-              onClick={() => setActiveTab('clinic')}
-              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'clinic' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Building2 className="w-3.5 h-3.5" />
-              Clínica
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('document_templates')}
-              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'document_templates' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Modelos de Documentos
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('insurances');
-                fetchClinicInsurances();
-              }}
-              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'insurances' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <CreditCard className="w-3.5 h-3.5" />
-              Convênios
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('profile')}
-              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'profile' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              Minha Conta
-            </button>
-          </div>
-        )}
+        {/* Abas de navegação */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
+          {isClinicAdmin && (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTab('clinic')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'clinic' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Clínica
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('document_templates')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'document_templates' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Modelos de Documentos
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('insurances');
+                  fetchClinicInsurances();
+                }}
+                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'insurances' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                Convênios
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'profile' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            Minha Conta
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('legal')}
+            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'legal' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Scale className="w-3.5 h-3.5" />
+            Privacidade e Documentos Legais
+          </button>
+        </div>
       </div>
 
       {/* ABA 1: Configurações da Clínica (Apenas Gestores / Admins) */}
@@ -1327,6 +1344,117 @@ export const SettingsView: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ABA: Privacidade e Documentos Legais */}
+      {activeTab === 'legal' && (
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Scale className="w-5 h-5 text-indigo-600" />
+              Privacidade e Documentos Legais
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Consulte os termos aceitos pela sua clínica e gerencie a conformidade com a Lei Geral de Proteção de Dados (LGPD).
+            </p>
+          </div>
+
+          {/* Documentos Legais Vigentes */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  <h4 className="font-bold text-slate-800 text-sm">Termos de Uso</h4>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                  {currentUser?.termsVersionAccepted ? `v${currentUser.termsVersionAccepted} • Aceito` : 'Vigente'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Regras de utilização, responsabilidade da clínica pelos colaboradores, limites do plano e cláusula de isenção médica da plataforma.
+              </p>
+              <a
+                href="/termos-de-uso"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700"
+              >
+                <span>Ler Termos de Uso</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+
+            <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <h4 className="font-bold text-slate-800 text-sm">Política de Privacidade</h4>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                  {currentUser?.privacyVersionAccepted ? `v${currentUser.privacyVersionAccepted} • Ciente` : 'Vigente'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Tratamento de dados pessoais, salvaguardas de sigilo para prontuários de saúde e divisão de papéis da LGPD.
+              </p>
+              <a
+                href="/privacidade"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-700"
+              >
+                <span>Ler Política de Privacidade</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+
+          {/* Papéis de Controlador e Operador */}
+          <div className="p-4 rounded-2xl border border-indigo-100 bg-indigo-50/50 space-y-2">
+            <h4 className="font-bold text-indigo-900 text-xs flex items-center gap-1.5">
+              <Building2 className="w-4 h-4 text-indigo-600" />
+              Papéis da sua Clínica e da Plataforma na LGPD
+            </h4>
+            <p className="text-xs text-indigo-800 leading-relaxed">
+              Sua clínica atua como <strong>Controladora</strong> dos dados de pacientes e registros médicos, cabendo aos seus profissionais garantir o sigilo técnico e a legitimidade das anotações. O Zemda opera como <strong>Operador</strong> de infraestrutura tecnológica, garantindo isolamento lógico de banco de dados, criptografia e auditabilidade.
+            </p>
+          </div>
+
+          {/* Cookies e Preferências */}
+          <div className="p-4 rounded-2xl border border-slate-200 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Cookie className="w-4 h-4 text-amber-600" />
+                <h4 className="font-bold text-slate-800 text-xs">Preferências de Cookies e Rastreamento</h4>
+              </div>
+              <button
+                type="button"
+                onClick={openCookiePreferencesModal}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer self-start sm:self-auto"
+              >
+                Gerenciar Preferências de Cookies
+              </button>
+            </div>
+            <p className="text-xs text-slate-600">
+              Revise o consentimento de cookies a qualquer momento. Lembramos que o Zemda não comercializa dados nem envia dados clínicos de pacientes para serviços de terceiros.
+            </p>
+          </div>
+
+          {/* Canal do DPO */}
+          <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
+            <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+              <Mail className="w-4 h-4 text-slate-600" />
+              Canal de Atendimento ao Titular e Encarregado de Dados (DPO)
+            </h4>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Para exercer direitos como titular ou solicitar esclarecimentos adicionais sobre a proteção de dados na plataforma:
+            </p>
+            <p className="font-mono text-xs font-bold text-indigo-600">
+              privacidade@zemda.com.br • dpo@zemda.com.br
+            </p>
+          </div>
         </div>
       )}
     </div>

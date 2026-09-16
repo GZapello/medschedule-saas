@@ -214,12 +214,14 @@ api.get('/v1/public/download-android', (req, res) => {
 // ==========================================
 api.use(authMiddleware);
 api.use(tenantMiddleware);
-api.use(subscriptionGate);
 
-// Perfil autenticado (Acesso pessoal para qualquer usuário do sistema)
+// Perfil autenticado & Aceite Legal (Acesso pessoal para qualquer usuário do sistema)
 api.get('/v1/auth/me', AuthController.me);
+api.post('/v1/auth/accept-legal', AuthController.acceptLegal);
 api.put('/v1/auth/profile/password', AuthController.updateProfilePassword);
 api.put('/v1/auth/profile/email', AuthController.updateProfileEmail);
+
+api.use(subscriptionGate);
 
 // Tenants & Configurações da Clínica
 api.get('/v1/tenants/current', requireTenant, TenantController.getCurrent);

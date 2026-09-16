@@ -9,6 +9,7 @@ estokei/
 .gemini/
 *.log
 *.sqlite
+*.db*
 saas_schedule.db*
 
 # Builds e Temporários

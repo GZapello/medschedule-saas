@@ -12,6 +12,10 @@ if (!fs.existsSync(dbDir)) {
 }
 const rawDb = new DatabaseSync(dbPath);
 
+export const CURRENT_TERMS_VERSION = '2026.1';
+export const CURRENT_PRIVACY_VERSION = '2026.1';
+
+
 // Configurações de alta performance e integridade referencial
 rawDb.exec('PRAGMA journal_mode = WAL;');
 rawDb.exec('PRAGMA foreign_keys = ON;');
@@ -126,6 +130,8 @@ export function initializeDatabase(): void {
     addColIfMissing('tenants', 'terms_accepted_at', 'TEXT');
     addColIfMissing('tenants', 'privacy_accepted', 'INTEGER DEFAULT 1');
     addColIfMissing('tenants', 'privacy_accepted_at', 'TEXT');
+    addColIfMissing('tenants', 'terms_version', 'TEXT');
+    addColIfMissing('tenants', 'privacy_version', 'TEXT');
     addColIfMissing('tenants', 'rejection_reason', 'TEXT');
     addColIfMissing('tenants', 'street', 'TEXT');
     addColIfMissing('tenants', 'number', 'TEXT');
@@ -136,6 +142,29 @@ export function initializeDatabase(): void {
     addColIfMissing('tenants', 'whatsapp', 'TEXT');
     addColIfMissing('tenants', 'website', 'TEXT');
     addColIfMissing('tenants', 'description', 'TEXT');
+
+    // Tabela e índices de Aceite Legal (Termos de Uso e Política de Privacidade / LGPD)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS legal_acceptances (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          clinic_id TEXT NOT NULL,
+          terms_version TEXT NOT NULL,
+          privacy_version TEXT NOT NULL,
+          marketing_opt_in INTEGER DEFAULT 0,
+          accepted_at TEXT NOT NULL DEFAULT (datetime('now')),
+          ip_address TEXT,
+          user_agent TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances (user_id);
+        CREATE INDEX IF NOT EXISTS idx_legal_acceptances_clinic ON legal_acceptances (clinic_id);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabela legal_acceptances:', e);
+    }
+    addColIfMissing('legal_acceptances', 'marketing_opt_in', 'INTEGER DEFAULT 0');
 
     // Controle Administrativo Global (Banimento e Bloqueio de Cadastros)
     addColIfMissing('tenants', 'registrations_blocked', 'INTEGER DEFAULT 0');
@@ -156,6 +185,10 @@ export function initializeDatabase(): void {
     addColIfMissing('users', 'practice_areas', 'TEXT');
     addColIfMissing('users', 'registration_type', 'TEXT');
     addColIfMissing('users', 'registration_number', 'TEXT');
+    addColIfMissing('users', 'terms_version_accepted', 'TEXT');
+    addColIfMissing('users', 'privacy_version_accepted', 'TEXT');
+    addColIfMissing('users', 'terms_accepted_at', 'TEXT');
+    addColIfMissing('users', 'privacy_accepted_at', 'TEXT');
     addColIfMissing('tenants', 'manager_profession', 'TEXT');
     addColIfMissing('tenants', 'manager_practice_areas', 'TEXT');
 

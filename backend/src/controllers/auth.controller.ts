@@ -2,7 +2,7 @@ import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { requireOpenRegistration } from '../services/clinic-control.service';
-import { db } from '../config/database';
+import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/database';
 import { comparePassword, hashPassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { logAudit } from '../middlewares/audit.middleware';
@@ -19,7 +19,8 @@ export class AuthController {
       }
 
       const userStmt = db.prepare(`
-        SELECT id, tenant_id, name, email, password_hash, role, phone, avatar_url, status
+        SELECT id, tenant_id, name, email, password_hash, role, phone, avatar_url, status,
+               terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at
         FROM users
         WHERE email = ?
       `);
@@ -33,6 +34,10 @@ export class AuthController {
         phone: string | null;
         avatar_url: string | null;
         status: string;
+        terms_version_accepted?: string | null;
+        privacy_version_accepted?: string | null;
+        terms_accepted_at?: string | null;
+        privacy_accepted_at?: string | null;
       } | undefined;
 
       if (!user) {
@@ -284,6 +289,11 @@ export class AuthController {
         Number(cuRow?.zemda_fono_enabled) === 1
       );
 
+      const needsLegalAcceptance = user.role !== 'superadmin' && (
+        user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
+        user.privacy_version_accepted !== CURRENT_PRIVACY_VERSION
+      );
+
       res.json({
         token,
         user: {
@@ -296,6 +306,11 @@ export class AuthController {
           avatarUrl: user.avatar_url,
           tenantId: user.tenant_id,
           needsOnboarding,
+          needsLegalAcceptance,
+          termsVersionAccepted: user.terms_version_accepted || null,
+          privacyVersionAccepted: user.privacy_version_accepted || null,
+          termsAcceptedAt: user.terms_accepted_at || null,
+          privacyAcceptedAt: user.privacy_accepted_at || null,
           professionalId: profDetails?.professional_id,
           professionId: profDetails?.profession_id,
           professionName: profDetails?.profession_name,
@@ -329,7 +344,8 @@ export class AuthController {
       }
 
       const userStmt = db.prepare(`
-        SELECT id, tenant_id, name, email, role, phone, avatar_url, status
+        SELECT id, tenant_id, name, email, role, phone, avatar_url, status,
+               terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at
         FROM users
         WHERE id = ?
       `);
@@ -504,6 +520,11 @@ export class AuthController {
         Number(cuRow?.zemda_fono_enabled) === 1
       );
 
+      const needsLegalAcceptance = user.role !== 'superadmin' && (
+        user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
+        user.privacy_version_accepted !== CURRENT_PRIVACY_VERSION
+      );
+
       res.json({
         user: {
           id: user.id,
@@ -515,6 +536,11 @@ export class AuthController {
           avatarUrl: user.avatar_url,
           tenantId: user.tenant_id,
           needsOnboarding,
+          needsLegalAcceptance,
+          termsVersionAccepted: user.terms_version_accepted || null,
+          privacyVersionAccepted: user.privacy_version_accepted || null,
+          termsAcceptedAt: user.terms_accepted_at || null,
+          privacyAcceptedAt: user.privacy_accepted_at || null,
           professionalId: profDetails?.professional_id,
           professionId: profDetails?.profession_id,
           professionName: profDetails?.profession_name,
@@ -537,6 +563,79 @@ export class AuthController {
       if (respondBillingError(res, err)) return;
       console.error('[AuthController.me] Erro:', err);
       res.status(500).json({ error: 'Erro ao consultar usuário autenticado' });
+    }
+  }
+
+  // 1.1 Aceite de Novos Termos de Uso e Política de Privacidade (Re-aceite em atualizações materiais)
+  static async acceptLegal(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const { termsAccepted, privacyAccepted } = req.body;
+
+      if (!termsAccepted || !privacyAccepted) {
+        res.status(400).json({ error: 'É obrigatório aceitar os Termos de Uso e a Política de Privacidade' });
+        return;
+      }
+
+      const userId = req.user.userId;
+      const tenantId = req.user.tenantId;
+
+      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || null;
+      const userAgent = (req.headers['user-agent'] as string) || null;
+      const acceptanceId = 'la-' + uuidv4().slice(0, 8);
+
+      db.prepare(`
+        INSERT INTO legal_acceptances (
+          id, user_id, clinic_id, terms_version, privacy_version, accepted_at, ip_address, user_agent, created_at
+        ) VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
+      `).run(
+        acceptanceId,
+        userId,
+        tenantId || 'global',
+        CURRENT_TERMS_VERSION,
+        CURRENT_PRIVACY_VERSION,
+        ipAddress,
+        userAgent
+      );
+
+      db.prepare(`
+        UPDATE users
+        SET terms_version_accepted = ?, privacy_version_accepted = ?,
+            terms_accepted_at = datetime('now'), privacy_accepted_at = datetime('now'),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `).run(CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION, userId);
+
+      if (tenantId) {
+        db.prepare(`
+          UPDATE tenants
+          SET terms_version = ?, privacy_version = ?,
+              terms_accepted = 1, terms_accepted_at = datetime('now'),
+              privacy_accepted = 1, privacy_accepted_at = datetime('now'),
+              updated_at = datetime('now')
+          WHERE id = ?
+        `).run(CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION, tenantId);
+      }
+
+      logAudit(req, 'LEGAL_ACCEPTANCE', 'users', userId, {
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION
+      });
+
+      res.json({
+        success: true,
+        message: 'Termos de Uso e Política de Privacidade aceitos com sucesso.',
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION,
+        needsLegalAcceptance: false
+      });
+    } catch (err: any) {
+      console.error('[AuthController.acceptLegal] Erro:', err);
+      res.status(500).json({ error: 'Erro ao registrar aceite legal' });
     }
   }
 

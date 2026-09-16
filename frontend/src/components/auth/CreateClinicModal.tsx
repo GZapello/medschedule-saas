@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ApiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import {
   Building2,
@@ -14,7 +15,8 @@ import {
   ShieldCheck,
   FileText,
   Award,
-  Briefcase
+  Briefcase,
+  ExternalLink
 } from 'lucide-react';
 
 interface CreateClinicModalProps {
@@ -24,10 +26,12 @@ interface CreateClinicModalProps {
 
 export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, onClose }) => {
   const { showToast } = useToast();
+  const { loginWithToken } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [searchingCep, setSearchingCep] = useState(false);
   const [successData, setSuccessData] = useState<{ clinicId: string; slug: string; message: string } | null>(null);
+  const [marketingAccepted, setMarketingAccepted] = useState(false);
 
   const [formData, setFormData] = useState({
     responsibleName: '',
@@ -230,14 +234,28 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         state: formData.state,
         termsAccepted: formData.termsAccepted,
         privacyAccepted: formData.privacyAccepted,
+        marketingAccepted: marketingAccepted,
         managerProfession: formData.managerProfession,
         managerPracticeAreas: formData.managerPracticeAreas || undefined,
         managerRegistrationType: formData.managerProfession !== 'Apenas Gestão / Administrativo' ? formData.managerRegistrationType : undefined,
         managerRegistrationNumber: formData.managerProfession !== 'Apenas Gestão / Administrativo' ? formData.managerRegistrationNumber : undefined
       });
 
+      if (data.token && data.user) {
+        // Autenticação automática segura através do token de sessão retornado
+        loginWithToken(data.token, data.user, data.tenant);
+        showToast('Cadastro realizado com sucesso! Redirecionando para escolha do plano...', 'success');
+        onClose();
+        // Redireciona diretamente para /assinatura
+        window.history.pushState(null, '', '/assinatura');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'subscription' } }));
+        return;
+      }
+
+      // Fallback gracioso se a sessão não puder ser gerada automaticamente
       setSuccessData(data);
-      showToast('Cadastro realizado com sucesso!', 'success');
+      showToast('Cadastro realizado com sucesso! Faça login para continuar.', 'info');
     } catch (err: any) {
       showToast(err.message || 'Erro ao cadastrar clínica', 'error');
     } finally {
@@ -617,31 +635,67 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                 </div>
               </div>
 
-              {/* Seção 3: Termos e Condições */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
-                <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+              {/* Seção 3: Aceite Legal Obrigatório (Termos e LGPD) */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <label className="flex items-start gap-2.5 text-xs text-slate-800 cursor-pointer">
                   <input
                     type="checkbox"
+                    required
                     checked={formData.termsAccepted}
                     onChange={e => setFormData({ ...formData, termsAccepted: e.target.checked })}
                     className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                   />
                   <span>
-                    Declaro que li e concordo com os <strong>Termos de Uso</strong> da plataforma Zemda e que sou autorizado a responder por esta clínica.
+                    Li e aceito os{' '}
+                    <a
+                      href="/termos-de-uso"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold text-indigo-600 underline hover:text-indigo-700 inline-flex items-center gap-0.5"
+                    >
+                      Termos de Uso
+                      <ExternalLink className="w-3 h-3" />
+                    </a>{' '}
+                    *
                   </span>
                 </label>
 
-                <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+                <label className="flex items-start gap-2.5 text-xs text-slate-800 cursor-pointer">
                   <input
                     type="checkbox"
+                    required
                     checked={formData.privacyAccepted}
                     onChange={e => setFormData({ ...formData, privacyAccepted: e.target.checked })}
                     className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
                   />
                   <span>
-                    Concordo com a <strong>Política de Privacidade e Proteção de Dados (LGPD)</strong>, ciente do sigilo médico e isolamento seguro de dados.
+                    Li e estou ciente da{' '}
+                    <a
+                      href="/privacidade"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold text-indigo-600 underline hover:text-indigo-700 inline-flex items-center gap-0.5"
+                    >
+                      Política de Privacidade e Proteção de Dados
+                      <ExternalLink className="w-3 h-3" />
+                    </a>{' '}
+                    *
                   </span>
                 </label>
+
+                <div className="pt-2 border-t border-slate-200">
+                  <label className="flex items-start gap-2.5 text-xs text-slate-500 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={marketingAccepted}
+                      onChange={e => setMarketingAccepted(e.target.checked)}
+                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>
+                      (Opcional) Desejo receber comunicações sobre novidades, recursos de IA e atualizações da plataforma Zemda.
+                    </span>
+                  </label>
+                </div>
               </div>
 
               {/* Botões */}

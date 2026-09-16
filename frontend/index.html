@@ -33,13 +33,40 @@
     <!-- Google Search Console Placeholder (Injetado dinamicamente no backend ou via env) -->
     <!-- %GOOGLE_SITE_VERIFICATION_TAG% -->
 
-    <!-- Google Analytics 4 (GA4) Global Tag -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QFFJ7Y25ML"></script>
+    <!-- Google Consent Mode v2 & Google Analytics 4 (GA4) -->
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
+
+      // Padrão de privacidade: todas as categorias não essenciais desativadas (denied)
+      gtag('consent', 'default', {
+        'analytics_storage': 'denied',
+        'ad_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied'
+      });
+
+      // Restaura consentimento prévio salvo no navegador, se houver
+      try {
+        var rawConsent = localStorage.getItem('zemda_cookie_consent');
+        if (rawConsent) {
+          var parsedConsent = JSON.parse(rawConsent);
+          if (parsedConsent && parsedConsent.analytics === true) {
+            gtag('consent', 'update', {
+              'analytics_storage': 'granted'
+            });
+          }
+        }
+      } catch (e) {}
+    </script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QFFJ7Y25ML"></script>
+    <script>
       gtag('js', new Date());
       gtag('config', 'G-QFFJ7Y25ML');
+      gtag('set', {
+        anonymize_ip: true,
+        restricted_data_processing: true
+      });
     </script>
 
     <!-- Schema.org Dados Estruturados (JSON-LD) -->
