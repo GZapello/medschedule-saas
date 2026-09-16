@@ -1,3 +1,4 @@
+import { resolveClinicalModule } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,9 +29,9 @@ export class DocumentsController {
       WHERE p.id = ? AND p.tenant_id = ?
     `).get(appt.service_id, appt.professional_id, req.tenantId) as any;
 
-    let moduleType = appt.clinical_module || null;
+    let moduleType = resolveClinicalModule(appt, req.tenantId);
     if (!moduleType) {
-      const existingRec = db.prepare('SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL LIMIT 1').get(appt.id, req.tenantId) as { module_type?: string } | undefined;
+      const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(appt.id, req.tenantId) as { module_type?: string } | undefined;
       if (existingRec?.module_type) {
         moduleType = existingRec.module_type;
       }
@@ -417,6 +418,8 @@ export class DocumentsController {
       }
       const saved = db.prepare('SELECT * FROM consultation_completions WHERE appointment_id=? AND tenant_id=?').get(appointmentId, tenantId) as any;
 
+      appt.clinical_module = resolveClinicalModule(appt, tenantId);
+
       // Validação anti-conflito de módulos clínicos no mesmo atendimento
       if (evolution?.moduleType) {
         if (appt.clinical_module && appt.clinical_module !== evolution.moduleType) {
@@ -425,7 +428,7 @@ export class DocumentsController {
           });
           return;
         }
-        const existingRec = db.prepare('SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL LIMIT 1').get(appointmentId, tenantId) as { module_type?: string } | undefined;
+        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(appointmentId, tenantId) as { module_type?: string } | undefined;
         if (existingRec?.module_type && existingRec.module_type !== evolution.moduleType) {
           res.status(409).json({
             error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
@@ -438,7 +441,7 @@ export class DocumentsController {
         ZemdaNutri: isNutritionistOrClinicManager, ZemdaTO: isOccupationalTherapistOrClinicManager,
         ZemdaFono: isSpeechTherapistOrClinicManager, ZemdaOdonto: isDentistOrClinicManager, ZemdaFisio: isPhysiotherapistOrClinicManager
       };
-      if (evolution?.moduleType && (!moduleAccess[evolution.moduleType] || !moduleAccess[evolution.moduleType](req))) {
+      if (evolution?.moduleType && evolution.moduleType !== 'general' && (!moduleAccess[evolution.moduleType] || !moduleAccess[evolution.moduleType](req))) {
         res.status(403).json({ error: 'Sem permissão para este módulo clínico.' }); return;
       }
 
@@ -480,6 +483,9 @@ export class DocumentsController {
 
       // Inicia transação atômica
       db.exec('BEGIN IMMEDIATE');
+
+      db.prepare("UPDATE appointments SET clinical_module = COALESCE(NULLIF(clinical_module, 'ZemdaBody'), ?) WHERE id=? AND tenant_id=?")
+        .run(appt.clinical_module || evolution?.moduleType || null, appointmentId, tenantId);
 
       if (!saved) {
 

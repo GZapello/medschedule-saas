@@ -25,11 +25,13 @@ export function AppointmentConsultation({
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
 
-  const effectiveModuleType = appointment.clinical_module || initialModuleType || status?.moduleType;
+  const effectiveModuleType = status?.moduleType ||
+    (appointment.clinical_module !== 'ZemdaBody' ? appointment.clinical_module : undefined) ||
+    (initialModuleType !== 'ZemdaBody' ? initialModuleType : undefined);
 
   // Aba ativa da consulta: 'records' (Prontuário/Evolução), 'specialized' (Módulo Especializado), 'zemda_body' (ZemdaBody)
   const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>(() => {
-    if (effectiveModuleType === 'ZemdaBody') return 'zemda_body';
+    if (appointment.clinical_module === 'ZemdaBody' || initialModuleType === 'ZemdaBody') return 'zemda_body';
     if (['ZemdaOdonto', 'ZemdaNutri', 'ZemdaTO', 'ZemdaFono'].includes(effectiveModuleType)) return 'specialized';
     return 'records';
   });

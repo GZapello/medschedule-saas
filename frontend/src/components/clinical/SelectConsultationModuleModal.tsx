@@ -194,7 +194,7 @@ export function getCompatibleClinicalModules(auth: {
   result.push(ALL_CLINICAL_MODULES.general);
 
   // Recurso Clínico Complementar: ZemdaBody
-  result.push(ALL_CLINICAL_MODULES.ZemdaBody);
+  // Disponível dentro do atendimento, sem ocupar o módulo principal.
 
   return result;
 }

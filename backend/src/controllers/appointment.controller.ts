@@ -1,3 +1,4 @@
+import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { canOperate, BillingService } from '../services/billing.service';
 import { db } from '../config/database';
@@ -415,7 +416,7 @@ export class AppointmentController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { status, reason, cancellationReasonCategory, clinicalModule, professionId } = req.body;
+      const { status, reason, cancellationReasonCategory, clinicalModule: requestedModule, professionId } = req.body;
 
       const allowedStatuses = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled'];
       if (!allowedStatuses.includes(status)) {
@@ -423,11 +424,14 @@ export class AppointmentController {
         return;
       }
 
-      const current = db.prepare('SELECT status, clinical_module, professional_id, profession_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { status: string; clinical_module?: string; professional_id?: string; profession_id?: string } | undefined;
+      const current = db.prepare('SELECT id, status, clinical_module, professional_id, profession_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { status: string; clinical_module?: string; professional_id?: string; profession_id?: string } | undefined;
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
       }
+
+      current.clinical_module = resolveClinicalModule(current, tenantId) || undefined;
+      const clinicalModule = isPrimaryClinicalModule(requestedModule) ? requestedModule : current.clinical_module;
 
       // Regra: Bloqueia tentativa de alterar para módulo conflitante no mesmo atendimento
       if (current.clinical_module && clinicalModule && current.clinical_module !== clinicalModule) {
@@ -439,7 +443,7 @@ export class AppointmentController {
 
       // Verifica se já existe evolução salva em outro módulo para este agendamento
       if (clinicalModule) {
-        const existingRec = db.prepare('SELECT module_type FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL LIMIT 1').get(id, tenantId) as { module_type: string } | undefined;
+        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(id, tenantId) as { module_type: string } | undefined;
         if (existingRec && existingRec.module_type && existingRec.module_type !== clinicalModule) {
           res.status(409).json({
             error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
@@ -471,7 +475,7 @@ export class AppointmentController {
           cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END,
           cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END,
           cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END,
-          clinical_module = COALESCE(clinical_module, ?),
+          clinical_module = COALESCE(NULLIF(clinical_module, 'ZemdaBody'), ?),
           profession_id = COALESCE(profession_id, ?),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
