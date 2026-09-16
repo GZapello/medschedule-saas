@@ -29,7 +29,9 @@ import {
   Smile,
   Apple,
   Hand,
-  Mic
+  Mic,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
@@ -86,6 +88,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   // Records state
   const [records, setRecords] = useState<any[]>([]);
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
   const [showNewRecord, setShowNewRecord] = useState<boolean>(false);
   const [newRecordData, setNewRecordData] = useState({ title: 'Evolução Clínica', clinicalEvolution: '', technicalNotes: '', isSealed: false });
 
@@ -1178,37 +1181,125 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {records.map(r => (
-                    <div key={r.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2 text-xs">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                        <div>
-                          <span className="font-bold text-slate-900 text-sm">{r.title}</span>
-                          <span className="text-slate-400 ml-2">({r.session_date})</span>
+                  {records.map(r => {
+                    const isExpanded = expandedRecordId === r.id;
+
+                    return (
+                      <div
+                        key={r.id}
+                        className={`bg-white rounded-2xl border transition-all duration-200 shadow-xs text-xs ${
+                          isExpanded ? 'border-indigo-300 ring-2 ring-indigo-100 p-5' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/60 p-4'
+                        }`}
+                      >
+                        {/* CABEÇALHO COMPACTO: Data, profissional, módulo, procedimento, status e botão */}
+                        <div
+                          onClick={() => setExpandedRecordId(prev => prev === r.id ? null : r.id)}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              {/* Data */}
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-lg">
+                                <Calendar className="w-3 h-3 text-slate-500" />
+                                {r.session_date ? new Date(r.session_date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                              </span>
+
+                              {/* Módulo / Especialidade */}
+                              {r.module_type === 'ZemdaOdonto' && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200">
+                                  <Smile className="w-3 h-3 text-cyan-700" /> ZemdaOdonto
+                                </span>
+                              )}
+                              {r.module_type === 'ZemdaNutri' && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-lime-100 text-lime-800 border border-lime-200">
+                                  <Apple className="w-3 h-3 text-lime-700" /> ZemdaNutri
+                                </span>
+                              )}
+                              {r.module_type === 'ZemdaTO' && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                  <Hand className="w-3 h-3 text-amber-700" /> ZemdaTO
+                                </span>
+                              )}
+                              {r.module_type === 'ZemdaFono' && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                                  <Mic className="w-3 h-3 text-purple-700" /> ZemdaFono
+                                </span>
+                              )}
+                              {r.module_type === 'ZemdaFisio' && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
+                                  <Activity className="w-3 h-3 text-teal-700" /> ZemdaFisio
+                                </span>
+                              )}
+                              {(!r.module_type || r.module_type === 'general') && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  Geral / Clínico
+                                </span>
+                              )}
+
+                              {/* Status */}
+                              {r.is_sealed === 1 ? (
+                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                  Lacrado
+                                </span>
+                              ) : (
+                                <span className="bg-slate-100 text-slate-600 text-[10px] font-medium px-2 py-0.5 rounded-full">
+                                  Finalizado
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Procedimento e Profissional */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-slate-900 text-sm">{r.title}</span>
+                              <span className="text-slate-300 hidden sm:inline">•</span>
+                              <span className="text-slate-500 font-medium text-[11px]">
+                                Profissional: {r.professional_name} ({r.registration_type || 'CRM'} {r.registration_number || ''})
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Botão Ver detalhes / Seta */}
+                          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedRecordId(prev => prev === r.id ? null : r.id);
+                              }}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
+                                isExpanded
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                              }`}
+                            >
+                              <span>{isExpanded ? 'Recolher' : 'Ver detalhes'}</span>
+                              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {r.is_sealed === 1 && (
-                            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                              Lacrado
-                            </span>
-                          )}
-                          <span className="text-slate-500 font-medium">
-                            {r.professional_name} ({r.registration_type || 'CRM'} {r.registration_number || ''})
-                          </span>
-                        </div>
+
+                        {/* DETALHES EXPANDIDOS */}
+                        {isExpanded && (
+                          <div className="mt-3 pt-3 border-t border-slate-100 space-y-2.5">
+                            <div>
+                              <span className="font-bold text-slate-700 block mb-0.5">Evolução Clínica:</span>
+                              <div className="text-slate-700 whitespace-pre-wrap leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                {r.clinical_evolution || 'Sem anotações de evolução.'}
+                              </div>
+                            </div>
+                            {r.technical_notes && (
+                              <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-slate-500 italic">
+                                Notas Técnicas: {r.technical_notes}
+                              </div>
+                            )}
+                            <div className="pt-2 border-t border-slate-100">
+                              <ClinicalSnapshot record={r} />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-slate-700 whitespace-pre-wrap leading-relaxed py-1">
-                        {r.clinical_evolution || 'Sem anotações de evolução.'}
-                      </div>
-                      {r.technical_notes && (
-                        <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-slate-500 italic">
-                          Notas Técnicas: {r.technical_notes}
-                        </div>
-                      )}
-                      <div className="pt-2 border-t border-slate-100">
-                        <ClinicalSnapshot record={r} />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

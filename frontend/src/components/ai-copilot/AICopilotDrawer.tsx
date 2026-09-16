@@ -89,10 +89,14 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingStatus, setLoadingStatus] = useState<string>('Processando...');
 
-  // Speech Recognition & Ditado
+  // Speech Recognition & Ditado por Voz
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordedDraft, setRecordedDraft] = useState<string>('');
   const recognitionRef = useRef<any>(null);
+  const isRecordingRef = useRef<boolean>(false);
+  const initialVoiceTextRef = useRef<string>('');
+  const sessionFinalRef = useRef<string>('');
+  const activeTabRef = useRef<string>(activeTab);
 
   // Ferramenta "Melhorar com IA"
   const [improveMode, setImproveMode] = useState<string>('technical');
@@ -137,92 +141,160 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     }
   }, [isOpen, activePatientId]);
 
-  // Speech Recognition setup (sem duplicação de frases ou múltiplos listeners)
-  const baseVoiceTextRef = useRef<string>('');
-
+  // Mantém activeTabRef sempre sincronizado para o motor de voz
   useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'pt-BR';
-
-    recognition.onresult = (event: any) => {
-      let newlyFinal = '';
-      let currentInterim = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i];
-        const text = (res[0]?.transcript || '').trim();
-        if (res.isFinal) {
-          if (text) {
-            newlyFinal += (newlyFinal ? ' ' : '') + text;
-          }
-        } else {
-          currentInterim += (currentInterim ? ' ' : '') + text;
-        }
-      }
-
-      if (newlyFinal) {
-        baseVoiceTextRef.current = (baseVoiceTextRef.current ? baseVoiceTextRef.current + ' ' : '') + newlyFinal;
-      }
-
-      const fullText = (baseVoiceTextRef.current + (currentInterim ? ' ' + currentInterim : '')).trim();
-      if (activeTab === 'audio_draft') {
-        setRecordedDraft(fullText);
-      } else {
-        setInput(fullText);
-      }
-    };
-
-    recognition.onerror = (event: any) => {
-      if (event.error !== 'no-speech') {
-        setIsRecording(false);
-        showToast(`Erro no reconhecimento de voz: ${event.error}`, 'error');
-      }
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      try {
-        recognition.abort();
-      } catch (_) {}
-    };
+    activeTabRef.current = activeTab;
   }, [activeTab]);
 
-  const toggleRecording = () => {
-    if (!recognitionRef.current) {
+  const stopVoiceSession = useCallback(() => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onend = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.stop();
+      } catch (_) {}
+      recognitionRef.current = null;
+    }
+  }, []);
+
+  const startVoiceSession = useCallback(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
       showToast('Reconhecimento de voz não suportado neste navegador. Recomendamos Google Chrome ou Edge.', 'info');
       return;
     }
 
-    if (isRecording) {
+    // Encerra qualquer sessão residual
+    stopVoiceSession();
+
+    const currentTab = activeTabRef.current;
+    const currentBase = (currentTab === 'audio_draft' ? recordedDraft : input).trim();
+    initialVoiceTextRef.current = currentBase;
+    sessionFinalRef.current = '';
+    isRecordingRef.current = true;
+    setIsRecording(true);
+
+    const initRecognition = () => {
+      if (!isRecordingRef.current) return;
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'pt-BR';
+      rec.maxAlternatives = 1;
+
+      rec.onresult = (event: any) => {
+        let finals = '';
+        let interims = '';
+
+        for (let i = 0; i < event.results.length; i++) {
+          const res = event.results[i];
+          const text = (res[0]?.transcript || '').trim();
+          if (!text) continue;
+          if (res.isFinal) {
+            finals += (finals ? ' ' : '') + text;
+          } else {
+            interims += (interims ? ' ' : '') + text;
+          }
+        }
+
+        sessionFinalRef.current = finals;
+
+        const base = initialVoiceTextRef.current;
+        let combined = base;
+        if (finals) combined += (combined ? ' ' : '') + finals;
+        if (interims) combined += (combined ? ' ' : '') + interims;
+
+        if (activeTabRef.current === 'audio_draft') {
+          setRecordedDraft(combined);
+        } else {
+          setInput(combined);
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        if (event.error === 'no-speech') {
+          // Pausa normal do usuário ao falar; mantém ativo
+          return;
+        }
+        if (event.error === 'not-allowed') {
+          isRecordingRef.current = false;
+          setIsRecording(false);
+          showToast('Permissão de microfone negada. Habilite o acesso ao microfone no navegador.', 'error');
+          return;
+        }
+        if (event.error === 'network') {
+          isRecordingRef.current = false;
+          setIsRecording(false);
+          showToast('Falha de rede na transcrição de voz. Verifique sua conexão.', 'error');
+          return;
+        }
+        if (event.error !== 'aborted') {
+          console.warn('[AICopilotDrawer] Aviso no microfone:', event.error);
+        }
+      };
+
+      rec.onend = () => {
+        if (isRecordingRef.current) {
+          // Se o navegador finalizou por silêncio mas o usuário ainda quer gravar:
+          if (sessionFinalRef.current) {
+            const base = initialVoiceTextRef.current;
+            initialVoiceTextRef.current = (base ? base + ' ' : '') + sessionFinalRef.current;
+            sessionFinalRef.current = '';
+          }
+          try {
+            initRecognition();
+          } catch (_) {
+            isRecordingRef.current = false;
+            setIsRecording(false);
+          }
+        } else {
+          setIsRecording(false);
+        }
+      };
+
       try {
-        recognitionRef.current.stop();
-      } catch (_) {}
-      setIsRecording(false);
-      showToast('Gravação pausada.', 'info');
-    } else {
-      try {
-        baseVoiceTextRef.current = activeTab === 'audio_draft' ? recordedDraft.trim() : input.trim();
-        recognitionRef.current.start();
-        setIsRecording(true);
-        showToast('Captando áudio em português...', 'info');
+        rec.start();
+        recognitionRef.current = rec;
       } catch (err) {
-        try {
-          recognitionRef.current.stop();
-        } catch (_) {}
+        console.warn('[AICopilotDrawer] Falha ao iniciar reconhecimento:', err);
+        isRecordingRef.current = false;
         setIsRecording(false);
       }
+    };
+
+    initRecognition();
+    showToast('Captando áudio em português...', 'info');
+  }, [input, recordedDraft, showToast, stopVoiceSession]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopVoiceSession();
+      // Consolida o texto final limpo
+      const base = initialVoiceTextRef.current;
+      const finals = sessionFinalRef.current;
+      const finalCombined = (base && finals ? `${base} ${finals}` : (finals || base)).trim();
+      if (activeTabRef.current === 'audio_draft') {
+        if (finalCombined) setRecordedDraft(finalCombined);
+      } else {
+        if (finalCombined) setInput(finalCombined);
+      }
+      showToast('Gravação finalizada.', 'info');
+    } else {
+      startVoiceSession();
     }
-  };
+  }, [isRecording, startVoiceSession, stopVoiceSession, showToast]);
+
+  // Se trocar de aba ou fechar, encerra a captação de voz
+  useEffect(() => {
+    return () => {
+      stopVoiceSession();
+    };
+  }, [activeTab, isOpen, stopVoiceSession]);
 
   // Iniciar nova conversa — gera conversationId para memória
   const initConversation = async (): Promise<string> => {

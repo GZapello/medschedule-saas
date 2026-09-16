@@ -125,7 +125,7 @@ export const TermsOfUseView: React.FC<TermsOfUseViewProps> = ({
               <span className="text-teal-400 font-mono">1.</span> Identificação do Serviço e Partes
             </h2>
             <p>
-              Estes Termos de Uso regulam o acesso e a utilização da plataforma tecnológica <strong>Zemda</strong>, doravante denominada simplesmente &ldquo;Zemda&rdquo; ou &ldquo;Plataforma&rdquo;, desenvolvida e operada por <strong>Zemda Tecnologia em Saúde</strong> (empresa com cadastro empresarial em estruturação: <em>[Razão Social e CNPJ a definir; Endereço institucional a definir]</em>, doravante &ldquo;Provedora&rdquo;).
+              Estes Termos de Uso regulam o acesso e a utilização da plataforma tecnológica <strong>Zemda</strong>, doravante denominada simplesmente &ldquo;Zemda&rdquo; ou &ldquo;Plataforma&rdquo;, desenvolvida e operada por <strong>Zemda Tecnologia em Saúde</strong>.
             </p>
             <p>
               A adesão a estes Termos aperfeiçoa-se no momento do cadastro de uma Clínica, Consultório ou Profissional de Saúde (doravante denominado &ldquo;Contratante&rdquo; ou &ldquo;Clínica&rdquo;) e de seus usuários autorizados (doravante &ldquo;Usuários&rdquo;).

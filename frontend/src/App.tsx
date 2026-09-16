@@ -489,7 +489,22 @@ const AppContent: React.FC = () => {
   }
 
   const callback = window.location.pathname.match(/^\/assinatura\/(sucesso|cancelada|expirada)\/?$/)?.[1];
-  if (callback || window.location.pathname === '/planos') return <BillingView publicPage={window.location.pathname === '/planos' || !currentUser} callback={callback} onBack={()=>window.location.assign('/')} />;
+  if (callback || window.location.pathname === '/planos') {
+    return (
+      <BillingView
+        publicPage={window.location.pathname === '/planos' || !currentUser}
+        callback={callback}
+        onBack={() => {
+          if (currentUser) {
+            window.history.replaceState(null, '', '/');
+            setCurrentView('dashboard');
+          } else {
+            window.location.assign('/');
+          }
+        }}
+      />
+    );
+  }
   // Se não estiver logado, exibe páginas de SEO de nicho, Landing Page ou Login
   if (!currentUser) {
     if (activeSeoSlug && SEO_PAGES[activeSeoSlug]) {

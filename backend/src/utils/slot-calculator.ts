@@ -48,7 +48,8 @@ export function calculateAvailableSlots(
   professionalId: string,
   serviceId: string,
   dateStr: string, // 'YYYY-MM-DD'
-  roomId?: string
+  roomId?: string,
+  mockNow?: Date
 ): AvailableSlot[] {
   // 1. Busca dados do serviço
   const serviceStmt = db.prepare(`
@@ -76,9 +77,11 @@ export function calculateAvailableSlots(
   const [targetYear, targetMonth, targetDay] = dateStr.split('-').map(Number);
   if (!targetYear || !targetMonth || !targetDay) return [];
 
+  const referenceDate = mockNow || new Date();
+
   // Data atual no fuso de Brasília
   const spDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' });
-  const todayStr = spDateFormatter.format(new Date()); // 'YYYY-MM-DD'
+  const todayStr = spDateFormatter.format(referenceDate); // 'YYYY-MM-DD'
 
   if (dateStr < todayStr) {
     return []; // Não permite agendar em dias passados
@@ -104,8 +107,8 @@ export function calculateAvailableSlots(
     return []; // Feriado cadastrado
   }
 
-  // 4. Obtém o dia da semana (0 = Domingo, 1 = Segunda, ..., 6 = Sábado)
-  const dayOfWeek = targetDate.getDay();
+  // 4. Obtém o dia da semana (0 = Domingo, 1 = Segunda, ..., 6 = Sábado) via UTC para imunidade a fuso da máquina
+  const dayOfWeek = new Date(Date.UTC(targetYear, targetMonth - 1, targetDay, 12, 0, 0)).getUTCDay();
 
   // 4b. Checa horários de funcionamento da clínica
   const tenantRow = db.prepare('SELECT business_hours_json FROM tenants WHERE id = ?').get(tenantId) as { business_hours_json?: string } | undefined;
@@ -214,17 +217,17 @@ export function calculateAvailableSlots(
 
   const isToday = dateStr === todayStr;
 
-  // Calcula os minutos atuais no fuso de Brasília (America/Sao_Paulo)
-  const spParts = new Intl.DateTimeFormat('en-US', {
+  // Calcula os minutos atuais no fuso de Brasília (America/Sao_Paulo) com hourCycle h23
+  const nowSpFormatted = new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false
-  }).formatToParts(new Date());
-  const spHour = Number(spParts.find(p => p.type === 'hour')?.value || 0);
-  const spMin = Number(spParts.find(p => p.type === 'minute')?.value || 0);
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  }).format(referenceDate);
+  const [spHStr, spMStr] = nowSpFormatted.split(':');
+  const spHour = parseInt(spHStr, 10) || 0;
+  const spMin = parseInt(spMStr, 10) || 0;
   const currentMinutesInDay = spHour * 60 + spMin;
-  const currentTotalMinutes = currentMinutesInDay + (minLeadHours * 60);
 
   const slotStep = totalSlotDuration > 0 ? totalSlotDuration : duration;
 
@@ -241,8 +244,9 @@ export function calculateAvailableSlots(
     for (let current = effectiveStartMin; current + duration <= effectiveEndMin; current += slotStep) {
       const slotEndMin = current + duration;
 
-      // Se for hoje, checa a antecedência mínima
-      if (isToday && current < currentTotalMinutes) {
+      // Se for hoje, filtra apenas horários que já passaram no relógio de Brasília.
+      // Horários futuros do mesmo turno (ex: agora 10:00 -> vaga 11:00) aparecem normalmente.
+      if (isToday && current < currentMinutesInDay) {
         continue;
       }
 

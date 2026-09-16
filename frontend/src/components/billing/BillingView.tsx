@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { CreditCard, Users, CheckCircle2, AlertCircle, ArrowUpRight } from 'lucide-react';
+import { CreditCard, Users, CheckCircle2, AlertCircle, ArrowUpRight, ArrowLeft } from 'lucide-react';
 
 const money=(v:number)=>Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const date=(v:string)=>v?new Date(v.slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—';
@@ -52,7 +52,35 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string;onBack?:
   };
   const saveProfile=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError('');try{const r=await ApiClient.put<any>('/v1/subscriptions/profile',profile);setNotice(r.message);setProfileOpen(false);}catch(e:any){setError(e.message);}finally{setBusy(false);}};
   const pending=summary?.status==='PAST_DUE';
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else if (currentUser) {
+      window.history.replaceState(null, '', '/');
+      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
+    } else {
+      window.location.assign('/');
+    }
+  };
+
   return <section className="max-w-6xl mx-auto space-y-6 p-4 sm:p-6">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <button
+        type="button"
+        onClick={handleBack}
+        className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition shadow-xs cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4 text-slate-500" />
+        Voltar ao Zemda
+      </button>
+      {currentUser && (
+        <span className="text-xs text-slate-500 font-medium">
+          Conectado como <strong className="text-slate-700">{currentUser.name || currentUser.email}</strong>
+        </span>
+      )}
+    </div>
+
     <header className="rounded-3xl bg-slate-900 text-white p-6 sm:p-8 flex flex-wrap items-center justify-between gap-4">
       <div><div className="text-indigo-300 text-xs font-bold uppercase tracking-wider mb-2">Zemda · Assinaturas</div><h1 className="text-2xl font-bold">Assinatura e Plano</h1><p className="text-slate-300 text-sm mt-2">Escolha o tamanho da sua equipe. Seus módulos continuam disponíveis conforme sua profissão.</p></div>
       <CreditCard className="w-10 h-10 text-indigo-300" />
@@ -100,7 +128,27 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string;onBack?:
       {error && <p role="alert" className="text-red-700">{error}</p>}
       <div className="flex gap-3 justify-end"><button type="button" disabled={busy} onClick={()=>setCancelOpen(false)} className="border px-3 py-2 rounded-lg">Voltar</button><button disabled={busy || confirmation!=='CANCELAR'} className="bg-red-700 text-white px-3 py-2 rounded-lg disabled:opacity-50">{busy?'Processando…':'Cancelar renovação'}</button></div>
     </form></div>}
-    <footer className="flex gap-4 text-sm text-slate-600">{onBack && <button onClick={onBack} className="underline">Voltar ao Zemda</button>}{currentUser?<button onClick={logout} className="underline">Sair da conta</button>:<a href="/assinatura" className="underline">Já tenho conta · Entrar</a>}</footer>
+    <footer className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-200 text-sm text-slate-600">
+      <button
+        type="button"
+        onClick={handleBack}
+        className="inline-flex items-center gap-1.5 font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Voltar ao Zemda
+      </button>
+      <div>
+        {currentUser ? (
+          <button onClick={logout} className="text-slate-500 hover:text-red-600 underline cursor-pointer">
+            Sair da conta
+          </button>
+        ) : (
+          <a href="/assinatura" className="underline hover:text-indigo-600">
+            Já tenho conta · Entrar
+          </a>
+        )}
+      </div>
+    </footer>
   </section>;
 };
 

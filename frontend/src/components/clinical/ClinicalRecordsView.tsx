@@ -24,7 +24,9 @@ import {
   Apple,
   Hand,
   Mic,
-  Activity
+  Activity,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 export const ClinicalRecordsView: React.FC = () => {
@@ -35,6 +37,7 @@ export const ClinicalRecordsView: React.FC = () => {
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [records, setRecords] = useState<ClinicalRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
 
   // Modal Nova Evolução
   const [showNewModal, setShowNewModal] = useState<boolean>(false);
@@ -246,16 +249,32 @@ export const ClinicalRecordsView: React.FC = () => {
           <div className="relative border-l-2 border-indigo-200 ml-4 pl-6 space-y-6">
             {records.map(r => {
               const editHistory = parseEditHistory(r.edit_history_json);
+              const isExpanded = expandedRecordId === r.id;
 
               return (
-                <div key={r.id} className="relative bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
+                <div
+                  key={r.id}
+                  className={`relative bg-white rounded-2xl border transition-all duration-200 shadow-xs ${
+                    isExpanded ? 'border-indigo-300 ring-2 ring-indigo-100 p-6' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/60 p-4 sm:p-5'
+                  }`}
+                >
                   {/* Timeline Dot */}
-                  <div className="absolute -left-[31px] top-6 w-4 h-4 rounded-full bg-indigo-600 border-4 border-white shadow-xs" />
+                  <div className={`absolute -left-[31px] top-5 w-4 h-4 rounded-full border-4 border-white shadow-xs transition-colors ${isExpanded ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-400'}`} />
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-3">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-bold text-slate-900 text-base">{r.title}</h4>
+                  {/* CABEÇALHO COMPACTO (Sempre visível: data, profissional, módulo, procedimento, status e seta) */}
+                  <div
+                    onClick={() => setExpandedRecordId(prev => prev === r.id ? null : r.id)}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                        {/* Data */}
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg">
+                          <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                          {r.session_date ? new Date(r.session_date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                        </span>
+
+                        {/* Especialidade / Módulo */}
                         {r.module_type === 'ZemdaOdonto' && (
                           <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200">
                             <Smile className="w-3 h-3 text-cyan-700" /> ZemdaOdonto
@@ -281,99 +300,138 @@ export const ClinicalRecordsView: React.FC = () => {
                             <Activity className="w-3 h-3 text-teal-700" /> ZemdaFisio
                           </span>
                         )}
-                        {r.is_sealed === 1 && (
-                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                            <Lock className="w-3 h-3" /> Prontuário Lacrado
+                        {(!r.module_type || r.module_type === 'general') && (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            Geral / Clínico
                           </span>
                         )}
+
+                        {/* Status */}
+                        {r.is_sealed === 1 ? (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                            <Lock className="w-3 h-3" /> Lacrado
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            <CheckCircle2 className="w-3 h-3 text-slate-400" /> Finalizado
+                          </span>
+                        )}
+
                         {editHistory.length > 0 && (
                           <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                            <History className="w-3 h-3" /> {editHistory.length} {editHistory.length === 1 ? 'edição registrada' : 'edições registradas'}
+                            <History className="w-3 h-3" /> {editHistory.length} {editHistory.length === 1 ? 'edição' : 'edições'}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        Atendido por <span className="font-semibold text-slate-700">{r.professional_name}</span> ({r.registration_number || 'Registro Geral'})
-                      </p>
-                    </div>
 
-                    <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg self-start sm:self-auto">
-                      Sessão em: {r.session_date ? new Date(r.session_date + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
-                    </span>
-                  </div>
-
-                  {/* Clinical Evolution Text */}
-                  <div className="space-y-3 text-xs text-slate-700 leading-relaxed">
-                    <div>
-                      <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1">
-                        Evolução da Sessão / Conduta Clínica
-                      </h5>
-                      <p className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 whitespace-pre-wrap font-sans text-slate-800">
-                        {r.clinical_evolution}
-                      </p>
-                    </div>
-
-                    {r.technical_notes && (
-                      <div>
-                        <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1">
-                          Anotações Técnicas & Encaminhamentos
-                        </h5>
-                        <p className="bg-teal-50/50 p-3 rounded-xl border border-teal-100 text-teal-900 whitespace-pre-wrap">
-                          {r.technical_notes}
+                      {/* Procedimento e Profissional */}
+                      <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                        <h4 className="font-bold text-slate-900 text-sm sm:text-base">{r.title}</h4>
+                        <span className="text-slate-300 hidden sm:inline">•</span>
+                        <p className="text-xs text-slate-500">
+                          Profissional: <span className="font-semibold text-slate-700">{r.professional_name}</span> {r.registration_number ? `(${r.registration_number})` : ''}
                         </p>
                       </div>
-                    )}
-
-                    <ClinicalSnapshot record={r} />
-                  </div>
-
-                  {/* AÇÕES CLÍNICAS: VISUALIZAR, EDITAR, BAIXAR PDF, IMPRIMIR */}
-                  <div className="pt-3 mt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
-                    <div className="text-[11px] text-slate-400">
-                      {currentTenant?.city && (
-                        <span>Local: <strong className="text-slate-600">{currentTenant.city}</strong></span>
-                      )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    {/* Botão lateral / Ícone: Ver detalhes / Seta */}
+                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                       <button
-                        onClick={() => setViewingRecord(r)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
-                        title="Visualizar detalhes completos da evolução"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedRecordId(prev => prev === r.id ? null : r.id);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
+                          isExpanded
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                        }`}
+                        title={isExpanded ? 'Recolher detalhes deste atendimento' : 'Ver detalhes completos deste atendimento'}
                       >
-                        <Eye className="w-3.5 h-3.5 text-slate-600" />
-                        <span>Visualizar</span>
-                      </button>
-
-                      {r.is_sealed !== 1 ? (
-                        <button
-                          onClick={() => handleStartEdit(r)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer"
-                          title="Editar evolução clínica com auditoria"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>Editar</span>
-                        </button>
-                      ) : (
-                        <span
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-400 bg-slate-50 border border-slate-200 rounded-xl cursor-not-allowed"
-                          title="Prontuário lacrado para validade jurídica não permite alteração de texto"
-                        >
-                          <Lock className="w-3 h-3 text-slate-400" />
-                          <span>Lacrado</span>
-                        </span>
-                      )}
-
-                      <button
-                        onClick={() => handlePrintRecord(r)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer shadow-xs"
-                        title="Imprimir ou baixar PDF em folha A4 oficial com cabeçalho da clínica"
-                      >
-                        <Printer className="w-3.5 h-3.5 text-teal-600" />
-                        <span>Imprimir / PDF</span>
+                        <span>{isExpanded ? 'Recolher' : 'Ver detalhes'}</span>
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
+
+                  {/* CONTEÚDO EXPANDIDO (Visível apenas quando selecionado) */}
+                  {isExpanded && (
+                    <div className="mt-5 pt-4 border-t border-slate-100 space-y-4">
+                      {/* Clinical Evolution Text */}
+                      <div className="space-y-3 text-xs text-slate-700 leading-relaxed">
+                        <div>
+                          <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1">
+                            Evolução da Sessão / Conduta Clínica
+                          </h5>
+                          <p className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 whitespace-pre-wrap font-sans text-slate-800">
+                            {r.clinical_evolution}
+                          </p>
+                        </div>
+
+                        {r.technical_notes && (
+                          <div>
+                            <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1">
+                              Anotações Técnicas & Encaminhamentos
+                            </h5>
+                            <p className="bg-teal-50/50 p-3 rounded-xl border border-teal-100 text-teal-900 whitespace-pre-wrap">
+                              {r.technical_notes}
+                            </p>
+                          </div>
+                        )}
+
+                        <ClinicalSnapshot record={r} />
+                      </div>
+
+                      {/* AÇÕES CLÍNICAS: VISUALIZAR, EDITAR, BAIXAR PDF, IMPRIMIR */}
+                      <div className="pt-3 mt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                        <div className="text-[11px] text-slate-400">
+                          {currentTenant?.city && (
+                            <span>Local: <strong className="text-slate-600">{currentTenant.city}</strong></span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setViewingRecord(r)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                            title="Visualizar detalhes completos da evolução"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-600" />
+                            <span>Visualizar</span>
+                          </button>
+
+                          {r.is_sealed !== 1 ? (
+                            <button
+                              onClick={() => handleStartEdit(r)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer"
+                              title="Editar evolução clínica com auditoria"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Editar</span>
+                            </button>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-400 bg-slate-50 border border-slate-200 rounded-xl cursor-not-allowed"
+                              title="Prontuário lacrado para validade jurídica não permite alteração de texto"
+                            >
+                              <Lock className="w-3 h-3 text-slate-400" />
+                              <span>Lacrado</span>
+                            </span>
+                          )}
+
+                          <button
+                            onClick={() => handlePrintRecord(r)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer shadow-xs"
+                            title="Imprimir ou baixar PDF em folha A4 oficial com cabeçalho da clínica"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-teal-600" />
+                            <span>Imprimir / PDF</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
