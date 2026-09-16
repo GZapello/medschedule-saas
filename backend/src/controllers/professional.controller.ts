@@ -184,6 +184,16 @@ export class ProfessionalController {
       // Cria grade de horários padrão de segunda a sexta (ativo) e fim de semana (inativo)
       createDefaultSchedules(db, tenantId, profId);
 
+      // Garante vínculo ativo na clínica com permissões padrão
+      db.prepare(`
+        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, practice_areas)
+        VALUES (?, ?, ?, 'professional', 'active', 0, ?, ?)
+        ON CONFLICT(tenant_id, user_id) DO UPDATE SET
+          role = 'professional',
+          status = 'active',
+          practice_areas = COALESCE(excluded.practice_areas, clinic_users.practice_areas)
+      `).run('cu-' + uuidv4().slice(0, 8), tenantId, userId, JSON.stringify(['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient']), practiceAreas || null);
+
       logAudit(req, 'CREATE_PROFESSIONAL', 'professionals', profId, { name, email, slug: finalSlug });
       res.status(201).json({ id: profId, name, slug: finalSlug, message: 'Profissional cadastrado com sucesso' });
     } catch (err: any) {

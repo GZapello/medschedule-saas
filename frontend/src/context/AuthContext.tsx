@@ -148,6 +148,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  useEffect(() => {
+    const refreshSession = () => { if (localStorage.getItem('auth_token')) void reloadSession(); };
+    window.addEventListener('focus', refreshSession);
+    return () => window.removeEventListener('focus', refreshSession);
+  }, []);
+
   const isSuperAdmin = currentUser?.role === 'superadmin';
   const isClinicAdmin = currentUser?.role === 'clinic_admin' || isSuperAdmin;
   const isProfessional = currentUser?.role === 'professional';
@@ -177,10 +183,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('fisio') ||
     practiceAreas.includes('physio');
 
-  const isPhysiotherapist = !isSuperAdmin && (
-    (isProfessional && hasPhysioArea) ||
-    (currentUser?.role === 'clinic_admin' && hasPhysioArea)
-  );
+  const isPhysiotherapist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
+    Boolean(currentUser?.zemdaFisioEnabled || hasPhysioArea);
   const isZemdaFisio = isPhysiotherapist;
 
   // Regra Estrita de Acesso ao ZemdaOdonto:
@@ -197,10 +201,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('dentis') ||
     practiceAreas.includes('cro');
 
-  const isDentist = !isSuperAdmin && (
-    (isProfessional && hasOdontoArea) ||
-    (currentUser?.role === 'clinic_admin' && hasOdontoArea)
-  );
+  const isDentist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
+    Boolean(currentUser?.zemdaOdontoEnabled || hasOdontoArea);
   const isZemdaOdonto = isDentist;
 
   // Regra Estrita de Acesso ao ZemdaNutri:
@@ -214,10 +216,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('crn') ||
     practiceAreas.includes('diet');
 
-  const isNutritionist = !isSuperAdmin && (
-    (isProfessional && hasNutriArea) ||
-    (currentUser?.role === 'clinic_admin' && hasNutriArea)
-  );
+  const isNutritionist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
+    Boolean(currentUser?.zemdaNutriEnabled || hasNutriArea);
   const isZemdaNutri = isNutritionist;
 
   // Regra Estrita de Acesso ao ZemdaTO (Terapia Ocupacional):
@@ -234,10 +234,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('ocupacional') ||
     practiceAreas.includes('terapia-ocupacional');
 
-  const isOccupationalTherapist = !isSuperAdmin && (
-    (isProfessional && hasTOArea) ||
-    (currentUser?.role === 'clinic_admin' && hasTOArea)
-  );
+  const isOccupationalTherapist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
+    Boolean(currentUser?.zemdaToEnabled || hasTOArea);
   const isZemdaTO = isOccupationalTherapist;
 
   // Regra Estrita de Acesso ao ZemdaFono (Fonoaudiologia):
@@ -250,10 +248,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('fono') ||
     practiceAreas.includes('crfa');
 
-  const isSpeechTherapist = !isSuperAdmin && (
-    (isProfessional && hasFonoArea) ||
-    (currentUser?.role === 'clinic_admin' && hasFonoArea)
-  );
+  const isSpeechTherapist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
+    Boolean(currentUser?.zemdaFonoEnabled || hasFonoArea);
   const isZemdaFono = isSpeechTherapist;
 
   // Regra de Acesso ao ZemdaPersonal (Educação Física & Personal Trainer):

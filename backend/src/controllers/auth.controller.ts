@@ -1,3 +1,4 @@
+import { completeProfessionalProfile } from '../utils/professional-profile';
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
@@ -142,14 +143,14 @@ export class AuthController {
       if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = db.prepare(`
           SELECT 
-            p.id as professional_id, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
+            p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
             p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
           LEFT JOIN professions prof ON prof.id = p.profession_id
           LEFT JOIN specialties spec ON spec.id = p.specialty_id
-          WHERE p.user_id = ? AND p.tenant_id = ?
+          WHERE p.user_id = ? AND p.tenant_id = ? ORDER BY p.active DESC, p.id
         `).get(user.id, user.tenant_id);
 
         // Se não houver registro formal em professionals, verifica clinic_users / users / tenant
@@ -203,6 +204,10 @@ export class AuthController {
         }
       }
 
+      if (user.role === 'professional' || user.role === 'clinic_admin') {
+        profDetails = completeProfessionalProfile(user.id, user.tenant_id, profDetails);
+      }
+
       const checkProfText = [
         profDetails?.profession_id,
         profDetails?.profession_slug,
@@ -247,8 +252,8 @@ export class AuthController {
         checkProfText.includes('fono') ||
         checkProfText.includes('crfa');
 
-      const isProfessionalUser = user.role === 'professional';
-      const isManagerUser = user.role === 'clinic_admin';
+      const isProfessionalUser = user.role === 'professional' && !!profDetails?.professional_id && profDetails?.professional_active === 1;
+      const isManagerUser = user.role === 'clinic_admin' && profDetails?.professional_active !== 0;
 
       const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (isProfessionalUser || isManagerUser);
       const zemdaOdontoEnabled = user.role !== 'superadmin' && isDentistUser && (isProfessionalUser || isManagerUser);
@@ -323,6 +328,8 @@ export class AuthController {
         return;
       }
 
+      if (req.user.role !== 'superadmin') user.tenant_id = req.tenantId;
+
       let tenantData: any = null;
       if (user.tenant_id) {
         const tenantStmt = db.prepare(`
@@ -341,14 +348,14 @@ export class AuthController {
       if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = db.prepare(`
           SELECT 
-            p.id as professional_id, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
+            p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
             p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
           LEFT JOIN professions prof ON prof.id = p.profession_id
           LEFT JOIN specialties spec ON spec.id = p.specialty_id
-          WHERE p.user_id = ? AND p.tenant_id = ?
+          WHERE p.user_id = ? AND p.tenant_id = ? ORDER BY p.active DESC, p.id
         `).get(user.id, user.tenant_id);
 
         if (!profDetails && user.role === 'clinic_admin') {
@@ -400,6 +407,10 @@ export class AuthController {
       }
       const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
 
+      if (user.role === 'professional' || user.role === 'clinic_admin') {
+        profDetails = completeProfessionalProfile(user.id, user.tenant_id, profDetails);
+      }
+
       const checkProfText = [
         profDetails?.profession_id,
         profDetails?.profession_slug,
@@ -444,8 +455,8 @@ export class AuthController {
         checkProfText.includes('fono') ||
         checkProfText.includes('crfa');
 
-      const isProfessionalUser = user.role === 'professional';
-      const isManagerUser = user.role === 'clinic_admin';
+      const isProfessionalUser = user.role === 'professional' && !!profDetails?.professional_id && profDetails?.professional_active === 1;
+      const isManagerUser = user.role === 'clinic_admin' && profDetails?.professional_active !== 0;
 
       const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (isProfessionalUser || isManagerUser);
       const zemdaOdontoEnabled = user.role !== 'superadmin' && isDentistUser && (isProfessionalUser || isManagerUser);

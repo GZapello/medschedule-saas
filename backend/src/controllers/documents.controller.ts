@@ -15,7 +15,7 @@ export class DocumentsController {
     const appt = db.prepare('SELECT * FROM appointments WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId) as any;
     if (!appt) { res.status(404).json({ error: 'Agendamento não encontrado.' }); return; }
     if (!req.user || !hasClinicalAccess(req, appt.patient_id) ||
-        (req.user.role === 'professional' && !db.prepare('SELECT id FROM professionals WHERE id=? AND user_id=? AND tenant_id=?').get(appt.professional_id, req.user.userId, req.tenantId))) {
+        (req.user.role === 'professional' && !db.prepare('SELECT id FROM professionals WHERE id=? AND user_id=? AND tenant_id=? AND active=1').get(appt.professional_id, req.user.userId, req.tenantId))) {
       res.status(403).json({ error: 'Sem permissão para este atendimento.' }); return;
     }
     const saved = db.prepare('SELECT * FROM consultation_completions WHERE appointment_id=? AND tenant_id=?').get(appt.id, req.tenantId) as any;
@@ -409,7 +409,7 @@ export class DocumentsController {
 
       if (!req.user || !hasClinicalAccess(req, appt.patient_id) ||
           (req.body.patientId && req.body.patientId !== appt.patient_id) ||
-          (req.user.role === 'professional' && !db.prepare('SELECT id FROM professionals WHERE id=? AND user_id=? AND tenant_id=?').get(appt.professional_id, req.user.userId, tenantId))) {
+          (req.user.role === 'professional' && !db.prepare('SELECT id FROM professionals WHERE id=? AND user_id=? AND tenant_id=? AND active=1').get(appt.professional_id, req.user.userId, tenantId))) {
         res.status(403).json({ error: 'Sem permissão para finalizar este atendimento.' });
         return;
       }

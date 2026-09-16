@@ -66,7 +66,12 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
       managerAreaText.includes('médic') ||
       managerAreaText.includes('medic') ||
       managerAreaText.includes('psico') ||
-      managerAreaText.includes('enferm');
+      managerAreaText.includes('enferm') ||
+      managerAreaText.includes('personal') ||
+      managerAreaText.includes('educa') ||
+      managerAreaText.includes('físic') ||
+      managerAreaText.includes('cref') ||
+      managerAreaText.includes('treina');
 
     return hasAnyClinicalArea;
   }
@@ -74,7 +79,7 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
   // 4. Um profissional de saúde só pode visualizar os prontuários e evoluções de um paciente
   // se tiver vínculo assistencial: consulta agendada, encaminhamento ativo ou autoria de evolução.
   if (req.user.role === 'professional') {
-    const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+    const prof = db.prepare('SELECT id, active FROM professionals WHERE user_id = ? AND tenant_id = ? ORDER BY active DESC, id LIMIT 1').get(req.user.userId, tenantId) as any;
     if (!prof) {
       return false;
     }

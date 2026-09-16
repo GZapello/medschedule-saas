@@ -1,3 +1,4 @@
+import { hasClinicalAccess } from './clinical.controller';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { canOperate, BillingService } from '../services/billing.service';
@@ -86,11 +87,8 @@ export class AppointmentController {
 
       // Se for profissional logado (sem ser admin), filtra apenas seus atendimentos
       if (req.user && req.user.role === 'professional') {
-        const profUser = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
-        if (profUser) {
-          query += ' AND a.professional_id = ?';
-          params.push(profUser.id);
-        }
+        query += ' AND a.professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
+        params.push(req.user.userId, tenantId);
       } else if (professionalId) {
         query += ' AND a.professional_id = ?';
         params.push(professionalId);
@@ -424,10 +422,22 @@ export class AppointmentController {
         return;
       }
 
-      const current = db.prepare('SELECT id, status, clinical_module, professional_id, profession_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { status: string; clinical_module?: string; professional_id?: string; profession_id?: string } | undefined;
+      const current = db.prepare('SELECT id, patient_id, status, clinical_module, professional_id, profession_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { patient_id: string; status: string; clinical_module?: string; professional_id?: string; profession_id?: string } | undefined;
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
+      }
+
+      if (status === 'in_progress') {
+        const assignedProfessional = db.prepare('SELECT user_id, active FROM professionals WHERE id=? AND tenant_id=?')
+          .get(current.professional_id, tenantId) as any;
+        if (!req.user || !['professional', 'clinic_admin'].includes(req.user.role) ||
+            !assignedProfessional || assignedProfessional.active !== 1 ||
+            (req.user.role === 'professional' && assignedProfessional.user_id !== req.user.userId) ||
+            !hasClinicalAccess(req, current.patient_id)) {
+          res.status(403).json({ error: 'Sem permissão para iniciar o atendimento. Verifique o vínculo ativo do profissional com esta clínica.' });
+          return;
+        }
       }
 
       current.clinical_module = resolveClinicalModule(current, tenantId) || undefined;

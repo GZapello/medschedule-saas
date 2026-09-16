@@ -157,8 +157,24 @@ export class StaffController {
         WHERE user_id = ? AND tenant_id = ?
       `).run(req.user?.userId || null, id, tenantId);
 
-      // Ativa registro profissional caso exista
-      db.prepare("UPDATE professionals SET active = 1 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
+      // Ativa registro profissional caso exista ou vincula se houver profissional com mesmo nome
+      const profUpdated = db.prepare("UPDATE professionals SET active = 1 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
+      if (profUpdated.changes === 0) {
+        const cu = db.prepare("SELECT role, profession_custom, practice_areas FROM clinic_users WHERE user_id = ? AND tenant_id = ?").get(id, tenantId) as any;
+        if (user.role === 'professional' || cu?.role === 'professional') {
+          const unlinked = db.prepare("SELECT id FROM professionals WHERE tenant_id = ? AND (user_id IS NULL OR user_id = '') AND LOWER(name) = LOWER(?) LIMIT 1").get(tenantId, user.name) as any;
+          if (unlinked) {
+            db.prepare("UPDATE professionals SET user_id = ?, active = 1 WHERE id = ?").run(id, unlinked.id);
+          } else {
+            const profId = 'pro-' + uuidv4().slice(0, 8);
+            db.prepare(`
+              INSERT INTO professionals (id, tenant_id, user_id, name, registration_type, practice_areas, active)
+              VALUES (?, ?, ?, ?, 'Conselho', ?, 1)
+            `).run(profId, tenantId, id, user.name, cu?.practice_areas || null);
+            createDefaultSchedules(db, tenantId!, profId);
+          }
+        }
+      }
 
       logAudit(req, 'APPROVE_STAFF', 'users', id, { name: user.name });
       res.json({ message: `Acesso do funcionário ${user.name} aprovado com sucesso.` });
@@ -241,7 +257,7 @@ export class StaffController {
       // Sincroniza tabela professionals
       const existingProf = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (existingProf) {
-        db.prepare('UPDATE professionals SET practice_areas = ? WHERE user_id = ? AND tenant_id = ?').run(practiceAreas || null, id, tenantId);
+        db.prepare('UPDATE professionals SET practice_areas = ?, active = 1 WHERE user_id = ? AND tenant_id = ?').run(practiceAreas || null, id, tenantId);
       } else if (newRole === 'professional') {
         const profId = 'pro-' + uuidv4().slice(0, 8);
         db.prepare(`
@@ -273,7 +289,7 @@ export class StaffController {
         return;
       }
 
-      const user = db.prepare('SELECT id, tenant_id, name FROM users WHERE id = ?').get(id) as any;
+      const user = db.prepare('SELECT id, tenant_id, name, role FROM users WHERE id = ?').get(id) as any;
       if (!user || user.tenant_id !== tenantId) {
         res.status(403).json({ error: 'Acesso negado: usuário não pertence a esta clínica' });
         return;
@@ -282,14 +298,15 @@ export class StaffController {
       const permsJson = JSON.stringify(permissions);
       const zemdaBodyActive = permissions.includes('access_zemda_body') ? 1 : 0;
       const zemdaPersonalActive = permissions.includes('access_zemda_personal') ? 1 : 0;
+      const userRole = user.role || 'professional';
       db.prepare(`
         INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_body_enabled, zemda_personal_enabled)
-        VALUES (?, ?, ?, 'receptionist', 'active', 0, ?, ?, ?)
+        VALUES (?, ?, ?, ?, 'active', 0, ?, ?, ?)
         ON CONFLICT(tenant_id, user_id) DO UPDATE SET
           permissions_json = excluded.permissions_json,
           zemda_body_enabled = excluded.zemda_body_enabled,
           zemda_personal_enabled = excluded.zemda_personal_enabled
-      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, permsJson, zemdaBodyActive, zemdaPersonalActive);
+      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, userRole, permsJson, zemdaBodyActive, zemdaPersonalActive);
 
       logAudit(req, 'UPDATE_STAFF_PERMISSIONS', 'users', id, { permissionsCount: permissions.length });
       res.json({ message: 'Permissões do funcionário atualizadas com sucesso' });

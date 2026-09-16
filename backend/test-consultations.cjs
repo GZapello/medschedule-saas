@@ -31,6 +31,8 @@ for (const [key,name] of modules) {
 }
 db.prepare("INSERT INTO users (id,tenant_id,name,email,password_hash,role,status) VALUES ('manager','test-clinic','Gestor Teste','manager@test.invalid',?,'clinic_admin','active')").run(bcrypt.hashSync(password,4));
 db.prepare("INSERT INTO clinic_users (id,tenant_id,user_id,role,status) VALUES ('cu-manager','test-clinic','manager','clinic_admin','active')").run();
+// Body access now requires an explicit manager grant in the current application.
+db.prepare("UPDATE clinic_users SET permissions_json='[\"access_zemda_body\"]' WHERE tenant_id='test-clinic' AND role='professional'").run();
 let server;
 (async()=>{
   if (process.argv.includes('--serve')) {
