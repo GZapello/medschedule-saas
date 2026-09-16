@@ -37,6 +37,8 @@ import { NutritionController } from '../controllers/nutrition.controller';
 import { OccupationalTherapyController } from '../controllers/occupational-therapy.controller';
 import { SpeechTherapyController } from '../controllers/speech-therapy.controller';
 import { BodyAssessmentController } from '../controllers/body-assessment.controller';
+import { PersonalController } from '../controllers/personal.controller';
+import { PersonalAIController } from '../controllers/personal-ai.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
 import { FreeTrialController } from '../controllers/free-trial.controller';
 
@@ -466,6 +468,61 @@ api.get('/v1/body-assessments/patient/:patientId/anthropometry', requireTenant, 
 api.post('/v1/body-assessments/anthropometry', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveAnthropometry);
 api.get('/v1/body-assessments/patient/:patientId/therapeutic-plans', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listTherapeuticPlansByPatient);
 api.post('/v1/body-assessments/therapeutic-plans', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveTherapeuticPlan);
+
+// ==========================================
+// MÓDULO ZEMDAPERSONAL (TREINAMENTO & PERSONAL TRAINER)
+// ==========================================
+api.get('/v1/personal/dashboard', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getDashboard);
+api.get('/v1/personal/search', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.smartSearch);
+
+// Alunos
+api.get('/v1/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listStudents);
+api.get('/v1/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getStudent);
+api.post('/v1/personal/students/:id/profile', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.upsertProfile);
+api.get('/v1/personal/students/:studentId/attendance', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAttendanceStats);
+api.get('/v1/personal/students/:studentId/records', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getRecords);
+
+// Avaliações Físicas & Fotos
+api.get('/v1/personal/students/:studentId/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listAssessments);
+api.get('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAssessment);
+api.post('/v1/personal/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createAssessment);
+api.delete('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteAssessment);
+api.get('/v1/personal/students/:studentId/evolution', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getEvolutionData);
+api.get('/v1/personal/students/:studentId/photos', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listPhotos);
+api.post('/v1/personal/photos', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.savePhoto);
+api.delete('/v1/personal/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deletePhoto);
+
+// Exercícios
+api.get('/v1/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listExercises);
+api.post('/v1/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createExercise);
+api.put('/v1/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateExercise);
+api.delete('/v1/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteExercise);
+
+// Treinos
+api.get('/v1/personal/workouts', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listWorkouts);
+api.get('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getWorkout);
+api.post('/v1/personal/workouts', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createWorkout);
+api.put('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateWorkout);
+api.delete('/v1/personal/workouts/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteWorkout);
+api.post('/v1/personal/workouts/:id/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.duplicateWorkout);
+
+// Templates / Modelos
+api.get('/v1/personal/templates', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listTemplates);
+api.post('/v1/personal/templates', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createTemplate);
+api.post('/v1/personal/templates/:id/apply', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.applyTemplate);
+api.delete('/v1/personal/templates/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteTemplate);
+
+// Logs & Execução
+api.post('/v1/personal/logs', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.executeWorkoutLog);
+api.get('/v1/personal/logs', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listLogs);
+
+// Periodização
+api.get('/v1/personal/periodizations', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listPeriodizations);
+api.post('/v1/personal/periodizations', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createPeriodization);
+api.put('/v1/personal/periodizations/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updatePeriodization);
+
+// Assistente IA ZemdaPersonal
+api.post('/v1/personal/ai/assistant', requireTenant, requireRole('clinic_admin', 'professional'), PersonalAIController.askAssistant);
 
 // Encaminhamentos entre Profissionais da Clínica (Item 6)
 api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);

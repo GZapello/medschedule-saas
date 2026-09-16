@@ -10,6 +10,7 @@ import { CalendarView } from './components/calendar/CalendarView';
 import { PatientsView } from './components/patients/PatientsView';
 import { ClinicalRecordsView } from './components/clinical/ClinicalRecordsView';
 import { ZemdaBodyRecordsView } from './components/zemda-body/ZemdaBodyRecordsView';
+import { ZemdaPersonalView } from './components/personal/ZemdaPersonalView';
 import { PhysiotherapyRecordsView } from './components/physiotherapy/PhysiotherapyRecordsView';
 import { DentistryWorkspace } from './components/dentistry/DentistryWorkspace';
 import { NutritionWorkspace } from './components/nutrition/NutritionWorkspace';
@@ -662,6 +663,8 @@ const AppContent: React.FC = () => {
           {currentView === 'clinical' && <ClinicalRecordsView />}
 
           {currentView === 'zemda-body' && <ZemdaBodyRecordsView />}
+
+          {currentView === 'zemda-personal' && <ZemdaPersonalView />}
 
           {currentView === 'zemda-fisio' && (
             isPhysiotherapist ? (

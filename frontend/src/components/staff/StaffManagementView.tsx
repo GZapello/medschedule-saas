@@ -43,7 +43,8 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas' },
   { id: 'view_reports', label: 'Acessar relatórios e exportar planilhas' },
   { id: 'manage_settings', label: 'Alterar configurações da clínica' },
-  { id: 'access_zemda_body', label: 'ZemdaBody (Mapa Corporal): Acesso permitido' }
+  { id: 'access_zemda_body', label: 'ZemdaBody (Mapa Corporal): Acesso permitido' },
+  { id: 'access_zemda_personal', label: 'ZemdaPersonal (Treinamento & Personal): Acesso permitido' }
 ];
 
 const PERMISSION_PRESETS = [
@@ -102,6 +103,8 @@ const PROFESSIONS_LIST = [
   'Recepcionista / Atendimento',
   'Secretária(o)',
   'Gestor / Administrador',
+  'Personal Trainer',
+  'Educador Físico',
   'Outro'
 ];
 

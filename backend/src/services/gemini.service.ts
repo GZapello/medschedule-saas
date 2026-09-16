@@ -129,6 +129,16 @@ Ao final da resposta, se você identificar oportunidades de ajuda com base no co
 
 Não force sugestões — apenas inclua se forem genuinamente úteis.`;
 
+const PERSONAL_SYSTEM_PROMPT = `Você é o **Assistente de Treinamento e Fisiologia ZemdaPersonal**, uma IA de alta precisão integrada à plataforma Zemda, especializada em prescrição de treinos, periodização, cinesiologia, biomecânica e avaliação física.
+
+## REGRAS FUNDAMENTAIS:
+1. **Fidelidade aos dados reais**: Baseie-se ESTRITAMENTE nos dados do aluno fornecidos no contexto (avaliações físicas, dobras cutâneas de Pollock, % de gordura, histórico de treinos, PRs/cargas máximas, lesões ou restrições registradas).
+2. **NUNCA invente medidas ou históricos**: Se algum dado não constar no contexto (ex: dobra triciptal ausente, histórico de dor), informe que a informação não está registrada em vez de presumir valores.
+3. **Fundamentação científica e prática**: Aplique princípios de periodização do treinamento de força, sobrecarga progressiva, cálculo de volume semanal por grupo muscular (séries/semana), controle de fadiga (RPE/RIR) e cadência.
+4. **Segurança do aluno**: Respeite imediatamente qualquer restrição médica ou dor anatômica registrada no prontuário/mapa corporal do aluno.
+5. **Formatação clara**: Use Markdown estruturado (tabelas para divisões de treino ou evolução de cargas, tópicos com marcadores, negrito para destaque).
+6. **Idioma**: Português brasileiro profissional, direto, motivador e técnico.`;
+
 const TEXT_IMPROVEMENT_PROMPTS: Record<string, string> = {
   grammar: `Você é um revisor gramatical especializado em textos clínicos em português brasileiro.
 Corrija ortografia, concordância verbal e nominal, pontuação e acentuação.
@@ -355,6 +365,68 @@ export class GeminiService {
       return null;
     } catch (err: any) {
       console.error('[GeminiService.chat] Erro na chamada Gemini:', err?.message || err);
+      return null;
+    }
+  }
+
+  /**
+   * Chat especializado em treinamento, periodização e fisiologia para o ZemdaPersonal
+   */
+  static async personalChat(params: {
+    message: string;
+    conversationHistory: Array<{ sender: string; text: string }>;
+    contextData: string;
+    studentName?: string;
+  }): Promise<string | null> {
+    const startTime = Date.now();
+    try {
+      const rawContents: Content[] = [];
+
+      if (params.contextData && params.contextData.trim()) {
+        rawContents.push({
+          role: 'user',
+          parts: [{ text: `[DADOS DO ALUNO E HISTÓRICO DO ZEMDAPERSONAL]\n\n${params.contextData}\n\n[FIM DOS DADOS]\n\nVocê é o Assistente ZemdaPersonal. Confirme o recebimento dos dados do aluno e aguarde as instruções do treinador.` }]
+        });
+        rawContents.push({
+          role: 'model',
+          parts: [{ text: `Dados de treinamento e avaliação ${params.studentName ? `do(a) aluno(a) ${params.studentName}` : 'do aluno'} carregados com sucesso. Pronto para auxiliar na prescrição, periodização e análise física.` }]
+        });
+      }
+
+      for (const msg of params.conversationHistory) {
+        if (!msg.text?.trim()) continue;
+        rawContents.push({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text.trim() }]
+        });
+      }
+
+      rawContents.push({
+        role: 'user',
+        parts: [{ text: params.message.trim() }]
+      });
+
+      const contents = sanitizeContents(rawContents);
+
+      const result = await generateWithCascade(
+        PERSONAL_SYSTEM_PROMPT,
+        contents,
+        {
+          temperature: 0.35,
+          topP: 0.85,
+          maxOutputTokens: 4096,
+        },
+        18000
+      );
+
+      const durationMs = Date.now() - startTime;
+      if (result) {
+        console.log(`[GeminiService.personalChat] Sucesso com ${result.modelUsed} em ${durationMs}ms`);
+        return result.text;
+      }
+      return null;
+    } catch (err: any) {
+      console.error('[GeminiService.personalChat] Erro:', err?.message || err);
       return null;
     }
   }

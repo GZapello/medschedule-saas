@@ -30,7 +30,8 @@ import {
   Smile,
   Apple,
   Hand,
-  Mic
+  Mic,
+  Dumbbell
 } from 'lucide-react';
 import { openZemdaAI } from '../../utils/aiHelper';
 
@@ -72,6 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isZemdaTO,
     isSpeechTherapist,
     isZemdaFono,
+    isZemdaPersonal,
     isZemdaBody,
     clientTermLabel
   } = useAuth();
@@ -125,6 +127,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'ZemdaFono (Fonoaudiologia)',
           icon: Mic,
           visible: isSpeechTherapist || isZemdaFono
+        },
+        {
+          id: 'zemda-personal',
+          label: 'ZemdaPersonal (Treinamento)',
+          icon: Dumbbell,
+          visible: isClinicAdmin || isZemdaPersonal
         },
         { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
       ]

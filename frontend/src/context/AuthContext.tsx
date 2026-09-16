@@ -28,6 +28,8 @@ interface AuthContextType {
   isZemdaTO: boolean;
   isSpeechTherapist: boolean;
   isZemdaFono: boolean;
+  isPersonalTrainer: boolean;
+  isZemdaPersonal: boolean;
   isZemdaBody: boolean;
   userPermissions: string[];
   clientTermLabel: string;
@@ -254,8 +256,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
   const isZemdaFono = isSpeechTherapist;
 
+  // Regra de Acesso ao ZemdaPersonal (Educação Física & Personal Trainer):
+  const hasPersonalArea =
+    profId === 'prof-educador-fisico' ||
+    profId === 'prof-personal-trainer' ||
+    profId.includes('personal') ||
+    profId.includes('educa') ||
+    profSlug.includes('personal') ||
+    profSlug.includes('educa') ||
+    profName.includes('personal') ||
+    profName.includes('educa') ||
+    profName.includes('físic') ||
+    practiceAreas.includes('personal') ||
+    practiceAreas.includes('muscula') ||
+    practiceAreas.includes('treina') ||
+    practiceAreas.includes('cref');
+
+  const isPersonalTrainer = !isSuperAdmin && (
+    (isProfessional && hasPersonalArea) ||
+    (currentUser?.role === 'clinic_admin' && hasPersonalArea)
+  );
+
   // ZemdaBody: controlado exclusivamente por permissão manual do gestor ou administrador
   const isZemdaBody = isClinicAdmin || userPermissions.includes('access_zemda_body');
+
+  // ZemdaPersonal: liberado para gestores, profissionais de educação física/personal ou com permissão explícita
+  const isZemdaPersonal = isClinicAdmin || isPersonalTrainer || userPermissions.includes('access_zemda_personal');
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
 
@@ -287,6 +313,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaTO,
         isSpeechTherapist,
         isZemdaFono,
+        isPersonalTrainer,
+        isZemdaPersonal,
         isZemdaBody,
         userPermissions,
         clientTermLabel

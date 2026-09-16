@@ -1913,10 +1913,260 @@ export function initializeDatabase(): void {
         FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_therapeutic_patient ON body_therapeutic_plans (tenant_id, patient_id, assessment_date);
+
+      -- =========================================================================
+      -- 14. MÓDULO ZEMDAPERSONAL (TREINAMENTO, PERIODIZAÇÃO E AVALIAÇÃO FÍSICA)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS personal_student_profiles (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        goal TEXT,
+        experience_level TEXT,
+        weekly_frequency INTEGER DEFAULT 3,
+        training_preferences TEXT,
+        restrictions TEXT,
+        notes TEXT,
+        height REAL,
+        current_weight REAL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        UNIQUE(tenant_id, patient_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_profile_patient ON personal_student_profiles (tenant_id, patient_id);
+
+      CREATE TABLE IF NOT EXISTS personal_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        assessment_date TEXT NOT NULL,
+        weight REAL,
+        height REAL,
+        bmi REAL,
+        whr REAL,
+        whtr REAL,
+        neck_cm REAL,
+        shoulder_cm REAL,
+        chest_cm REAL,
+        arm_right_relaxed REAL,
+        arm_left_relaxed REAL,
+        arm_right_flexed REAL,
+        arm_left_flexed REAL,
+        forearm_right REAL,
+        forearm_left REAL,
+        wrist_right REAL,
+        wrist_left REAL,
+        waist_cm REAL,
+        abdomen_cm REAL,
+        hip_cm REAL,
+        thigh_right_prox REAL,
+        thigh_left_prox REAL,
+        thigh_right_med REAL,
+        thigh_left_med REAL,
+        calf_right REAL,
+        calf_left REAL,
+        fold_subscapular REAL,
+        fold_triceps REAL,
+        fold_chest REAL,
+        fold_axillary REAL,
+        fold_suprailiac REAL,
+        fold_abdominal REAL,
+        fold_thigh REAL,
+        fold_calf REAL,
+        body_fat_percentage REAL,
+        fat_mass_kg REAL,
+        lean_mass_kg REAL,
+        muscle_mass_kg REAL,
+        protocol TEXT DEFAULT 'pollock_7',
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_assess_patient ON personal_assessments (tenant_id, patient_id, assessment_date);
+
+      CREATE TABLE IF NOT EXISTS personal_assessment_photos (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        assessment_id TEXT,
+        patient_id TEXT NOT NULL,
+        photo_type TEXT NOT NULL CHECK(photo_type IN ('front', 'back', 'right', 'left')),
+        photo_url TEXT NOT NULL,
+        photo_date TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_photos_patient ON personal_assessment_photos (tenant_id, patient_id, photo_date);
+
+      CREATE TABLE IF NOT EXISTS personal_exercises (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        muscle_group TEXT NOT NULL,
+        secondary_muscles_json TEXT,
+        instructions TEXT,
+        photo_url TEXT,
+        is_custom INTEGER DEFAULT 0,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_exercises_muscle ON personal_exercises (tenant_id, muscle_group);
+
+      CREATE TABLE IF NOT EXISTS personal_workouts (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        division TEXT NOT NULL DEFAULT 'A',
+        structure_type TEXT DEFAULT 'ABC',
+        version INTEGER DEFAULT 1,
+        is_active INTEGER DEFAULT 1,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_workouts_patient ON personal_workouts (tenant_id, patient_id, is_active);
+
+      CREATE TABLE IF NOT EXISTS personal_workout_exercises (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        workout_id TEXT NOT NULL,
+        exercise_id TEXT,
+        order_index INTEGER NOT NULL DEFAULT 0,
+        name TEXT NOT NULL,
+        muscle_group TEXT NOT NULL,
+        sets INTEGER NOT NULL DEFAULT 3,
+        reps TEXT NOT NULL DEFAULT '10-12',
+        load_kg REAL,
+        tempo TEXT,
+        rest_seconds INTEGER DEFAULT 60,
+        cadence TEXT,
+        rpe REAL,
+        rir REAL,
+        technique TEXT DEFAULT 'Direta',
+        technique_custom TEXT,
+        notes TEXT,
+        photo_url TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (workout_id) REFERENCES personal_workouts(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_we_workout ON personal_workout_exercises (tenant_id, workout_id, order_index);
+
+      CREATE TABLE IF NOT EXISTS personal_workout_logs (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        workout_id TEXT,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT,
+        appointment_id TEXT,
+        completed_at TEXT NOT NULL,
+        duration_minutes INTEGER,
+        rpe REAL,
+        feedback_notes TEXT,
+        log_details_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_logs_patient ON personal_workout_logs (tenant_id, patient_id, completed_at);
+
+      CREATE TABLE IF NOT EXISTS personal_workout_templates (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        structure_type TEXT NOT NULL,
+        description TEXT,
+        workouts_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS personal_periodizations (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        professional_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        phase TEXT NOT NULL DEFAULT 'hypertrophy',
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        meso_weeks INTEGER DEFAULT 4,
+        target_volume_json TEXT,
+        notes TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_period_patient ON personal_periodizations (tenant_id, patient_id, status);
     `);
     addColIfMissing('odontograms', 'record_id', 'TEXT');
+    addColIfMissing('clinic_users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('patients', 'gender', "TEXT DEFAULT 'm'");
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);
+  }
+
+  // Pre-seed biblioteca de exercícios padrão
+  try {
+    const totalExercises = rawDb.prepare("SELECT COUNT(*) as count FROM personal_exercises WHERE tenant_id = 'global'").get() as any;
+    if (!totalExercises || totalExercises.count === 0) {
+      const defaultExercises = [
+        { id: 'ex-supino-reto', name: 'Supino Reto com Barra', muscle_group: 'Peitoral', secondary: '["Tríceps", "Ombros"]', inst: 'Deitado no banco, descer a barra até o meio do peito e empurrar mantendo escápulas aduzidas.' },
+        { id: 'ex-supino-inclinado', name: 'Supino Inclinado com Halteres', muscle_group: 'Peitoral', secondary: '["Ombros", "Tríceps"]', inst: 'Banco a 30-45 graus, amplitude máxima controlada.' },
+        { id: 'ex-crucifixo-reto', name: 'Crucifixo Reto com Halteres', muscle_group: 'Peitoral', secondary: '["Ombros"]', inst: 'Abertura controlada focando no alongamento da fáscia peitoral.' },
+        { id: 'ex-crossover', name: 'Crossover na Polia Média/Alta', muscle_group: 'Peitoral', secondary: '["Ombros"]', inst: 'Adução horizontal com pico de contração no final.' },
+        { id: 'ex-puxada-frontal', name: 'Puxada Frontal no Pulley', muscle_group: 'Costas', secondary: '["Bíceps", "Antebraço"]', inst: 'Puxar a barra em direção à clavícula retraindo as escápulas.' },
+        { id: 'ex-remada-curvada', name: 'Remada Curvada com Barra', muscle_group: 'Costas', secondary: '["Bíceps", "Lombar"]', inst: 'Tronco inclinado a 45 graus, puxar em direção ao umbigo.' },
+        { id: 'ex-remada-baixa', name: 'Remada Baixa no Triângulo', muscle_group: 'Costas', secondary: '["Bíceps", "Antebraço"]', inst: 'Manter coluna alinhada e focar no movimento escapular.' },
+        { id: 'ex-desenvolvimento-halteres', name: 'Desenvolvimento com Halteres', muscle_group: 'Ombros', secondary: '["Tríceps"]', inst: 'Sentado com apoio, elevar os halteres até a extensão controlada.' },
+        { id: 'ex-elevacao-lateral', name: 'Elevação Lateral', muscle_group: 'Ombros', secondary: '["Trapézio"]', inst: 'Elevar os braços até a altura dos ombros mantendo cotovelos levemente flexionados.' },
+        { id: 'ex-elevacao-frontal', name: 'Elevação Frontal', muscle_group: 'Ombros', secondary: '["Peitoral"]', inst: 'Elevação controlada até a linha dos olhos.' },
+        { id: 'ex-rosca-direta', name: 'Rosca Direta com Barra W', muscle_group: 'Bíceps', secondary: '["Antebraço"]', inst: 'Cotovelos fixos ao lado do tronco, sem balanço lombar.' },
+        { id: 'ex-rosca-martelo', name: 'Rosca Martelo com Halteres', muscle_group: 'Bíceps', secondary: '["Antebraço"]', inst: 'Pegada neutra focando no braquial e braquiorradial.' },
+        { id: 'ex-triceps-corda', name: 'Tríceps Corda na Polia', muscle_group: 'Tríceps', secondary: '["Antebraço"]', inst: 'Extensão completa abrindo a corda no final do movimento.' },
+        { id: 'ex-triceps-testa', name: 'Tríceps Testa com Barra', muscle_group: 'Tríceps', secondary: '[]', inst: 'Deitado, flexão e extensão do cotovelo com controle da descida.' },
+        { id: 'ex-agachamento-livre', name: 'Agachamento Livre com Barra', muscle_group: 'Quadríceps', secondary: '["Glúteos", "Lombar"]', inst: 'Pés na largura dos ombros, descida profunda mantendo estabilidade do core.' },
+        { id: 'ex-leg-press-45', name: 'Leg Press 45°', muscle_group: 'Quadríceps', secondary: '["Glúteos"]', inst: 'Posicionamento médio dos pés, amplitude completa sem retroversão pélvica.' },
+        { id: 'ex-cadeira-extensora', name: 'Cadeira Extensora', muscle_group: 'Quadríceps', secondary: '[]', inst: 'Extensão de joelho com contração isométrica de 1 segundo no topo.' },
+        { id: 'ex-mesa-flexora', name: 'Mesa Flexora', muscle_group: 'Posteriores', secondary: '["Panturrilhas"]', inst: 'Flexão de joelhos focando nos isquiotibiais.' },
+        { id: 'ex-stiff', name: 'Stiff com Halteres ou Barra', muscle_group: 'Posteriores', secondary: '["Glúteos", "Lombar"]', inst: 'Quadril para trás com joelhos semi-flexionados, mantendo coluna neutra.' },
+        { id: 'ex-elevacao-pelvica', name: 'Elevação Pélvica com Barra', muscle_group: 'Glúteos', secondary: '["Posteriores"]', inst: 'Apoio escapular no banco, extensão máxima de quadril no topo.' },
+        { id: 'ex-gemeos-em-pe', name: 'Gêmeos em Pé no Smith', muscle_group: 'Panturrilhas', secondary: '[]', inst: 'Flexão plantar completa sobre degrau/bloco com pausa embaixo.' },
+        { id: 'ex-abdominal-infra', name: 'Abdominal Infra na Barra Fixa', muscle_group: 'Abdômen', secondary: '["Flexores de Quadril"]', inst: 'Elevação dos joelhos/pernas com retroversão da bacia.' },
+        { id: 'ex-prancha-isometrica', name: 'Prancha Isométrica', muscle_group: 'Abdômen', secondary: '["Lombar", "Ombros"]', inst: 'Manter corpo alinhado e abdômen contraído.' }
+      ];
+
+      const insertEx = rawDb.prepare(`
+        INSERT INTO personal_exercises (id, tenant_id, name, muscle_group, secondary_muscles_json, instructions, photo_url, is_custom, created_at, updated_at)
+        VALUES (?, 'global', ?, ?, ?, ?, null, 0, datetime('now'), datetime('now'))
+      `);
+
+      for (const ex of defaultExercises) {
+        insertEx.run(ex.id, ex.name, ex.muscle_group, ex.secondary, ex.inst);
+      }
+    }
+  } catch (seedExErr) {
+    console.warn('[Database] Aviso ao semear exercícios:', seedExErr);
   }
 
   migrateConsultations(rawDb);

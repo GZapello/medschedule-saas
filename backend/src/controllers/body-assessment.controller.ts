@@ -1,8 +1,36 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
-import { hasClinicalAccess } from './clinical.controller';
 import { logAudit } from '../middlewares/audit.middleware';
+
+/**
+ * Validação de acesso ao ZemdaBody:
+ * Regra:
+ * - SuperAdmin SaaS: sem acesso a dados clínicos de clínicas
+ * - Gerenciador da Clínica (clinic_admin): acesso total imediato a todos os recursos do ZemdaBody
+ * - Profissional / Funcionário: acesso imediato e irrestrito caso o Gerenciador tenha concedido permissão
+ *   (zemda_body_enabled === 1 ou 'access_zemda_body' em permissions_json).
+ * - Se o Gerenciador não concedeu ou revogou a permissão: acesso bloqueado (HTTP 403).
+ * - Sem travas funcionais internas adicionais ou bloqueios parciais.
+ */
+export function hasZemdaBodyAccess(req: Request): boolean {
+  if (!req.user || !req.tenantId) return false;
+  if (req.user.role === 'superadmin') return false;
+  if (req.user.role === 'clinic_admin') return true;
+
+  try {
+    const cu = db.prepare('SELECT permissions_json, zemda_body_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+    if (!cu) return false;
+    if (cu.zemda_body_enabled === 1) return true;
+    if (cu.permissions_json) {
+      const perms = JSON.parse(cu.permissions_json);
+      if (Array.isArray(perms) && perms.includes('access_zemda_body')) return true;
+    }
+  } catch (err) {
+    console.error('[hasZemdaBodyAccess] Erro ao checar permissão:', err);
+  }
+  return false;
+}
 
 export class BodyAssessmentController {
   /**
@@ -18,14 +46,14 @@ export class BodyAssessmentController {
         return;
       }
 
-      const appt = db.prepare('SELECT id, patient_id, professional_id FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any;
-      if (!appt) {
-        res.status(404).json({ error: 'Agendamento não encontrado' });
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
         return;
       }
 
-      if (!hasClinicalAccess(req, appt.patient_id)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      const appt = db.prepare('SELECT id, patient_id, professional_id FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any;
+      if (!appt) {
+        res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
       }
 
@@ -88,8 +116,14 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasClinicalAccess(req, patientId)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        return;
+      }
+
+      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      if (!patientInTenant) {
+        res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
       }
 
@@ -128,6 +162,11 @@ export class BodyAssessmentController {
         return;
       }
 
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        return;
+      }
+
       const assessment = db.prepare(`
         SELECT ba.*, p.name as professional_name, pat.full_name as patient_name
         FROM body_assessments ba
@@ -138,11 +177,6 @@ export class BodyAssessmentController {
 
       if (!assessment) {
         res.status(404).json({ error: 'Avaliação corporal não encontrada' });
-        return;
-      }
-
-      if (!hasClinicalAccess(req, assessment.patient_id)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
         return;
       }
 
@@ -202,13 +236,19 @@ export class BodyAssessmentController {
         return;
       }
 
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        return;
+      }
+
       if (!patientId) {
         res.status(400).json({ error: 'Identificação do paciente é obrigatória' });
         return;
       }
 
-      if (!hasClinicalAccess(req, patientId)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      if (!patientInTenant) {
+        res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
       }
 
@@ -283,14 +323,14 @@ export class BodyAssessmentController {
         return;
       }
 
-      const assessment = db.prepare('SELECT patient_id FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
-      if (!assessment) {
-        res.status(404).json({ error: 'Avaliação corporal não encontrada' });
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
         return;
       }
 
-      if (!hasClinicalAccess(req, assessment.patient_id)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      const assessment = db.prepare('SELECT patient_id FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
+      if (!assessment) {
+        res.status(404).json({ error: 'Avaliação corporal não encontrada' });
         return;
       }
 
@@ -343,6 +383,11 @@ export class BodyAssessmentController {
         return;
       }
 
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        return;
+      }
+
       const marker = db.prepare(`
         SELECT bm.*, ba.patient_id
         FROM body_markers bm
@@ -352,11 +397,6 @@ export class BodyAssessmentController {
 
       if (!marker) {
         res.status(404).json({ error: 'Marcador não encontrado' });
-        return;
-      }
-
-      if (!hasClinicalAccess(req, marker.patient_id)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
         return;
       }
 
@@ -384,14 +424,14 @@ export class BodyAssessmentController {
         return;
       }
 
-      const assessment = db.prepare('SELECT * FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
-      if (!assessment) {
-        res.status(404).json({ error: 'Avaliação corporal não encontrada' });
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
         return;
       }
 
-      if (!hasClinicalAccess(req, assessment.patient_id)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      const assessment = db.prepare('SELECT * FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
+      if (!assessment) {
+        res.status(404).json({ error: 'Avaliação corporal não encontrada' });
         return;
       }
 
@@ -471,14 +511,14 @@ export class BodyAssessmentController {
         return;
       }
 
-      const assessment = db.prepare('SELECT patient_id FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
-      if (!assessment) {
-        res.status(404).json({ error: 'Avaliação não encontrada' });
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
         return;
       }
 
-      if (!hasClinicalAccess(req, assessment.patient_id)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      const assessment = db.prepare('SELECT patient_id FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
+      if (!assessment) {
+        res.status(404).json({ error: 'Avaliação não encontrada' });
         return;
       }
 
@@ -525,13 +565,19 @@ export class BodyAssessmentController {
         notes
       } = req.body;
 
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        return;
+      }
+
       if (!patientId) {
         res.status(400).json({ error: 'Identificação do paciente é obrigatória' });
         return;
       }
 
-      if (!hasClinicalAccess(req, patientId)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      if (!patientInTenant) {
+        res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
       }
 
@@ -640,8 +686,14 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasClinicalAccess(req, patientId)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        return;
+      }
+
+      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      if (!patientInTenant) {
+        res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
       }
 
@@ -697,13 +749,19 @@ export class BodyAssessmentController {
         notes
       } = req.body;
 
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        return;
+      }
+
       if (!patientId) {
         res.status(400).json({ error: 'Identificação do paciente é obrigatória' });
         return;
       }
 
-      if (!hasClinicalAccess(req, patientId)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      if (!patientInTenant) {
+        res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
       }
 
@@ -762,8 +820,14 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasClinicalAccess(req, patientId)) {
-        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+      if (!hasZemdaBodyAccess(req)) {
+        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        return;
+      }
+
+      const patientInTenant = db.prepare('SELECT 1 FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      if (!patientInTenant) {
+        res.status(404).json({ error: 'Paciente não encontrado nesta clínica' });
         return;
       }
 

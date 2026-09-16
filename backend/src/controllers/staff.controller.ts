@@ -66,6 +66,7 @@ export class StaffController {
           COALESCE(cu.deactivated_at, u.deactivated_at) as deactivated_at,
           COALESCE(cu.scheduled_deletion_at, u.scheduled_deletion_at) as scheduled_deletion_at,
           cu.is_manager, cu.permissions_json, cu.approved_at, cu.approved_by,
+          cu.zemda_body_enabled, cu.zemda_personal_enabled,
           COALESCE(cu.profession_custom, prof.name, u.role) as profession_name,
           COALESCE(cu.practice_areas, p.practice_areas, p.bio) as practice_areas,
           p.id as professional_id, p.registration_type, p.registration_number,
@@ -280,13 +281,15 @@ export class StaffController {
 
       const permsJson = JSON.stringify(permissions);
       const zemdaBodyActive = permissions.includes('access_zemda_body') ? 1 : 0;
+      const zemdaPersonalActive = permissions.includes('access_zemda_personal') ? 1 : 0;
       db.prepare(`
-        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_body_enabled)
-        VALUES (?, ?, ?, 'receptionist', 'active', 0, ?, ?)
+        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_body_enabled, zemda_personal_enabled)
+        VALUES (?, ?, ?, 'receptionist', 'active', 0, ?, ?, ?)
         ON CONFLICT(tenant_id, user_id) DO UPDATE SET
           permissions_json = excluded.permissions_json,
-          zemda_body_enabled = excluded.zemda_body_enabled
-      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, permsJson, zemdaBodyActive);
+          zemda_body_enabled = excluded.zemda_body_enabled,
+          zemda_personal_enabled = excluded.zemda_personal_enabled
+      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, permsJson, zemdaBodyActive, zemdaPersonalActive);
 
       logAudit(req, 'UPDATE_STAFF_PERMISSIONS', 'users', id, { permissionsCount: permissions.length });
       res.json({ message: 'Permissões do funcionário atualizadas com sucesso' });
