@@ -1,706 +1,1289 @@
-export interface BodyRegionDef {
-  id: string;
-  region: string; // cabeça, ombro, braço, antebraço, mão, tórax, barriga, glúteo, perna, canela, pé
-  side: 'right' | 'left' | 'midline';
+export interface BodyPanoramaRegion {
+  id: string; // ex: 'frente_cabeca', 'frente_braco_direito', 'verso_gluteos'
+  label: string; // ex: 'Cabeça (Frente)', 'Braço Direito (Frente)'
+  baseRegion: string; // cabeca, ombro, braco, antebraco, mao, torax, abdomen, gluteos, perna, canela, pe
+  region: string; // alias para baseRegion
   view: 'front' | 'back' | 'left' | 'right';
-  label: string;
-  shapeType: 'polygon' | 'ellipse';
-  points?: string; // Para polygon "x1,y1 x2,y2 ..."
+  side: 'right' | 'left' | 'midline';
+  shapeType: 'ellipse' | 'polygon';
+  points?: string;
   ellipseCoords?: { cx: number; cy: number; rx: number; ry: number };
-  center: { x: number; y: number }; // Coordenada central no espaço 400x760 da vista
+  center: { x: number; y: number };
 }
 
-export const VIEW_CANVAS_DIMS = {
-  single: { width: 400, height: 760 },
-  panorama: { width: 1024, height: 768 }
-};
+// Compatibilidade retroativa de tipos
+export type BodyRegionDef = BodyPanoramaRegion;
 
-// Conversor linear preciso de coordenadas da vista individual (400x760) para o panorama (1024x768)
-export function mapToPanorama(x: number, y: number, view: 'front' | 'back' | 'left' | 'right'): { x: number; y: number } {
-  const centers = {
-    front: 150,
-    back: 435,
-    left: 665,
-    right: 870
-  };
-  const panoX = x - 200 + centers[view];
-  const panoY = y - 20;
-  return { x: Math.max(0, Math.min(1024, panoX)), y: Math.max(0, Math.min(768, panoY)) };
-}
-
-// Converte string de points do polígono para o grid do panorama
-export function mapPointsToPanorama(pointsStr: string, view: 'front' | 'back' | 'left' | 'right'): string {
-  return pointsStr
-    .trim()
-    .split(/\s+/)
-    .map(pair => {
-      const [px, py] = pair.split(',').map(Number);
-      const mapped = mapToPanorama(px, py, view);
-      return `${mapped.x.toFixed(1)},${mapped.y.toFixed(1)}`;
-    })
-    .join(' ');
-}
-
-export const BODY_REGIONS: BodyRegionDef[] = [
-  // =========================================================================
-  // 1. FRENTE (view: 'front', espaço 400 x 760)
-  // Lateralidade do paciente:
-  // Lado DIREITO do paciente = tela ESQUERDA (x < 200, side: 'right')
-  // Lado ESQUERDO do paciente = tela DIREITA (x > 200, side: 'left')
-  // =========================================================================
-
-  // 1. Cabeça
+// =============================================================================
+// CATÁLOGO DE REGIÕES PANORÂMICAS: MODELO MASCULINO (1024 x 768)
+// =============================================================================
+export const PANORAMA_REGIONS_MALE: BodyPanoramaRegion[] = [
+  // --- 1. FRENTE ---
   {
-    id: 'front-cabeca',
-    region: 'cabeça',
-    side: 'midline',
+    id: 'frente_cabeca',
+    label: 'Cabeça (Frente)',
+    baseRegion: 'cabeca',
+    region: 'cabeca',
     view: 'front',
-    label: 'Cabeça',
+    side: 'midline',
     shapeType: 'ellipse',
-    ellipseCoords: { cx: 200, cy: 75, rx: 38, ry: 48 },
-    center: { x: 200, y: 75 }
+    ellipseCoords: { cx: 158, cy: 65, rx: 32, ry: 42 },
+    center: { x: 158, y: 65 }
   },
-
-  // 2. Ombros
   {
-    id: 'front-ombro-dir',
+    id: 'frente_ombro_direito',
+    label: 'Ombro Direito (Frente)',
+    baseRegion: 'ombro',
     region: 'ombro',
-    side: 'right',
     view: 'front',
-    label: 'Ombro Direito',
+    side: 'right', // Paciente direito = tela esquerda
     shapeType: 'polygon',
-    points: '172,130 120,150 115,185 145,185 168,150 178,135',
-    center: { x: 140, y: 155 }
+    points: '130,118 80,138 72,172 108,172 134,136',
+    center: { x: 105, y: 145 }
   },
   {
-    id: 'front-ombro-esq',
+    id: 'frente_ombro_esquerdo',
+    label: 'Ombro Esquerdo (Frente)',
+    baseRegion: 'ombro',
     region: 'ombro',
-    side: 'left',
     view: 'front',
-    label: 'Ombro Esquerdo',
+    side: 'left', // Paciente esquerdo = tela direita
     shapeType: 'polygon',
-    points: '228,130 280,150 285,185 255,185 232,150 222,135',
-    center: { x: 260, y: 155 }
+    points: '186,118 236,138 244,172 208,172 182,136',
+    center: { x: 211, y: 145 }
   },
-
-  // 3. Braços
   {
-    id: 'front-braco-dir',
-    region: 'braço',
+    id: 'frente_braco_direito',
+    label: 'Braço Direito (Frente)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'front',
     side: 'right',
-    view: 'front',
-    label: 'Braço Direito',
     shapeType: 'polygon',
-    points: '115,185 145,185 138,265 100,265',
-    center: { x: 122, y: 225 }
+    points: '72,172 108,172 98,252 58,252',
+    center: { x: 84, y: 212 }
   },
   {
-    id: 'front-braco-esq',
-    region: 'braço',
+    id: 'frente_braco_esquerdo',
+    label: 'Braço Esquerdo (Frente)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'front',
     side: 'left',
-    view: 'front',
-    label: 'Braço Esquerdo',
     shapeType: 'polygon',
-    points: '255,185 285,185 300,265 262,265',
-    center: { x: 278, y: 225 }
+    points: '208,172 244,172 258,252 218,252',
+    center: { x: 232, y: 212 }
   },
-
-  // 4. Antebraços
   {
-    id: 'front-antebraco-dir',
-    region: 'antebraço',
+    id: 'frente_antebraco_direito',
+    label: 'Antebraço Direito (Frente)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'front',
     side: 'right',
-    view: 'front',
-    label: 'Antebraço Direito',
     shapeType: 'polygon',
-    points: '100,265 138,265 125,365 85,365',
-    center: { x: 110, y: 315 }
+    points: '58,252 98,252 86,332 44,332',
+    center: { x: 72, y: 292 }
   },
   {
-    id: 'front-antebraco-esq',
-    region: 'antebraço',
+    id: 'frente_antebraco_esquerdo',
+    label: 'Antebraço Esquerdo (Frente)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'front',
     side: 'left',
-    view: 'front',
-    label: 'Antebraço Esquerdo',
     shapeType: 'polygon',
-    points: '262,265 300,265 315,365 275,365',
-    center: { x: 290, y: 315 }
+    points: '218,252 258,252 272,332 230,332',
+    center: { x: 244, y: 292 }
   },
-
-  // 5. Mãos
   {
-    id: 'front-mao-dir',
-    region: 'mão',
+    id: 'frente_mao_direita',
+    label: 'Mão Direita (Frente)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'front',
     side: 'right',
-    view: 'front',
-    label: 'Mão Direita',
     shapeType: 'polygon',
-    points: '85,365 125,365 115,445 68,445',
-    center: { x: 95, y: 405 }
+    points: '44,332 86,332 78,395 24,395',
+    center: { x: 58, y: 363 }
   },
   {
-    id: 'front-mao-esq',
-    region: 'mão',
+    id: 'frente_mao_esquerda',
+    label: 'Mão Esquerda (Frente)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'front',
     side: 'left',
-    view: 'front',
-    label: 'Mão Esquerda',
     shapeType: 'polygon',
-    points: '275,365 315,365 332,445 285,445',
-    center: { x: 305, y: 405 }
+    points: '230,332 272,332 292,395 238,395',
+    center: { x: 258, y: 363 }
   },
-
-  // 6. Tórax
   {
-    id: 'front-torax',
-    region: 'tórax',
+    id: 'frente_torax',
+    label: 'Tórax / Peitoral (Frente)',
+    baseRegion: 'torax',
+    region: 'torax',
+    view: 'front',
     side: 'midline',
-    view: 'front',
-    label: 'Tórax',
     shapeType: 'polygon',
-    points: '175,130 225,130 248,150 245,225 155,225 152,150',
-    center: { x: 200, y: 180 }
+    points: '124,120 192,120 206,172 200,218 116,218 110,172',
+    center: { x: 158, y: 169 }
   },
-
-  // 7. Barriga / Abdômen
   {
-    id: 'front-barriga',
-    region: 'barriga',
+    id: 'frente_abdomen',
+    label: 'Barriga / Abdômen (Frente)',
+    baseRegion: 'abdomen',
+    region: 'abdomen',
+    view: 'front',
     side: 'midline',
-    view: 'front',
-    label: 'Barriga / Abdômen',
     shapeType: 'polygon',
-    points: '155,225 245,225 240,335 160,335',
-    center: { x: 200, y: 275 }
+    points: '116,218 200,218 208,285 206,340 110,340 108,285',
+    center: { x: 158, y: 279 }
   },
-
-  // 8. Pernas (Coxas)
   {
-    id: 'front-perna-dir',
+    id: 'frente_perna_direita',
+    label: 'Perna Direita (Frente)',
+    baseRegion: 'perna',
     region: 'perna',
-    side: 'right',
     view: 'front',
-    label: 'Perna Direita (Coxa)',
+    side: 'right',
     shapeType: 'polygon',
-    points: '150,335 200,335 192,510 148,510',
-    center: { x: 172, y: 420 }
+    points: '104,340 154,340 152,475 96,475',
+    center: { x: 126, y: 407 }
   },
   {
-    id: 'front-perna-esq',
+    id: 'frente_perna_esquerda',
+    label: 'Perna Esquerda (Frente)',
+    baseRegion: 'perna',
     region: 'perna',
-    side: 'left',
     view: 'front',
-    label: 'Perna Esquerda (Coxa)',
+    side: 'left',
     shapeType: 'polygon',
-    points: '200,335 250,335 252,510 208,510',
-    center: { x: 228, y: 420 }
+    points: '162,340 212,340 220,475 164,475',
+    center: { x: 189, y: 407 }
   },
-
-  // 9. Canelas
   {
-    id: 'front-canela-dir',
+    id: 'frente_canela_direita',
+    label: 'Canela Direita (Frente)',
+    baseRegion: 'canela',
     region: 'canela',
-    side: 'right',
     view: 'front',
-    label: 'Canela Direita',
+    side: 'right',
     shapeType: 'polygon',
-    points: '148,510 192,510 188,645 152,645',
-    center: { x: 170, y: 575 }
+    points: '96,475 152,475 142,630 84,630',
+    center: { x: 118, y: 552 }
   },
   {
-    id: 'front-canela-esq',
+    id: 'frente_canela_esquerda',
+    label: 'Canela Esquerda (Frente)',
+    baseRegion: 'canela',
     region: 'canela',
-    side: 'left',
     view: 'front',
-    label: 'Canela Esquerda',
+    side: 'left',
     shapeType: 'polygon',
-    points: '208,510 252,510 248,645 212,645',
-    center: { x: 230, y: 575 }
+    points: '164,475 220,475 232,630 174,630',
+    center: { x: 198, y: 552 }
   },
-
-  // 10. Pés
   {
-    id: 'front-pe-dir',
-    region: 'pé',
+    id: 'frente_pe_direito',
+    label: 'Pé Direito (Frente)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'front',
     side: 'right',
-    view: 'front',
-    label: 'Pé Direito',
     shapeType: 'polygon',
-    points: '152,645 188,645 190,705 138,705',
-    center: { x: 165, y: 675 }
+    points: '84,630 142,630 140,682 60,682',
+    center: { x: 106, y: 656 }
   },
   {
-    id: 'front-pe-esq',
-    region: 'pé',
+    id: 'frente_pe_esquerdo',
+    label: 'Pé Esquerdo (Frente)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'front',
     side: 'left',
-    view: 'front',
-    label: 'Pé Esquerdo',
     shapeType: 'polygon',
-    points: '212,645 248,645 262,705 210,705',
-    center: { x: 235, y: 675 }
+    points: '174,630 232,630 256,682 176,682',
+    center: { x: 210, y: 656 }
   },
 
-  // =========================================================================
-  // 2. VERSO (view: 'back', espaço 400 x 760)
-  // Lateralidade do paciente:
-  // Lado ESQUERDO do paciente = tela ESQUERDA (x < 200, side: 'left')
-  // Lado DIREITO do paciente = tela DIREITA (x > 200, side: 'right')
-  // =========================================================================
-
-  // 1. Cabeça
+  // --- 2. VERSO ---
   {
-    id: 'back-cabeca',
-    region: 'cabeça',
-    side: 'midline',
+    id: 'verso_cabeca',
+    label: 'Cabeça (Verso)',
+    baseRegion: 'cabeca',
+    region: 'cabeca',
     view: 'back',
-    label: 'Cabeça Posterior',
+    side: 'midline',
     shapeType: 'ellipse',
-    ellipseCoords: { cx: 200, cy: 75, rx: 38, ry: 48 },
-    center: { x: 200, y: 75 }
+    ellipseCoords: { cx: 445, cy: 65, rx: 32, ry: 42 },
+    center: { x: 445, y: 65 }
   },
-
-  // 2. Ombros
   {
-    id: 'back-ombro-esq',
+    id: 'verso_ombro_esquerdo',
+    label: 'Ombro Esquerdo (Verso)',
+    baseRegion: 'ombro',
     region: 'ombro',
-    side: 'left',
     view: 'back',
-    label: 'Ombro Esquerdo',
+    side: 'left', // Paciente esquerdo = tela esquerda
     shapeType: 'polygon',
-    points: '172,130 120,150 115,185 145,185 168,150 178,135',
-    center: { x: 140, y: 155 }
+    points: '417,118 367,138 359,172 395,172 421,136',
+    center: { x: 391, y: 145 }
   },
   {
-    id: 'back-ombro-dir',
+    id: 'verso_ombro_direito',
+    label: 'Ombro Direito (Verso)',
+    baseRegion: 'ombro',
     region: 'ombro',
-    side: 'right',
     view: 'back',
-    label: 'Ombro Direito',
+    side: 'right', // Paciente direito = tela direita
     shapeType: 'polygon',
-    points: '228,130 280,150 285,185 255,185 232,150 222,135',
-    center: { x: 260, y: 155 }
+    points: '473,118 523,138 531,172 495,172 469,136',
+    center: { x: 499, y: 145 }
   },
-
-  // 3. Braços
   {
-    id: 'back-braco-esq',
-    region: 'braço',
+    id: 'verso_braco_esquerdo',
+    label: 'Braço Esquerdo (Verso)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'back',
     side: 'left',
-    view: 'back',
-    label: 'Braço Esquerdo',
     shapeType: 'polygon',
-    points: '115,185 145,185 138,265 100,265',
-    center: { x: 122, y: 225 }
+    points: '359,172 395,172 385,252 345,252',
+    center: { x: 371, y: 212 }
   },
   {
-    id: 'back-braco-dir',
-    region: 'braço',
+    id: 'verso_braco_direito',
+    label: 'Braço Direito (Verso)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'back',
     side: 'right',
-    view: 'back',
-    label: 'Braço Direito',
     shapeType: 'polygon',
-    points: '255,185 285,185 300,265 262,265',
-    center: { x: 278, y: 225 }
+    points: '495,172 531,172 545,252 505,252',
+    center: { x: 519, y: 212 }
   },
-
-  // 4. Antebraços
   {
-    id: 'back-antebraco-esq',
-    region: 'antebraço',
+    id: 'verso_antebraco_esquerdo',
+    label: 'Antebraço Esquerdo (Verso)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'back',
     side: 'left',
-    view: 'back',
-    label: 'Antebraço Esquerdo',
     shapeType: 'polygon',
-    points: '100,265 138,265 125,365 85,365',
-    center: { x: 110, y: 315 }
+    points: '345,252 385,252 373,332 331,332',
+    center: { x: 358, y: 292 }
   },
   {
-    id: 'back-antebraco-dir',
-    region: 'antebraço',
+    id: 'verso_antebraco_direito',
+    label: 'Antebraço Direito (Verso)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'back',
     side: 'right',
-    view: 'back',
-    label: 'Antebraço Direito',
     shapeType: 'polygon',
-    points: '262,265 300,265 315,365 275,365',
-    center: { x: 290, y: 315 }
+    points: '505,252 545,252 559,332 517,332',
+    center: { x: 531, y: 292 }
   },
-
-  // 5. Mãos
   {
-    id: 'back-mao-esq',
-    region: 'mão',
+    id: 'verso_mao_esquerda',
+    label: 'Mão Esquerda (Verso)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'back',
     side: 'left',
-    view: 'back',
-    label: 'Mão Esquerda',
     shapeType: 'polygon',
-    points: '85,365 125,365 115,445 68,445',
-    center: { x: 95, y: 405 }
+    points: '331,332 373,332 365,395 311,395',
+    center: { x: 345, y: 363 }
   },
   {
-    id: 'back-mao-dir',
-    region: 'mão',
+    id: 'verso_mao_direita',
+    label: 'Mão Direita (Verso)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'back',
     side: 'right',
-    view: 'back',
-    label: 'Mão Direita',
     shapeType: 'polygon',
-    points: '275,365 315,365 332,445 285,445',
-    center: { x: 305, y: 405 }
+    points: '517,332 559,332 579,395 525,395',
+    center: { x: 545, y: 363 }
   },
-
-  // 6. Tórax Posterior (Costas)
   {
-    id: 'back-torax',
-    region: 'tórax',
+    id: 'verso_torax',
+    label: 'Costas / Tórax Posterior (Verso)',
+    baseRegion: 'torax',
+    region: 'torax',
+    view: 'back',
     side: 'midline',
-    view: 'back',
-    label: 'Tórax Posterior (Costas)',
     shapeType: 'polygon',
-    points: '175,130 225,130 248,150 245,230 155,230 152,150',
-    center: { x: 200, y: 185 }
+    points: '411,120 479,120 493,172 487,235 403,235 397,172',
+    center: { x: 445, y: 177 }
   },
-
-  // 7. Barriga / Região Lombar
   {
-    id: 'back-barriga',
-    region: 'barriga',
+    id: 'verso_gluteos',
+    label: 'Glúteos / Lombar (Verso)',
+    baseRegion: 'gluteos',
+    region: 'gluteos',
+    view: 'back',
     side: 'midline',
-    view: 'back',
-    label: 'Lombar',
     shapeType: 'polygon',
-    points: '158,230 242,230 238,300 162,300',
-    center: { x: 200, y: 265 }
-  },
-
-  // 8. Glúteos
-  {
-    id: 'back-gluteo-esq',
-    region: 'glúteo',
-    side: 'left',
-    view: 'back',
-    label: 'Glúteo Esquerdo',
-    shapeType: 'polygon',
-    points: '155,300 200,300 200,370 145,360',
-    center: { x: 175, y: 335 }
+    points: '403,235 487,235 498,285 498,340 392,340 392,285',
+    center: { x: 445, y: 287 }
   },
   {
-    id: 'back-gluteo-dir',
-    region: 'glúteo',
-    side: 'right',
-    view: 'back',
-    label: 'Glúteo Direito',
-    shapeType: 'polygon',
-    points: '200,300 245,300 255,360 200,370',
-    center: { x: 225, y: 335 }
-  },
-
-  // 9. Pernas (Coxas Posteriores)
-  {
-    id: 'back-perna-esq',
+    id: 'verso_perna_esquerda',
+    label: 'Perna Esquerda (Verso)',
+    baseRegion: 'perna',
     region: 'perna',
-    side: 'left',
     view: 'back',
-    label: 'Perna Esquerda (Coxa Posterior)',
+    side: 'left',
     shapeType: 'polygon',
-    points: '145,360 200,370 192,510 148,510',
-    center: { x: 172, y: 420 }
+    points: '392,340 442,340 440,475 384,475',
+    center: { x: 414, y: 407 }
   },
   {
-    id: 'back-perna-dir',
+    id: 'verso_perna_direita',
+    label: 'Perna Direita (Verso)',
+    baseRegion: 'perna',
     region: 'perna',
-    side: 'right',
     view: 'back',
-    label: 'Perna Direita (Coxa Posterior)',
+    side: 'right',
     shapeType: 'polygon',
-    points: '200,370 255,360 252,510 208,510',
-    center: { x: 228, y: 420 }
+    points: '448,340 498,340 506,475 450,475',
+    center: { x: 476, y: 407 }
   },
-
-  // 10. Canelas (Panturrilhas)
   {
-    id: 'back-canela-esq',
+    id: 'verso_canela_esquerda',
+    label: 'Canela / Panturrilha Esquerda (Verso)',
+    baseRegion: 'canela',
     region: 'canela',
-    side: 'left',
     view: 'back',
-    label: 'Canela / Panturrilha Esquerda',
+    side: 'left',
     shapeType: 'polygon',
-    points: '148,510 192,510 188,645 152,645',
-    center: { x: 170, y: 575 }
+    points: '384,475 440,475 430,630 372,630',
+    center: { x: 406, y: 552 }
   },
   {
-    id: 'back-canela-dir',
+    id: 'verso_canela_direita',
+    label: 'Canela / Panturrilha Direita (Verso)',
+    baseRegion: 'canela',
     region: 'canela',
+    view: 'back',
     side: 'right',
-    view: 'back',
-    label: 'Canela / Panturrilha Direita',
     shapeType: 'polygon',
-    points: '208,510 252,510 248,645 212,645',
-    center: { x: 230, y: 575 }
+    points: '450,475 506,475 518,630 460,630',
+    center: { x: 484, y: 552 }
   },
-
-  // 11. Pés (Calcanhares)
   {
-    id: 'back-pe-esq',
-    region: 'pé',
+    id: 'verso_pe_esquerdo',
+    label: 'Pé Esquerdo (Verso)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'back',
     side: 'left',
-    view: 'back',
-    label: 'Pé Esquerdo (Calcanhar)',
     shapeType: 'polygon',
-    points: '152,645 188,645 186,705 146,705',
-    center: { x: 167, y: 675 }
+    points: '372,630 430,630 428,682 348,682',
+    center: { x: 395, y: 656 }
   },
   {
-    id: 'back-pe-dir',
-    region: 'pé',
+    id: 'verso_pe_direito',
+    label: 'Pé Direito (Verso)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'back',
     side: 'right',
-    view: 'back',
-    label: 'Pé Direito (Calcanhar)',
     shapeType: 'polygon',
-    points: '212,645 248,645 254,705 214,705',
-    center: { x: 233, y: 675 }
+    points: '460,630 518,630 542,682 462,682',
+    center: { x: 495, y: 656 }
   },
 
-  // =========================================================================
-  // 3. LADO ESQUERDO (view: 'left', perfil voltado para a esquerda)
-  // Todas as regiões laterais são side: 'left'
-  // =========================================================================
-
+  // --- 3. PERFIL ESQUERDO ---
   {
-    id: 'left-cabeca',
-    region: 'cabeça',
-    side: 'left',
-    view: 'left',
+    id: 'perfil_esq_cabeca',
     label: 'Cabeça (Perfil Esquerdo)',
+    baseRegion: 'cabeca',
+    region: 'cabeca',
+    view: 'left',
+    side: 'left',
     shapeType: 'ellipse',
-    ellipseCoords: { cx: 205, cy: 75, rx: 34, ry: 48 },
-    center: { x: 205, y: 75 }
+    ellipseCoords: { cx: 702, cy: 65, rx: 34, ry: 42 },
+    center: { x: 702, y: 65 }
   },
   {
-    id: 'left-ombro',
+    id: 'perfil_esq_ombro',
+    label: 'Ombro (Perfil Esquerdo)',
+    baseRegion: 'ombro',
     region: 'ombro',
-    side: 'left',
     view: 'left',
-    label: 'Ombro Esquerdo',
+    side: 'left',
     shapeType: 'polygon',
-    points: '185,135 235,135 235,185 185,185',
-    center: { x: 210, y: 160 }
+    points: '680,120 725,120 735,160 690,160',
+    center: { x: 707, y: 140 }
   },
   {
-    id: 'left-braco',
-    region: 'braço',
-    side: 'left',
+    id: 'perfil_esq_braco',
+    label: 'Braço (Perfil Esquerdo)',
+    baseRegion: 'braco',
+    region: 'braco',
     view: 'left',
-    label: 'Braço Esquerdo',
+    side: 'left',
     shapeType: 'polygon',
-    points: '185,185 235,185 230,265 190,265',
-    center: { x: 210, y: 225 }
+    points: '690,160 735,160 730,245 685,245',
+    center: { x: 710, y: 202 }
   },
   {
-    id: 'left-antebraco',
-    region: 'antebraço',
-    side: 'left',
+    id: 'perfil_esq_antebraco',
+    label: 'Antebraço (Perfil Esquerdo)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
     view: 'left',
-    label: 'Antebraço Esquerdo',
+    side: 'left',
     shapeType: 'polygon',
-    points: '190,265 230,265 220,365 180,365',
-    center: { x: 205, y: 315 }
+    points: '685,245 730,245 725,325 680,325',
+    center: { x: 705, y: 285 }
   },
   {
-    id: 'left-mao',
-    region: 'mão',
-    side: 'left',
+    id: 'perfil_esq_mao',
+    label: 'Mão (Perfil Esquerdo)',
+    baseRegion: 'mao',
+    region: 'mao',
     view: 'left',
-    label: 'Mão Esquerda',
+    side: 'left',
     shapeType: 'polygon',
-    points: '180,365 220,365 212,445 174,445',
-    center: { x: 195, y: 405 }
+    points: '680,325 725,325 715,385 665,385',
+    center: { x: 696, y: 355 }
   },
   {
-    id: 'left-torax',
-    region: 'tórax',
-    side: 'left',
+    id: 'perfil_esq_torax',
+    label: 'Tórax (Perfil Esquerdo)',
+    baseRegion: 'torax',
+    region: 'torax',
     view: 'left',
-    label: 'Tórax Esquerdo',
+    side: 'left',
     shapeType: 'polygon',
-    points: '170,140 215,140 215,225 170,225',
-    center: { x: 192, y: 182 }
+    points: '658,145 710,145 715,220 660,220',
+    center: { x: 686, y: 182 }
   },
   {
-    id: 'left-barriga',
-    region: 'barriga',
-    side: 'left',
+    id: 'perfil_esq_abdomen',
+    label: 'Barriga / Abdômen (Perfil Esquerdo)',
+    baseRegion: 'abdomen',
+    region: 'abdomen',
     view: 'left',
-    label: 'Barriga / Lombar Esquerda',
+    side: 'left',
     shapeType: 'polygon',
-    points: '172,225 215,225 215,310 172,310',
-    center: { x: 193, y: 267 }
+    points: '660,220 715,220 718,315 662,315',
+    center: { x: 689, y: 267 }
   },
   {
-    id: 'left-gluteo',
-    region: 'glúteo',
-    side: 'left',
+    id: 'perfil_esq_gluteos',
+    label: 'Glúteo (Perfil Esquerdo)',
+    baseRegion: 'gluteos',
+    region: 'gluteos',
     view: 'left',
-    label: 'Glúteo Esquerdo',
+    side: 'left',
     shapeType: 'polygon',
-    points: '195,305 245,305 240,375 190,375',
-    center: { x: 217, y: 340 }
+    points: '716,245 745,265 745,335 715,335',
+    center: { x: 730, y: 290 }
   },
   {
-    id: 'left-perna',
+    id: 'perfil_esq_perna',
+    label: 'Perna (Perfil Esquerdo)',
+    baseRegion: 'perna',
     region: 'perna',
-    side: 'left',
     view: 'left',
-    label: 'Perna Esquerda (Coxa)',
+    side: 'left',
     shapeType: 'polygon',
-    points: '175,365 240,375 225,510 178,510',
-    center: { x: 204, y: 435 }
+    points: '668,335 738,335 735,475 672,475',
+    center: { x: 703, y: 405 }
   },
   {
-    id: 'left-canela',
+    id: 'perfil_esq_canela',
+    label: 'Canela / Panturrilha (Perfil Esquerdo)',
+    baseRegion: 'canela',
     region: 'canela',
-    side: 'left',
     view: 'left',
-    label: 'Canela Esquerda',
+    side: 'left',
     shapeType: 'polygon',
-    points: '178,510 225,510 220,645 182,645',
-    center: { x: 201, y: 575 }
+    points: '672,475 735,475 732,630 680,630',
+    center: { x: 705, y: 552 }
   },
   {
-    id: 'left-pe',
-    region: 'pé',
-    side: 'left',
+    id: 'perfil_esq_pe',
+    label: 'Pé (Perfil Esquerdo)',
+    baseRegion: 'pe',
+    region: 'pe',
     view: 'left',
-    label: 'Pé Esquerdo',
+    side: 'left',
     shapeType: 'polygon',
-    points: '165,645 235,645 235,705 165,705',
-    center: { x: 200, y: 675 }
+    points: '680,630 732,630 735,682 620,682',
+    center: { x: 692, y: 656 }
   },
 
-  // =========================================================================
-  // 4. LADO DIREITO (view: 'right', perfil voltado para a direita)
-  // Todas as regiões laterais são side: 'right'
-  // =========================================================================
-
+  // --- 4. PERFIL DIREITO ---
   {
-    id: 'right-cabeca',
-    region: 'cabeça',
-    side: 'right',
-    view: 'right',
+    id: 'perfil_dir_cabeca',
     label: 'Cabeça (Perfil Direito)',
+    baseRegion: 'cabeca',
+    region: 'cabeca',
+    view: 'right',
+    side: 'right',
     shapeType: 'ellipse',
-    ellipseCoords: { cx: 195, cy: 75, rx: 34, ry: 48 },
-    center: { x: 195, y: 75 }
+    ellipseCoords: { cx: 895, cy: 65, rx: 34, ry: 42 },
+    center: { x: 895, y: 65 }
   },
   {
-    id: 'right-ombro',
+    id: 'perfil_dir_ombro',
+    label: 'Ombro (Perfil Direito)',
+    baseRegion: 'ombro',
     region: 'ombro',
-    side: 'right',
     view: 'right',
-    label: 'Ombro Direito',
+    side: 'right',
     shapeType: 'polygon',
-    points: '165,135 215,135 215,185 165,185',
-    center: { x: 190, y: 160 }
+    points: '875,120 920,120 930,160 885,160',
+    center: { x: 902, y: 140 }
   },
   {
-    id: 'right-braco',
-    region: 'braço',
-    side: 'right',
+    id: 'perfil_dir_braco',
+    label: 'Braço (Perfil Direito)',
+    baseRegion: 'braco',
+    region: 'braco',
     view: 'right',
-    label: 'Braço Direito',
+    side: 'right',
     shapeType: 'polygon',
-    points: '165,185 215,185 210,265 170,265',
-    center: { x: 190, y: 225 }
+    points: '885,160 930,160 925,245 880,245',
+    center: { x: 905, y: 202 }
   },
   {
-    id: 'right-antebraco',
-    region: 'antebraço',
-    side: 'right',
+    id: 'perfil_dir_antebraco',
+    label: 'Antebraço (Perfil Direito)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
     view: 'right',
-    label: 'Antebraço Direito',
+    side: 'right',
     shapeType: 'polygon',
-    points: '170,265 210,265 220,365 180,365',
-    center: { x: 195, y: 315 }
+    points: '880,245 925,245 920,325 875,325',
+    center: { x: 900, y: 285 }
   },
   {
-    id: 'right-mao',
-    region: 'mão',
-    side: 'right',
+    id: 'perfil_dir_mao',
+    label: 'Mão (Perfil Direito)',
+    baseRegion: 'mao',
+    region: 'mao',
     view: 'right',
-    label: 'Mão Direita',
+    side: 'right',
     shapeType: 'polygon',
-    points: '180,365 220,365 226,445 188,445',
-    center: { x: 205, y: 405 }
+    points: '875,325 920,325 910,385 860,385',
+    center: { x: 891, y: 355 }
   },
   {
-    id: 'right-torax',
-    region: 'tórax',
-    side: 'right',
+    id: 'perfil_dir_torax',
+    label: 'Tórax (Perfil Direito)',
+    baseRegion: 'torax',
+    region: 'torax',
     view: 'right',
-    label: 'Tórax Direito',
+    side: 'right',
     shapeType: 'polygon',
-    points: '185,140 230,140 230,225 185,225',
-    center: { x: 208, y: 182 }
+    points: '845,145 897,145 902,220 847,220',
+    center: { x: 873, y: 182 }
   },
   {
-    id: 'right-barriga',
-    region: 'barriga',
-    side: 'right',
+    id: 'perfil_dir_abdomen',
+    label: 'Barriga / Abdômen (Perfil Direito)',
+    baseRegion: 'abdomen',
+    region: 'abdomen',
     view: 'right',
-    label: 'Barriga / Lombar Direita',
+    side: 'right',
     shapeType: 'polygon',
-    points: '185,225 228,225 228,310 185,310',
-    center: { x: 207, y: 267 }
+    points: '847,220 902,220 905,315 849,315',
+    center: { x: 876, y: 267 }
   },
   {
-    id: 'right-gluteo',
-    region: 'glúteo',
-    side: 'right',
+    id: 'perfil_dir_gluteos',
+    label: 'Glúteo (Perfil Direito)',
+    baseRegion: 'gluteos',
+    region: 'gluteos',
     view: 'right',
-    label: 'Glúteo Direito',
+    side: 'right',
     shapeType: 'polygon',
-    points: '155,305 205,305 210,375 160,375',
-    center: { x: 183, y: 340 }
+    points: '818,245 847,265 847,335 818,335',
+    center: { x: 832, y: 290 }
   },
   {
-    id: 'right-perna',
+    id: 'perfil_dir_perna',
+    label: 'Perna (Perfil Direito)',
+    baseRegion: 'perna',
     region: 'perna',
-    side: 'right',
     view: 'right',
-    label: 'Perna Direita (Coxa)',
+    side: 'right',
     shapeType: 'polygon',
-    points: '160,375 225,365 222,510 175,510',
-    center: { x: 196, y: 435 }
+    points: '855,335 925,335 922,475 859,475',
+    center: { x: 890, y: 405 }
   },
   {
-    id: 'right-canela',
+    id: 'perfil_dir_canela',
+    label: 'Canela / Panturrilha (Perfil Direito)',
+    baseRegion: 'canela',
     region: 'canela',
-    side: 'right',
     view: 'right',
-    label: 'Canela Direita',
+    side: 'right',
     shapeType: 'polygon',
-    points: '175,510 222,510 218,645 180,645',
-    center: { x: 199, y: 575 }
+    points: '859,475 922,475 919,630 867,630',
+    center: { x: 892, y: 552 }
   },
   {
-    id: 'right-pe',
-    region: 'pé',
-    side: 'right',
+    id: 'perfil_dir_pe',
+    label: 'Pé (Perfil Direito)',
+    baseRegion: 'pe',
+    region: 'pe',
     view: 'right',
-    label: 'Pé Direito',
+    side: 'right',
     shapeType: 'polygon',
-    points: '165,645 235,645 235,705 165,705',
-    center: { x: 200, y: 675 }
+    points: '867,630 919,630 965,682 850,682',
+    center: { x: 900, y: 656 }
   }
 ];
 
-export const VIEW_BOUNDS: Record<'front' | 'back' | 'left' | 'right', { minX: number; maxX: number; width: number }> = {
-  front: { minX: 0, maxX: 400, width: 400 },
-  back: { minX: 0, maxX: 400, width: 400 },
-  left: { minX: 0, maxX: 400, width: 400 },
-  right: { minX: 0, maxX: 400, width: 400 }
-};
+// =============================================================================
+// CATÁLOGO DE REGIÕES PANORÂMICAS: MODELO FEMININO (1024 x 768)
+// =============================================================================
+export const PANORAMA_REGIONS_FEMALE: BodyPanoramaRegion[] = [
+  // --- 1. FRENTE ---
+  {
+    id: 'frente_cabeca',
+    label: 'Cabeça (Frente)',
+    baseRegion: 'cabeca',
+    region: 'cabeca',
+    view: 'front',
+    side: 'midline',
+    shapeType: 'ellipse',
+    ellipseCoords: { cx: 160, cy: 65, rx: 32, ry: 42 },
+    center: { x: 160, y: 65 }
+  },
+  {
+    id: 'frente_ombro_direito',
+    label: 'Ombro Direito (Frente)',
+    baseRegion: 'ombro',
+    region: 'ombro',
+    view: 'front',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '135,122 88,140 80,170 114,170 138,138',
+    center: { x: 109, y: 148 }
+  },
+  {
+    id: 'frente_ombro_esquerdo',
+    label: 'Ombro Esquerdo (Frente)',
+    baseRegion: 'ombro',
+    region: 'ombro',
+    view: 'front',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '185,122 232,140 240,170 206,170 182,138',
+    center: { x: 211, y: 148 }
+  },
+  {
+    id: 'frente_braco_direito',
+    label: 'Braço Direito (Frente)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'front',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '80,170 114,170 106,248 68,248',
+    center: { x: 92, y: 209 }
+  },
+  {
+    id: 'frente_braco_esquerdo',
+    label: 'Braço Esquerdo (Frente)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'front',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '206,170 240,170 252,248 214,248',
+    center: { x: 228, y: 209 }
+  },
+  {
+    id: 'frente_antebraco_direito',
+    label: 'Antebraço Direito (Frente)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'front',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '68,248 106,248 94,325 54,325',
+    center: { x: 80, y: 286 }
+  },
+  {
+    id: 'frente_antebraco_esquerdo',
+    label: 'Antebraço Esquerdo (Frente)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'front',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '214,248 252,248 266,325 226,325',
+    center: { x: 240, y: 286 }
+  },
+  {
+    id: 'frente_mao_direita',
+    label: 'Mão Direita (Frente)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'front',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '54,325 94,325 86,390 35,390',
+    center: { x: 67, y: 357 }
+  },
+  {
+    id: 'frente_mao_esquerda',
+    label: 'Mão Esquerda (Frente)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'front',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '226,325 266,325 285,390 234,390',
+    center: { x: 253, y: 357 }
+  },
+  {
+    id: 'frente_torax',
+    label: 'Tórax / Peitoral (Frente)',
+    baseRegion: 'torax',
+    region: 'torax',
+    view: 'front',
+    side: 'midline',
+    shapeType: 'polygon',
+    points: '126,122 194,122 208,170 200,215 120,215 112,170',
+    center: { x: 160, y: 168 }
+  },
+  {
+    id: 'frente_abdomen',
+    label: 'Barriga / Abdômen (Frente)',
+    baseRegion: 'abdomen',
+    region: 'abdomen',
+    view: 'front',
+    side: 'midline',
+    shapeType: 'polygon',
+    points: '120,215 200,215 208,285 206,335 114,335 112,285',
+    center: { x: 160, y: 275 }
+  },
+  {
+    id: 'frente_perna_direita',
+    label: 'Perna Direita (Frente)',
+    baseRegion: 'perna',
+    region: 'perna',
+    view: 'front',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '104,335 155,335 152,475 98,475',
+    center: { x: 127, y: 405 }
+  },
+  {
+    id: 'frente_perna_esquerda',
+    label: 'Perna Esquerda (Frente)',
+    baseRegion: 'perna',
+    region: 'perna',
+    view: 'front',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '165,335 216,335 222,475 168,475',
+    center: { x: 193, y: 405 }
+  },
+  {
+    id: 'frente_canela_direita',
+    label: 'Canela Direita (Frente)',
+    baseRegion: 'canela',
+    region: 'canela',
+    view: 'front',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '98,475 152,475 145,625 90,625',
+    center: { x: 121, y: 550 }
+  },
+  {
+    id: 'frente_canela_esquerda',
+    label: 'Canela Esquerda (Frente)',
+    baseRegion: 'canela',
+    region: 'canela',
+    view: 'front',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '168,475 222,475 230,625 175,625',
+    center: { x: 199, y: 550 }
+  },
+  {
+    id: 'frente_pe_direito',
+    label: 'Pé Direito (Frente)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'front',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '90,625 145,625 146,685 75,685',
+    center: { x: 114, y: 655 }
+  },
+  {
+    id: 'frente_pe_esquerdo',
+    label: 'Pé Esquerdo (Frente)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'front',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '175,625 230,625 245,685 174,685',
+    center: { x: 206, y: 655 }
+  },
 
-export const VIEW_INDEX: Record<'front' | 'back' | 'left' | 'right', number> = {
-  front: 0,
-  back: 1,
-  left: 2,
-  right: 3
-};
+  // --- 2. VERSO ---
+  {
+    id: 'verso_cabeca',
+    label: 'Cabeça (Verso)',
+    baseRegion: 'cabeca',
+    region: 'cabeca',
+    view: 'back',
+    side: 'midline',
+    shapeType: 'ellipse',
+    ellipseCoords: { cx: 406, cy: 65, rx: 32, ry: 42 },
+    center: { x: 406, y: 65 }
+  },
+  {
+    id: 'verso_ombro_esquerdo',
+    label: 'Ombro Esquerdo (Verso)',
+    baseRegion: 'ombro',
+    region: 'ombro',
+    view: 'back',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '381,122 334,140 326,170 360,170 384,138',
+    center: { x: 357, y: 148 }
+  },
+  {
+    id: 'verso_ombro_direito',
+    label: 'Ombro Direito (Verso)',
+    baseRegion: 'ombro',
+    region: 'ombro',
+    view: 'back',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '431,122 478,140 486,170 452,170 428,138',
+    center: { x: 459, y: 148 }
+  },
+  {
+    id: 'verso_braco_esquerdo',
+    label: 'Braço Esquerdo (Verso)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'back',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '326,170 360,170 352,248 314,248',
+    center: { x: 338, y: 209 }
+  },
+  {
+    id: 'verso_braco_direito',
+    label: 'Braço Direito (Verso)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'back',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '452,170 486,170 498,248 460,248',
+    center: { x: 474, y: 209 }
+  },
+  {
+    id: 'verso_antebraco_esquerdo',
+    label: 'Antebraço Esquerdo (Verso)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'back',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '314,248 352,248 340,325 300,325',
+    center: { x: 326, y: 286 }
+  },
+  {
+    id: 'verso_antebraco_direito',
+    label: 'Antebraço Direito (Verso)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'back',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '460,248 498,248 512,325 472,325',
+    center: { x: 486, y: 286 }
+  },
+  {
+    id: 'verso_mao_esquerda',
+    label: 'Mão Esquerda (Verso)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'back',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '300,325 340,325 332,390 281,390',
+    center: { x: 313, y: 357 }
+  },
+  {
+    id: 'verso_mao_direita',
+    label: 'Mão Direita (Verso)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'back',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '472,325 512,325 531,390 480,390',
+    center: { x: 499, y: 357 }
+  },
+  {
+    id: 'verso_torax',
+    label: 'Costas / Tórax Posterior (Verso)',
+    baseRegion: 'torax',
+    region: 'torax',
+    view: 'back',
+    side: 'midline',
+    shapeType: 'polygon',
+    points: '372,122 440,122 454,170 448,225 364,225 358,170',
+    center: { x: 406, y: 173 }
+  },
+  {
+    id: 'verso_gluteos',
+    label: 'Glúteos / Lombar (Verso)',
+    baseRegion: 'gluteos',
+    region: 'gluteos',
+    view: 'back',
+    side: 'midline',
+    shapeType: 'polygon',
+    points: '364,225 448,225 460,285 458,335 352,335 350,285',
+    center: { x: 406, y: 280 }
+  },
+  {
+    id: 'verso_perna_esquerda',
+    label: 'Perna Esquerda (Verso)',
+    baseRegion: 'perna',
+    region: 'perna',
+    view: 'back',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '350,335 401,335 398,475 344,475',
+    center: { x: 373, y: 405 }
+  },
+  {
+    id: 'verso_perna_direita',
+    label: 'Perna Direita (Verso)',
+    baseRegion: 'perna',
+    region: 'perna',
+    view: 'back',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '411,335 462,335 468,475 414,475',
+    center: { x: 439, y: 405 }
+  },
+  {
+    id: 'verso_canela_esquerda',
+    label: 'Canela / Panturrilha Esquerda (Verso)',
+    baseRegion: 'canela',
+    region: 'canela',
+    view: 'back',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '344,475 398,475 391,625 336,625',
+    center: { x: 367, y: 550 }
+  },
+  {
+    id: 'verso_canela_direita',
+    label: 'Canela / Panturrilha Direita (Verso)',
+    baseRegion: 'canela',
+    region: 'canela',
+    view: 'back',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '414,475 468,475 476,625 421,625',
+    center: { x: 445, y: 550 }
+  },
+  {
+    id: 'verso_pe_esquerdo',
+    label: 'Pé Esquerdo (Verso)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'back',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '336,625 391,625 392,685 321,685',
+    center: { x: 360, y: 655 }
+  },
+  {
+    id: 'verso_pe_direito',
+    label: 'Pé Direito (Verso)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'back',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '421,625 476,625 491,685 420,685',
+    center: { x: 452, y: 655 }
+  },
+
+  // --- 3. PERFIL ESQUERDO ---
+  {
+    id: 'perfil_esq_cabeca',
+    label: 'Cabeça (Perfil Esquerdo)',
+    baseRegion: 'cabeca',
+    region: 'cabeca',
+    view: 'left',
+    side: 'left',
+    shapeType: 'ellipse',
+    ellipseCoords: { cx: 646, cy: 65, rx: 34, ry: 42 },
+    center: { x: 646, y: 65 }
+  },
+  {
+    id: 'perfil_esq_ombro',
+    label: 'Ombro (Perfil Esquerdo)',
+    baseRegion: 'ombro',
+    region: 'ombro',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '625,120 670,120 680,160 635,160',
+    center: { x: 652, y: 140 }
+  },
+  {
+    id: 'perfil_esq_braco',
+    label: 'Braço (Perfil Esquerdo)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '635,160 680,160 675,245 630,245',
+    center: { x: 655, y: 202 }
+  },
+  {
+    id: 'perfil_esq_antebraco',
+    label: 'Antebraço (Perfil Esquerdo)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '630,245 675,245 670,325 625,325',
+    center: { x: 650, y: 285 }
+  },
+  {
+    id: 'perfil_esq_mao',
+    label: 'Mão (Perfil Esquerdo)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '625,325 670,325 660,385 610,385',
+    center: { x: 641, y: 355 }
+  },
+  {
+    id: 'perfil_esq_torax',
+    label: 'Tórax (Perfil Esquerdo)',
+    baseRegion: 'torax',
+    region: 'torax',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '605,145 655,145 660,220 607,220',
+    center: { x: 632, y: 182 }
+  },
+  {
+    id: 'perfil_esq_abdomen',
+    label: 'Barriga / Abdômen (Perfil Esquerdo)',
+    baseRegion: 'abdomen',
+    region: 'abdomen',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '607,220 660,220 662,315 609,315',
+    center: { x: 635, y: 267 }
+  },
+  {
+    id: 'perfil_esq_gluteos',
+    label: 'Glúteo (Perfil Esquerdo)',
+    baseRegion: 'gluteos',
+    region: 'gluteos',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '662,245 695,265 695,335 660,335',
+    center: { x: 678, y: 290 }
+  },
+  {
+    id: 'perfil_esq_perna',
+    label: 'Perna (Perfil Esquerdo)',
+    baseRegion: 'perna',
+    region: 'perna',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '615,335 685,335 682,475 620,475',
+    center: { x: 651, y: 405 }
+  },
+  {
+    id: 'perfil_esq_canela',
+    label: 'Canela / Panturrilha (Perfil Esquerdo)',
+    baseRegion: 'canela',
+    region: 'canela',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '620,475 682,475 678,630 626,630',
+    center: { x: 651, y: 552 }
+  },
+  {
+    id: 'perfil_esq_pe',
+    label: 'Pé (Perfil Esquerdo)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'left',
+    side: 'left',
+    shapeType: 'polygon',
+    points: '626,630 678,630 682,682 575,682',
+    center: { x: 640, y: 656 }
+  },
+
+  // --- 4. PERFIL DIREITO ---
+  {
+    id: 'perfil_dir_cabeca',
+    label: 'Cabeça (Perfil Direito)',
+    baseRegion: 'cabeca',
+    region: 'cabeca',
+    view: 'right',
+    side: 'right',
+    shapeType: 'ellipse',
+    ellipseCoords: { cx: 860, cy: 65, rx: 34, ry: 42 },
+    center: { x: 860, y: 65 }
+  },
+  {
+    id: 'perfil_dir_ombro',
+    label: 'Ombro (Perfil Direito)',
+    baseRegion: 'ombro',
+    region: 'ombro',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '835,120 880,120 890,160 845,160',
+    center: { x: 862, y: 140 }
+  },
+  {
+    id: 'perfil_dir_braco',
+    label: 'Braço (Perfil Direito)',
+    baseRegion: 'braco',
+    region: 'braco',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '845,160 890,160 885,245 840,245',
+    center: { x: 865, y: 202 }
+  },
+  {
+    id: 'perfil_dir_antebraco',
+    label: 'Antebraço (Perfil Direito)',
+    baseRegion: 'antebraco',
+    region: 'antebraco',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '840,245 885,245 880,325 835,325',
+    center: { x: 860, y: 285 }
+  },
+  {
+    id: 'perfil_dir_mao',
+    label: 'Mão (Perfil Direito)',
+    baseRegion: 'mao',
+    region: 'mao',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '835,325 880,325 870,385 820,385',
+    center: { x: 851, y: 355 }
+  },
+  {
+    id: 'perfil_dir_torax',
+    label: 'Tórax (Perfil Direito)',
+    baseRegion: 'torax',
+    region: 'torax',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '820,145 870,145 875,220 822,220',
+    center: { x: 847, y: 182 }
+  },
+  {
+    id: 'perfil_dir_abdomen',
+    label: 'Barriga / Abdômen (Perfil Direito)',
+    baseRegion: 'abdomen',
+    region: 'abdomen',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '822,220 875,220 877,315 824,315',
+    center: { x: 849, y: 267 }
+  },
+  {
+    id: 'perfil_dir_gluteos',
+    label: 'Glúteo (Perfil Direito)',
+    baseRegion: 'gluteos',
+    region: 'gluteos',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '788,245 822,265 822,335 788,335',
+    center: { x: 805, y: 290 }
+  },
+  {
+    id: 'perfil_dir_perna',
+    label: 'Perna (Perfil Direito)',
+    baseRegion: 'perna',
+    region: 'perna',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '830,335 900,335 897,475 834,475',
+    center: { x: 865, y: 405 }
+  },
+  {
+    id: 'perfil_dir_canela',
+    label: 'Canela / Panturrilha (Perfil Direito)',
+    baseRegion: 'canela',
+    region: 'canela',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '834,475 897,475 893,630 841,630',
+    center: { x: 866, y: 552 }
+  },
+  {
+    id: 'perfil_dir_pe',
+    label: 'Pé (Perfil Direito)',
+    baseRegion: 'pe',
+    region: 'pe',
+    view: 'right',
+    side: 'right',
+    shapeType: 'polygon',
+    points: '841,630 893,630 935,682 830,682',
+    center: { x: 875, y: 656 }
+  }
+];
+
+// Dicionário por modelo corporal
+export function getPanoramaRegions(model: 'female' | 'male'): BodyPanoramaRegion[] {
+  return model === 'female' ? PANORAMA_REGIONS_FEMALE : PANORAMA_REGIONS_MALE;
+}
+
+// Obter label amigável pelo ID
+export function getRegionLabel(regionId: string, model: 'female' | 'male' = 'male'): string {
+  const list = getPanoramaRegions(model);
+  const found = list.find(r => r.id === regionId);
+  if (found) return found.label;
+
+  // Fallback se não encontrar
+  const parts = regionId.split('_');
+  return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}

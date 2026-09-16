@@ -1,24 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { BodyRegionDef } from './bodyRegionsData';
-import { ZemdaBodyCanvas, BodyStroke, BodyMarkerItem } from './ZemdaBodyCanvas';
-import { ZemdaBodyPanel } from './ZemdaBodyPanel';
+import { ZemdaBodyCanvas } from './ZemdaBodyCanvas';
+import { getRegionLabel } from './bodyRegionsData';
 import {
-  MousePointer,
-  PenTool,
-  Highlighter,
-  Eraser,
-  RotateCcw,
-  RotateCw,
-  Trash2,
   CheckCircle2,
   AlertCircle,
-  Eye,
-  User,
-  Layers,
+  Save,
+  RotateCcw,
   Sparkles,
-  HelpCircle
+  Layers,
+  FileText,
+  User,
+  ShieldCheck,
+  Tag
 } from 'lucide-react';
 
 interface ZemdaBodyWorkspaceProps {
@@ -42,38 +37,18 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
 }) => {
   const { showToast } = useToast();
 
-  // Estado da Avaliação
+  // Estados principais
   const [assessmentId, setAssessmentId] = useState<string | null>(null);
   const [bodyModel, setBodyModel] = useState<'female' | 'male'>(initialBodyModel);
-  const [activeView, setActiveView] = useState<'front' | 'back' | 'left' | 'right' | 'all'>('front');
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [clinicalNotes, setClinicalNotes] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [savingStatus, setSavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
-  // Marcadores e Desenhos
-  const [markers, setMarkers] = useState<BodyMarkerItem[]>([]);
-  const [drawings, setDrawings] = useState<Record<string, BodyStroke[]>>({
-    front: [],
-    back: [],
-    left: [],
-    right: []
-  });
-
-  // Ferramenta Ativa
-  const [tool, setTool] = useState<'select' | 'pen' | 'highlighter' | 'eraser'>('select');
-  const [penColor, setPenColor] = useState<string>('#dc2626'); // Vermelho padrão
-  const [penWidth, setPenWidth] = useState<number>(4); // Média
-  const [highlighterWidth, setHighlighterWidth] = useState<number>(18);
-
-  // Região Selecionada
-  const [selectedRegion, setSelectedRegion] = useState<BodyRegionDef | null>(null);
-
-  // Confirmação de Limpar Desenho
-  const [showClearConfirm, setShowClearConfirm] = useState<boolean>(false);
-
-  // Timer de debounce para salvar desenhos
+  // Timer de debounce para persistência automática
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Carrega avaliação existente ou inicializa
+  // Carrega avaliação existente ou cria se em consulta
   useEffect(() => {
     async function loadData() {
       try {
@@ -89,15 +64,40 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
           if (res.assessment.body_model) {
             setBodyModel(res.assessment.body_model);
           }
-          setMarkers(res.markers || []);
-          setDrawings({
-            front: res.drawings?.front || [],
-            back: res.drawings?.back || [],
-            left: res.drawings?.left || [],
-            right: res.drawings?.right || []
-          });
+
+          // Restaura regiões selecionadas e observações de notes ou markers
+          let loadedRegions: string[] = [];
+          if (res.assessment.notes) {
+            try {
+              const parsed = JSON.parse(res.assessment.notes);
+              if (Array.isArray(parsed)) {
+                loadedRegions = parsed;
+              } else if (parsed && typeof parsed === 'object') {
+                if (Array.isArray(parsed.selectedRegions)) {
+                  loadedRegions = parsed.selectedRegions;
+                }
+                if (parsed.clinicalNotes) {
+                  setClinicalNotes(parsed.clinicalNotes);
+                }
+              } else {
+                setClinicalNotes(res.assessment.notes);
+              }
+            } catch {
+              // Se notes era texto puro
+              setClinicalNotes(res.assessment.notes);
+            }
+          }
+
+          // Se não havia no notes, extrai dos markers
+          if (loadedRegions.length === 0 && Array.isArray(res.markers) && res.markers.length > 0) {
+            loadedRegions = res.markers
+              .filter((m: any) => m.body_region)
+              .map((m: any) => m.body_region);
+          }
+
+          setSelectedRegions(loadedRegions);
         } else if (!readOnly) {
-          // Cria uma nova avaliação vinculada ao agendamento
+          // Cria nova avaliação para o agendamento
           const createRes = await ApiClient.post<any>('/v1/body-assessments', {
             patientId,
             appointmentId: appointmentId || null,
@@ -121,114 +121,137 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
     loadData();
   }, [patientId, appointmentId, professionalId, module, readOnly]);
 
-  // Alteração de modelo corporal
-  const handleModelChange = async (newModel: 'female' | 'male') => {
-    setBodyModel(newModel);
-    if (assessmentId && !readOnly) {
+  // Função central de persistência
+  const saveAssessmentData = useCallback(
+    async (
+      regionsToSave: string[],
+      notesToSave: string,
+      modelToSave: 'female' | 'male',
+      isManual: boolean = false
+    ) => {
+      if (readOnly) return;
+
       try {
-        await ApiClient.post('/v1/body-assessments', {
-          id: assessmentId,
+        setSavingStatus('saving');
+
+        const notesPayload = JSON.stringify({
+          selectedRegions: regionsToSave,
+          clinicalNotes: notesToSave
+        });
+
+        const res = await ApiClient.post<any>('/v1/body-assessments', {
+          id: assessmentId || undefined,
           patientId,
           appointmentId: appointmentId || null,
           professionalId: professionalId || null,
           module,
-          bodyModel: newModel
+          bodyModel: modelToSave,
+          notes: notesPayload,
+          assessmentDate: new Date().toISOString().split('T')[0]
         });
-      } catch (e) {
-        console.warn('Erro ao atualizar modelo:', e);
-      }
-    }
-  };
 
-  // Salvar Marcador Clínico Estruturado
-  const handleAddMarker = async (newMarker: Omit<BodyMarkerItem, 'id'>) => {
-    if (!assessmentId) {
-      showToast('Avaliação corporal não inicializada', 'error');
-      return;
-    }
-
-    try {
-      const res = await ApiClient.post<any>(`/v1/body-assessments/${assessmentId}/markers`, newMarker);
-      if (res?.markerId) {
-        const fullMarker: BodyMarkerItem = {
-          ...newMarker,
-          id: res.markerId
-        };
-        setMarkers(prev => [...prev, fullMarker]);
-        showToast('Informação clínica registrada no mapa!', 'success');
-      }
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao registrar marcador', 'error');
-      throw err;
-    }
-  };
-
-  // Excluir Marcador
-  const handleDeleteMarker = async (markerId: string) => {
-    try {
-      await ApiClient.delete(`/v1/body-assessments/markers/${markerId}`);
-      setMarkers(prev => prev.filter(m => m.id !== markerId));
-      showToast('Registro excluído com sucesso', 'info');
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao excluir registro', 'error');
-    }
-  };
-
-  // Salvar Desenhos com Debounce para evitar sobrecarregar API
-  const handleSaveViewDrawings = useCallback(
-    (view: 'front' | 'back' | 'left' | 'right', strokes: BodyStroke[]) => {
-      // Atualização imediata no estado local
-      setDrawings(prev => ({
-        ...prev,
-        [view]: strokes
-      }));
-
-      if (!assessmentId || readOnly) return;
-
-      setSavingStatus('saving');
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-
-      debounceTimerRef.current = setTimeout(async () => {
-        try {
-          await ApiClient.put(`/v1/body-assessments/${assessmentId}/drawings/${view}`, {
-            strokes
-          });
-          setSavingStatus('saved');
-          setTimeout(() => setSavingStatus('idle'), 2000);
-        } catch (err) {
-          console.error('Erro ao sincronizar desenhos:', err);
-          setSavingStatus('error');
+        const activeId = assessmentId || res?.assessmentId;
+        if (!assessmentId && res?.assessmentId) {
+          setAssessmentId(res.assessmentId);
         }
-      }, 700);
+
+        // Sincroniza marcadores individuais em body_markers para compatibilidade com relatórios
+        if (activeId) {
+          // Salva cada marcador ativo
+          for (const regId of regionsToSave) {
+            const side = regId.includes('direito')
+              ? 'right'
+              : regId.includes('esquerdo')
+              ? 'left'
+              : 'midline';
+            const view = regId.startsWith('verso')
+              ? 'back'
+              : regId.startsWith('perfil_esq')
+              ? 'left'
+              : regId.startsWith('perfil_dir')
+              ? 'right'
+              : 'front';
+
+            await ApiClient.post(`/v1/body-assessments/${activeId}/markers`, {
+              id: `${activeId}_${regId}`,
+              bodyRegion: regId,
+              side,
+              view,
+              markerType: 'selected_region',
+              value: regId
+            }).catch(() => {});
+          }
+        }
+
+        setSavingStatus('saved');
+        if (isManual) {
+          showToast('Avaliação corporal salva com sucesso!', 'success');
+        }
+        setTimeout(() => setSavingStatus('idle'), 2500);
+      } catch (err: any) {
+        console.error('Erro ao salvar avaliação:', err);
+        setSavingStatus('error');
+        if (isManual) {
+          showToast('Erro ao salvar mapa corporal', 'error');
+        }
+      }
     },
-    [assessmentId, readOnly]
+    [assessmentId, patientId, appointmentId, professionalId, module, readOnly, showToast]
   );
 
-  // Confirmar Limpar Desenho da Vista Ativa
-  const handleConfirmClearView = async () => {
-    if (activeView === 'all') {
-      showToast('Selecione uma vista específica para limpar', 'info');
-      setShowClearConfirm(false);
-      return;
+  // Debounce para salvamento automático ao clicar no mapa
+  const triggerAutoSave = (
+    newRegions: string[],
+    newNotes: string = clinicalNotes,
+    newModel: 'female' | 'male' = bodyModel
+  ) => {
+    if (readOnly) return;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      saveAssessmentData(newRegions, newNotes, newModel, false);
+    }, 600);
+  };
+
+  // Alternar região corporal (clicar para marcar / desmarcar)
+  const handleToggleRegion = (regionId: string) => {
+    if (readOnly) return;
+
+    let updated: string[];
+    if (selectedRegions.includes(regionId)) {
+      updated = selectedRegions.filter(id => id !== regionId);
+      // Remove marcador individual
+      if (assessmentId) {
+        ApiClient.delete(`/v1/body-assessments/markers/${assessmentId}_${regionId}`).catch(() => {});
+      }
+    } else {
+      updated = [...selectedRegions, regionId];
     }
 
-    const viewToClear = activeView;
-    try {
-      if (assessmentId && !readOnly) {
-        await ApiClient.delete(`/v1/body-assessments/${assessmentId}/drawings/${viewToClear}`);
-      }
-      setDrawings(prev => ({
-        ...prev,
-        [viewToClear]: []
-      }));
-      showToast(`Anotações manuais da vista ${viewToClear} removidas`, 'info');
-    } catch (err: any) {
-      showToast('Erro ao limpar anotações', 'error');
-    } finally {
-      setShowClearConfirm(false);
+    setSelectedRegions(updated);
+    triggerAutoSave(updated);
+  };
+
+  // Desmarcar todas as regiões
+  const handleClearAll = () => {
+    if (readOnly || selectedRegions.length === 0) return;
+    if (confirm('Deseja desmarcar todas as regiões selecionadas?')) {
+      setSelectedRegions([]);
+      triggerAutoSave([]);
+      showToast('Seleções limpas', 'info');
     }
+  };
+
+  // Alternar modelo (Feminino / Masculino)
+  const handleModelChange = (newModel: 'female' | 'male') => {
+    setBodyModel(newModel);
+    triggerAutoSave(selectedRegions, clinicalNotes, newModel);
+  };
+
+  // Salvar manualmente pelo botão
+  const handleManualSave = () => {
+    saveAssessmentData(selectedRegions, clinicalNotes, bodyModel, true);
   };
 
   if (loading) {
@@ -236,7 +259,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
       <div className="flex items-center justify-center p-12 bg-slate-50 rounded-2xl">
         <div className="text-center space-y-2">
           <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-semibold text-slate-600">Carregando ZemdaBody...</p>
+          <p className="text-xs font-semibold text-slate-600">Carregando mapa corporal...</p>
         </div>
       </div>
     );
@@ -244,110 +267,22 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* 1. BARRA DE FERRAMENTAS SUPERIOR DO ZEMDABODY */}
+      {/* 1. BARRA SUPERIOR: CONTROLES & STATUS */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        {/* Lado Esquerdo: Ferramentas de Interação */}
-        <div className="flex items-center flex-wrap gap-1.5">
-          {/* Selecionar */}
-          <button
-            type="button"
-            onClick={() => setTool('select')}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              tool === 'select'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-            }`}
-            title="Modo Seleção: clique no corpo para registrar ou consultar dados estruturados"
-          >
-            <MousePointer className="w-4 h-4" />
-            <span>Selecionar</span>
-          </button>
+        {/* Lado Esquerdo: Modelo Corporal */}
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+            <User className="w-4 h-4 text-slate-400" />
+            Modelo:
+          </span>
 
-          {!readOnly && (
-            <>
-              {/* Caneta Clínica */}
-              <button
-                type="button"
-                onClick={() => setTool('pen')}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  tool === 'pen'
-                    ? 'bg-teal-600 text-white shadow-xs shadow-teal-500/20'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
-                title="Caneta Clínica: desenhe círculos, setas, áreas de dor ou escreva anotações livres"
-              >
-                <PenTool className="w-4 h-4" />
-                <span>Caneta</span>
-              </button>
-
-              {/* Marca-texto */}
-              <button
-                type="button"
-                onClick={() => setTool('highlighter')}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  tool === 'highlighter'
-                    ? 'bg-amber-500 text-white shadow-xs shadow-amber-500/20'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
-                title="Marca-texto: destaque semitransparente sobre regiões amplas"
-              >
-                <Highlighter className="w-4 h-4" />
-                <span>Marca-texto</span>
-              </button>
-
-              {/* Borracha */}
-              <button
-                type="button"
-                onClick={() => setTool('eraser')}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  tool === 'eraser'
-                    ? 'bg-rose-600 text-white shadow-xs shadow-rose-500/20'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
-                title="Borracha: clique sobre traços manuais para apagá-los (não remove marcadores)"
-              >
-                <Eraser className="w-4 h-4" />
-                <span>Borracha</span>
-              </button>
-
-              {/* Separador */}
-              <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block" />
-
-              {/* Limpar Desenho */}
-              <button
-                type="button"
-                onClick={() => setShowClearConfirm(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                title="Limpar todas as anotações manuais desta vista"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">Limpar vista</span>
-              </button>
-            </>
-          )}
-
-          {/* Indicador do Modo Atual */}
-          <div className="hidden lg:flex items-center pl-2">
-            <span className="text-[11px] font-semibold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-              Modo atual: <strong className="text-slate-700">{
-                tool === 'select' ? 'Seleção Anatômica' :
-                tool === 'pen' ? 'Caneta Clínica' :
-                tool === 'highlighter' ? 'Marca-texto' : 'Borracha'
-              }</strong>
-            </span>
-          </div>
-        </div>
-
-        {/* Lado Direito: Seletores de Modelo e Vistas */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* Seletor de Modelo Corporal */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
             <button
               type="button"
               onClick={() => handleModelChange('female')}
               className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 bodyModel === 'female'
-                  ? 'bg-white text-slate-900 shadow-xs'
+                  ? 'bg-white text-teal-700 shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -358,7 +293,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
               onClick={() => handleModelChange('male')}
               className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 bodyModel === 'male'
-                  ? 'bg-white text-slate-900 shadow-xs'
+                  ? 'bg-white text-teal-700 shadow-xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -366,176 +301,136 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
             </button>
           </div>
 
+          <span className="text-xs text-slate-400 hidden sm:inline">• Panorama 4 Vistas</span>
+        </div>
+
+        {/* Lado Direito: Status e Ações */}
+        <div className="flex items-center gap-3">
           {/* Status de Sincronização */}
           {savingStatus === 'saving' && (
-            <span className="text-[11px] font-semibold text-amber-600 animate-pulse flex items-center gap-1">
+            <span className="text-xs font-semibold text-amber-600 animate-pulse flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
               Sincronizando...
             </span>
           )}
           {savingStatus === 'saved' && (
-            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Salvo
+            <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+              <CheckCircle2 className="w-4 h-4" /> Salvo
             </span>
+          )}
+          {savingStatus === 'error' && (
+            <span className="text-xs font-semibold text-rose-600 flex items-center gap-1">
+              <AlertCircle className="w-4 h-4" /> Erro ao salvar
+            </span>
+          )}
+
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleManualSave}
+              disabled={savingStatus === 'saving'}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 active:bg-teal-800 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Salvar Avaliação</span>
+            </button>
           )}
         </div>
       </div>
 
-      {/* 2. SUB-BARRA CONTEXTUAL: OPÇÕES DA CANETA / VISTAS */}
-      <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
-        {/* Seletor de Vistas Corporais */}
-        <div className="flex items-center gap-1">
-          <span className="text-xs font-bold text-slate-500 mr-1.5 hidden sm:inline">Vista:</span>
-          {[
-            { id: 'front', label: 'Frente' },
-            { id: 'back', label: 'Verso' },
-            { id: 'left', label: 'Lado esquerdo' },
-            { id: 'right', label: 'Lado direito' },
-            { id: 'all', label: 'Panorama (4 Vistas)' }
-          ].map(v => (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => {
-                setActiveView(v.id as any);
-                setSelectedRegion(null);
-              }}
-              className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                activeView === v.id
-                  ? 'bg-white text-teal-700 shadow-xs border border-teal-200 font-extrabold'
-                  : 'text-slate-600 hover:bg-slate-200/60'
-              }`}
-            >
-              {v.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Cores e Espessuras da Caneta (visível quando caneta está ativa) */}
-        {tool === 'pen' && !readOnly && (
-          <div className="flex items-center gap-2">
-            {/* Cores Clínicas Discretas */}
-            <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-xl border border-slate-200">
-              {[
-                { hex: '#dc2626', name: 'Vermelho' },
-                { hex: '#2563eb', name: 'Azul' },
-                { hex: '#16a34a', name: 'Verde' },
-                { hex: '#ea580c', name: 'Laranja' },
-                { hex: '#1e293b', name: 'Preto' }
-              ].map(c => (
-                <button
-                  key={c.hex}
-                  type="button"
-                  onClick={() => setPenColor(c.hex)}
-                  className={`w-5 h-5 rounded-full transition-transform cursor-pointer ${
-                    penColor === c.hex ? 'scale-125 ring-2 ring-slate-400' : 'hover:scale-110'
-                  }`}
-                  style={{ backgroundColor: c.hex }}
-                  title={c.name}
-                />
-              ))}
-            </div>
-
-            {/* Espessuras */}
-            <div className="flex items-center bg-white p-1 rounded-xl border border-slate-200 text-xs">
-              <button
-                type="button"
-                onClick={() => setPenWidth(2)}
-                className={`px-2 py-0.5 rounded-lg font-medium ${penWidth === 2 ? 'bg-slate-200 text-slate-900 font-bold' : 'text-slate-600'}`}
-              >
-                Fina
-              </button>
-              <button
-                type="button"
-                onClick={() => setPenWidth(4)}
-                className={`px-2 py-0.5 rounded-lg font-medium ${penWidth === 4 ? 'bg-slate-200 text-slate-900 font-bold' : 'text-slate-600'}`}
-              >
-                Média
-              </button>
-              <button
-                type="button"
-                onClick={() => setPenWidth(8)}
-                className={`px-2 py-0.5 rounded-lg font-medium ${penWidth === 8 ? 'bg-slate-200 text-slate-900 font-bold' : 'text-slate-600'}`}
-              >
-                Grossa
-              </button>
-            </div>
-          </div>
-        )}
+      {/* 2. MAPA CORPORAL PANORÂMICO INTERATIVO */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex justify-center overflow-hidden">
+        <ZemdaBodyCanvas
+          bodyModel={bodyModel}
+          selectedRegions={selectedRegions}
+          onToggleRegion={handleToggleRegion}
+          readOnly={readOnly}
+        />
       </div>
 
-      {/* 3. ÁREA PRINCIPAL: MAPA CORPORAL + PAINEL LATERAL CONTEXTUAL */}
-      <div className="relative flex flex-col lg:flex-row items-start justify-center gap-5 min-h-[550px]">
-        {/* Canvas do ZemdaBody */}
-        <div className="flex-1 w-full flex justify-center">
-          <ZemdaBodyCanvas
-            bodyModel={bodyModel}
-            activeView={activeView}
-            tool={tool}
-            penColor={penColor}
-            penWidth={penWidth}
-            highlighterWidth={highlighterWidth}
-            selectedRegionId={selectedRegion?.id || null}
-            onSelectRegion={setSelectedRegion}
-            markers={markers}
-            drawings={drawings}
-            onSaveViewDrawings={handleSaveViewDrawings}
-            readOnly={readOnly}
+      {/* 3. RESUMO DAS REGIÕES SELECIONADAS & OBSERVAÇÕES */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Áreas Marcadas */}
+        <div className="lg:col-span-2 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Tag className="w-4 h-4 text-rose-500" />
+              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                Áreas Corporais Selecionadas
+              </h4>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
+                {selectedRegions.length}
+              </span>
+            </div>
+
+            {!readOnly && selectedRegions.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+              >
+                Desmarcar todas
+              </button>
+            )}
+          </div>
+
+          {selectedRegions.length === 0 ? (
+            <p className="text-xs text-slate-400 italic py-2">
+              Nenhuma região marcada. Clique diretamente sobre o mapa acima para registrar as áreas corporais afetadas.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {selectedRegions.map(regId => {
+                const label = getRegionLabel(regId, bodyModel);
+                return (
+                  <span
+                    key={regId}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-rose-50 text-rose-900 border border-rose-200 animate-in fade-in"
+                  >
+                    <span>{label}</span>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleRegion(regId)}
+                        className="text-rose-400 hover:text-rose-700 hover:bg-rose-100 rounded-md p-0.5 transition-colors cursor-pointer"
+                        title={`Remover ${label}`}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Observações Clínicas Opcionais */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-teal-600" />
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+              Observações Clínicas
+            </h4>
+          </div>
+
+          <textarea
+            value={clinicalNotes}
+            onChange={e => {
+              setClinicalNotes(e.target.value);
+              triggerAutoSave(selectedRegions, e.target.value);
+            }}
+            disabled={readOnly}
+            placeholder={
+              readOnly
+                ? 'Sem observações adicionais.'
+                : 'Observações sobre queixas, dor, intensidade, amplitude ou evolução clínica...'
+            }
+            rows={3}
+            className="w-full text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded-xl p-2.5 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:opacity-75 resize-none"
           />
         </div>
-
-        {/* Painel Lateral Contextual da Região */}
-        {selectedRegion && (
-          <div className="w-full lg:w-96 shrink-0">
-            <ZemdaBodyPanel
-              region={selectedRegion}
-              module={module}
-              markers={markers}
-              onClose={() => setSelectedRegion(null)}
-              onAddMarker={handleAddMarker}
-              onDeleteMarker={handleDeleteMarker}
-              readOnly={readOnly}
-            />
-          </div>
-        )}
       </div>
-
-      {/* 4. MODAL DE CONFIRMAÇÃO PARA LIMPAR DESENHOS DA VISTA */}
-      {showClearConfirm && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm">Limpar Anotações Manuais?</h4>
-                <p className="text-xs text-slate-500">Vista: {activeView}</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Deseja remover todas as anotações manuais desta vista? Os registros estruturados, EVA e observações permanecerão intactos.
-            </p>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowClearConfirm(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmClearView}
-                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer"
-              >
-                Sim, Limpar Desenhos
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
