@@ -311,6 +311,7 @@ export class FreeTrialController {
         managerEmail,
         managerPassword,
         managerPhone,
+        professionId,
         termsAccepted,
         privacyAccepted
       } = req.body;
@@ -337,6 +338,11 @@ export class FreeTrialController {
 
       if (!managerPassword || typeof managerPassword !== 'string' || managerPassword.length < 6) {
         res.status(400).json({ error: 'A senha de acesso deve ter pelo menos 6 caracteres.' });
+        return;
+      }
+
+      if (!professionId || typeof professionId !== 'string' || !professionId.trim()) {
+        res.status(400).json({ error: 'A área de atuação do profissional é obrigatória.' });
         return;
       }
 
@@ -406,6 +412,14 @@ export class FreeTrialController {
 
         const passwordHash = await hashPassword(managerPassword);
 
+        // 3.1 Resolver a profissão informada
+        const profRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ? OR slug = ? OR name = ?').get(
+          professionId.trim(), professionId.trim(), professionId.trim()
+        ) as any;
+        const selectedProfessionId = profRow ? profRow.id : professionId.trim();
+        const selectedProfessionName = profRow ? profRow.name : professionId.trim();
+        const selectedProfessionSlug = profRow ? profRow.slug : (professionId.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-'));
+
         // 4. Criar o Tenant (Clínica)
         db.prepare(`
           INSERT INTO tenants (
@@ -413,8 +427,9 @@ export class FreeTrialController {
             status, billing_required, onboarding_completed, onboarding_step,
             terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
             responsible_name, responsible_email, responsible_phone, responsible_role,
+            manager_profession, manager_practice_areas,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, 1, 1, ?, 1, ?, ?, ?, ?, 'Gestor da Clínica', ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, 1, 1, ?, 1, ?, ?, ?, ?, 'Gestor da Clínica', ?, ?, ?, ?)
         `).run(
           tenantId,
           uniqueSlug,
@@ -428,17 +443,20 @@ export class FreeTrialController {
           managerName.trim(),
           cleanEmail,
           managerPhone && typeof managerPhone === 'string' ? managerPhone.trim() : null,
+          selectedProfessionName,
+          selectedProfessionName,
           nowIso,
           nowIso
         );
 
-        // 5. Criar o Usuário Gestor (clinic_admin)
+        // 5. Criar o Usuário Gestor (clinic_admin) com área profissional vinculada
         db.prepare(`
           INSERT INTO users (
             id, tenant_id, name, email, password_hash, role, phone, status,
+            profession_id, profession_name, practice_areas,
             terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, 'clinic_admin', ?, 'active', ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, 'clinic_admin', ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           userId,
           tenantId,
@@ -446,10 +464,33 @@ export class FreeTrialController {
           cleanEmail,
           passwordHash,
           managerPhone && typeof managerPhone === 'string' ? managerPhone.trim() : null,
+          selectedProfessionId,
+          selectedProfessionName,
+          selectedProfessionName,
           CURRENT_TERMS_VERSION,
           CURRENT_PRIVACY_VERSION,
           nowIso,
           nowIso,
+          nowIso,
+          nowIso
+        );
+
+        // 5.1 Criar cadastro inicial do profissional para o gestor na clínica
+        const profRecordId = 'pro-' + uuidv4().slice(0, 8);
+        const profSlug = managerName.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + profRecordId.slice(-4);
+        db.prepare(`
+          INSERT INTO professionals (
+            id, tenant_id, user_id, name, slug, public_booking_enabled,
+            profession_id, practice_areas, buffer_minutes, active, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, 10, 1, ?, ?)
+        `).run(
+          profRecordId,
+          tenantId,
+          userId,
+          managerName.trim(),
+          profSlug,
+          selectedProfessionId,
+          selectedProfessionName,
           nowIso,
           nowIso
         );
@@ -479,11 +520,11 @@ export class FreeTrialController {
           nowIso
         );
 
-        // 8. Obter plano para assinatura de teste
-        const planRow = (db.prepare("SELECT id FROM plans WHERE active = 1 ORDER BY price_monthly DESC LIMIT 1").get() as any)
-          || { id: 'zemda-CLINIC' };
+        // 8. Obter plano para assinatura de teste (sempre Plano Solo)
+        const planRow = (db.prepare("SELECT id FROM plans WHERE code = 'SOLO' OR id = 'zemda-SOLO'").get() as any)
+          || { id: 'zemda-SOLO' };
 
-        // 9. Criar assinatura com status 'trial'
+        // 9. Criar assinatura com status 'trial' no Plano Solo
         db.prepare(`
           INSERT INTO subscriptions (
             id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
@@ -532,13 +573,21 @@ export class FreeTrialController {
             email: cleanEmail,
             role: 'clinic_admin',
             phone: managerPhone || null,
-            status: 'active'
+            status: 'active',
+            profession_id: selectedProfessionId,
+            profession_name: selectedProfessionName,
+            professionSlug: selectedProfessionSlug,
+            professionId: selectedProfessionId,
+            professionName: selectedProfessionName,
+            practice_areas: selectedProfessionName
           },
           tenant: {
             id: tenantId,
             name: clinicName.trim(),
             slug: uniqueSlug,
-            status: 'active'
+            status: 'active',
+            manager_profession: selectedProfessionName,
+            manager_practice_areas: selectedProfessionName
           },
           trialEndAt: trialEndIso,
           durationDays: trial.duration_days,

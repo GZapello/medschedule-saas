@@ -17,7 +17,8 @@ import {
   Ban,
   ArrowRight,
   ShieldCheck,
-  Sparkles
+  Sparkles,
+  Stethoscope
 } from 'lucide-react';
 
 interface FreeTrialActivationViewProps {
@@ -50,6 +51,24 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
   } | null>(null);
   const [trialData, setTrialData] = useState<ValidTrialData | null>(null);
 
+  // Lista de Profissões e Área de Atuação
+  const DEFAULT_PROFESSIONS = [
+    { id: 'prof-fonoaudiologia', name: 'Fonoaudiologia' },
+    { id: 'prof-fisioterapia', name: 'Fisioterapia' },
+    { id: 'prof-terapia-ocupacional', name: 'Terapia Ocupacional' },
+    { id: 'prof-nutricao', name: 'Nutrição' },
+    { id: 'prof-odontologia', name: 'Odontologia' },
+    { id: 'prof-psicologia', name: 'Psicologia' },
+    { id: 'prof-medicina', name: 'Medicina' },
+    { id: 'prof-psicopedagogia', name: 'Psicopedagogia' },
+    { id: 'prof-enfermagem', name: 'Enfermagem' },
+    { id: 'prof-educacao-fisica', name: 'Educação Física' },
+    { id: 'prof-outro-saude', name: 'Outro profissional da saúde' }
+  ];
+
+  const [professions, setProfessions] = useState<Array<{ id: string; name: string }>>(DEFAULT_PROFESSIONS);
+  const [selectedProfessionId, setSelectedProfessionId] = useState('');
+
   // Formulário
   const [clinicName, setClinicName] = useState('');
   const [managerName, setManagerName] = useState('');
@@ -64,7 +83,19 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
 
   useEffect(() => {
     validateTrialToken();
+    loadProfessions();
   }, [token]);
+
+  const loadProfessions = async () => {
+    try {
+      const data = await ApiClient.get<any[]>('/v1/taxonomy/professions');
+      if (Array.isArray(data) && data.length > 0) {
+        setProfessions(data.map(p => ({ id: p.id, name: p.name })));
+      }
+    } catch {
+      // Fallback padrão já definido
+    }
+  };
 
   const validateTrialToken = async () => {
     try {
@@ -124,6 +155,11 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
       return;
     }
 
+    if (!selectedProfessionId) {
+      showToast('Por favor, selecione sua área de atuação profissional.', 'error');
+      return;
+    }
+
     if (!managerEmail.trim() || !managerEmail.includes('@')) {
       showToast('Informe um e-mail válido para acesso.', 'error');
       return;
@@ -155,6 +191,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
         managerEmail: managerEmail.trim().toLowerCase(),
         managerPassword,
         managerPhone: managerPhone.trim() || undefined,
+        professionId: selectedProfessionId,
         termsAccepted: true,
         privacyAccepted: true
       });
@@ -328,6 +365,32 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all font-medium"
                 />
               </div>
+            </div>
+
+            {/* Área de Atuação do Profissional */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Área de Atuação do Profissional <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Stethoscope className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  required
+                  value={selectedProfessionId}
+                  onChange={e => setSelectedProfessionId(e.target.value)}
+                  className="w-full pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all font-medium text-slate-800"
+                >
+                  <option value="">Selecione sua área de atuação...</option>
+                  {professions.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                O Zemda criará seu teste no Plano Solo e ativará automaticamente o módulo clínico correspondente à sua área.
+              </p>
             </div>
 
             {/* Grid: E-mail e Telefone */}

@@ -249,45 +249,11 @@ export class AuthController {
       const isProfessionalUser = user.role === 'professional';
       const isManagerUser = user.role === 'clinic_admin';
 
-      const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_fisio') ||
-        Number(profDetails?.zemda_fisio_enabled) === 1 ||
-        Number(cuRow?.zemda_fisio_enabled) === 1
-      );
-
-      const zemdaOdontoEnabled = user.role !== 'superadmin' && isDentistUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_odonto') ||
-        Number(profDetails?.zemda_odonto_enabled) === 1 ||
-        Number(cuRow?.zemda_odonto_enabled) === 1
-      );
-
-      const zemdaNutriEnabled = user.role !== 'superadmin' && isNutriUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_nutri') ||
-        Number(profDetails?.zemda_nutri_enabled) === 1 ||
-        Number(cuRow?.zemda_nutri_enabled) === 1
-      );
-
-      const zemdaToEnabled = user.role !== 'superadmin' && isTOUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_to') ||
-        Number(profDetails?.zemda_to_enabled) === 1 ||
-        Number(cuRow?.zemda_to_enabled) === 1
-      );
-
-      const zemdaFonoEnabled = user.role !== 'superadmin' && isFonoUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_fono') ||
-        Number(profDetails?.zemda_fono_enabled) === 1 ||
-        Number(cuRow?.zemda_fono_enabled) === 1
-      );
+      const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (isProfessionalUser || isManagerUser);
+      const zemdaOdontoEnabled = user.role !== 'superadmin' && isDentistUser && (isProfessionalUser || isManagerUser);
+      const zemdaNutriEnabled = user.role !== 'superadmin' && isNutriUser && (isProfessionalUser || isManagerUser);
+      const zemdaToEnabled = user.role !== 'superadmin' && isTOUser && (isProfessionalUser || isManagerUser);
+      const zemdaFonoEnabled = user.role !== 'superadmin' && isFonoUser && (isProfessionalUser || isManagerUser);
 
       const needsLegalAcceptance = user.role !== 'superadmin' && (
         user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
@@ -480,45 +446,11 @@ export class AuthController {
       const isProfessionalUser = user.role === 'professional';
       const isManagerUser = user.role === 'clinic_admin';
 
-      const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_fisio') ||
-        Number(profDetails?.zemda_fisio_enabled) === 1 ||
-        Number(cuRow?.zemda_fisio_enabled) === 1
-      );
-
-      const zemdaOdontoEnabled = user.role !== 'superadmin' && isDentistUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_odonto') ||
-        Number(profDetails?.zemda_odonto_enabled) === 1 ||
-        Number(cuRow?.zemda_odonto_enabled) === 1
-      );
-
-      const zemdaNutriEnabled = user.role !== 'superadmin' && isNutriUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_nutri') ||
-        Number(profDetails?.zemda_nutri_enabled) === 1 ||
-        Number(cuRow?.zemda_nutri_enabled) === 1
-      );
-
-      const zemdaToEnabled = user.role !== 'superadmin' && isTOUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_to') ||
-        Number(profDetails?.zemda_to_enabled) === 1 ||
-        Number(cuRow?.zemda_to_enabled) === 1
-      );
-
-      const zemdaFonoEnabled = user.role !== 'superadmin' && isFonoUser && (
-        isProfessionalUser ||
-        isManagerUser ||
-        userPermissions.includes('access_zemda_fono') ||
-        Number(profDetails?.zemda_fono_enabled) === 1 ||
-        Number(cuRow?.zemda_fono_enabled) === 1
-      );
+      const zemdaFisioEnabled = user.role !== 'superadmin' && isPhysioUser && (isProfessionalUser || isManagerUser);
+      const zemdaOdontoEnabled = user.role !== 'superadmin' && isDentistUser && (isProfessionalUser || isManagerUser);
+      const zemdaNutriEnabled = user.role !== 'superadmin' && isNutriUser && (isProfessionalUser || isManagerUser);
+      const zemdaToEnabled = user.role !== 'superadmin' && isTOUser && (isProfessionalUser || isManagerUser);
+      const zemdaFonoEnabled = user.role !== 'superadmin' && isFonoUser && (isProfessionalUser || isManagerUser);
 
       const needsLegalAcceptance = user.role !== 'superadmin' && (
         user.terms_version_accepted !== CURRENT_TERMS_VERSION ||

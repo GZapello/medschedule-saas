@@ -28,6 +28,8 @@ interface AuthContextType {
   isZemdaTO: boolean;
   isSpeechTherapist: boolean;
   isZemdaFono: boolean;
+  isZemdaBody: boolean;
+  userPermissions: string[];
   clientTermLabel: string;
 }
 
@@ -175,9 +177,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isPhysiotherapist = !isSuperAdmin && (
     (isProfessional && hasPhysioArea) ||
-    (currentUser?.role === 'clinic_admin' && hasPhysioArea) ||
-    userPermissions.includes('access_zemda_fisio') ||
-    !!(currentUser as any)?.zemdaFisioEnabled
+    (currentUser?.role === 'clinic_admin' && hasPhysioArea)
   );
   const isZemdaFisio = isPhysiotherapist;
 
@@ -197,9 +197,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isDentist = !isSuperAdmin && (
     (isProfessional && hasOdontoArea) ||
-    (currentUser?.role === 'clinic_admin' && hasOdontoArea) ||
-    userPermissions.includes('access_zemda_odonto') ||
-    !!(currentUser as any)?.zemdaOdontoEnabled
+    (currentUser?.role === 'clinic_admin' && hasOdontoArea)
   );
   const isZemdaOdonto = isDentist;
 
@@ -216,9 +214,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isNutritionist = !isSuperAdmin && (
     (isProfessional && hasNutriArea) ||
-    (currentUser?.role === 'clinic_admin' && hasNutriArea) ||
-    userPermissions.includes('access_zemda_nutri') ||
-    !!(currentUser as any)?.zemdaNutriEnabled
+    (currentUser?.role === 'clinic_admin' && hasNutriArea)
   );
   const isZemdaNutri = isNutritionist;
 
@@ -238,9 +234,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isOccupationalTherapist = !isSuperAdmin && (
     (isProfessional && hasTOArea) ||
-    (currentUser?.role === 'clinic_admin' && hasTOArea) ||
-    userPermissions.includes('access_zemda_to') ||
-    !!(currentUser as any)?.zemdaToEnabled
+    (currentUser?.role === 'clinic_admin' && hasTOArea)
   );
   const isZemdaTO = isOccupationalTherapist;
 
@@ -256,11 +250,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isSpeechTherapist = !isSuperAdmin && (
     (isProfessional && hasFonoArea) ||
-    (currentUser?.role === 'clinic_admin' && hasFonoArea) ||
-    userPermissions.includes('access_zemda_fono') ||
-    !!(currentUser as any)?.zemdaFonoEnabled
+    (currentUser?.role === 'clinic_admin' && hasFonoArea)
   );
   const isZemdaFono = isSpeechTherapist;
+
+  // ZemdaBody: controlado exclusivamente por permissão manual do gestor ou administrador
+  const isZemdaBody = isClinicAdmin || userPermissions.includes('access_zemda_body');
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
 
@@ -292,6 +287,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaTO,
         isSpeechTherapist,
         isZemdaFono,
+        isZemdaBody,
+        userPermissions,
         clientTermLabel
       }}
     >

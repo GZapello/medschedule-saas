@@ -72,6 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isZemdaTO,
     isSpeechTherapist,
     isZemdaFono,
+    isZemdaBody,
     clientTermLabel
   } = useAuth();
 
@@ -93,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-body',
           label: 'ZemdaBody (Mapa Corporal)',
           icon: Activity,
-          visible: isClinicAdmin || isProfessional
+          visible: isClinicAdmin || isZemdaBody
         },
         {
           id: 'zemda-fisio',

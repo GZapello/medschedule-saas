@@ -23,7 +23,7 @@ import {
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { PatientProfileModal } from '../patients/PatientProfileModal';
-import { SelectConsultationModuleModal, getCompatibleClinicalModules } from '../clinical/SelectConsultationModuleModal';
+import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 
 interface DashboardViewProps {
   onNavigate: (view: string) => void;
@@ -103,16 +103,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           return;
         }
 
-        const modules = getCompatibleClinicalModules(auth);
-        if (modules.length <= 1) {
-          const autoModule = modules[0]?.id || 'general';
-          executeStartConsultation(appointmentId, autoModule);
-          return;
-        } else {
-          setCompatibleModules(modules);
-          setSelectingModuleAppt(appt);
-          return;
-        }
+        // Acesso automático: detecta a profissão do usuário logado e abre diretamente o módulo correspondente
+        const autoModule = getModuleForProfession(auth);
+        executeStartConsultation(appointmentId, autoModule);
+        return;
       }
 
       await ApiClient.put(`/v1/appointments/${appointmentId}/status`, { status: newStatus });

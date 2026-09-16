@@ -181,6 +181,7 @@ export function initializeDatabase(): void {
     // Colunas de Mapa Corporal de Dor e Área de Atuação do Gestor
     addColIfMissing('physiotherapy_assessments', 'body_map_json', 'TEXT');
     addColIfMissing('physiotherapy_assessments', 'body_map_image', 'TEXT');
+    addColIfMissing('users', 'profession_id', 'TEXT');
     addColIfMissing('users', 'profession_name', 'TEXT');
     addColIfMissing('users', 'practice_areas', 'TEXT');
     addColIfMissing('users', 'registration_type', 'TEXT');
@@ -189,6 +190,7 @@ export function initializeDatabase(): void {
     addColIfMissing('users', 'privacy_version_accepted', 'TEXT');
     addColIfMissing('users', 'terms_accepted_at', 'TEXT');
     addColIfMissing('users', 'privacy_accepted_at', 'TEXT');
+    addColIfMissing('clinic_users', 'zemda_body_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('tenants', 'manager_profession', 'TEXT');
     addColIfMissing('tenants', 'manager_practice_areas', 'TEXT');
 

@@ -159,6 +159,26 @@ export const ALL_CLINICAL_MODULES: Record<string, ClinicalModuleOption> = {
 };
 
 /**
+ * Detecta diretamente qual módulo clínico corresponde à profissão do profissional logado.
+ */
+export function getModuleForProfession(auth: {
+  isPhysiotherapist?: boolean;
+  isSpeechTherapist?: boolean;
+  isDentist?: boolean;
+  isNutritionist?: boolean;
+  isOccupationalTherapist?: boolean;
+  currentUser?: any;
+  currentTenant?: any;
+}): 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'general' {
+  if (auth.isSpeechTherapist) return 'ZemdaFono';
+  if (auth.isPhysiotherapist) return 'ZemdaFisio';
+  if (auth.isOccupationalTherapist) return 'ZemdaTO';
+  if (auth.isNutritionist) return 'ZemdaNutri';
+  if (auth.isDentist) return 'ZemdaOdonto';
+  return 'general';
+}
+
+/**
  * Retorna os módulos compatíveis com a atuação do usuário logado.
  */
 export function getCompatibleClinicalModules(auth: {
@@ -171,32 +191,8 @@ export function getCompatibleClinicalModules(auth: {
   currentUser?: any;
   currentTenant?: any;
 }): ClinicalModuleOption[] {
-  const result: ClinicalModuleOption[] = [];
-
-  // Módulos especializados
-  if (auth.isPhysiotherapist) {
-    result.push(ALL_CLINICAL_MODULES.ZemdaFisio);
-  }
-  if (auth.isSpeechTherapist) {
-    result.push(ALL_CLINICAL_MODULES.ZemdaFono);
-  }
-  if (auth.isDentist) {
-    result.push(ALL_CLINICAL_MODULES.ZemdaOdonto);
-  }
-  if (auth.isNutritionist) {
-    result.push(ALL_CLINICAL_MODULES.ZemdaNutri);
-  }
-  if (auth.isOccupationalTherapist) {
-    result.push(ALL_CLINICAL_MODULES.ZemdaTO);
-  }
-
-  // Atendimento Convencional Geral
-  result.push(ALL_CLINICAL_MODULES.general);
-
-  // Recurso Clínico Complementar: ZemdaBody
-  // Disponível dentro do atendimento, sem ocupar o módulo principal.
-
-  return result;
+  const modId = getModuleForProfession(auth);
+  return [ALL_CLINICAL_MODULES[modId] || ALL_CLINICAL_MODULES.general];
 }
 
 interface SelectConsultationModuleModalProps {

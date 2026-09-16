@@ -38,11 +38,12 @@ export class DocumentsController {
     }
     if (!moduleType) {
       const text = [prof?.profession_id, prof?.profession_slug, prof?.profession_name, prof?.practice_areas, prof?.service_name].filter(Boolean).join(' ').toLowerCase();
-      moduleType = 'ZemdaFisio';
-      if (text.includes('nutri') || text.includes('crn')) moduleType = 'ZemdaNutri';
+      if (text.includes('fono') || text.includes('crfa')) moduleType = 'ZemdaFono';
+      else if (text.includes('nutri') || text.includes('crn') || text.includes('diet')) moduleType = 'ZemdaNutri';
       else if (text.includes('ocupacional') || text.includes('terapia-ocupacional')) moduleType = 'ZemdaTO';
-      else if (text.includes('fono') || text.includes('crfa')) moduleType = 'ZemdaFono';
       else if (text.includes('odonto') || text.includes('dentis') || text.includes('cro')) moduleType = 'ZemdaOdonto';
+      else if (text.includes('fisio') || text.includes('crefito') || text.includes('physio')) moduleType = 'ZemdaFisio';
+      else moduleType = 'general';
     }
 
     res.json({ awaitingPayment: !!saved && !saved.completed_at && appt.status !== 'completed', alreadyCompleted: appt.status === 'completed', generatedDocs: saved ? JSON.parse(saved.generated_docs_json) : {}, payment, moduleType });

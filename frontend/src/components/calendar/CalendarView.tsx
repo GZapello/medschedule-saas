@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
-import { SelectConsultationModuleModal, getCompatibleClinicalModules } from '../clinical/SelectConsultationModuleModal';
+import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 
 interface CalendarViewProps {
   onOpenNewAppointment: () => void;
@@ -152,18 +152,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       return;
     }
 
-    // Obter módulos compatíveis com a atuação do usuário logado
-    const modules = getCompatibleClinicalModules(auth);
-
-    if (modules.length <= 1) {
-      // Regra 1: se possuir apenas 1 módulo compatível, abre automaticamente sem exibir modal desnecessário
-      const autoModule = modules[0]?.id || 'general';
-      executeStartConsultation(appointment, autoModule);
-    } else {
-      // Regra 1: mais de 1 módulo compatível, abre modal de seleção exclusivo para os compatíveis
-      setCompatibleModules(modules);
-      setSelectingModuleAppt(appointment);
-    }
+    // Acesso automático: detecta a profissão do usuário logado e abre diretamente o módulo correspondente
+    const autoModule = getModuleForProfession(auth);
+    executeStartConsultation(appointment, autoModule);
   };
 
   const handleConfirmReschedule = async () => {

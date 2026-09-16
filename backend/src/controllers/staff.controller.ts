@@ -279,20 +279,14 @@ export class StaffController {
       }
 
       const permsJson = JSON.stringify(permissions);
-      const zemdaFisioActive = permissions.includes('access_zemda_fisio') ? 1 : 0;
-      const zemdaOdontoActive = permissions.includes('access_zemda_odonto') ? 1 : 0;
+      const zemdaBodyActive = permissions.includes('access_zemda_body') ? 1 : 0;
       db.prepare(`
-        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_fisio_enabled, zemda_odonto_enabled)
-        VALUES (?, ?, ?, 'receptionist', 'active', 0, ?, ?, ?)
+        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_body_enabled)
+        VALUES (?, ?, ?, 'receptionist', 'active', 0, ?, ?)
         ON CONFLICT(tenant_id, user_id) DO UPDATE SET
           permissions_json = excluded.permissions_json,
-          zemda_fisio_enabled = excluded.zemda_fisio_enabled,
-          zemda_odonto_enabled = excluded.zemda_odonto_enabled
-      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, permsJson, zemdaFisioActive, zemdaOdontoActive);
-
-      // Sincroniza flags no cadastro profissional e usuários (Item 9)
-      db.prepare("UPDATE professionals SET zemda_fisio_enabled = ?, zemda_odonto_enabled = ? WHERE user_id = ? AND tenant_id = ?").run(zemdaFisioActive, zemdaOdontoActive, id, tenantId);
-      db.prepare("UPDATE users SET zemda_fisio_enabled = ?, zemda_odonto_enabled = ? WHERE id = ? AND tenant_id = ?").run(zemdaFisioActive, zemdaOdontoActive, id, tenantId);
+          zemda_body_enabled = excluded.zemda_body_enabled
+      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, permsJson, zemdaBodyActive);
 
       logAudit(req, 'UPDATE_STAFF_PERMISSIONS', 'users', id, { permissionsCount: permissions.length });
       res.json({ message: 'Permissões do funcionário atualizadas com sucesso' });
