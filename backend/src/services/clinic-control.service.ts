@@ -16,7 +16,10 @@ export function globalAudit(admin: string, id: string, name: string, action: str
 
 // Resolve ownership before any DELETE. An unexpected cross-clinic reference aborts
 // the transaction instead of allowing SQLite CASCADE / SET NULL to affect it.
-export function purgeClinic(id: string, admin: string, reason: string): void {
+export function purgeClinic(id: string, admin: string, reason: string, options?: {
+  guard: (owned: Map<string, Set<any>>) => void;
+  reauthenticated: boolean;
+}): void {
   const existingJob = db.prepare('SELECT * FROM clinic_deletion_jobs WHERE clinic_id = ?').get(id);
   if (existingJob) { finishFiles(id); return; }
   db.transaction(() => {
@@ -67,6 +70,8 @@ export function purgeClinic(id: string, admin: string, reason: string): void {
         }
       }
     }
+    // Automatic registration expiry must recheck eligibility under this write lock.
+    options?.guard(owned);
     const files = new Set<string>();
     const uploadRoot = path.resolve(process.env.CLINIC_UPLOAD_ROOT || path.resolve(__dirname, '../../uploads'));
     const resolveFile = (value: string): string | null => {
@@ -104,7 +109,7 @@ export function purgeClinic(id: string, admin: string, reason: string): void {
         current = path.dirname(current);
       }
     }
-    globalAudit(admin, id, tenant.name, 'DELETE_REQUESTED', reason, true);
+    globalAudit(admin, id, tenant.name, 'DELETE_REQUESTED', reason, options?.reauthenticated ?? true);
     db.prepare('INSERT INTO clinic_deletion_jobs (clinic_id, files_json) VALUES (?, ?)').run(id, JSON.stringify([...files]));
     db.exec('PRAGMA defer_foreign_keys = ON');
     // Child-first ordering avoids CASCADE changing records before their explicit removal.

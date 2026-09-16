@@ -9,6 +9,7 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { PatientsView } from './components/patients/PatientsView';
 import { ClinicalRecordsView } from './components/clinical/ClinicalRecordsView';
+import { ZemdaBodyRecordsView } from './components/zemda-body/ZemdaBodyRecordsView';
 import { PhysiotherapyRecordsView } from './components/physiotherapy/PhysiotherapyRecordsView';
 import { DentistryWorkspace } from './components/dentistry/DentistryWorkspace';
 import { NutritionWorkspace } from './components/nutrition/NutritionWorkspace';
@@ -70,8 +71,13 @@ const AppContent: React.FC = () => {
     isZemdaFono
   } = useAuth();
 
-  const { summary: billingSummary, reload: reloadBilling } = useBillingSummary();
+  const { summary: billingSummary } = useBillingSummary();
   const [currentView, setCurrentView] = useState<string>('dashboard');
+  const [billingReturnHome, setBillingReturnHome] = useState(() => window.location.pathname === '/' && sessionStorage.getItem('zemda-billing-return-home') === '1');
+  const leaveBillingHome = () => {
+    sessionStorage.removeItem('zemda-billing-return-home');
+    setBillingReturnHome(false);
+  };
   const [publicView, setPublicView] = useState<'landing' | 'login'>(window.location.pathname.startsWith('/assinatura') ? 'login' : 'landing');
 
   // Roteamento de páginas públicas de nicho (SEO)
@@ -494,19 +500,11 @@ const AppContent: React.FC = () => {
       <BillingView
         publicPage={window.location.pathname === '/planos' || !currentUser}
         callback={callback}
-        onBack={() => {
-          if (currentUser) {
-            window.history.replaceState(null, '', '/');
-            setCurrentView('dashboard');
-          } else {
-            window.location.assign('/');
-          }
-        }}
       />
     );
   }
   // Se não estiver logado, exibe páginas de SEO de nicho, Landing Page ou Login
-  if (!currentUser) {
+  if (!currentUser || billingReturnHome) {
     if (activeSeoSlug && SEO_PAGES[activeSeoSlug]) {
       return (
         <PublicSeoPageView
@@ -529,14 +527,17 @@ const AppContent: React.FC = () => {
       return (
         <ZemdaLandingPage
           onLogin={() => {
+            leaveBillingHome();
             setAuthInitialAction('login');
             setPublicView('login');
           }}
           onRegisterClinic={() => {
+            leaveBillingHome();
             setAuthInitialAction('create-clinic');
             setPublicView('login');
           }}
           onRegisterUser={() => {
+            leaveBillingHome();
             setAuthInitialAction('register-user');
             setPublicView('login');
           }}
@@ -558,8 +559,8 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (currentUser.role !== 'superadmin' && billingSummary && !billingSummary.canOperate) return <BillingView onBack={()=>{void reloadBilling();void reloadSession();}} />;
-  if (currentView === 'subscription' || window.location.pathname === '/assinatura') return <BillingView onBack={()=>{window.history.replaceState(null,'','/');setCurrentView('dashboard');}} />;
+  if (currentUser.role !== 'superadmin' && billingSummary && !billingSummary.canOperate) return <BillingView />;
+  if (currentView === 'subscription' || window.location.pathname === '/assinatura') return <BillingView />;
   // Se o gestor precisa concluir o Onboarding obrigatório da clínica
   if (currentUser.needsOnboarding) {
     return (
@@ -616,6 +617,8 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'clinical' && <ClinicalRecordsView />}
+
+          {currentView === 'zemda-body' && <ZemdaBodyRecordsView />}
 
           {currentView === 'zemda-fisio' && (
             isPhysiotherapist ? (

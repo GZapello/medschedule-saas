@@ -21,7 +21,7 @@ export function useBillingSummary(includeGlobal=false) {
     return()=>{clearInterval(timer);window.removeEventListener('zemda-billing-refresh',event);};},[reload]);
   return {summary,error,reload};
 }
-export const BillingView:React.FC<{publicPage?:boolean;callback?:string;onBack?:()=>void}>=({publicPage=false,callback,onBack})=>{
+export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publicPage=false,callback})=>{
   const {currentUser,logout,reloadSession}=useAuth();
   const {summary,error:summaryError,reload}=useBillingSummary(true);
   const [plans,setPlans]=useState<any[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -54,14 +54,8 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string;onBack?:
   const pending=summary?.status==='PAST_DUE';
 
   const handleBack = () => {
-    if (onBack) {
-      onBack();
-    } else if (currentUser) {
-      window.history.replaceState(null, '', '/');
-      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
-    } else {
-      window.location.assign('/');
-    }
+    sessionStorage.setItem('zemda-billing-return-home', '1');
+    window.location.assign('https://zemda.com.br');
   };
 
   return <section className="max-w-6xl mx-auto space-y-6 p-4 sm:p-6">

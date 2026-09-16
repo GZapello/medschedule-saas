@@ -2,6 +2,7 @@ import { db } from '../config/database';
 import { randomUUID } from 'crypto';
 import { AsaasError, AsaasService } from './asaas.service';
 import { activeUsers, addDays, addMonth, billingAudit, BillingService, today } from './billing.service';
+import { RegistrationCleanupService } from './registration-cleanup.service';
 
 const events=new Set(['PAYMENT_CREATED','PAYMENT_CONFIRMED','PAYMENT_RECEIVED','PAYMENT_OVERDUE','PAYMENT_CREDIT_CARD_CAPTURE_REFUSED','PAYMENT_REFUNDED','PAYMENT_DELETED',
   'SUBSCRIPTION_CREATED','SUBSCRIPTION_UPDATED','SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED','CHECKOUT_CREATED','CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED']);
@@ -43,6 +44,8 @@ export class BillingWebhookService {
         }
       }
       BillingService.expireGrace();
+      // Reuse the existing scheduler; expiry has its own hourly throttle.
+      void RegistrationCleanupService.runDue().catch(()=>console.error('[RegistrationCleanup] RETRY'));
     } finally {this.running=false;}
   }
   private static async process(row:any) {
