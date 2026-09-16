@@ -1,0 +1,498 @@
+import { Request, Response } from 'express';
+import { db } from '../config/database';
+import { v4 as uuidv4 } from 'uuid';
+import { hasClinicalAccess } from './clinical.controller';
+import { logAudit } from '../middlewares/audit.middleware';
+
+export class BodyAssessmentController {
+  /**
+   * 1. Consulta avaliação corporal vinculada ao agendamento atual
+   */
+  static getByAppointment(req: Request, res: Response): void {
+    try {
+      const appointmentId = String(req.params.appointmentId);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const appt = db.prepare('SELECT id, patient_id, professional_id FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any;
+      if (!appt) {
+        res.status(404).json({ error: 'Agendamento não encontrado' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, appt.patient_id)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      const assessment = db.prepare(`
+        SELECT ba.*, p.name as professional_name
+        FROM body_assessments ba
+        LEFT JOIN professionals p ON p.id = ba.professional_id
+        WHERE ba.appointment_id = ? AND ba.tenant_id = ?
+        ORDER BY ba.created_at DESC LIMIT 1
+      `).get(appointmentId, tenantId) as any;
+
+      if (!assessment) {
+        res.json({ assessment: null, markers: [], drawings: {} });
+        return;
+      }
+
+      const markers = db.prepare(`
+        SELECT * FROM body_markers
+        WHERE assessment_id = ? AND tenant_id = ?
+        ORDER BY created_at ASC
+      `).all(assessment.id, tenantId);
+
+      const drawingsRows = db.prepare(`
+        SELECT * FROM body_drawings
+        WHERE assessment_id = ? AND tenant_id = ?
+      `).all(assessment.id, tenantId);
+
+      const drawings: Record<string, any[]> = {
+        front: [],
+        back: [],
+        left: [],
+        right: []
+      };
+
+      for (const row of drawingsRows) {
+        try {
+          drawings[row.view] = row.strokes_json ? JSON.parse(row.strokes_json) : [];
+        } catch {
+          drawings[row.view] = [];
+        }
+      }
+
+      res.json({ assessment, markers, drawings });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.getByAppointment] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar avaliação do mapa corporal' });
+    }
+  }
+
+  /**
+   * 2. Lista histórico de mapas corporais de um paciente para o prontuário
+   */
+  static listByPatient(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      const assessments = db.prepare(`
+        SELECT 
+          ba.*,
+          p.name as professional_name,
+          p.registration_type,
+          p.registration_number,
+          (SELECT COUNT(*) FROM body_markers WHERE assessment_id = ba.id) as total_markers,
+          (SELECT COUNT(*) FROM body_drawings WHERE assessment_id = ba.id) as total_views_drawn
+        FROM body_assessments ba
+        LEFT JOIN professionals p ON p.id = ba.professional_id
+        WHERE ba.patient_id = ? AND ba.tenant_id = ?
+        ORDER BY ba.assessment_date DESC, ba.created_at DESC
+      `).all(patientId, tenantId);
+
+      logAudit(req, 'LIST_BODY_ASSESSMENTS', 'body_assessments', patientId);
+      res.json(assessments);
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.listByPatient] Erro:', err);
+      res.status(500).json({ error: 'Erro ao consultar histórico de mapas corporais' });
+    }
+  }
+
+  /**
+   * 3. Busca detalhes de uma avaliação específica com marcadores e desenhos
+   */
+  static getById(req: Request, res: Response): void {
+    try {
+      const id = String(req.params.id);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const assessment = db.prepare(`
+        SELECT ba.*, p.name as professional_name, pat.full_name as patient_name
+        FROM body_assessments ba
+        LEFT JOIN professionals p ON p.id = ba.professional_id
+        JOIN patients pat ON pat.id = ba.patient_id
+        WHERE ba.id = ? AND ba.tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!assessment) {
+        res.status(404).json({ error: 'Avaliação corporal não encontrada' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, assessment.patient_id)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      const markers = db.prepare(`
+        SELECT * FROM body_markers
+        WHERE assessment_id = ? AND tenant_id = ?
+        ORDER BY created_at ASC
+      `).all(id, tenantId);
+
+      const drawingsRows = db.prepare(`
+        SELECT * FROM body_drawings
+        WHERE assessment_id = ? AND tenant_id = ?
+      `).all(id, tenantId);
+
+      const drawings: Record<string, any[]> = {
+        front: [],
+        back: [],
+        left: [],
+        right: []
+      };
+
+      for (const row of drawingsRows) {
+        try {
+          drawings[row.view] = row.strokes_json ? JSON.parse(row.strokes_json) : [];
+        } catch {
+          drawings[row.view] = [];
+        }
+      }
+
+      res.json({ assessment, markers, drawings });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.getById] Erro:', err);
+      res.status(500).json({ error: 'Erro ao carregar detalhes do mapa corporal' });
+    }
+  }
+
+  /**
+   * 4. Cria ou atualiza uma avaliação corporal (Upsert)
+   */
+  static upsertAssessment(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const {
+        id: customId,
+        patientId,
+        appointmentId,
+        professionalId,
+        professionId,
+        module = 'general',
+        bodyModel = 'female',
+        assessmentDate,
+        notes
+      } = req.body;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      if (!patientId) {
+        res.status(400).json({ error: 'Identificação do paciente é obrigatória' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      let resolvedProfId = professionalId;
+      if (!resolvedProfId) {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) resolvedProfId = prof.id;
+      }
+
+      const dateStr = assessmentDate || new Date().toISOString().split('T')[0];
+
+      // Verifica se já existe por appointment_id ou por id
+      let existing: any = null;
+      if (customId) {
+        existing = db.prepare('SELECT * FROM body_assessments WHERE id = ? AND tenant_id = ?').get(customId, tenantId);
+      } else if (appointmentId) {
+        existing = db.prepare('SELECT * FROM body_assessments WHERE appointment_id = ? AND tenant_id = ?').get(appointmentId, tenantId);
+      }
+
+      let assessmentId: string;
+      if (existing) {
+        assessmentId = existing.id;
+        db.prepare(`
+          UPDATE body_assessments
+          SET body_model = ?, module = ?, notes = COALESCE(?, notes), updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(bodyModel, module, notes || null, assessmentId, tenantId);
+      } else {
+        assessmentId = customId || 'ba-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO body_assessments (
+            id, tenant_id, patient_id, appointment_id, professional_id,
+            profession_id, module, body_model, assessment_date, notes,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(
+          assessmentId, tenantId, patientId, appointmentId || null, resolvedProfId,
+          professionId || null, module, bodyModel, dateStr, notes || null
+        );
+      }
+
+      logAudit(req, 'SAVE_BODY_ASSESSMENT', 'body_assessments', assessmentId);
+      res.json({ success: true, assessmentId });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.upsertAssessment] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar avaliação do mapa corporal' });
+    }
+  }
+
+  /**
+   * 5. Salva um marcador clínico estruturado sobre uma região anatômica
+   */
+  static saveMarker(req: Request, res: Response): void {
+    try {
+      const assessmentId = String(req.params.id);
+      const tenantId = req.tenantId;
+      const {
+        id: markerId,
+        bodyRegion,
+        side = 'midline',
+        view = 'front',
+        markerType,
+        value,
+        severity,
+        notes,
+        coordinates,
+        detailsJson
+      } = req.body;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const assessment = db.prepare('SELECT patient_id FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
+      if (!assessment) {
+        res.status(404).json({ error: 'Avaliação corporal não encontrada' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, assessment.patient_id)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      if (!bodyRegion || !markerType) {
+        res.status(400).json({ error: 'Região corporal e tipo de marcador são obrigatórios' });
+        return;
+      }
+
+      const idToUse = markerId || 'bm-' + uuidv4().slice(0, 8);
+      const coordsStr = coordinates ? (typeof coordinates === 'string' ? coordinates : JSON.stringify(coordinates)) : null;
+      const detailsStr = detailsJson ? (typeof detailsJson === 'string' ? detailsJson : JSON.stringify(detailsJson)) : null;
+
+      db.prepare(`
+        INSERT INTO body_markers (
+          id, tenant_id, assessment_id, body_region, side, view,
+          marker_type, value, severity, notes, coordinates, details_json,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        ON CONFLICT(id) DO UPDATE SET
+          value = excluded.value,
+          severity = excluded.severity,
+          notes = excluded.notes,
+          coordinates = excluded.coordinates,
+          details_json = excluded.details_json,
+          updated_at = datetime('now')
+      `).run(
+        idToUse, tenantId, assessmentId, bodyRegion, side, view,
+        markerType, value ? String(value) : null, severity || null,
+        notes || null, coordsStr, detailsStr
+      );
+
+      logAudit(req, 'SAVE_BODY_MARKER', 'body_markers', idToUse, { bodyRegion, markerType, view });
+      res.json({ success: true, markerId: idToUse });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.saveMarker] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar marcador corporal' });
+    }
+  }
+
+  /**
+   * 6. Remove um marcador estruturado
+   */
+  static deleteMarker(req: Request, res: Response): void {
+    try {
+      const markerId = String(req.params.markerId);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const marker = db.prepare(`
+        SELECT bm.*, ba.patient_id
+        FROM body_markers bm
+        JOIN body_assessments ba ON ba.id = bm.assessment_id
+        WHERE bm.id = ? AND bm.tenant_id = ?
+      `).get(markerId, tenantId) as any;
+
+      if (!marker) {
+        res.status(404).json({ error: 'Marcador não encontrado' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, marker.patient_id)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      db.prepare('DELETE FROM body_markers WHERE id = ? AND tenant_id = ?').run(markerId, tenantId);
+      logAudit(req, 'DELETE_BODY_MARKER', 'body_markers', markerId);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.deleteMarker] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir marcador corporal' });
+    }
+  }
+
+  /**
+   * 7. Salva desenhos/traços manuais da caneta ou marca-texto para uma vista
+   */
+  static saveDrawings(req: Request, res: Response): void {
+    try {
+      const assessmentId = String(req.params.id);
+      const view = String(req.params.view);
+      const tenantId = req.tenantId;
+      const { strokes } = req.body;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const assessment = db.prepare('SELECT * FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
+      if (!assessment) {
+        res.status(404).json({ error: 'Avaliação corporal não encontrada' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, assessment.patient_id)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      const validViews = ['front', 'back', 'left', 'right'];
+      if (!validViews.includes(view)) {
+        res.status(400).json({ error: 'Vista corporal inválida' });
+        return;
+      }
+
+      const strokesArray = Array.isArray(strokes) ? strokes : [];
+      const strokesJson = JSON.stringify(strokesArray);
+
+      // Upsert em body_drawings
+      const existingDrawing = db.prepare('SELECT id FROM body_drawings WHERE assessment_id = ? AND view = ? AND tenant_id = ?').get(assessmentId, view, tenantId) as any;
+      let drawingId: string;
+
+      if (existingDrawing) {
+        drawingId = existingDrawing.id;
+        db.prepare(`
+          UPDATE body_drawings
+          SET strokes_json = ?, updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(strokesJson, drawingId, tenantId);
+      } else {
+        drawingId = 'bd-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO body_drawings (
+            id, tenant_id, assessment_id, patient_id, appointment_id,
+            professional_id, module, body_model, view, strokes_json,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(
+          drawingId, tenantId, assessmentId, assessment.patient_id,
+          assessment.appointment_id, assessment.professional_id,
+          assessment.module, assessment.body_model, view, strokesJson
+        );
+      }
+
+      // Sincroniza body_drawing_strokes
+      db.prepare('DELETE FROM body_drawing_strokes WHERE drawing_id = ?').run(drawingId);
+
+      const insertStroke = db.prepare(`
+        INSERT INTO body_drawing_strokes (
+          id, drawing_id, assessment_id, tool_type, color, stroke_width,
+          opacity, points, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `);
+
+      for (const stroke of strokesArray) {
+        const sId = stroke.strokeId || stroke.id || 'stk-' + uuidv4().slice(0, 8);
+        const ptsStr = typeof stroke.points === 'string' ? stroke.points : JSON.stringify(stroke.points || []);
+        insertStroke.run(
+          sId, drawingId, assessmentId, stroke.toolType || 'pen',
+          stroke.color || '#dc2626', stroke.strokeWidth || 4,
+          stroke.opacity !== undefined ? stroke.opacity : 1.0, ptsStr
+        );
+      }
+
+      res.json({ success: true, totalStrokes: strokesArray.length });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.saveDrawings] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar anotações manuais' });
+    }
+  }
+
+  /**
+   * 8. Limpa desenhos manuais de uma vista específica
+   */
+  static clearViewDrawings(req: Request, res: Response): void {
+    try {
+      const assessmentId = String(req.params.id);
+      const view = String(req.params.view);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const assessment = db.prepare('SELECT patient_id FROM body_assessments WHERE id = ? AND tenant_id = ?').get(assessmentId, tenantId) as any;
+      if (!assessment) {
+        res.status(404).json({ error: 'Avaliação não encontrada' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, assessment.patient_id)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      const drawing = db.prepare('SELECT id FROM body_drawings WHERE assessment_id = ? AND view = ? AND tenant_id = ?').get(assessmentId, view, tenantId) as any;
+      if (drawing) {
+        db.prepare('DELETE FROM body_drawing_strokes WHERE drawing_id = ?').run(drawing.id);
+        db.prepare("UPDATE body_drawings SET strokes_json = '[]', updated_at = datetime('now') WHERE id = ?").run(drawing.id);
+      }
+
+      logAudit(req, 'CLEAR_BODY_DRAWINGS', 'body_drawings', assessmentId, { view });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.clearViewDrawings] Erro:', err);
+      res.status(500).json({ error: 'Erro ao limpar anotações manuais da vista' });
+    }
+  }
+}

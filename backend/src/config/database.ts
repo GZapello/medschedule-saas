@@ -1755,6 +1755,85 @@ export function initializeDatabase(): void {
         FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_fono_plans_patient ON fono_treatment_plans (tenant_id, patient_id);
+
+      -- =========================================================================
+      -- 13. MÓDULO CLÍNICO ZEMDABODY (MAPA CORPORAL & CANETA CLÍNICA)
+      -- =========================================================================
+      CREATE TABLE IF NOT EXISTS body_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        profession_id TEXT,
+        module TEXT NOT NULL DEFAULT 'general',
+        body_model TEXT NOT NULL DEFAULT 'female' CHECK(body_model IN ('female', 'male')),
+        assessment_date TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_body_assess_patient ON body_assessments (tenant_id, patient_id, assessment_date);
+      CREATE INDEX IF NOT EXISTS idx_body_assess_appt ON body_assessments (tenant_id, appointment_id);
+
+      CREATE TABLE IF NOT EXISTS body_markers (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        body_region TEXT NOT NULL,
+        side TEXT NOT NULL DEFAULT 'midline' CHECK(side IN ('right', 'left', 'midline')),
+        view TEXT NOT NULL CHECK(view IN ('front', 'back', 'left', 'right')),
+        marker_type TEXT NOT NULL,
+        value TEXT,
+        severity TEXT,
+        notes TEXT,
+        coordinates TEXT,
+        details_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (assessment_id) REFERENCES body_assessments(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_body_markers_assess ON body_markers (tenant_id, assessment_id);
+      CREATE INDEX IF NOT EXISTS idx_body_markers_region ON body_markers (assessment_id, body_region, view);
+
+      CREATE TABLE IF NOT EXISTS body_drawings (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        module TEXT NOT NULL DEFAULT 'general',
+        body_model TEXT NOT NULL DEFAULT 'female' CHECK(body_model IN ('female', 'male')),
+        view TEXT NOT NULL CHECK(view IN ('front', 'back', 'left', 'right')),
+        strokes_json TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (assessment_id) REFERENCES body_assessments(id) ON DELETE CASCADE
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_body_drawings_assess_view ON body_drawings (assessment_id, view);
+      CREATE INDEX IF NOT EXISTS idx_body_drawings_appt ON body_drawings (tenant_id, appointment_id);
+
+      CREATE TABLE IF NOT EXISTS body_drawing_strokes (
+        id TEXT PRIMARY KEY,
+        drawing_id TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        tool_type TEXT NOT NULL DEFAULT 'pen' CHECK(tool_type IN ('pen', 'highlighter')),
+        color TEXT NOT NULL,
+        stroke_width REAL NOT NULL,
+        opacity REAL NOT NULL DEFAULT 1.0,
+        points TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (drawing_id) REFERENCES body_drawings(id) ON DELETE CASCADE,
+        FOREIGN KEY (assessment_id) REFERENCES body_assessments(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_body_strokes_drawing ON body_drawing_strokes (drawing_id);
     `);
     addColIfMissing('odontograms', 'record_id', 'TEXT');
   } catch (migErr) {

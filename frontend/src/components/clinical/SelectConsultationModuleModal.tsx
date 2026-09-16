@@ -137,6 +137,24 @@ export const ALL_CLINICAL_MODULES: Record<string, ClinicalModuleOption> = {
       iconBg: 'bg-indigo-100 text-indigo-700',
       iconColor: 'text-indigo-600'
     }
+  },
+  ZemdaBody: {
+    id: 'ZemdaBody' as any,
+    name: 'ZemdaBody',
+    badge: 'Mapa Corporal',
+    profession: 'Avaliação Corporal & Caneta Clínica',
+    description: 'Mapa anatômico interativo com caneta clínica, escala de dor EVA e marcadores por região.',
+    icon: Activity,
+    colorTheme: {
+      border: 'border-teal-200 hover:border-teal-500',
+      bg: 'bg-white hover:bg-teal-50/50',
+      hoverBg: 'hover:bg-teal-50',
+      text: 'text-teal-900',
+      badgeBg: 'bg-teal-100',
+      badgeText: 'text-teal-800',
+      iconBg: 'bg-teal-100 text-teal-700',
+      iconColor: 'text-teal-600'
+    }
   }
 };
 
@@ -155,6 +173,7 @@ export function getCompatibleClinicalModules(auth: {
 }): ClinicalModuleOption[] {
   const result: ClinicalModuleOption[] = [];
 
+  // Módulos especializados
   if (auth.isPhysiotherapist) {
     result.push(ALL_CLINICAL_MODULES.ZemdaFisio);
   }
@@ -171,10 +190,11 @@ export function getCompatibleClinicalModules(auth: {
     result.push(ALL_CLINICAL_MODULES.ZemdaTO);
   }
 
-  // Se nenhuma especialidade restrita foi identificada, disponibiliza Atendimento Geral
-  if (result.length === 0) {
-    result.push(ALL_CLINICAL_MODULES.general);
-  }
+  // Atendimento Convencional Geral
+  result.push(ALL_CLINICAL_MODULES.general);
+
+  // Recurso Clínico Complementar: ZemdaBody
+  result.push(ALL_CLINICAL_MODULES.ZemdaBody);
 
   return result;
 }

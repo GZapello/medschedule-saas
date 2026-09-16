@@ -1,4 +1,5 @@
 import { ClinicalSnapshot } from './ClinicalSnapshot';
+import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -58,11 +59,22 @@ export const ClinicalRecordsView: React.FC = () => {
   const [editIsSealed, setEditIsSealed] = useState<boolean>(false);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
+  // ZemdaBody - Mapas Corporais Vinculados ao Prontuário
+  const [patientBodyAssessments, setPatientBodyAssessments] = useState<any[]>([]);
+  const [viewingBodyAssessment, setViewingBodyAssessment] = useState<any | null>(null);
+
   const fetchRecords = async (patientId: string) => {
     try {
       setLoading(true);
       const data = await ApiClient.get<ClinicalRecord[]>(`/v1/clinical-records/patient/${patientId}`);
       setRecords(data);
+
+      try {
+        const bodyData = await ApiClient.get<any[]>(`/v1/body-assessments/patient/${patientId}`);
+        setPatientBodyAssessments(bodyData || []);
+      } catch {
+        setPatientBodyAssessments([]);
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao carregar prontuário', 'error');
     } finally {
@@ -381,6 +393,50 @@ export const ClinicalRecordsView: React.FC = () => {
                         )}
 
                         <ClinicalSnapshot record={r} />
+
+                        {/* ZEMDABODY INTEGRADO AO PRONTUÁRIO */}
+                        {(() => {
+                          const bodyAss = patientBodyAssessments.find(
+                            ba => (r.appointment_id && ba.appointment_id === r.appointment_id) || ba.assessment_date === r.session_date
+                          );
+                          if (!bodyAss) return null;
+
+                          return (
+                            <div className="bg-gradient-to-br from-teal-50/80 via-emerald-50/40 to-slate-50 border border-teal-200/90 rounded-2xl p-4 my-3 shadow-2xs">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                                    <Activity className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] font-extrabold text-teal-700 uppercase tracking-wider block">
+                                      ZemdaBody • Mapa Corporal
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-800">
+                                      {bodyAss.total_markers || 0} marcadores clínicos • Modelo {bodyAss.body_model === 'male' ? 'Masculino' : 'Feminino'}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingBodyAssessment(bodyAss)}
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-all cursor-pointer"
+                                  title="Abrir o mapa corporal deste atendimento em modo visualização"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Visualizar mapa corporal</span>
+                                </button>
+                              </div>
+
+                              {bodyAss.notes && (
+                                <p className="text-xs text-slate-600 bg-white/80 p-2.5 rounded-xl border border-teal-100 mt-2">
+                                  <strong>Observações corporais:</strong> {bodyAss.notes}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* AÇÕES CLÍNICAS: VISUALIZAR, EDITAR, BAIXAR PDF, IMPRIMIR */}
@@ -729,6 +785,22 @@ export const ClinicalRecordsView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL ZEMDABODY (VISUALIZAR MAPA CORPORAL HISTÓRICO) */}
+      {viewingBodyAssessment && (
+        <ZemdaBodyModal
+          isOpen={!!viewingBodyAssessment}
+          onClose={() => setViewingBodyAssessment(null)}
+          patientId={viewingBodyAssessment.patient_id}
+          patientName={patients.find(p => p.id === viewingBodyAssessment.patient_id)?.full_name}
+          appointmentId={viewingBodyAssessment.appointment_id}
+          professionalId={viewingBodyAssessment.professional_id}
+          professionalName={viewingBodyAssessment.professional_name}
+          module={viewingBodyAssessment.module}
+          initialBodyModel={viewingBodyAssessment.body_model}
+          readOnly={true}
+        />
       )}
     </div>
   );

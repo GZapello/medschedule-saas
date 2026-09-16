@@ -36,6 +36,7 @@ import { DentistryController } from '../controllers/dentistry.controller';
 import { NutritionController } from '../controllers/nutrition.controller';
 import { OccupationalTherapyController } from '../controllers/occupational-therapy.controller';
 import { SpeechTherapyController } from '../controllers/speech-therapy.controller';
+import { BodyAssessmentController } from '../controllers/body-assessment.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
@@ -439,6 +440,18 @@ api.get('/v1/speech-therapy/treatment-plans/:patientId', requireTenant, requireR
 api.post('/v1/speech-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveTreatmentPlan);
 
 api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.finishConsultation);
+
+// ==========================================
+// MÓDULO CLÍNICO ZEMDABODY (MAPA CORPORAL & CANETA CLÍNICA)
+// ==========================================
+api.get('/v1/body-assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listByPatient);
+api.get('/v1/body-assessments/appointment/:appointmentId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.getByAppointment);
+api.get('/v1/body-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.getById);
+api.post('/v1/body-assessments', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.upsertAssessment);
+api.post('/v1/body-assessments/:id/markers', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveMarker);
+api.delete('/v1/body-assessments/markers/:markerId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.deleteMarker);
+api.put('/v1/body-assessments/:id/drawings/:view', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveDrawings);
+api.delete('/v1/body-assessments/:id/drawings/:view', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.clearViewDrawings);
 
 // Encaminhamentos entre Profissionais da Clínica (Item 6)
 api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);

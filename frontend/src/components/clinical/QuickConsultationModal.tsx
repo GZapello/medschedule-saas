@@ -46,6 +46,7 @@ import { ReferralModal } from './ReferralModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
 import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
 import { OdontogramCanvas, OdontogramData } from '../dentistry/OdontogramCanvas';
+import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 
 interface QuickConsultationModalProps {
   appointment: {
@@ -67,13 +68,15 @@ interface QuickConsultationModalProps {
   moduleType?: string;
   onClose: () => void;
   onFinished: () => void;
+  onOpenZemdaBody?: () => void;
 }
 
 export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   appointment,
   moduleType,
   onClose,
-  onFinished
+  onFinished,
+  onOpenZemdaBody
 }) => {
   const {
     currentTenant,
@@ -147,6 +150,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     isAppointmentPhysio ? 'ZemdaFisio' :
     'general'
   );
+
+  const [showZemdaBodyModal, setShowZemdaBodyModal] = useState<boolean>(false);
 
   // Campos clínicos
   const [title, setTitle] = useState<string>(
@@ -747,6 +752,23 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                 </>
               )}
             </div>
+
+            {/* Botão de Acesso Rápido ao ZemdaBody */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenZemdaBody) {
+                  onOpenZemdaBody();
+                } else {
+                  setShowZemdaBodyModal(true);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-teal-600 hover:bg-teal-500 text-white shadow-xs transition-colors cursor-pointer"
+              title="Abrir mapa corporal clínico ZemdaBody"
+            >
+              <Activity className="w-4 h-4" />
+              <span>ZemdaBody</span>
+            </button>
 
             <button
               onClick={onClose}
@@ -2212,6 +2234,20 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
           </div>
         </div>
+      )}
+
+      {/* Modal do ZemdaBody */}
+      {showZemdaBodyModal && (
+        <ZemdaBodyModal
+          isOpen={showZemdaBodyModal}
+          onClose={() => setShowZemdaBodyModal(false)}
+          patientId={appointment.patient_id}
+          patientName={patientName}
+          appointmentId={appointment.id}
+          professionalId={appointment.professional_id}
+          professionalName={appointment.professional_name}
+          module={effectiveModule}
+        />
       )}
 
     </div>
