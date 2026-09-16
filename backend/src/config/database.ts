@@ -1860,6 +1860,53 @@ export function initializeDatabase(): void {
         FOREIGN KEY (assessment_id) REFERENCES body_assessments(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_body_strokes_drawing ON body_drawing_strokes (drawing_id);
+
+      -- Tabelas complementares do ZemdaBody: Avaliação Antropométrica e Plano Terapêutico
+      CREATE TABLE IF NOT EXISTS body_anthropometric_assessments (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        assessment_date TEXT NOT NULL,
+        weight REAL,
+        height REAL,
+        waist_circumference REAL,
+        abdomen_circumference REAL,
+        hip_circumference REAL,
+        body_fat_percentage REAL,
+        fat_mass_kg REAL,
+        muscle_mass_kg REAL,
+        visceral_fat TEXT,
+        bmi REAL,
+        whr REAL,
+        whtr REAL,
+        body_measures_json TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_anthropometric_patient ON body_anthropometric_assessments (tenant_id, patient_id, assessment_date);
+
+      CREATE TABLE IF NOT EXISTS body_therapeutic_plans (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        appointment_id TEXT,
+        professional_id TEXT NOT NULL,
+        assessment_date TEXT NOT NULL,
+        items_json TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+        FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_therapeutic_patient ON body_therapeutic_plans (tenant_id, patient_id, assessment_date);
     `);
     addColIfMissing('odontograms', 'record_id', 'TEXT');
   } catch (migErr) {

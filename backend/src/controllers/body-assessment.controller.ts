@@ -495,4 +495,307 @@ export class BodyAssessmentController {
       res.status(500).json({ error: 'Erro ao limpar anotações manuais da vista' });
     }
   }
+
+  /**
+   * 9. Salva nova Avaliação Antropométrica e Medidas Corporais (Nutricionista)
+   */
+  static saveAnthropometry(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const {
+        patientId,
+        appointmentId,
+        professionalId,
+        assessmentDate,
+        weight,
+        height,
+        waistCircumference,
+        abdomenCircumference,
+        hipCircumference,
+        bodyFatPercentage,
+        fatMassKg,
+        muscleMassKg,
+        visceralFat,
+        bodyMeasures,
+        notes
+      } = req.body;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'Identificação do paciente é obrigatória' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      let resolvedProfId = professionalId;
+      if (!resolvedProfId) {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) resolvedProfId = prof.id;
+      }
+      if (!resolvedProfId) resolvedProfId = req.user.userId;
+
+      const dateStr = assessmentDate || new Date().toISOString().split('T')[0];
+
+      // Cálculos automáticos de índices
+      const w = weight !== undefined && weight !== null && weight !== '' ? Number(weight) : null;
+      const h = height !== undefined && height !== null && height !== '' ? Number(height) : null;
+      const waist = waistCircumference !== undefined && waistCircumference !== null && waistCircumference !== '' ? Number(waistCircumference) : null;
+      const abdomen = abdomenCircumference !== undefined && abdomenCircumference !== null && abdomenCircumference !== '' ? Number(abdomenCircumference) : null;
+      const hip = hipCircumference !== undefined && hipCircumference !== null && hipCircumference !== '' ? Number(hipCircumference) : null;
+      const fatPct = bodyFatPercentage !== undefined && bodyFatPercentage !== null && bodyFatPercentage !== '' ? Number(bodyFatPercentage) : null;
+
+      let bmi: number | null = null;
+      if (w && h && h > 0) {
+        const hMeters = h / 100;
+        bmi = Number((w / (hMeters * hMeters)).toFixed(2));
+      }
+
+      let whr: number | null = null;
+      if (waist && hip && hip > 0) {
+        whr = Number((waist / hip).toFixed(2));
+      }
+
+      let whtr: number | null = null;
+      if (waist && h && h > 0) {
+        whtr = Number((waist / h).toFixed(2));
+      }
+
+      let calculatedFatMass = fatMassKg !== undefined && fatMassKg !== null && fatMassKg !== '' ? Number(fatMassKg) : null;
+      if (calculatedFatMass === null && w !== null && fatPct !== null) {
+        calculatedFatMass = Number(((w * fatPct) / 100).toFixed(2));
+      }
+
+      let calculatedMuscleMass = muscleMassKg !== undefined && muscleMassKg !== null && muscleMassKg !== '' ? Number(muscleMassKg) : null;
+      if (calculatedMuscleMass === null && w !== null && calculatedFatMass !== null) {
+        calculatedMuscleMass = Number((w - calculatedFatMass).toFixed(2));
+      }
+
+      const bodyMeasuresJson = bodyMeasures ? (typeof bodyMeasures === 'string' ? bodyMeasures : JSON.stringify(bodyMeasures)) : null;
+      const id = 'baa-' + uuidv4().slice(0, 12);
+
+      db.prepare(`
+        INSERT INTO body_anthropometric_assessments (
+          id, tenant_id, patient_id, appointment_id, professional_id,
+          assessment_date, weight, height, waist_circumference,
+          abdomen_circumference, hip_circumference, body_fat_percentage,
+          fat_mass_kg, muscle_mass_kg, visceral_fat, bmi, whr, whtr,
+          body_measures_json, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(
+        id, tenantId, patientId, appointmentId || null, resolvedProfId,
+        dateStr, w, h, waist, abdomen, hip, fatPct,
+        calculatedFatMass, calculatedMuscleMass, visceralFat ? String(visceralFat) : null,
+        bmi, whr, whtr, bodyMeasuresJson, notes || null
+      );
+
+      logAudit(req, 'SAVE_ANTHROPOMETRIC_ASSESSMENT', 'body_anthropometric_assessments', id, { patientId, dateStr });
+
+      res.status(201).json({
+        success: true,
+        assessmentId: id,
+        data: {
+          id,
+          patientId,
+          appointmentId,
+          assessmentDate: dateStr,
+          weight: w,
+          height: h,
+          waistCircumference: waist,
+          abdomenCircumference: abdomen,
+          hipCircumference: hip,
+          bodyFatPercentage: fatPct,
+          fatMassKg: calculatedFatMass,
+          muscleMassKg: calculatedMuscleMass,
+          visceralFat,
+          bmi,
+          whr,
+          whtr,
+          notes
+        }
+      });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.saveAnthropometry] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar avaliação antropométrica' });
+    }
+  }
+
+  /**
+   * 10. Lista histórico de avaliações antropométricas do paciente
+   */
+  static listAnthropometryByPatient(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT 
+          baa.*,
+          p.name as professional_name
+        FROM body_anthropometric_assessments baa
+        LEFT JOIN professionals p ON p.id = baa.professional_id
+        WHERE baa.patient_id = ? AND baa.tenant_id = ?
+        ORDER BY baa.assessment_date DESC, baa.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      const assessments = rows.map(r => {
+        let measures: any = [];
+        if (r.body_measures_json) {
+          try {
+            measures = JSON.parse(r.body_measures_json);
+          } catch {
+            measures = [];
+          }
+        }
+        return {
+          ...r,
+          body_measures: measures
+        };
+      });
+
+      res.json(assessments);
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.listAnthropometryByPatient] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar avaliações antropométricas do paciente' });
+    }
+  }
+
+  /**
+   * 11. Salva Avaliação Corporal e Plano Terapêutico (Demais profissionais)
+   */
+  static saveTherapeuticPlan(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const {
+        patientId,
+        appointmentId,
+        professionalId,
+        assessmentDate,
+        items,
+        notes
+      } = req.body;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'Identificação do paciente é obrigatória' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      let resolvedProfId = professionalId;
+      if (!resolvedProfId) {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) resolvedProfId = prof.id;
+      }
+      if (!resolvedProfId) resolvedProfId = req.user.userId;
+
+      const dateStr = assessmentDate || new Date().toISOString().split('T')[0];
+      const itemsArray = Array.isArray(items) ? items : [];
+      const itemsJson = JSON.stringify(itemsArray);
+      const id = 'btp-' + uuidv4().slice(0, 12);
+
+      db.prepare(`
+        INSERT INTO body_therapeutic_plans (
+          id, tenant_id, patient_id, appointment_id, professional_id,
+          assessment_date, items_json, notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(
+        id, tenantId, patientId, appointmentId || null, resolvedProfId,
+        dateStr, itemsJson, notes || null
+      );
+
+      logAudit(req, 'SAVE_BODY_THERAPEUTIC_PLAN', 'body_therapeutic_plans', id, { patientId, dateStr, totalItems: itemsArray.length });
+
+      res.status(201).json({
+        success: true,
+        planId: id,
+        data: {
+          id,
+          patientId,
+          appointmentId,
+          assessmentDate: dateStr,
+          items: itemsArray,
+          notes
+        }
+      });
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.saveTherapeuticPlan] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar plano terapêutico corporal' });
+    }
+  }
+
+  /**
+   * 12. Lista histórico de planos terapêuticos corporais do paciente
+   */
+  static listTherapeuticPlansByPatient(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito (LGPD)' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT 
+          btp.*,
+          p.name as professional_name
+        FROM body_therapeutic_plans btp
+        LEFT JOIN professionals p ON p.id = btp.professional_id
+        WHERE btp.patient_id = ? AND btp.tenant_id = ?
+        ORDER BY btp.assessment_date DESC, btp.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      const plans = rows.map(r => {
+        let items: any = [];
+        if (r.items_json) {
+          try {
+            items = JSON.parse(r.items_json);
+          } catch {
+            items = [];
+          }
+        }
+        return {
+          ...r,
+          items
+        };
+      });
+
+      res.json(plans);
+    } catch (err: any) {
+      console.error('[BodyAssessmentController.listTherapeuticPlansByPatient] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar planos terapêuticos do paciente' });
+    }
+  }
 }

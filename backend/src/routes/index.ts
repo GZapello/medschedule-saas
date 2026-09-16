@@ -462,6 +462,10 @@ api.post('/v1/body-assessments/:id/markers', requireTenant, requireRole('clinic_
 api.delete('/v1/body-assessments/markers/:markerId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.deleteMarker);
 api.put('/v1/body-assessments/:id/drawings/:view', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveDrawings);
 api.delete('/v1/body-assessments/:id/drawings/:view', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.clearViewDrawings);
+api.get('/v1/body-assessments/patient/:patientId/anthropometry', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listAnthropometryByPatient);
+api.post('/v1/body-assessments/anthropometry', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveAnthropometry);
+api.get('/v1/body-assessments/patient/:patientId/therapeutic-plans', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listTherapeuticPlansByPatient);
+api.post('/v1/body-assessments/therapeutic-plans', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.saveTherapeuticPlan);
 
 // Encaminhamentos entre Profissionais da Clínica (Item 6)
 api.post('/v1/referrals', requireTenant, requireRole('clinic_admin', 'professional'), ReferralController.create);

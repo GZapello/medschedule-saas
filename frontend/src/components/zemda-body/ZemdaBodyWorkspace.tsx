@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { ZemdaBodyCanvas, BodyStroke } from './ZemdaBodyCanvas';
 import { getRegionLabel } from './bodyRegionsData';
+import { AnthropometricAssessmentView } from './AnthropometricAssessmentView';
+import { TherapeuticPlanView } from './TherapeuticPlanView';
 import {
   MousePointer,
   PenTool,
@@ -14,7 +17,9 @@ import {
   User,
   Tag,
   FileText,
-  ShieldCheck
+  ShieldCheck,
+  Scale,
+  ClipboardList
 } from 'lucide-react';
 
 interface ZemdaBodyWorkspaceProps {
@@ -46,6 +51,17 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
   const [clinicalNotes, setClinicalNotes] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [savingStatus, setSavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // Identificação automática da profissão do usuário logado
+  const { isNutritionist, isZemdaNutri } = useAuth();
+  const isNutriUser = Boolean(isNutritionist || isZemdaNutri || module === 'nutrition' || module === 'nutri');
+  const [activeSection, setActiveSection] = useState<'anthropometry' | 'therapeutic'>(
+    isNutriUser ? 'anthropometry' : 'therapeutic'
+  );
+
+  useEffect(() => {
+    setActiveSection(isNutriUser ? 'anthropometry' : 'therapeutic');
+  }, [isNutriUser]);
 
   // Ferramenta Ativa (apenas uma por vez: selecionar | caneta | borracha)
   const [tool, setTool] = useState<'select' | 'pen' | 'eraser'>('select');
@@ -589,7 +605,65 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* 4. MODAL DE CONFIRMAÇÃO: LIMPAR DESENHOS DA CANETA */}
+      {/* 4. SEÇÃO CLÍNICA ESPECIALIZADA POR PROFISSÃO */}
+      <div className="space-y-4 pt-1">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Módulo Especializado ZemdaBody:
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+              {isNutriUser ? 'Nutrição (Identificado)' : 'Área da Saúde (Identificado)'}
+            </span>
+          </div>
+
+          {/* Abas para alternar se necessário */}
+          <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setActiveSection('anthropometry')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeSection === 'anthropometry'
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5" />
+              <span>Avaliação Antropométrica</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSection('therapeutic')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeSection === 'therapeutic'
+                  ? 'bg-white text-teal-700 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span>Plano Terapêutico</span>
+            </button>
+          </div>
+        </div>
+
+        {activeSection === 'anthropometry' ? (
+          <AnthropometricAssessmentView
+            patientId={patientId}
+            appointmentId={appointmentId}
+            patientSex={bodyModel}
+            readOnly={readOnly}
+          />
+        ) : (
+          <TherapeuticPlanView
+            patientId={patientId}
+            appointmentId={appointmentId}
+            readOnly={readOnly}
+          />
+        )}
+      </div>
+
+      {/* 5. MODAL DE CONFIRMAÇÃO: LIMPAR DESENHOS DA CANETA */}
       {showClearDrawingsConfirm && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 space-y-4">
