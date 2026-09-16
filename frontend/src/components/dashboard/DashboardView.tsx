@@ -23,6 +23,7 @@ import {
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { PatientProfileModal } from '../patients/PatientProfileModal';
+import { SelectConsultationModuleModal, getCompatibleClinicalModules } from '../clinical/SelectConsultationModuleModal';
 
 interface DashboardViewProps {
   onNavigate: (view: string) => void;
@@ -35,11 +36,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenNewAppointment,
   onOpenNewPatient
 }) => {
-  const { clientTermLabel } = useAuth();
+  const auth = useAuth();
+  const { clientTermLabel } = auth;
   const { showToast } = useToast();
   const [loading, setLoading] = useState<boolean>(true);
   const [metrics, setMetrics] = useState<any>(null);
   const [quickConsultAppt, setQuickConsultAppt] = useState<any | null>(null);
+  const [selectingModuleAppt, setSelectingModuleAppt] = useState<any | null>(null);
+  const [compatibleModules, setCompatibleModules] = useState<any[]>([]);
+  const [activeConsultationModule, setActiveConsultationModule] = useState<string | undefined>(undefined);
   const [filterTab, setFilterTab] = useState<'all' | 'scheduled' | 'in_progress' | 'completed' | 'no_show' | 'cancelled'>('all');
   const [printDoc, setPrintDoc] = useState<{ type: 'certificate' | 'prescription' | 'exam_request'; id: string } | null>(null);
   const [viewPatientId, setViewPatientId] = useState<string | null>(null);
@@ -61,14 +66,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     fetchMetrics();
   }, []);
 
+  const executeStartConsultation = async (appointmentId: string, selectedModule?: string) => {
+    try {
+      const payload: any = { status: 'in_progress' };
+      if (selectedModule) {
+        payload.clinicalModule = selectedModule;
+      }
+      await ApiClient.put(`/v1/appointments/${appointmentId}/status`, payload);
+      const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
+      const chosenModule = selectedModule || appt?.clinical_module;
+      setActiveConsultationModule(chosenModule);
+      setQuickConsultAppt({
+        ...appt,
+        status: 'in_progress',
+        clinical_module: chosenModule
+      });
+      setSelectingModuleAppt(null);
+      showToast('Atendimento iniciado!', 'success');
+      fetchMetrics();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao iniciar atendimento', 'error');
+    }
+  };
+
   const handleUpdateStatus = async (appointmentId: string, newStatus: string) => {
     try {
       if (newStatus === 'completed') {
         setQuickConsultAppt(metrics.today.appointments.find((a: any) => a.id === appointmentId));
         return;
       }
+
+      if (newStatus === 'in_progress') {
+        const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
+        if (appt?.clinical_module) {
+          executeStartConsultation(appointmentId, appt.clinical_module);
+          return;
+        }
+
+        const modules = getCompatibleClinicalModules(auth);
+        if (modules.length <= 1) {
+          const autoModule = modules[0]?.id || 'general';
+          executeStartConsultation(appointmentId, autoModule);
+          return;
+        } else {
+          setCompatibleModules(modules);
+          setSelectingModuleAppt(appt);
+          return;
+        }
+      }
+
       await ApiClient.put(`/v1/appointments/${appointmentId}/status`, { status: newStatus });
-      if (newStatus === 'in_progress') setQuickConsultAppt({ ...metrics.today.appointments.find((a: any) => a.id === appointmentId), status: 'in_progress' });
       showToast(`Status atualizado para ${newStatus}!`, 'success');
       fetchMetrics();
     } catch (err: any) {
@@ -477,6 +524,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Modal de Seleção de Módulo Clínico */}
+      {selectingModuleAppt && (
+        <SelectConsultationModuleModal
+          isOpen={!!selectingModuleAppt}
+          onClose={() => setSelectingModuleAppt(null)}
+          modules={compatibleModules}
+          patientName={selectingModuleAppt.patient_name}
+          serviceName={selectingModuleAppt.service_name}
+          onSelectModule={(moduleId) => executeStartConsultation(selectingModuleAppt.id, moduleId)}
+        />
+      )}
+
       {/* Modal de Atendimento Rápido */}
       {quickConsultAppt && (
         <AppointmentConsultation
@@ -492,8 +551,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             start_time: quickConsultAppt.start_time,
             end_time: quickConsultAppt.end_time,
             modality: quickConsultAppt.modality,
-            status: quickConsultAppt.status
+            status: quickConsultAppt.status,
+            clinical_module: quickConsultAppt.clinical_module || activeConsultationModule
           }}
+          initialModuleType={activeConsultationModule || quickConsultAppt.clinical_module}
           onClose={() => setQuickConsultAppt(null)}
           onFinished={() => {
             setQuickConsultAppt(null);

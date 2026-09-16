@@ -209,6 +209,29 @@ export class ClinicalController {
         return;
       }
 
+      // Validação de integridade de módulo clínico vinculado ao agendamento
+      if (appointmentId) {
+        const apptRow = db.prepare('SELECT clinical_module FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as { clinical_module?: string } | undefined;
+        if (apptRow?.clinical_module && moduleType && apptRow.clinical_module !== moduleType) {
+          res.status(409).json({
+            error: `O atendimento já foi iniciado com o módulo "${apptRow.clinical_module}". Não é permitido salvar em módulos diferentes.`
+          });
+          return;
+        }
+
+        const existingRec = db.prepare('SELECT module_type FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL LIMIT 1').get(appointmentId, tenantId) as { module_type: string } | undefined;
+        if (existingRec && moduleType && existingRec.module_type !== moduleType) {
+          res.status(409).json({
+            error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
+          });
+          return;
+        }
+
+        if (moduleType && (!apptRow?.clinical_module)) {
+          db.prepare('UPDATE appointments SET clinical_module = ? WHERE id = ? AND tenant_id = ?').run(moduleType, appointmentId, tenantId);
+        }
+      }
+
       const id = 'rec-' + uuidv4().slice(0, 8);
       const creatorName = req.user?.name || req.user?.email || 'Profissional';
       const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;

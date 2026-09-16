@@ -21,13 +21,15 @@ import {
 } from 'lucide-react';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
+import { SelectConsultationModuleModal, getCompatibleClinicalModules } from '../clinical/SelectConsultationModuleModal';
 
 interface CalendarViewProps {
   onOpenNewAppointment: () => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment }) => {
-  const { currentTenant, clientTermLabel } = useAuth();
+  const auth = useAuth();
+  const { currentTenant, clientTermLabel } = auth;
   const { showToast } = useToast();
 
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
@@ -49,6 +51,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
   // Modais de Atendimento Rápido, Finalização e Cancelamento Estruturado
   const [activeConsultationAppt, setActiveConsultationAppt] = useState<any | null>(null);
+  const [activeConsultationModule, setActiveConsultationModule] = useState<string | undefined>(undefined);
+  const [selectingModuleAppt, setSelectingModuleAppt] = useState<Appointment | null>(null);
+  const [compatibleModules, setCompatibleModules] = useState<any[]>([]);
   const [finishingAppt, setFinishingAppt] = useState<any | null>(null);
   const [cancellingAppt, setCancellingAppt] = useState<any | null>(null);
   const [cancellationCategory, setCancellationCategory] = useState<string>('Desistência do paciente');
@@ -113,16 +118,52 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     }
   };
 
+  const executeStartConsultation = async (appointment: Appointment, selectedModule?: string) => {
+    try {
+      const payload: any = { status: 'in_progress' };
+      if (selectedModule) {
+        payload.clinicalModule = selectedModule;
+      }
+      await ApiClient.put(`/v1/appointments/${appointment.id}/status`, payload);
+      const chosenModule = selectedModule || (appointment as any).clinical_module;
+      setActiveConsultationModule(chosenModule);
+      setActiveConsultationAppt({
+        ...appointment,
+        status: 'in_progress',
+        clinical_module: chosenModule
+      });
+      setSelectedAppt(null);
+      setSelectingModuleAppt(null);
+      fetchCalendarData();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao iniciar atendimento', 'error');
+    }
+  };
+
   const startConsultation = async (appointment: Appointment) => {
     if (['completed', 'cancelled', 'no_show'].includes(appointment.status)) {
-      showToast('Abra o prontuário para consultar um atendimento encerrado.', 'info'); return;
+      showToast('Abra o prontuário para consultar um atendimento encerrado.', 'info');
+      return;
     }
-    try {
-      await ApiClient.put(`/v1/appointments/${appointment.id}/status`, { status: 'in_progress' });
-      setActiveConsultationAppt({ ...appointment, status: 'in_progress' });
-      setSelectedAppt(null);
-      fetchCalendarData();
-    } catch (err: any) { showToast(err.message || 'Erro ao iniciar atendimento', 'error'); }
+
+    // Se o agendamento já tiver módulo gravado previamente, abre direto nele sem modal
+    if ((appointment as any).clinical_module) {
+      executeStartConsultation(appointment, (appointment as any).clinical_module);
+      return;
+    }
+
+    // Obter módulos compatíveis com a atuação do usuário logado
+    const modules = getCompatibleClinicalModules(auth);
+
+    if (modules.length <= 1) {
+      // Regra 1: se possuir apenas 1 módulo compatível, abre automaticamente sem exibir modal desnecessário
+      const autoModule = modules[0]?.id || 'general';
+      executeStartConsultation(appointment, autoModule);
+    } else {
+      // Regra 1: mais de 1 módulo compatível, abre modal de seleção exclusivo para os compatíveis
+      setCompatibleModules(modules);
+      setSelectingModuleAppt(appointment);
+    }
   };
 
   const handleConfirmReschedule = async () => {
@@ -635,6 +676,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         </div>
       )}
 
+      {/* Modal de Seleção de Módulo Clínico (quando profissional possui múltiplas especialidades compatíveis) */}
+      {selectingModuleAppt && (
+        <SelectConsultationModuleModal
+          isOpen={!!selectingModuleAppt}
+          onClose={() => setSelectingModuleAppt(null)}
+          modules={compatibleModules}
+          patientName={selectingModuleAppt.patient_name}
+          serviceName={selectingModuleAppt.service_name}
+          onSelectModule={(moduleId) => executeStartConsultation(selectingModuleAppt, moduleId)}
+        />
+      )}
+
       {/* Modal de Atendimento Rápido */}
       {activeConsultationAppt && (
         <AppointmentConsultation
@@ -650,8 +703,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             start_time: activeConsultationAppt.start_time,
             end_time: activeConsultationAppt.end_time,
             modality: activeConsultationAppt.modality,
-            status: activeConsultationAppt.status
+            status: activeConsultationAppt.status,
+            clinical_module: activeConsultationAppt.clinical_module || activeConsultationModule
           }}
+          initialModuleType={activeConsultationModule || activeConsultationAppt.clinical_module}
           onClose={() => setActiveConsultationAppt(null)}
           onFinished={() => {
             setActiveConsultationAppt(null);

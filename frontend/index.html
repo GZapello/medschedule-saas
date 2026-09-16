@@ -30,9 +30,17 @@
     <meta name="twitter:description" content="Agenda online, prontuário eletrônico, finanças e emissão de recibos para clínicas e terapeutas." />
     <meta name="twitter:image" content="https://zemda.com.br/brand/zemda-icon.png" />
 
-    <!-- Google Search Console & Analytics Placeholders (Injetados dinamicamente no backend ou via env) -->
+    <!-- Google Search Console Placeholder (Injetado dinamicamente no backend ou via env) -->
     <!-- %GOOGLE_SITE_VERIFICATION_TAG% -->
-    <!-- %GA_TRACKING_SCRIPT% -->
+
+    <!-- Google Analytics 4 (GA4) Global Tag -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QFFJ7Y25ML"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-QFFJ7Y25ML');
+    </script>
 
     <!-- Schema.org Dados Estruturados (JSON-LD) -->
     <script type="application/ld+json">

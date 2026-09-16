@@ -8,7 +8,17 @@ import { SpeechTherapyWorkspace } from '../speech-therapy/SpeechTherapyWorkspace
 import { DentistryWorkspace } from '../dentistry/DentistryWorkspace';
 import { QuickConsultationModal } from './QuickConsultationModal';
 
-export function AppointmentConsultation({ appointment, onClose, onFinished }: { appointment: any; onClose: () => void; onFinished: () => void }) {
+export function AppointmentConsultation({
+  appointment,
+  initialModuleType,
+  onClose,
+  onFinished
+}: {
+  appointment: any;
+  initialModuleType?: string;
+  onClose: () => void;
+  onFinished: () => void;
+}) {
   const { isNutritionist, isOccupationalTherapist, isSpeechTherapist, isDentist } = useAuth();
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
@@ -55,16 +65,27 @@ export function AppointmentConsultation({ appointment, onClose, onFinished }: { 
     );
   }
 
-  const moduleType = status.moduleType;
+  const effectiveModuleType = appointment.clinical_module || initialModuleType || status.moduleType;
+
   const Workspace =
-    (isDentist || moduleType === 'ZemdaOdonto') ? DentistryWorkspace :
-    (isNutritionist || moduleType === 'ZemdaNutri') ? NutritionWorkspace :
-    (isOccupationalTherapist || moduleType === 'ZemdaTO') ? OccupationalTherapyWorkspace :
-    (isSpeechTherapist || moduleType === 'ZemdaFono') ? SpeechTherapyWorkspace :
+    effectiveModuleType === 'ZemdaOdonto' ? DentistryWorkspace :
+    effectiveModuleType === 'ZemdaNutri' ? NutritionWorkspace :
+    effectiveModuleType === 'ZemdaTO' ? OccupationalTherapyWorkspace :
+    effectiveModuleType === 'ZemdaFono' ? SpeechTherapyWorkspace :
     null;
 
   if (!Workspace) {
-    return <QuickConsultationModal appointment={appointment} onClose={onClose} onFinished={onFinished} />;
+    return (
+      <QuickConsultationModal
+        appointment={{
+          ...appointment,
+          clinical_module: effectiveModuleType
+        }}
+        moduleType={effectiveModuleType || 'general'}
+        onClose={onClose}
+        onFinished={onFinished}
+      />
+    );
   }
 
   return (

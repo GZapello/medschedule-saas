@@ -44,6 +44,7 @@ import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
 import { QuickAIAssistantShortcut } from './components/ai-copilot/QuickAIAssistantShortcut';
 import { NetworkOfflineModal } from './components/common/NetworkOfflineModal';
 import { UpdateNotificationModal } from './components/common/UpdateNotificationModal';
+import { trackPageView } from './utils/analytics';
 import { Sparkles, AlertCircle } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -164,6 +165,53 @@ const AppContent: React.FC = () => {
       setCurrentView('superadmin');
     }
   }, [currentUser?.role]);
+
+  // Google Analytics 4: Rastreamento SPA global de páginas/visualizações (100% livre de PII ou dados clínicos)
+  useEffect(() => {
+    if (currentUser) {
+      const viewTitles: Record<string, string> = {
+        dashboard: 'Painel Operacional',
+        calendar: 'Agenda de Atendimentos',
+        patients: 'Pacientes',
+        'clinical-records': 'Prontuários',
+        'physiotherapy-records': 'ZemdaFisio',
+        'dentistry-workspace': 'ZemdaOdonto',
+        'nutrition-workspace': 'ZemdaNutri',
+        'occupational-therapy-workspace': 'ZemdaTO',
+        'speech-therapy-workspace': 'ZemdaFono',
+        professionals: 'Profissionais',
+        services: 'Catálogo de Serviços',
+        financial: 'Financeiro',
+        receipts: 'Recibos',
+        staff: 'Equipe',
+        schedules: 'Horários de Atendimento',
+        budgets: 'Orçamentos',
+        payroll: 'Comissões e Repasses',
+        inventory: 'Estoque',
+        'pending-exams': 'Exames Pendentes',
+        'support-tickets': 'Central de Chamados',
+        reports: 'Relatórios Gerenciais',
+        settings: 'Configurações da Clínica',
+        superadmin: 'Administração Global',
+        billing: 'Assinatura e Planos',
+        onboarding: 'Configuração Inicial'
+      };
+      const title = viewTitles[currentView] ? `Zemda • ${viewTitles[currentView]}` : `Zemda • ${currentView}`;
+      trackPageView(`/${currentView}`, title);
+    } else {
+      if (activeSeoSlug) {
+        trackPageView(`/${activeSeoSlug}`, `Zemda • ${SEO_PAGES[activeSeoSlug]?.title || 'Especialidade'}`);
+      } else if (activeProfSlug) {
+        trackPageView('/agendar', 'Zemda • Agendamento Online');
+      } else if (activeInvite) {
+        trackPageView('/convite', 'Zemda • Convite');
+      } else if (publicView === 'login') {
+        trackPageView('/login', 'Zemda • Login e Acesso');
+      } else {
+        trackPageView('/', 'Zemda • Sistema de Gestão em Saúde');
+      }
+    }
+  }, [currentUser, currentView, publicView, activeSeoSlug, activeProfSlug, activeInvite]);
 
   // Tratamento do botão Voltar nativo do Android
   useEffect(() => {

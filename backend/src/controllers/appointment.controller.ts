@@ -415,7 +415,7 @@ export class AppointmentController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { status, reason, cancellationReasonCategory } = req.body;
+      const { status, reason, cancellationReasonCategory, clinicalModule, professionId } = req.body;
 
       const allowedStatuses = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show', 'rescheduled'];
       if (!allowedStatuses.includes(status)) {
@@ -423,10 +423,39 @@ export class AppointmentController {
         return;
       }
 
-      const current = db.prepare('SELECT status FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { status: string } | undefined;
+      const current = db.prepare('SELECT status, clinical_module, professional_id, profession_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { status: string; clinical_module?: string; professional_id?: string; profession_id?: string } | undefined;
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;
+      }
+
+      // Regra: Bloqueia tentativa de alterar para módulo conflitante no mesmo atendimento
+      if (current.clinical_module && clinicalModule && current.clinical_module !== clinicalModule) {
+        res.status(409).json({
+          error: `O atendimento já foi iniciado com o módulo "${current.clinical_module}". Não é permitido alterar o módulo clínico durante o atendimento.`
+        });
+        return;
+      }
+
+      // Verifica se já existe evolução salva em outro módulo para este agendamento
+      if (clinicalModule) {
+        const existingRec = db.prepare('SELECT module_type FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL LIMIT 1').get(id, tenantId) as { module_type: string } | undefined;
+        if (existingRec && existingRec.module_type && existingRec.module_type !== clinicalModule) {
+          res.status(409).json({
+            error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
+          });
+          return;
+        }
+      }
+
+      // Resolução segura de profession_id
+      let resolvedProfessionId = professionId || current.profession_id || null;
+      if (!resolvedProfessionId && current.professional_id) {
+        const profRow = db.prepare('SELECT profession_id FROM professionals WHERE id = ? AND tenant_id = ?').get(current.professional_id, tenantId) as { profession_id?: string } | undefined;
+        if (profRow?.profession_id) resolvedProfessionId = profRow.profession_id;
+      }
+      if (!resolvedProfessionId && (req.user as any)?.professionId) {
+        resolvedProfessionId = (req.user as any).professionId;
       }
 
       const cancelledBy = req.user ? `${req.user.name} (${req.user.role})` : 'Usuário';
@@ -442,6 +471,8 @@ export class AppointmentController {
           cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END,
           cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END,
           cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END,
+          clinical_module = COALESCE(clinical_module, ?),
+          profession_id = COALESCE(profession_id, ?),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -451,6 +482,8 @@ export class AppointmentController {
         status, cancellationReasonCategory || (status === 'cancelled' ? 'Outro' : null),
         status, status === 'cancelled' ? cancelledBy : null,
         status,
+        clinicalModule || null,
+        resolvedProfessionId || null,
         id, tenantId
       );
 

@@ -62,13 +62,16 @@ interface QuickConsultationModalProps {
     end_time?: string;
     modality?: string;
     status?: string;
+    clinical_module?: string;
   };
+  moduleType?: string;
   onClose: () => void;
   onFinished: () => void;
 }
 
 export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   appointment,
+  moduleType,
   onClose,
   onFinished
 }) => {
@@ -84,13 +87,15 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   } = useAuth();
   const { showToast } = useToast();
 
+  const effectiveModule = moduleType || appointment.clinical_module;
+
   const [loadingPatient, setLoadingPatient] = useState<boolean>(true);
   const [patientData, setPatientData] = useState<any>(null);
   const [allergiesList, setAllergiesList] = useState<any[]>([]);
   const [medicationsList, setMedicationsList] = useState<any[]>([]);
 
-  // ZemdaFisio - Mapa de Dor & Avaliação Fisioterapêutica (Regras 3, 4, 5, 6, 7)
-  const [isAppointmentPhysio, setIsAppointmentPhysio] = useState<boolean>(() => !!isPhysiotherapist);
+  // ZemdaFisio - Mapa de Dor & Avaliação Fisioterapêutica
+  const [isAppointmentPhysio, setIsAppointmentPhysio] = useState<boolean>(() => effectiveModule ? effectiveModule === 'ZemdaFisio' : !!isPhysiotherapist);
   const [zemdaFisioExpanded, setZemdaFisioExpanded] = useState<boolean>(true);
   const [bodyMapJson, setBodyMapJson] = useState<string>('');
   const [bodyMapImage, setBodyMapImage] = useState<string>('');
@@ -103,13 +108,13 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [savingPhysio, setSavingPhysio] = useState<boolean>(false);
 
   // ZemdaOdonto - Odontograma & Procedimentos Odontológicos
-  const [isAppointmentDentist, setIsAppointmentDentist] = useState<boolean>(() => !!isDentist);
+  const [isAppointmentDentist, setIsAppointmentDentist] = useState<boolean>(() => effectiveModule ? effectiveModule === 'ZemdaOdonto' : !!isDentist);
   const [zemdaOdontoExpanded, setZemdaOdontoExpanded] = useState<boolean>(true);
   const [odontogramData, setOdontogramData] = useState<OdontogramData>({});
   const [pendingToothChanges, setPendingToothChanges] = useState<any[]>([]);
 
   // ZemdaNutri - Nutrição & Antropometria Rápida
-  const [isAppointmentNutri, setIsAppointmentNutri] = useState<boolean>(() => !!isNutritionist);
+  const [isAppointmentNutri, setIsAppointmentNutri] = useState<boolean>(() => effectiveModule ? effectiveModule === 'ZemdaNutri' : !!isNutritionist);
   const [zemdaNutriExpanded, setZemdaNutriExpanded] = useState<boolean>(true);
   const [nutriWeight, setNutriWeight] = useState<string>('');
   const [nutriHeight, setNutriHeight] = useState<string>('');
@@ -119,7 +124,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [nutriNotes, setNutriNotes] = useState<string>('');
 
   // ZemdaTO - Terapia Ocupacional
-  const [isAppointmentTO, setIsAppointmentTO] = useState<boolean>(() => !!isOccupationalTherapist);
+  const [isAppointmentTO, setIsAppointmentTO] = useState<boolean>(() => effectiveModule ? effectiveModule === 'ZemdaTO' : !!isOccupationalTherapist);
   const [zemdaTOExpanded, setZemdaTOExpanded] = useState<boolean>(true);
   const [toIndependenceLevel, setToIndependenceLevel] = useState<number>(5);
   const [toMainOccupation, setToMainOccupation] = useState<string>('Autocuidado e rotina diária');
@@ -127,12 +132,21 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [toNotes, setToNotes] = useState<string>('');
 
   // ZemdaFono - Fonoaudiologia
-  const [isAppointmentFono, setIsAppointmentFono] = useState<boolean>(() => !!isSpeechTherapist);
+  const [isAppointmentFono, setIsAppointmentFono] = useState<boolean>(() => effectiveModule ? effectiveModule === 'ZemdaFono' : !!isSpeechTherapist);
   const [zemdaFonoExpanded, setZemdaFonoExpanded] = useState<boolean>(true);
   const [fonoPhonemeAltered, setFonoPhonemeAltered] = useState<string>('');
   const [fonoVoiceQuality, setFonoVoiceQuality] = useState<string>('Adequada');
   const [fonoOrofacialHabit, setFonoOrofacialHabit] = useState<string>('Nenhum');
   const [fonoNotes, setFonoNotes] = useState<string>('');
+
+  const activeModuleType = effectiveModule || (
+    isAppointmentDentist ? 'ZemdaOdonto' :
+    isAppointmentNutri ? 'ZemdaNutri' :
+    isAppointmentTO ? 'ZemdaTO' :
+    isAppointmentFono ? 'ZemdaFono' :
+    isAppointmentPhysio ? 'ZemdaFisio' :
+    'general'
+  );
 
   // Campos clínicos
   const [title, setTitle] = useState<string>(
@@ -566,7 +580,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         title: title.trim() || `Consulta de ${appointment.service_name || 'Rotina'}`,
         clinicalEvolution: clinicalEvolution.trim(),
         technicalNotes: technicalNotes.trim() || null,
-        isSealed
+        isSealed,
+        moduleType: activeModuleType
       });
 
       // Sincroniza dados do ZemdaFisio caso preenchidos
@@ -1849,7 +1864,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             isSealed,
             odontogramData: isAppointmentDentist ? odontogramData : undefined,
             toothChanges: isAppointmentDentist ? pendingToothChanges : undefined,
-            moduleType: isAppointmentDentist ? 'ZemdaOdonto' : isAppointmentNutri ? 'ZemdaNutri' : isAppointmentTO ? 'ZemdaTO' : isAppointmentFono ? 'ZemdaFono' : isAppointmentPhysio ? 'ZemdaFisio' : undefined,
+            moduleType: activeModuleType,
             moduleData: isAppointmentTO ? { independenceLevel: toIndependenceLevel, mainOccupation: toMainOccupation, sensoryStatus: toSensoryStatus, notes: toNotes }
               : isAppointmentFono ? { phonemeAltered: fonoPhonemeAltered, voiceQuality: fonoVoiceQuality, orofacialHabit: fonoOrofacialHabit, notes: fonoNotes }
               : isAppointmentPhysio ? { painScore, painLocation, painCharacteristics, conductsExercises, bodyMapJson, bodyMapImage }

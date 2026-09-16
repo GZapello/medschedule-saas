@@ -28,12 +28,21 @@ export class DocumentsController {
       WHERE p.id = ? AND p.tenant_id = ?
     `).get(appt.service_id, appt.professional_id, req.tenantId) as any;
 
-    const text = [prof?.profession_id, prof?.profession_slug, prof?.profession_name, prof?.practice_areas, prof?.service_name].filter(Boolean).join(' ').toLowerCase();
-    let moduleType = 'ZemdaFisio';
-    if (text.includes('nutri') || text.includes('crn')) moduleType = 'ZemdaNutri';
-    else if (text.includes('ocupacional') || text.includes('terapia-ocupacional')) moduleType = 'ZemdaTO';
-    else if (text.includes('fono') || text.includes('crfa')) moduleType = 'ZemdaFono';
-    else if (text.includes('odonto') || text.includes('dentis') || text.includes('cro')) moduleType = 'ZemdaOdonto';
+    let moduleType = appt.clinical_module || null;
+    if (!moduleType) {
+      const existingRec = db.prepare('SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL LIMIT 1').get(appt.id, req.tenantId) as { module_type?: string } | undefined;
+      if (existingRec?.module_type) {
+        moduleType = existingRec.module_type;
+      }
+    }
+    if (!moduleType) {
+      const text = [prof?.profession_id, prof?.profession_slug, prof?.profession_name, prof?.practice_areas, prof?.service_name].filter(Boolean).join(' ').toLowerCase();
+      moduleType = 'ZemdaFisio';
+      if (text.includes('nutri') || text.includes('crn')) moduleType = 'ZemdaNutri';
+      else if (text.includes('ocupacional') || text.includes('terapia-ocupacional')) moduleType = 'ZemdaTO';
+      else if (text.includes('fono') || text.includes('crfa')) moduleType = 'ZemdaFono';
+      else if (text.includes('odonto') || text.includes('dentis') || text.includes('cro')) moduleType = 'ZemdaOdonto';
+    }
 
     res.json({ awaitingPayment: !!saved && !saved.completed_at && appt.status !== 'completed', alreadyCompleted: appt.status === 'completed', generatedDocs: saved ? JSON.parse(saved.generated_docs_json) : {}, payment, moduleType });
   }
@@ -407,6 +416,24 @@ export class DocumentsController {
         return;
       }
       const saved = db.prepare('SELECT * FROM consultation_completions WHERE appointment_id=? AND tenant_id=?').get(appointmentId, tenantId) as any;
+
+      // Validação anti-conflito de módulos clínicos no mesmo atendimento
+      if (evolution?.moduleType) {
+        if (appt.clinical_module && appt.clinical_module !== evolution.moduleType) {
+          res.status(409).json({
+            error: `Este atendimento foi iniciado no módulo "${appt.clinical_module}". Não é permitido salvar ou finalizar em módulo diferente ("${evolution.moduleType}").`
+          });
+          return;
+        }
+        const existingRec = db.prepare('SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL LIMIT 1').get(appointmentId, tenantId) as { module_type?: string } | undefined;
+        if (existingRec?.module_type && existingRec.module_type !== evolution.moduleType) {
+          res.status(409).json({
+            error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
+          });
+          return;
+        }
+      }
+
       const moduleAccess: Record<string, (request: Request) => boolean> = {
         ZemdaNutri: isNutritionistOrClinicManager, ZemdaTO: isOccupationalTherapistOrClinicManager,
         ZemdaFono: isSpeechTherapistOrClinicManager, ZemdaOdonto: isDentistOrClinicManager, ZemdaFisio: isPhysiotherapistOrClinicManager
@@ -414,6 +441,7 @@ export class DocumentsController {
       if (evolution?.moduleType && (!moduleAccess[evolution.moduleType] || !moduleAccess[evolution.moduleType](req))) {
         res.status(403).json({ error: 'Sem permissão para este módulo clínico.' }); return;
       }
+
       const saveOnly = req.body.saveOnly === true;
       const clinicalPayload = JSON.stringify({ evolution, certificate, prescription, examRequest, returnAppointment, referral });
       if (saveOnly && saved?.payload_json && saved.payload_json !== clinicalPayload) {
@@ -815,9 +843,10 @@ export class DocumentsController {
       db.prepare(`
         UPDATE appointments SET
           status = 'completed',
+          clinical_module = COALESCE(clinical_module, ?),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
-      `).run(appointmentId, tenantId);
+      `).run(evolution?.moduleType || null, appointmentId, tenantId);
 
       // 8. Grava no histórico de status
       try {

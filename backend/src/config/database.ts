@@ -166,6 +166,8 @@ export function initializeDatabase(): void {
     addColIfMissing('appointments', 'referral_reason', 'TEXT');
     addColIfMissing('appointments', 'cancellation_reason_category', 'TEXT');
     addColIfMissing('appointments', 'cancelled_by', 'TEXT');
+    addColIfMissing('appointments', 'clinical_module', 'TEXT');
+    addColIfMissing('appointments', 'profession_id', 'TEXT');
 
     // Colunas em pagamentos para vínculo com caixa
     addColIfMissing('payments', 'cash_register_id', 'TEXT');
