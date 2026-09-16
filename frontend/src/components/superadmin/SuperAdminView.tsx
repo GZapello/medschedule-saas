@@ -22,15 +22,17 @@ import {
   Briefcase,
   ToggleLeft,
   ToggleRight,
-  Sparkles
+  Sparkles,
+  Gift
 } from 'lucide-react';
+import { FreeTrialsAdminView } from './FreeTrialsAdminView';
 
 export const SuperAdminView: React.FC = () => {
   const { switchTenant, currentUser: user } = useAuth();
   const { showToast } = useToast();
 
   // Navegação Principal do SuperAdmin
-  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations'>('tenants');
+  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials'>('tenants');
 
   // Clínicas
   const [metrics, setMetrics] = useState<any>(null);
@@ -403,6 +405,18 @@ export const SuperAdminView: React.FC = () => {
             <Layers className="w-3.5 h-3.5" />
             Tipos de Serviço ({categories.length})
           </button>
+
+          <button
+            onClick={() => setMainSection('free_trials')}
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              mainSection === 'free_trials'
+                ? 'bg-amber-400 text-slate-950 font-black shadow-md'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            <Gift className="w-3.5 h-3.5" />
+            Testes Grátis
+          </button>
         </div>
       </div>
 
@@ -411,6 +425,7 @@ export const SuperAdminView: React.FC = () => {
       {/* ========================================================================= */}
       {mainSection === 'subscriptions' && <GlobalBillingView />}
       {mainSection === 'integrations' && <GlobalBillingView integration />}
+      {mainSection === 'free_trials' && <FreeTrialsAdminView />}
       {mainSection === 'tenants' && (
         <div className="space-y-6">
           {/* Alertas do Sistema */}

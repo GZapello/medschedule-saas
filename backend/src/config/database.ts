@@ -278,6 +278,32 @@ export function initializeDatabase(): void {
       );
       CREATE INDEX IF NOT EXISTS idx_clinic_invites_token ON clinic_invites (token);
       CREATE INDEX IF NOT EXISTS idx_clinic_invites_tenant ON clinic_invites (tenant_id, status);
+
+      -- Tabela de Testes Grátis gerados pelo SuperAdmin
+      CREATE TABLE IF NOT EXISTS free_trials (
+        id TEXT PRIMARY KEY,
+        token TEXT NOT NULL UNIQUE,
+        target_name TEXT NOT NULL,
+        target_email TEXT,
+        duration_days INTEGER NOT NULL,
+        duration_label TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'used', 'expired', 'revoked')),
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        link_expires_at TEXT NOT NULL,
+        activated_at TEXT,
+        trial_end_at TEXT,
+        tenant_id TEXT,
+        user_id TEXT,
+        notes TEXT,
+        revoked_at TEXT,
+        revoked_by TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_free_trials_token ON free_trials(token);
+      CREATE INDEX IF NOT EXISTS idx_free_trials_status ON free_trials(status);
     `);
 
     // Criação das novas tabelas clínicas, de convênios, documentos e caixa

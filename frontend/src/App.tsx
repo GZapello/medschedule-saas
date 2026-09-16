@@ -30,6 +30,7 @@ import { OnboardingWizardView } from './components/onboarding/OnboardingWizardVi
 import { PublicBookingView } from './components/public-booking/PublicBookingView';
 import { PublicProfessionalBookingView } from './components/public-booking/PublicProfessionalBookingView';
 import { InviteRegisterView } from './components/auth/InviteRegisterView';
+import { FreeTrialActivationView } from './components/auth/FreeTrialActivationView';
 import { WorkSchedulesView } from './components/schedules/WorkSchedulesView';
 import { SupportTicketsView } from './components/support/SupportTicketsView';
 import { PendingExamsView } from './components/exams/PendingExamsView';
@@ -103,6 +104,15 @@ const AppContent: React.FC = () => {
     return null;
   };
   const [activeInvite, setActiveInvite] = useState<{ clinicSlug?: string; token: string } | null>(getInitialInvite);
+
+  // Roteamento para teste grátis (/teste-gratis/:token ou query params ?teste-gratis=:token / ?trial=:token)
+  const getInitialTrialToken = (): string | null => {
+    const match = window.location.pathname.match(/^\/teste-gratis\/([^/]+)/);
+    if (match) return match[1];
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('teste-gratis') || urlParams.get('trial') || null;
+  };
+  const [activeTrialToken, setActiveTrialToken] = useState<string | null>(getInitialTrialToken);
 
   // Roteamento para páginas legais (/termos-de-uso e /privacidade)
   const getInitialLegalPage = (): 'terms' | 'privacy' | null => {
@@ -274,6 +284,12 @@ const AppContent: React.FC = () => {
         window.history.pushState(null, '', '/');
         return;
       }
+      // 3.1 Se estiver em link de teste grátis, volta para home
+      if (activeTrialToken) {
+        setActiveTrialToken(null);
+        window.history.pushState(null, '', '/');
+        return;
+      }
       // 4. Se estiver na página pública individual do profissional, volta para a home
       if (activeProfSlug) {
         setActiveProfSlug(null);
@@ -322,6 +338,14 @@ const AppContent: React.FC = () => {
       } else {
         const singleInviteMatch = window.location.pathname.match(/^\/convite\/([^/]+)/);
         setActiveInvite(singleInviteMatch ? { token: singleInviteMatch[1] } : null);
+      }
+
+      const trialMatch = window.location.pathname.match(/^\/teste-gratis\/([^/]+)/);
+      if (trialMatch) {
+        setActiveTrialToken(trialMatch[1]);
+      } else {
+        const urlParams = new URLSearchParams(window.location.search);
+        setActiveTrialToken(urlParams.get('teste-gratis') || urlParams.get('trial') || null);
       }
     };
 
@@ -489,6 +513,25 @@ const AppContent: React.FC = () => {
           window.history.pushState(null, '', '/');
           setPublicView('login');
           setAuthInitialAction('login');
+        }}
+      />
+    );
+  }
+
+  // Se o usuário está acessando link de teste grátis (/teste-gratis/:token)
+  if (activeTrialToken) {
+    return (
+      <FreeTrialActivationView
+        token={activeTrialToken}
+        onBackToHome={() => {
+          setActiveTrialToken(null);
+          window.history.pushState(null, '', '/');
+          setPublicView('landing');
+        }}
+        onSuccess={() => {
+          setActiveTrialToken(null);
+          window.history.pushState(null, '', '/');
+          reloadSession();
         }}
       />
     );

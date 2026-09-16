@@ -38,6 +38,7 @@ import { OccupationalTherapyController } from '../controllers/occupational-thera
 import { SpeechTherapyController } from '../controllers/speech-therapy.controller';
 import { BodyAssessmentController } from '../controllers/body-assessment.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
+import { FreeTrialController } from '../controllers/free-trial.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -70,6 +71,10 @@ api.get('/v1/public/tenants', TenantController.listPublic);
 api.get('/v1/public/invites/:token', AuthController.validateInvite);
 api.get('/v1/public/invites/:clinicSlug/:token', AuthController.validateInvite);
 api.post('/v1/auth/register-invite', AuthController.registerWithInvite);
+
+// Validação e Ativação de Teste Grátis
+api.get('/v1/public/free-trials/validate/:token', FreeTrialController.validateToken);
+api.post('/v1/public/free-trials/activate/:token', FreeTrialController.activate);
 
 // Taxonomia pública (para formulários e página pública)
 api.get('/v1/taxonomy/categories', TaxonomyController.listCategories);
@@ -241,6 +246,11 @@ api.put('/v1/admin/tenants/:id/ban', requireRole('superadmin'), TenantController
 api.put('/v1/admin/tenants/:id/unban', requireRole('superadmin'), TenantController.adminUnban);
 api.put('/v1/admin/tenants/:id/toggle-registrations', requireRole('superadmin'), TenantController.adminToggleRegistrations);
 api.post('/v1/admin/tenants/:id/delete-permanently', requireRole('superadmin'), TenantController.adminDeletePermanently);
+
+// Gestão de Testes Grátis (Exclusivo SuperAdmin SaaS)
+api.post('/v1/admin/free-trials', requireRole('superadmin'), FreeTrialController.create);
+api.get('/v1/admin/free-trials', requireRole('superadmin'), FreeTrialController.listAll);
+api.delete('/v1/admin/free-trials/:id/revoke', requireRole('superadmin'), FreeTrialController.revoke);
 
 // Onboarding e Assistente de Configuração da Clínica (Gestor)
 api.get('/v1/onboarding/status', requireTenant, OnboardingController.getStatus);
