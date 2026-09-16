@@ -4,15 +4,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 
 export class SupportController {
-  // Listar chamados: Exclusivo para Administrador Global (SuperAdmin)
+  // Listar chamados: SuperAdmin visualiza todos; usuário comum visualiza apenas os próprios chamados
   static list(req: Request, res: Response): void {
     try {
       const user = req.user;
-      if (!user || user.role !== 'superadmin') {
-        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Usuário não autenticado' });
         return;
       }
 
+      const isSuper = user.role === 'superadmin';
       const { status, priority, category } = req.query;
       let query = `
         SELECT 
@@ -26,6 +27,17 @@ export class SupportController {
         WHERE 1=1
       `;
       const params: any[] = [];
+
+      // Usuários comuns visualizam apenas seus próprios chamados
+      if (!isSuper) {
+        query += ' AND t.user_id = ?';
+        params.push(user.userId);
+        const tenantId = req.tenantId || user.tenantId;
+        if (tenantId) {
+          query += ' AND (t.tenant_id = ? OR t.tenant_id IS NULL)';
+          params.push(tenantId);
+        }
+      }
 
       if (status) {
         query += ' AND t.status = ?';
@@ -50,13 +62,13 @@ export class SupportController {
     }
   }
 
-  // Detalhes do chamado e mensagens associadas (Exclusivo SuperAdmin)
+  // Detalhes do chamado e mensagens associadas (SuperAdmin ou proprietário do chamado)
   static getById(req: Request, res: Response): void {
     try {
       const { id } = req.params;
       const user = req.user;
-      if (!user || user.role !== 'superadmin') {
-        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Usuário não autenticado' });
         return;
       }
 
@@ -77,15 +89,31 @@ export class SupportController {
         return;
       }
 
-      const messages = db.prepare(`
+      const isSuper = user.role === 'superadmin';
+      // Isolamento: se não for SuperAdmin, usuário só pode acessar o próprio chamado
+      if (!isSuper) {
+        const userTenant = req.tenantId || user.tenantId;
+        const tenantMatches = !ticket.tenant_id || !userTenant || ticket.tenant_id === userTenant;
+        if (ticket.user_id !== user.userId || !tenantMatches) {
+          res.status(403).json({ success: false, error: 'Você não possui permissão para acessar este chamado.' });
+          return;
+        }
+      }
+
+      let msgQuery = `
         SELECT 
           m.id, m.ticket_id, m.user_id, m.message, m.attachments_json, m.is_internal, m.created_at,
           u.name as sender_name, u.role as sender_role
         FROM support_ticket_messages m
         JOIN users u ON u.id = m.user_id
         WHERE m.ticket_id = ?
-        ORDER BY m.created_at ASC
-      `).all(id);
+      `;
+      if (!isSuper) {
+        msgQuery += ' AND m.is_internal = 0';
+      }
+      msgQuery += ' ORDER BY m.created_at ASC';
+
+      const messages = db.prepare(msgQuery).all(id);
 
       res.json({ success: true, ticket, messages });
     } catch (err: any) {
@@ -94,12 +122,12 @@ export class SupportController {
     }
   }
 
-  // Criar novo chamado (Exclusivo SuperAdmin)
+  // Criar novo chamado (Disponível para qualquer usuário autenticado)
   static create(req: Request, res: Response): void {
     try {
       const user = req.user;
-      if (!user || user.role !== 'superadmin') {
-        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Usuário não autenticado' });
         return;
       }
 
@@ -112,6 +140,7 @@ export class SupportController {
 
       const ticketId = 'tkt-' + uuidv4().slice(0, 8);
       const attachmentsJson = Array.isArray(attachments) ? JSON.stringify(attachments) : null;
+      const tenantId = req.tenantId || user.tenantId || null;
 
       db.prepare(`
         INSERT INTO support_tickets (
@@ -121,7 +150,7 @@ export class SupportController {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'), datetime('now'))
       `).run(
         ticketId,
-        req.tenantId || null,
+        tenantId,
         user.userId,
         title.trim(),
         category || 'duvida',
@@ -145,13 +174,13 @@ export class SupportController {
     }
   }
 
-  // Adicionar mensagem / resposta no chamado (Exclusivo SuperAdmin)
+  // Adicionar mensagem / resposta no chamado (SuperAdmin ou proprietário do chamado)
   static addMessage(req: Request, res: Response): void {
     try {
       const { id } = req.params;
       const user = req.user;
-      if (!user || user.role !== 'superadmin') {
-        res.status(403).json({ success: false, error: 'Você não possui permissão para acessar esta área.' });
+      if (!user) {
+        res.status(401).json({ success: false, error: 'Usuário não autenticado' });
         return;
       }
 
@@ -161,19 +190,33 @@ export class SupportController {
         return;
       }
 
-      const ticket = db.prepare('SELECT id, status FROM support_tickets WHERE id = ?').get(id) as any;
+      const ticket = db.prepare('SELECT id, tenant_id, user_id, status FROM support_tickets WHERE id = ?').get(id) as any;
       if (!ticket) {
         res.status(404).json({ success: false, error: 'Chamado não encontrado' });
         return;
       }
 
+      const isSuper = user.role === 'superadmin';
+      if (!isSuper) {
+        const userTenant = req.tenantId || user.tenantId;
+        const tenantMatches = !ticket.tenant_id || !userTenant || ticket.tenant_id === userTenant;
+        if (ticket.user_id !== user.userId || !tenantMatches) {
+          res.status(403).json({ success: false, error: 'Você não possui permissão para responder a este chamado.' });
+          return;
+        }
+      }
+
       const messageId = 'msg-' + uuidv4().slice(0, 8);
       const attachmentsJson = Array.isArray(attachments) ? JSON.stringify(attachments) : null;
+      const shouldBeInternal = isSuper && isInternal ? 1 : 0;
 
       db.prepare(`
         INSERT INTO support_ticket_messages (id, ticket_id, user_id, message, attachments_json, is_internal, created_at)
         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-      `).run(messageId, id, user.userId, message.trim(), attachmentsJson, isInternal ? 1 : 0);
+      `).run(messageId, id, user.userId, message.trim(), attachmentsJson, shouldBeInternal);
+
+      // Atualiza timestamp de última atualização do chamado
+      db.prepare("UPDATE support_tickets SET updated_at = datetime('now') WHERE id = ?").run(id);
 
       res.status(201).json({ success: true, id: messageId, message: 'Resposta registrada com sucesso' });
     } catch (err: any) {

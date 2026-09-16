@@ -156,7 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Suporte & Sistema',
       items: [
         { id: 'ai-assistant', label: 'Assistente Zemda', icon: Bot, visible: true },
-        { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: isSuperAdmin },
+        { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: true },
         { id: 'import', label: 'Importar Dados', icon: UploadCloud, visible: isClinicAdmin },
         { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isSuperAdmin },
         { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },

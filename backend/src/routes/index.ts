@@ -286,6 +286,7 @@ api.delete('/v1/professionals/blocks/:blockId', requireTenant, requireRole('clin
 api.get('/v1/services', requireTenant, ServiceController.list);
 api.post('/v1/services', requireTenant, requireRole('clinic_admin'), ServiceController.create);
 api.put('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.update);
+api.delete('/v1/services/:id', requireTenant, requireRole('clinic_admin'), ServiceController.delete);
 api.get('/v1/rooms', requireTenant, ServiceController.listRooms);
 api.post('/v1/rooms', requireTenant, requireRole('clinic_admin'), ServiceController.createRoom);
 
@@ -533,11 +534,11 @@ api.get('/v1/import/batches', requireTenant, requireRole('clinic_admin'), Import
 api.post('/v1/import/batches/:id/rollback', requireTenant, requireRole('clinic_admin'), ImportController.rollbackBatch);
 api.post('/v1/import/export-custom-docx', requireTenant, ImportController.exportCustomDocx);
 
-// Central de Chamados & Suporte (Exclusivo SuperAdmin / Administrador Global)
-api.get('/v1/support/tickets', requireRole('superadmin'), SupportController.list);
-api.get('/v1/support/tickets/:id', requireRole('superadmin'), SupportController.getById);
-api.post('/v1/support/tickets', requireRole('superadmin'), SupportController.create);
-api.post('/v1/support/tickets/:id/messages', requireRole('superadmin'), SupportController.addMessage);
+// Central de Chamados & Suporte
+api.get('/v1/support/tickets', SupportController.list);
+api.get('/v1/support/tickets/:id', SupportController.getById);
+api.post('/v1/support/tickets', SupportController.create);
+api.post('/v1/support/tickets/:id/messages', SupportController.addMessage);
 api.put('/v1/support/tickets/:id/status', requireRole('superadmin'), SupportController.updateStatus);
 api.patch('/v1/support/tickets/:id/status', requireRole('superadmin'), SupportController.updateStatus);
 

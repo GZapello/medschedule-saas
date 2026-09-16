@@ -25,20 +25,6 @@ export const SupportTicketsView: React.FC = () => {
   const { showToast } = useToast();
   const { currentUser, isSuperAdmin, isClinicAdmin } = useAuth();
 
-  if (!isSuperAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
-        <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
-          <AlertCircle className="w-8 h-8" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito</h2>
-        <p className="text-sm text-slate-600 mb-4">
-          Você não possui permissão para acessar esta área. O gerenciamento da Central de Chamados é exclusivo para a administração geral da Zemda.
-        </p>
-      </div>
-    );
-  }
-
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
@@ -164,6 +150,7 @@ export const SupportTicketsView: React.FC = () => {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'open': return 'Aberto';
+      case 'analyzing':
       case 'in_analysis': return 'Em Análise';
       case 'in_progress': return 'Em Atendimento';
       case 'resolved': return 'Resolvido';
@@ -175,6 +162,7 @@ export const SupportTicketsView: React.FC = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open': return 'bg-amber-100 text-amber-800 border-amber-200';
+      case 'analyzing':
       case 'in_analysis': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'in_progress': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       case 'resolved': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
@@ -255,7 +243,7 @@ export const SupportTicketsView: React.FC = () => {
               >
                 <option value="">Todos os Status</option>
                 <option value="open">Abertos</option>
-                <option value="in_analysis">Em Análise</option>
+                <option value="analyzing">Em Análise</option>
                 <option value="in_progress">Em Atendimento</option>
                 <option value="resolved">Resolvidos</option>
                 <option value="closed">Fechados</option>
@@ -306,15 +294,26 @@ export const SupportTicketsView: React.FC = () => {
                     <h4 className="font-bold text-slate-900 text-xs line-clamp-1">{ticket.title}</h4>
                     <p className="text-slate-500 text-[11px] mt-1 line-clamp-2 leading-relaxed">{ticket.description}</p>
 
-                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                      <span className="flex items-center gap-1 font-medium text-slate-600">
-                        <User className="w-3 h-3 text-slate-400" />
-                        {ticket.user_name || 'Usuário'}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
-                      </span>
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-col gap-1 text-[10px] text-slate-400">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1 font-medium text-slate-600">
+                          <User className="w-3 h-3 text-slate-400" />
+                          {ticket.user_name || 'Usuário'}
+                          {isSuperAdmin && ticket.clinic_name && (
+                            <span className="text-slate-400 font-normal">({ticket.clinic_name})</span>
+                          )}
+                        </span>
+                        <span className="flex items-center gap-1" title="Data de Abertura">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          Aberto: {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span>ID: {ticket.id}</span>
+                        <span>
+                          Atualizado: {new Date(ticket.updated_at || ticket.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -347,8 +346,8 @@ export const SupportTicketsView: React.FC = () => {
                       {getPriorityBadge(ticketDetails.ticket.priority)}
                     </div>
 
-                    {/* Status Changer for Admins */}
-                    {(isClinicAdmin || isSuperAdmin) && (
+                    {/* Status Changer Exclusivo para SuperAdmin */}
+                    {isSuperAdmin && (
                       <div className="flex items-center gap-2">
                         <label className="text-[11px] font-semibold text-slate-500 hidden sm:inline">Status:</label>
                         <select
@@ -357,7 +356,7 @@ export const SupportTicketsView: React.FC = () => {
                           className="text-xs border border-slate-200 rounded-xl px-2 py-1 bg-white font-semibold text-slate-800"
                         >
                           <option value="open">Aberto</option>
-                          <option value="in_analysis">Em Análise</option>
+                          <option value="analyzing">Em Análise</option>
                           <option value="in_progress">Em Atendimento</option>
                           <option value="resolved">Resolvido</option>
                           <option value="closed">Fechado</option>
@@ -368,11 +367,13 @@ export const SupportTicketsView: React.FC = () => {
 
                   <div>
                     <h3 className="text-base font-bold text-slate-900">{ticketDetails.ticket.title}</h3>
-                    <div className="flex flex-wrap items-center gap-3 mt-1 text-[11px] text-slate-500">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-[11px] text-slate-500">
                       <span>Autor: <strong className="text-slate-700">{ticketDetails.ticket.user_name}</strong></span>
                       {ticketDetails.ticket.clinic_name && (
                         <span>Clínica: <strong className="text-slate-700">{ticketDetails.ticket.clinic_name}</strong></span>
                       )}
+                      <span>Abertura: <strong className="text-slate-700">{new Date(ticketDetails.ticket.created_at).toLocaleString('pt-BR')}</strong></span>
+                      <span>Última Atualização: <strong className="text-slate-700">{new Date(ticketDetails.ticket.updated_at || ticketDetails.ticket.created_at).toLocaleString('pt-BR')}</strong></span>
                       <span>Plataforma: <strong className="text-slate-700">{ticketDetails.ticket.platform || 'Web'}</strong></span>
                       <span>Versão: <strong className="text-slate-700">{ticketDetails.ticket.app_version || '1.1.2'}</strong></span>
                     </div>
