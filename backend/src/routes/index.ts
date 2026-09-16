@@ -498,6 +498,7 @@ api.get('/v1/clinical/exam-requests/:id', requireTenant, DocumentsController.get
 api.get('/v1/clinics/document-templates', requireTenant, DocumentsController.listTemplates);
 api.put('/v1/clinics/document-templates/:documentType', requireTenant, requireRole('clinic_admin'), DocumentsController.upsertTemplate);
 api.post('/v1/appointments/:id/finish', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.finishConsultation);
+api.get('/v1/appointments/:id/completion', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.consultationStatus);
 
 // Gestão de Convênios
 api.get('/v1/insurances/clinic', requireTenant, InsuranceController.listClinicInsurances);

@@ -41,7 +41,10 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
       WHERE u.id = ?
     `).get(tenantId, req.user.userId) as any;
 
+    const professional = db.prepare('SELECT p.practice_areas, pr.name FROM professionals p LEFT JOIN professions pr ON pr.id=p.profession_id WHERE p.user_id=? AND p.tenant_id=?').get(req.user.userId, tenantId) as any;
     const managerAreaText = [
+      professional?.name,
+      professional?.practice_areas,
       tenant?.manager_profession,
       tenant?.manager_practice_areas,
       clinicUser?.profession_custom,
@@ -129,11 +132,13 @@ export class ClinicalController {
           p.name as professional_name, p.registration_type, p.registration_number,
           (SELECT COUNT(*) FROM documents WHERE record_id = r.id) as total_attachments
         FROM records r
-        JOIN professionals p ON p.id = r.professional_id
+        LEFT JOIN professionals p ON p.id = r.professional_id
         WHERE r.patient_id = ? AND r.tenant_id = ?
         ORDER BY r.session_date DESC, r.created_at DESC
       `);
-      const records = stmt.all(patientId, tenantId);
+      const records = stmt.all(patientId, tenantId).map((record: any) => ({
+        ...record, attachments: db.prepare('SELECT id, title, file_url FROM documents WHERE record_id=? AND tenant_id=? AND patient_id=?').all(record.id, tenantId, patientId)
+      }));
 
       logAudit(req, 'VIEW_CLINICAL_RECORDS', 'records', patientId, { totalViewed: records.length });
       res.json(records);
@@ -155,7 +160,7 @@ export class ClinicalController {
           p.name as professional_name, p.registration_type, p.registration_number,
           pat.full_name as patient_name, pat.cpf as patient_cpf, pat.birth_date as patient_birth_date
         FROM records r
-        JOIN professionals p ON p.id = r.professional_id
+        LEFT JOIN professionals p ON p.id = r.professional_id
         JOIN patients pat ON pat.id = r.patient_id
         WHERE r.id = ? AND r.tenant_id = ?
       `).get(id, tenantId) as any;
@@ -336,7 +341,7 @@ export class ClinicalController {
           pat.full_name as patient_name, pat.cpf as patient_cpf, pat.birth_date as patient_birth_date,
           pat.phone as patient_phone, pat.email as patient_email
         FROM records r
-        JOIN professionals p ON p.id = r.professional_id
+        LEFT JOIN professionals p ON p.id = r.professional_id
         JOIN patients pat ON pat.id = r.patient_id
         WHERE r.id = ? AND r.tenant_id = ?
       `).get(id, tenantId) as any;

@@ -153,10 +153,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const profId = ((currentUser as any)?.professionId || '').toLowerCase();
   const profSlug = (currentUser?.professionSlug || '').toLowerCase();
   const profName = (currentUser?.professionName || '').toLowerCase();
-  const practiceAreas = (currentUser?.practiceAreas || '').toLowerCase();
+  const practiceAreas = [
+    (currentUser?.practiceAreas || ''),
+    currentUser?.role === 'clinic_admin' ? (currentTenant as any)?.manager_profession || '' : '',
+    currentUser?.role === 'clinic_admin' ? (currentTenant as any)?.manager_practice_areas || '' : ''
+  ].filter(Boolean).join(' ').toLowerCase();
 
-  // Verifica se o usuário tem área de atuação em Fisioterapia (Regras 1, 3 e 4)
-  // Válido tanto para Professional quanto para ClinicAdmin que atua como Fisioterapeuta
+  const userPermissions = (currentUser as any)?.permissions || [];
+
+  // Regra Estrita de Acesso ao ZemdaFisio:
   const hasPhysioArea =
     profId === 'prof-fisioterapeuta' ||
     profId === 'prof-fisioterapia' ||
@@ -168,20 +173,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('fisio') ||
     practiceAreas.includes('physio');
 
-  const userPermissions = (currentUser as any)?.permissions || [];
-  const isZemdaFisioAuthorized =
-    isClinicAdmin ||
+  const isPhysiotherapist = !isSuperAdmin && (
+    (isProfessional && hasPhysioArea) ||
+    (currentUser?.role === 'clinic_admin' && hasPhysioArea) ||
     userPermissions.includes('access_zemda_fisio') ||
-    !!(currentUser as any)?.zemdaFisioEnabled;
-
-  // Regra Estrita de Acesso ao ZemdaFisio:
-  const isPhysiotherapist = !isSuperAdmin && (isProfessional || isClinicAdmin) && hasPhysioArea && isZemdaFisioAuthorized;
+    !!(currentUser as any)?.zemdaFisioEnabled
+  );
   const isZemdaFisio = isPhysiotherapist;
 
   // Regra Estrita de Acesso ao ZemdaOdonto:
-  // 1. Administrador Global NUNCA tem uso clínico do ZemdaOdonto (nem botão nem tela)
-  // 2. Deve pertencer à profissão / área de Odontologia (Cirurgião-Dentista, Odontologia)
-  // 3. Deve possuir liberação explícita do gestor da clínica (ou ser gerente com a formação em Odontologia)
   const hasOdontoArea =
     profId === 'prof-dentista' ||
     profId === 'prof-odontologia' ||
@@ -195,18 +195,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('dentis') ||
     practiceAreas.includes('cro');
 
-  const isZemdaOdontoAuthorized =
+  const isDentist = !isSuperAdmin && (
+    (isProfessional && hasOdontoArea) ||
     (currentUser?.role === 'clinic_admin' && hasOdontoArea) ||
     userPermissions.includes('access_zemda_odonto') ||
-    !!(currentUser as any)?.zemdaOdontoEnabled;
-
-  const isDentist = !isSuperAdmin && (isProfessional || (currentUser?.role === 'clinic_admin' && hasOdontoArea)) && hasOdontoArea && isZemdaOdontoAuthorized;
+    !!(currentUser as any)?.zemdaOdontoEnabled
+  );
   const isZemdaOdonto = isDentist;
 
   // Regra Estrita de Acesso ao ZemdaNutri:
-  // 1. Administrador Global NUNCA tem uso clínico
-  // 2. Deve pertencer à profissão / área de Nutrição
-  // 3. Deve possuir liberação do gestor (ou ser gestor com formação em Nutrição)
   const hasNutriArea =
     profId === 'prof-nutricionista' ||
     profId === 'prof-nutricao' ||
@@ -214,20 +211,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     profSlug.includes('nutri') ||
     profName.includes('nutri') ||
     practiceAreas.includes('nutri') ||
-    practiceAreas.includes('crn');
+    practiceAreas.includes('crn') ||
+    practiceAreas.includes('diet');
 
-  const isZemdaNutriAuthorized =
+  const isNutritionist = !isSuperAdmin && (
+    (isProfessional && hasNutriArea) ||
     (currentUser?.role === 'clinic_admin' && hasNutriArea) ||
     userPermissions.includes('access_zemda_nutri') ||
-    !!(currentUser as any)?.zemdaNutriEnabled;
-
-  const isNutritionist = !isSuperAdmin && (isProfessional || (currentUser?.role === 'clinic_admin' && hasNutriArea)) && hasNutriArea && isZemdaNutriAuthorized;
+    !!(currentUser as any)?.zemdaNutriEnabled
+  );
   const isZemdaNutri = isNutritionist;
 
   // Regra Estrita de Acesso ao ZemdaTO (Terapia Ocupacional):
-  // 1. Administrador Global NUNCA tem uso clínico
-  // 2. Deve pertencer à profissão / área de Terapia Ocupacional
-  // 3. Deve possuir liberação do gestor (ou ser gestor com formação em TO)
   const hasTOArea =
     profId === 'prof-terapeuta-ocupacional' ||
     profId === 'prof-terapia-ocupacional' ||
@@ -236,21 +231,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     profSlug.includes('ocupacional') ||
     profSlug.includes('terapia_ocupacional') ||
     profName.includes('ocupacional') ||
+    practiceAreas.includes('terapia ocupacional') ||
+    practiceAreas.includes('terapeuta ocupacional') ||
     practiceAreas.includes('ocupacional') ||
-    (practiceAreas.includes('to') && practiceAreas.includes('terapia'));
+    practiceAreas.includes('terapia-ocupacional');
 
-  const isZemdaTOAuthorized =
+  const isOccupationalTherapist = !isSuperAdmin && (
+    (isProfessional && hasTOArea) ||
     (currentUser?.role === 'clinic_admin' && hasTOArea) ||
     userPermissions.includes('access_zemda_to') ||
-    !!(currentUser as any)?.zemdaToEnabled;
-
-  const isOccupationalTherapist = !isSuperAdmin && (isProfessional || (currentUser?.role === 'clinic_admin' && hasTOArea)) && hasTOArea && isZemdaTOAuthorized;
+    !!(currentUser as any)?.zemdaToEnabled
+  );
   const isZemdaTO = isOccupationalTherapist;
 
   // Regra Estrita de Acesso ao ZemdaFono (Fonoaudiologia):
-  // 1. Administrador Global NUNCA tem uso clínico
-  // 2. Deve pertencer à profissão / área de Fonoaudiologia
-  // 3. Deve possuir liberação do gestor (ou ser gestor com formação em Fono)
   const hasFonoArea =
     profId === 'prof-fonoaudiologo' ||
     profId === 'prof-fonoaudiologia' ||
@@ -260,12 +254,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     practiceAreas.includes('fono') ||
     practiceAreas.includes('crfa');
 
-  const isZemdaFonoAuthorized =
+  const isSpeechTherapist = !isSuperAdmin && (
+    (isProfessional && hasFonoArea) ||
     (currentUser?.role === 'clinic_admin' && hasFonoArea) ||
     userPermissions.includes('access_zemda_fono') ||
-    !!(currentUser as any)?.zemdaFonoEnabled;
-
-  const isSpeechTherapist = !isSuperAdmin && (isProfessional || (currentUser?.role === 'clinic_admin' && hasFonoArea)) && hasFonoArea && isZemdaFonoAuthorized;
+    !!(currentUser as any)?.zemdaFonoEnabled
+  );
   const isZemdaFono = isSpeechTherapist;
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';

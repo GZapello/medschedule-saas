@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
+import { DocumentsController } from './documents.controller';
 
 /**
  * Validação de acesso exclusivo para Odontologia (ZemdaOdonto)
@@ -61,8 +62,8 @@ export function isDentistOrClinicManager(req: Request): boolean {
     clinicUser?.cu_practice_areas,
     clinicUser?.profession_name,
     clinicUser?.u_practice_areas,
-    tenant?.manager_profession,
-    tenant?.manager_practice_areas
+    req.user.role === 'clinic_admin' ? tenant?.manager_profession : null,
+    req.user.role === 'clinic_admin' ? tenant?.manager_practice_areas : null
   ].filter(Boolean).join(' ').toLowerCase();
 
   const isOdontoArea =
@@ -85,8 +86,10 @@ export function isDentistOrClinicManager(req: Request): boolean {
   } catch {}
 
   const isManager = req.user.role === 'clinic_admin' || clinicUser?.is_manager === 1 || clinicUser?.role === 'clinic_admin';
+  const isProfessional = req.user.role === 'professional';
 
   const isAuthorizedByManager =
+    (isProfessional && isOdontoArea) ||
     (isManager && isOdontoArea) ||
     perms.includes('access_zemda_odonto') ||
     Number(prof?.zemda_odonto_enabled) === 1 ||
@@ -946,6 +949,17 @@ export class DentistryController {
   // =========================================================================
 
   static finishConsultation(req: Request, res: Response): void {
+    if (req.body.appointmentId) {
+      if (!isDentistOrClinicManager(req)) { res.status(403).json({ error: 'Sem acesso ao módulo clínico.' }); return; }
+      const body = req.body;
+      req.params.id = body.appointmentId;
+      req.body = { ...body, evolution: {
+        ...body, moduleType: 'ZemdaOdonto', moduleData: { ...body },
+        clinicalEvolution: body.clinicalEvolution || 'Atendimento clínico registrado.'
+      }};
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
     try {
       const tenantId = req.tenantId;
       if (!isDentistOrClinicManager(req)) {
@@ -991,6 +1005,7 @@ export class DentistryController {
 
       const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;
       const odontoModuleData = {
+        ...req.body,
         proceduresPerformed: proceduresPerformed || null,
         toothChanges: toothChanges || [],
         odontogramData: odontogramData || null

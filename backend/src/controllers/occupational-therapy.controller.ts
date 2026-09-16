@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
+import { DocumentsController } from './documents.controller';
 
 /**
  * Validação de acesso exclusivo para Terapia Ocupacional (ZemdaTO - Regras 1 e 2)
@@ -56,8 +57,8 @@ export function isOccupationalTherapistOrClinicManager(req: Request): boolean {
     clinicUser?.cu_practice_areas,
     clinicUser?.profession_name,
     clinicUser?.u_practice_areas,
-    tenant?.manager_profession,
-    tenant?.manager_practice_areas
+    req.user.role === 'clinic_admin' ? tenant?.manager_profession : null,
+    req.user.role === 'clinic_admin' ? tenant?.manager_practice_areas : null
   ].filter(Boolean).join(' ').toLowerCase();
 
   const isTOArea =
@@ -80,8 +81,10 @@ export function isOccupationalTherapistOrClinicManager(req: Request): boolean {
   } catch {}
 
   const isManager = req.user.role === 'clinic_admin' || clinicUser?.is_manager === 1 || clinicUser?.role === 'clinic_admin';
+  const isProfessional = req.user.role === 'professional';
 
   const isAuthorized =
+    (isProfessional && isTOArea) ||
     (isManager && isTOArea) ||
     perms.includes('access_zemda_to') ||
     Number(prof?.zemda_to_enabled) === 1 ||
@@ -482,6 +485,17 @@ export class OccupationalTherapyController {
 
   // 7. FINALIZAÇÃO SEGURA DO ATENDIMENTO DE T.O. (Regra 56)
   static finishConsultation(req: Request, res: Response): void {
+    if (req.body.appointmentId) {
+      if (!isOccupationalTherapistOrClinicManager(req)) { res.status(403).json({ error: 'Sem acesso ao módulo clínico.' }); return; }
+      const body = req.body;
+      req.params.id = body.appointmentId;
+      req.body = { ...body, evolution: {
+        ...body, moduleType: 'ZemdaTO', moduleData: { ...body },
+        clinicalEvolution: body.clinicalEvolution || 'Atendimento clínico registrado.'
+      }};
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
     try {
       const tenantId = req.tenantId;
       if (!isOccupationalTherapistOrClinicManager(req)) {
@@ -516,6 +530,7 @@ export class OccupationalTherapyController {
       const recTitle = title || 'Atendimento Terapêutico Ocupacional (ZemdaTO)';
 
       const toModuleData = {
+        ...req.body,
         avd: avdData || null,
         sensory: sensoryData || null,
         motorCognitive: motorCognitiveData || null,

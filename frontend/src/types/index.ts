@@ -283,8 +283,8 @@ export interface Payment {
   professional_name?: string;
   service_name?: string;
   amount: number;
-  payment_method: 'pix' | 'credit_card' | 'debit_card' | 'cash' | 'bank_transfer' | 'insurance';
-  status: 'paid' | 'pending' | 'partial' | 'cancelled' | 'refunded';
+  payment_method: 'pix' | 'credit_card' | 'debit_card' | 'cash' | 'bank_transfer' | 'insurance' | 'other';
+  status: 'paid' | 'pending' | 'partial' | 'cancelled' | 'refunded' | 'exempt';
   transaction_id?: string;
   payment_date?: string;
   notes?: string;

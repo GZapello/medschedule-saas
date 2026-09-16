@@ -185,6 +185,9 @@ export const FinancialView: React.FC = () => {
         return <span className="flex items-center gap-1 text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md font-bold text-[11px]"><QrCode className="w-3 h-3" /> PIX</span>;
       case 'credit_card':
         return <span className="flex items-center gap-1 text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md font-bold text-[11px]"><CreditCard className="w-3 h-3" /> Cartão</span>;
+      case 'debit_card': return <span>Cartão de Débito</span>;
+      case 'insurance': return <span>Convênio</span>;
+      case 'other': return <span>Outro</span>;
       case 'cash':
         return <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md font-bold text-[11px]"><Banknote className="w-3 h-3" /> Dinheiro</span>;
       default:
@@ -356,7 +359,7 @@ export const FinancialView: React.FC = () => {
                             </span>
                           ) : (
                             <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
-                              Pendente
+                              {p.status === 'exempt' ? 'Isento' : 'Pendente'}
                             </span>
                           )}
                         </td>

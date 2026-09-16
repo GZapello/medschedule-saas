@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Printer
 } from 'lucide-react';
+import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { PrintableDocumentModal } from './PrintableDocumentModal';
 
 interface FinishConsultationModalProps {
@@ -48,6 +49,12 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   onFinished
 }) => {
   const { showToast } = useToast();
+  const [receipt, setReceipt] = useState<any>(null);
+  React.useEffect(() => {
+    ApiClient.get<any>(`/v1/appointments/${appointment.id}/completion`).then(result => {
+      if (result.awaitingPayment) setReceipt(result);
+    }).catch((err: any) => showToast(err.message || 'Erro ao consultar atendimento.', 'error'));
+  }, [appointment.id]);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   // Seções ativas
@@ -165,11 +172,12 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     try {
       setSubmitting(true);
 
-      const payload: any = {};
+      const payload: any = { saveOnly: true };
 
-      if (includeEvolution && evolution.clinicalEvolution.trim()) {
+      if (evolution.clinicalEvolution.trim() || evolution.technicalNotes.trim()) {
         payload.evolution = {
           ...evolution,
+          clinicalEvolution: evolution.clinicalEvolution.trim() || 'Atendimento clínico registrado.',
           odontogramData: clinicalData?.odontogramData,
           toothChanges: clinicalData?.toothChanges,
           moduleType: clinicalData?.moduleType,
@@ -241,23 +249,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
       const res = await ApiClient.post<any>(`/v1/appointments/${appointment.id}/finish`, payload);
       
-      // Limpa rascunho apenas após êxito confirmado do servidor
-      try {
-        localStorage.removeItem(DRAFT_KEY);
-      } catch (e) {}
-
-      showToast('Atendimento finalizado com sucesso!', 'success');
-
-      // Exibe tela estruturada de confirmação
-      setCompletionSummary({
-        hasEvolution: includeEvolution && !!evolution.clinicalEvolution.trim(),
-        hasCertificate: includeCertificate,
-        hasPrescription: includePrescription && !!prescription.content.trim(),
-        hasExamRequest: includeExamRequest && !!examRequest.examsList.trim(),
-        hasReturn: includeReturn && !!returnAppt.date,
-        hasReferral: includeReferral && !!referral.referralReason,
-        generatedDocs: res.generatedDocs || {}
-      });
+      setReceipt(res);
     } catch (err: any) {
       console.error('Falha ao finalizar atendimento:', err);
       // NUNCA apaga os campos preenchidos
@@ -269,6 +261,20 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
       setSubmitting(false);
     }
   };
+
+  if (receipt) return <ConsultationPaymentModal appointmentId={appointment.id} initialPayment={receipt.payment}
+    onClose={onClose} onFinished={(result) => {
+      localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(`zemda_quick_consult_${appointment.id}`);
+      setReceipt(null);
+      setCompletionSummary({
+        hasEvolution: !!receipt.generatedDocs?.recordId, hasCertificate: !!receipt.generatedDocs?.certificateId,
+        hasPrescription: !!receipt.generatedDocs?.prescriptionId, hasExamRequest: !!receipt.generatedDocs?.examRequestId,
+        hasReturn: !!receipt.generatedDocs?.returnAppointmentId, hasReferral: includeReferral,
+        generatedDocs: result.generatedDocs || receipt.generatedDocs
+      });
+      showToast('Atendimento finalizado e recebimento registrado.', 'success');
+    }} />;
 
   if (completionSummary) {
     return (

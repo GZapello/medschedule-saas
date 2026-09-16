@@ -1,3 +1,4 @@
+import { ClinicalSnapshot } from './ClinicalSnapshot';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -323,67 +324,7 @@ export const ClinicalRecordsView: React.FC = () => {
                       </div>
                     )}
 
-                    {r.module_data_json && (() => {
-                      try {
-                        const mod = JSON.parse(r.module_data_json);
-                        return (
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs text-slate-700">
-                            <h6 className="font-bold text-[11px] uppercase tracking-wider text-slate-500 mb-1.5 flex items-center gap-1.5">
-                              <span>Registro Especializado: {r.module_type || 'Clínico'}</span>
-                            </h6>
-                            <div className="flex flex-wrap gap-2.5">
-                              {mod.weight && (
-                                <span className="bg-lime-50 text-lime-900 px-2 py-0.5 rounded-md border border-lime-200">
-                                  <strong>Peso:</strong> {mod.weight} kg
-                                </span>
-                              )}
-                              {mod.height && (
-                                <span className="bg-lime-50 text-lime-900 px-2 py-0.5 rounded-md border border-lime-200">
-                                  <strong>Altura:</strong> {mod.height} m
-                                </span>
-                              )}
-                              {mod.waistCirc && (
-                                <span className="bg-lime-50 text-lime-900 px-2 py-0.5 rounded-md border border-lime-200">
-                                  <strong>Cintura:</strong> {mod.waistCirc} cm
-                                </span>
-                              )}
-                              {mod.independenceLevel && (
-                                <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
-                                  <strong>Funcionalidade:</strong> Nível {mod.independenceLevel}
-                                </span>
-                              )}
-                              {mod.mainOccupation && (
-                                <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
-                                  <strong>Foco:</strong> {mod.mainOccupation}
-                                </span>
-                              )}
-                              {mod.phonemeAltered && (
-                                <span className="bg-purple-50 text-purple-900 px-2 py-0.5 rounded-md border border-purple-200">
-                                  <strong>Fonemas:</strong> {mod.phonemeAltered}
-                                </span>
-                              )}
-                              {mod.voiceQuality && (
-                                <span className="bg-purple-50 text-purple-900 px-2 py-0.5 rounded-md border border-purple-200">
-                                  <strong>Voz:</strong> {mod.voiceQuality}
-                                </span>
-                              )}
-                              {mod.painScore !== undefined && (
-                                <span className="bg-teal-50 text-teal-900 px-2 py-0.5 rounded-md border border-teal-200">
-                                  <strong>EVA:</strong> {mod.painScore} / 10
-                                </span>
-                              )}
-                              {mod.painLocation && (
-                                <span className="bg-teal-50 text-teal-900 px-2 py-0.5 rounded-md border border-teal-200">
-                                  <strong>Local:</strong> {mod.painLocation}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      } catch (e) {
-                        return null;
-                      }
-                    })()}
+                    <ClinicalSnapshot record={r} />
                   </div>
 
                   {/* AÇÕES CLÍNICAS: VISUALIZAR, EDITAR, BAIXAR PDF, IMPRIMIR */}
@@ -505,6 +446,8 @@ export const ClinicalRecordsView: React.FC = () => {
                 </div>
               </div>
             )}
+
+            <ClinicalSnapshot record={viewingRecord} />
 
             {/* Histórico de Auditoria / Revisões */}
             {viewingRecord.edit_history_json && parseEditHistory(viewingRecord.edit_history_json).length > 0 && (

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
+import { ClinicalSnapshot } from '../clinical/ClinicalSnapshot';
 
 interface PatientProfileModalProps {
   patientId: string;
@@ -1203,6 +1204,9 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                           Notas Técnicas: {r.technical_notes}
                         </div>
                       )}
+                      <div className="pt-2 border-t border-slate-100">
+                        <ClinicalSnapshot record={r} />
+                      </div>
                     </div>
                   ))}
                 </div>

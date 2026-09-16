@@ -430,6 +430,10 @@ export class AppointmentController {
       }
 
       const cancelledBy = req.user ? `${req.user.name} (${req.user.role})` : 'Usuário';
+      if (status === 'completed' && current.status !== 'completed') {
+        res.status(409).json({ error: 'Finalize pelo atendimento para salvar o prontuário e registrar o recebimento.' });
+        return;
+      }
 
       const updateStmt = db.prepare(`
         UPDATE appointments SET

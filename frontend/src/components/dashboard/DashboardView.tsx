@@ -20,7 +20,7 @@ import {
   ExternalLink,
   Filter
 } from 'lucide-react';
-import { QuickConsultationModal } from '../clinical/QuickConsultationModal';
+import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { PatientProfileModal } from '../patients/PatientProfileModal';
 
@@ -63,7 +63,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const handleUpdateStatus = async (appointmentId: string, newStatus: string) => {
     try {
+      if (newStatus === 'completed') {
+        setQuickConsultAppt(metrics.today.appointments.find((a: any) => a.id === appointmentId));
+        return;
+      }
       await ApiClient.put(`/v1/appointments/${appointmentId}/status`, { status: newStatus });
+      if (newStatus === 'in_progress') setQuickConsultAppt({ ...metrics.today.appointments.find((a: any) => a.id === appointmentId), status: 'in_progress' });
       showToast(`Status atualizado para ${newStatus}!`, 'success');
       fetchMetrics();
     } catch (err: any) {
@@ -373,7 +378,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
                       {appt.status !== 'completed' && appt.status !== 'cancelled' && (
                         <button
-                          onClick={() => setQuickConsultAppt(appt)}
+                          onClick={() => handleUpdateStatus(appt.id, 'in_progress')}
                           className="flex items-center gap-1 px-3 py-1 text-xs font-bold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-all shadow-xs cursor-pointer"
                           title="Iniciar Atendimento Rápido"
                         >
@@ -474,7 +479,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Modal de Atendimento Rápido */}
       {quickConsultAppt && (
-        <QuickConsultationModal
+        <AppointmentConsultation
           appointment={{
             id: quickConsultAppt.id,
             patient_id: quickConsultAppt.patient_id,

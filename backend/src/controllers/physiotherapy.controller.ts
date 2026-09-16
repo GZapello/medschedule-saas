@@ -61,8 +61,8 @@ export function isPhysiotherapistOrClinicManager(req: Request): boolean {
     clinicUser?.cu_practice_areas,
     clinicUser?.profession_name,
     clinicUser?.u_practice_areas,
-    tenant?.manager_profession,
-    tenant?.manager_practice_areas
+    req.user.role === 'clinic_admin' ? tenant?.manager_profession : null,
+    req.user.role === 'clinic_admin' ? tenant?.manager_practice_areas : null
   ].filter(Boolean).join(' ').toLowerCase();
 
   const isPhysioArea =
@@ -84,8 +84,10 @@ export function isPhysiotherapistOrClinicManager(req: Request): boolean {
   } catch {}
 
   const isManager = req.user.role === 'clinic_admin' || clinicUser?.is_manager === 1 || clinicUser?.role === 'clinic_admin';
+  const isProfessional = req.user.role === 'professional';
 
   const isAuthorizedByManager =
+    (isProfessional && isPhysioArea) ||
     (isManager && isPhysioArea) ||
     perms.includes('access_zemda_fisio') ||
     Number(prof?.zemda_fisio_enabled) === 1 ||

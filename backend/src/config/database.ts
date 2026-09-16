@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { runSeed } from './seed';
 import { migrateBilling } from './billing-migration';
+import { migrateConsultations } from './consultation-migration';
 
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
 const dbDir = path.dirname(dbPath);
@@ -74,6 +75,14 @@ export function initializeDatabase(): void {
   } else {
     console.warn('[Database] Arquivo schema.sql não encontrado em', schemaPath);
   }
+
+  // Executa seed básico de categorias se necessário para evitar falhas de FK nas migrações
+  try {
+    const catCount = (rawDb.prepare("SELECT count(*) as total FROM categories").get() as any)?.total || 0;
+    if (catCount === 0) {
+      runSeed(rawDb);
+    }
+  } catch (_) {}
 
   // Migrações dinâmicas para adicionar colunas em tabelas existentes
   try {
@@ -991,6 +1000,8 @@ export function initializeDatabase(): void {
         long_term_goals TEXT,
         treatment_plan TEXT,
         conducts_exercises TEXT,
+        body_map_json TEXT,
+        body_map_image TEXT,
         guidelines TEXT,
         is_sealed INTEGER NOT NULL DEFAULT 0,
         created_by TEXT,
@@ -1068,6 +1079,7 @@ export function initializeDatabase(): void {
         patient_id TEXT NOT NULL,
         professional_id TEXT,
         appointment_id TEXT,
+        record_id TEXT,
         type TEXT NOT NULL DEFAULT 'current',
         status_data_json TEXT NOT NULL,
         notes TEXT,
@@ -1709,9 +1721,12 @@ export function initializeDatabase(): void {
       );
       CREATE INDEX IF NOT EXISTS idx_fono_plans_patient ON fono_treatment_plans (tenant_id, patient_id);
     `);
+    addColIfMissing('odontograms', 'record_id', 'TEXT');
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);
   }
+
+  migrateConsultations(rawDb);
 
   // SQLite requires a table rebuild to extend an existing CHECK constraint.
   const tenantSql = rawDb.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tenants'").get() as { sql: string };

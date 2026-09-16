@@ -1,3 +1,4 @@
+import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import React, { useState, useEffect } from 'react';
 import {
   Apple,
@@ -46,6 +47,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
   const { showToast } = useToast();
 
   // Pacientes e Seleção
+  const completion = useConsultationCompletion(onFinishConsultation);
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
@@ -547,7 +549,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
     try {
       setSaving(true);
-      const res = await ApiClient.post<any>('/v1/nutrition/consultations/finish', {
+      await completion.save('/v1/nutrition/consultations/finish', {
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId || null,
         title: consultationTitle,
@@ -568,13 +570,11 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         } : null,
         calculationsData: calculatedEnergy,
         mealPlanData: planForm,
-        goalsData: goals
+        goalsData: goals, anamnesisData, bioimpedanceData: bioForm, recallData: recallForm, anthropometryForm: anthroForm, goalForm,
+        calculationInputs: { calcFormula, activityFactor, injuryFactor, customBmr, customGet, carbPercent, proteinPercent, fatPercent }
       });
 
-      showToast(res.message || 'Consulta Nutricional finalizada com sucesso!', 'success');
-      if (onFinishConsultation) {
-        onFinishConsultation();
-      }
+
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar consulta nutricional', 'error');
     } finally {
@@ -584,6 +584,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      {completion.dialog}
       {/* CABEÇALHO DO MÓDULO ZEMDANUTRI */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -609,6 +610,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
               value={selectedPatientId}
+              disabled={!!initialAppointmentId}
               onChange={e => setSelectedPatientId(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-emerald-500 focus:outline-none transition-colors"
             >

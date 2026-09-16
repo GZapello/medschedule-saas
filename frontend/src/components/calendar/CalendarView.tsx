@@ -20,7 +20,7 @@ import {
   Stethoscope
 } from 'lucide-react';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
-import { QuickConsultationModal } from '../clinical/QuickConsultationModal';
+import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 
 interface CalendarViewProps {
   onOpenNewAppointment: () => void;
@@ -111,6 +111,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar status', 'error');
     }
+  };
+
+  const startConsultation = async (appointment: Appointment) => {
+    if (['completed', 'cancelled', 'no_show'].includes(appointment.status)) {
+      showToast('Abra o prontuário para consultar um atendimento encerrado.', 'info'); return;
+    }
+    try {
+      await ApiClient.put(`/v1/appointments/${appointment.id}/status`, { status: 'in_progress' });
+      setActiveConsultationAppt({ ...appointment, status: 'in_progress' });
+      setSelectedAppt(null);
+      fetchCalendarData();
+    } catch (err: any) { showToast(err.message || 'Erro ao iniciar atendimento', 'error'); }
   };
 
   const handleConfirmReschedule = async () => {
@@ -445,8 +457,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 <div className="pt-3 border-t border-slate-100 space-y-3">
                   <button
                     onClick={() => {
-                      setActiveConsultationAppt(selectedAppt);
-                      setSelectedAppt(null);
+                      startConsultation(selectedAppt);
                     }}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
                   >
@@ -464,7 +475,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         Confirmar
                       </button>
                       <button
-                        onClick={() => handleUpdateStatus(selectedAppt.id, 'in_progress')}
+                        onClick={() => startConsultation(selectedAppt)}
                         className="px-3 py-1.5 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg"
                       >
                         Iniciar
@@ -626,7 +637,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
       {/* Modal de Atendimento Rápido */}
       {activeConsultationAppt && (
-        <QuickConsultationModal
+        <AppointmentConsultation
           appointment={{
             id: activeConsultationAppt.id,
             patient_id: activeConsultationAppt.patient_id,

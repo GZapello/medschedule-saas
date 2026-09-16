@@ -2,8 +2,41 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { hasClinicalAccess } from './clinical.controller';
+import { isNutritionistOrClinicManager } from './nutrition.controller';
+import { isOccupationalTherapistOrClinicManager } from './occupational-therapy.controller';
+import { isSpeechTherapistOrClinicManager } from './speech-therapy.controller';
+import { isDentistOrClinicManager } from './dentistry.controller';
+import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 
 export class DocumentsController {
+  static consultationStatus(req: Request, res: Response): void {
+    const appt = db.prepare('SELECT * FROM appointments WHERE id=? AND tenant_id=?').get(req.params.id, req.tenantId) as any;
+    if (!appt) { res.status(404).json({ error: 'Agendamento não encontrado.' }); return; }
+    if (!req.user || !hasClinicalAccess(req, appt.patient_id) ||
+        (req.user.role === 'professional' && !db.prepare('SELECT id FROM professionals WHERE id=? AND user_id=? AND tenant_id=?').get(appt.professional_id, req.user.userId, req.tenantId))) {
+      res.status(403).json({ error: 'Sem permissão para este atendimento.' }); return;
+    }
+    const saved = db.prepare('SELECT * FROM consultation_completions WHERE appointment_id=? AND tenant_id=?').get(appt.id, req.tenantId) as any;
+    const payment = db.prepare("SELECT amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appt.id, req.tenantId);
+
+    const prof = db.prepare(`
+      SELECT p.id, p.profession_id, p.practice_areas, pr.name as profession_name, pr.slug as profession_slug, s.name as service_name
+      FROM professionals p
+      LEFT JOIN professions pr ON pr.id = p.profession_id
+      LEFT JOIN services s ON s.id = ?
+      WHERE p.id = ? AND p.tenant_id = ?
+    `).get(appt.service_id, appt.professional_id, req.tenantId) as any;
+
+    const text = [prof?.profession_id, prof?.profession_slug, prof?.profession_name, prof?.practice_areas, prof?.service_name].filter(Boolean).join(' ').toLowerCase();
+    let moduleType = 'ZemdaFisio';
+    if (text.includes('nutri') || text.includes('crn')) moduleType = 'ZemdaNutri';
+    else if (text.includes('ocupacional') || text.includes('terapia-ocupacional')) moduleType = 'ZemdaTO';
+    else if (text.includes('fono') || text.includes('crfa')) moduleType = 'ZemdaFono';
+    else if (text.includes('odonto') || text.includes('dentis') || text.includes('cro')) moduleType = 'ZemdaOdonto';
+
+    res.json({ awaitingPayment: !!saved && !saved.completed_at && appt.status !== 'completed', alreadyCompleted: appt.status === 'completed', generatedDocs: saved ? JSON.parse(saved.generated_docs_json) : {}, payment, moduleType });
+  }
   // 1. ATESTADOS
   static createCertificate(req: Request, res: Response): void {
     try {
@@ -363,36 +396,64 @@ export class DocumentsController {
         return;
       }
 
+      if (!req.user || !hasClinicalAccess(req, appt.patient_id) ||
+          (req.body.patientId && req.body.patientId !== appt.patient_id) ||
+          (req.user.role === 'professional' && !db.prepare('SELECT id FROM professionals WHERE id=? AND user_id=? AND tenant_id=?').get(appt.professional_id, req.user.userId, tenantId))) {
+        res.status(403).json({ error: 'Sem permissão para finalizar este atendimento.' });
+        return;
+      }
+      if (['cancelled', 'no_show'].includes(appt.status)) {
+        res.status(409).json({ error: 'Este atendimento não pode ser finalizado.' });
+        return;
+      }
+      const saved = db.prepare('SELECT * FROM consultation_completions WHERE appointment_id=? AND tenant_id=?').get(appointmentId, tenantId) as any;
+      const moduleAccess: Record<string, (request: Request) => boolean> = {
+        ZemdaNutri: isNutritionistOrClinicManager, ZemdaTO: isOccupationalTherapistOrClinicManager,
+        ZemdaFono: isSpeechTherapistOrClinicManager, ZemdaOdonto: isDentistOrClinicManager, ZemdaFisio: isPhysiotherapistOrClinicManager
+      };
+      if (evolution?.moduleType && (!moduleAccess[evolution.moduleType] || !moduleAccess[evolution.moduleType](req))) {
+        res.status(403).json({ error: 'Sem permissão para este módulo clínico.' }); return;
+      }
+      const saveOnly = req.body.saveOnly === true;
+      const clinicalPayload = JSON.stringify({ evolution, certificate, prescription, examRequest, returnAppointment, referral });
+      if (saveOnly && saved?.payload_json && saved.payload_json !== clinicalPayload) {
+        res.status(409).json({ error: 'O prontuário desta consulta já foi salvo. Retome o recebimento pela agenda. Alterações clínicas devem ser registradas no prontuário.' });
+        return;
+      }
+      const payment = req.body.payment;
+      if (!saveOnly && appt.status !== 'completed' && (!payment ||
+          !['paid', 'pending', 'exempt'].includes(payment.status) ||
+          !['cash', 'pix', 'credit_card', 'debit_card', 'insurance', 'other'].includes(payment.paymentMethod) ||
+          typeof payment.amount !== 'number' || !Number.isFinite(payment.amount) || payment.amount < 0 ||
+          (payment.status !== 'exempt' && payment.amount <= 0))) {
+        res.status(400).json({ error: 'Informe valor, forma e status do recebimento.' });
+        return;
+      }
+
       // Proteção contra duplo clique e idempotência
       if (appt.status === 'completed') {
         res.json({
           message: 'Este atendimento já foi concluído anteriormente.',
           alreadyCompleted: true,
-          generatedDocs: {}
+          generatedDocs: saved ? JSON.parse(saved.generated_docs_json) : {}
         });
         return;
       }
 
       // Resolução segura de profissional responsável
-      let resolvedProfId = appt.professional_id;
-      if (!resolvedProfId && req.user) {
-        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ?').get(req.user.userId) as { id: string } | undefined;
-        if (prof) resolvedProfId = prof.id;
-      }
-      if (!resolvedProfId) {
-        const defaultProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as { id: string } | undefined;
-        if (defaultProf) resolvedProfId = defaultProf.id;
-      }
-      if (!resolvedProfId) {
+      const resolvedProfId = appt.professional_id;
+      if (!resolvedProfId || !db.prepare('SELECT id FROM professionals WHERE id=? AND tenant_id=?').get(resolvedProfId, tenantId)) {
         res.status(400).json({ error: 'Não foi possível identificar o profissional de saúde responsável pelo atendimento.' });
         return;
       }
 
-      const generatedDocs: any = {};
+      const generatedDocs: any = saved ? JSON.parse(saved.generated_docs_json) : {};
       const year = new Date().getFullYear();
 
       // Inicia transação atômica
-      db.exec('BEGIN TRANSACTION');
+      db.exec('BEGIN IMMEDIATE');
+
+      if (!saved) {
 
       // 1. Grava evolução do prontuário, se preenchida
       if (evolution && evolution.clinicalEvolution && evolution.clinicalEvolution.trim()) {
@@ -403,7 +464,24 @@ export class DocumentsController {
         const sessionDate = appt.start_time ? appt.start_time.split('T')[0] : spDateStr;
         const sessionTime = appt.start_time?.includes('T') ? appt.start_time.split('T')[1].slice(0, 5) : null;
         const clinicalDataJson = evolution.clinicalData ? (typeof evolution.clinicalData === 'string' ? evolution.clinicalData : JSON.stringify(evolution.clinicalData)) : null;
-        const moduleDataJson = evolution.moduleData ? (typeof evolution.moduleData === 'string' ? evolution.moduleData : JSON.stringify(evolution.moduleData)) : null;
+        const snapshot = typeof evolution.moduleData === 'string' ? JSON.parse(evolution.moduleData) : { ...evolution.moduleData };
+        if (evolution.assessmentData && !snapshot.assessmentData && !snapshot.assessment) snapshot.assessment = evolution.assessmentData;
+        if (evolution.odontogramData) snapshot.odontogramData = evolution.odontogramData;
+        if (evolution.toothChanges) snapshot.toothChanges = evolution.toothChanges;
+        if (evolution.moduleType === 'ZemdaFisio') {
+          const assessment = db.prepare('SELECT * FROM physiotherapy_assessments WHERE appointment_id=? AND tenant_id=? AND patient_id=? ORDER BY created_at DESC LIMIT 1').get(appointmentId, tenantId, appt.patient_id) as any;
+          if (assessment) snapshot.functionalAssessment = assessment;
+          const values = [snapshot.painScore ?? 0, snapshot.painLocation || null, snapshot.painCharacteristics || null,
+            snapshot.conductsExercises || null, typeof snapshot.bodyMapJson === 'object' ? JSON.stringify(snapshot.bodyMapJson) : snapshot.bodyMapJson || null, snapshot.bodyMapImage || null];
+          if (assessment) {
+            db.prepare("UPDATE physiotherapy_assessments SET pain_score=?, pain_location=?, pain_characteristics=?, conducts_exercises=?, body_map_json=?, body_map_image=?, updated_at=datetime('now') WHERE id=? AND tenant_id=?")
+              .run(...values, assessment.id, tenantId);
+          } else {
+            db.prepare('INSERT INTO physiotherapy_assessments (id, tenant_id, patient_id, professional_id, appointment_id, chief_complaint, pain_score, pain_location, pain_characteristics, conducts_exercises, body_map_json, body_map_image, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+              .run('pfa-' + uuidv4(), tenantId, appt.patient_id, resolvedProfId, appointmentId, evolution.title || srvName, ...values, req.user?.name);
+          }
+        }
+        const moduleDataJson = JSON.stringify(snapshot);
 
         db.prepare(`
           INSERT INTO records (
@@ -429,8 +507,14 @@ export class DocumentsController {
         );
         generatedDocs.recordId = recId;
 
+        for (const attachmentId of (Array.isArray(evolution.attachmentIds) ? evolution.attachmentIds : [])) {
+          const attachment = db.prepare('SELECT id, record_id FROM documents WHERE id=? AND patient_id=? AND tenant_id=?').get(attachmentId, appt.patient_id, tenantId) as any;
+          if (!attachment || (attachment.record_id && attachment.record_id !== recId)) throw new Error('Anexo não pertence a este atendimento');
+          db.prepare('UPDATE documents SET record_id=? WHERE id=? AND tenant_id=?').run(recId, attachmentId, tenantId);
+        }
+
         // Persistência especializada por módulo clínico (Garantia de que nada é perdido)
-        const parsedModuleData = evolution.moduleData ? (typeof evolution.moduleData === 'string' ? JSON.parse(evolution.moduleData) : evolution.moduleData) : {};
+        const parsedModuleData = snapshot;
 
         // A. ZEMDAODONTO: Salva Odontograma inicial, atual, snapshot e alterações de dentes
         if (evolution.moduleType === 'ZemdaOdonto' || parsedModuleData.odontogramData || evolution.odontogramData) {
@@ -499,6 +583,83 @@ export class DocumentsController {
               ass.waistCirc || null, ass.abdominalCirc || null, ass.hipCirc || null,
               ass.armCirc || null, ass.calfCirc || null, ass.neckCirc || null, ass.thighCirc || null, ass.notes || null
             );
+          }
+        }
+
+        // C. ZEMDATO: Salva avaliação de AVDs e sensorial se presentes
+        if (evolution.moduleType === 'ZemdaTO' || parsedModuleData.adlData || parsedModuleData.avd) {
+          const avd = parsedModuleData.adlData || parsedModuleData.avd;
+          if (avd) {
+            const scoresJson = typeof avd === 'string' ? avd : JSON.stringify(avd);
+            const overallLevel = avd.level !== undefined ? String(avd.level) : (avd.overallLevel || null);
+            try {
+              db.prepare(`
+                INSERT INTO to_avd_assessments (
+                  id, tenant_id, patient_id, professional_id, appointment_id,
+                  assessment_type, scores_json, overall_level, notes
+                ) VALUES (?, ?, ?, ?, ?, 'avd', ?, ?, ?)
+              `).run(
+                'to-avd-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+                scoresJson, overallLevel, parsedModuleData.notes || null
+              );
+            } catch (toErr) {
+              console.warn('[finishConsultation] Aviso ao gravar to_avd_assessments:', toErr);
+            }
+          }
+          if (parsedModuleData.sensoryData) {
+            const sensory = parsedModuleData.sensoryData;
+            try {
+              db.prepare(`
+                INSERT INTO to_sensory_assessments (
+                  id, tenant_id, patient_id, professional_id, appointment_id,
+                  tactile, auditory, visual, vestibular, proprioceptive, gustatory, olfactory, interoceptive, notes_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                'to-sns-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+                sensory.tactile || null, sensory.auditory || null, sensory.visual || null,
+                sensory.vestibular || null, sensory.proprioceptive || null, sensory.gustatory || null,
+                sensory.olfactory || null, sensory.interoceptive || null, JSON.stringify(sensory)
+              );
+            } catch (snsErr) {
+              console.warn('[finishConsultation] Aviso ao gravar to_sensory_assessments:', snsErr);
+            }
+          }
+        }
+
+        // D. ZEMDAFONO: Salva fonemas e avaliação vocal se presentes
+        if (evolution.moduleType === 'ZemdaFono' || parsedModuleData.phonemesData || parsedModuleData.voiceData) {
+          const phon = parsedModuleData.phonemesData || parsedModuleData.phonemes;
+          if (phon) {
+            const phonJson = typeof phon === 'string' ? phon : JSON.stringify(phon);
+            try {
+              db.prepare(`
+                INSERT INTO fono_speech_phonology (
+                  id, tenant_id, patient_id, professional_id, appointment_id,
+                  phonemes_json, intelligibility, articulation_notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                'fon-sph-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+                phonJson, phon.intelligibility || null, parsedModuleData.notes || null
+              );
+            } catch (fonErr) {
+              console.warn('[finishConsultation] Aviso ao gravar fono_speech_phonology:', fonErr);
+            }
+          }
+          const voice = parsedModuleData.voiceData || parsedModuleData.voice;
+          if (voice) {
+            try {
+              db.prepare(`
+                INSERT INTO fono_voice_assessments (
+                  id, tenant_id, patient_id, professional_id, appointment_id,
+                  vocal_quality, audio_url, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                'fon-voc-' + uuidv4().slice(0, 8), tenantId, appt.patient_id, resolvedProfId, appointmentId,
+                voice.vocalQuality || 'normal', voice.audioUrl || parsedModuleData.audioData || null, voice.notes || null
+              );
+            } catch (vocErr) {
+              console.warn('[finishConsultation] Aviso ao gravar fono_voice_assessments:', vocErr);
+            }
           }
         }
       }
@@ -613,6 +774,43 @@ export class DocumentsController {
       }
 
       // 7. Marca o agendamento como finalizado / completed
+      db.prepare('INSERT INTO consultation_completions (appointment_id, tenant_id, generated_docs_json, payload_json, saved_by) VALUES (?, ?, ?, ?, ?)')
+        .run(appointmentId, tenantId, JSON.stringify(generatedDocs), clinicalPayload, req.user!.userId);
+      }
+
+      if (saveOnly) {
+        db.exec('COMMIT');
+        const existingPayment = db.prepare("SELECT id, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appointmentId, tenantId) as any;
+        const price = db.prepare('SELECT price FROM services WHERE id=? AND tenant_id=?').get(appt.service_id, tenantId) as any;
+        logAudit(req, 'SAVE_CONSULTATION', 'appointments', appointmentId, { generatedDocs });
+        res.json({ generatedDocs, awaitingPayment: true, payment: existingPayment || { amount: price?.price || 0, payment_method: 'pix', status: 'pending' } });
+        return;
+      }
+
+      currentStage = 'SAVE_INTERNAL_PAYMENT';
+      const existingPayments = db.prepare("SELECT * FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at").all(appointmentId, tenantId) as any[];
+      if (existingPayments.length > 1) {
+        db.exec('ROLLBACK');
+        res.status(409).json({ error: 'Existem múltiplos lançamentos para esta consulta. Confira-os no Financeiro antes de finalizar.' });
+        return;
+      }
+      const amount = payment.status === 'exempt' ? 0 : Math.round(payment.amount * 100) / 100;
+      const existingPayment = existingPayments[0];
+      if (existingPayment && ['paid', 'partial'].includes(existingPayment.status) &&
+          (existingPayment.status !== payment.status || Number(existingPayment.amount) !== amount || existingPayment.payment_method !== payment.paymentMethod)) {
+        db.exec('ROLLBACK');
+        res.status(409).json({ error: 'O recebimento já registrado deve ser conferido no Financeiro.' });
+        return;
+      }
+      const paymentId = existingPayment?.id || 'pay-' + uuidv4();
+      if (existingPayment) {
+        db.prepare('UPDATE payments SET amount=?, payment_method=?, status=?, payment_date=?, notes=? WHERE id=? AND tenant_id=?')
+          .run(amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? (existingPayment.payment_date || new Date().toISOString()) : null, payment.notes || null, paymentId, tenantId);
+      } else {
+        db.prepare('INSERT INTO payments (id, tenant_id, appointment_id, patient_id, amount, payment_method, status, payment_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(paymentId, tenantId, appointmentId, appt.patient_id, amount, payment.paymentMethod, payment.status, payment.status === 'paid' ? new Date().toISOString() : null, payment.notes || null);
+      }
+      db.prepare("UPDATE consultation_completions SET payment_id=?, completed_at=datetime('now') WHERE appointment_id=? AND tenant_id=?").run(paymentId, appointmentId, tenantId);
       currentStage = 'UPDATE_APPOINTMENT_STATUS';
       db.prepare(`
         UPDATE appointments SET
@@ -666,4 +864,3 @@ export class DocumentsController {
     }
   }
 }
-

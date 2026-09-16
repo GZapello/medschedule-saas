@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
+import { DocumentsController } from './documents.controller';
 
 /**
  * Validação de acesso exclusivo para Nutrição (ZemdaNutri - Regras 1 e 2)
@@ -60,8 +61,8 @@ export function isNutritionistOrClinicManager(req: Request): boolean {
     clinicUser?.cu_practice_areas,
     clinicUser?.profession_name,
     clinicUser?.u_practice_areas,
-    tenant?.manager_profession,
-    tenant?.manager_practice_areas
+    req.user.role === 'clinic_admin' ? tenant?.manager_profession : null,
+    req.user.role === 'clinic_admin' ? tenant?.manager_practice_areas : null
   ].filter(Boolean).join(' ').toLowerCase();
 
   const isNutriArea =
@@ -84,8 +85,10 @@ export function isNutritionistOrClinicManager(req: Request): boolean {
   } catch {}
 
   const isManager = req.user.role === 'clinic_admin' || clinicUser?.is_manager === 1 || clinicUser?.role === 'clinic_admin';
+  const isProfessional = req.user.role === 'professional';
 
   const isAuthorized =
+    (isProfessional && isNutriArea) ||
     (isManager && isNutriArea) ||
     perms.includes('access_zemda_nutri') ||
     Number(prof?.zemda_nutri_enabled) === 1 ||
@@ -628,6 +631,17 @@ export class NutritionController {
 
   // 8. FINALIZAÇÃO SEGURA DO ATENDIMENTO NUTRICIONAL (Regra 56)
   static finishConsultation(req: Request, res: Response): void {
+    if (req.body.appointmentId) {
+      if (!isNutritionistOrClinicManager(req)) { res.status(403).json({ error: 'Sem acesso ao módulo clínico.' }); return; }
+      const body = req.body;
+      req.params.id = body.appointmentId;
+      req.body = { ...body, evolution: {
+        ...body, moduleType: 'ZemdaNutri', moduleData: { ...body },
+        clinicalEvolution: body.clinicalEvolution || 'Atendimento clínico registrado.'
+      }};
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
     try {
       const tenantId = req.tenantId;
       if (!isNutritionistOrClinicManager(req)) {
@@ -662,6 +676,7 @@ export class NutritionController {
       const recTitle = title || 'Consulta Nutricional (ZemdaNutri)';
 
       const nutriModuleData = {
+        ...req.body,
         assessment: assessmentData || null,
         calculations: calculationsData || null,
         mealPlan: mealPlanData || null,

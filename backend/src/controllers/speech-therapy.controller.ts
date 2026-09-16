@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
+import { DocumentsController } from './documents.controller';
 
 /**
  * Validação de acesso exclusivo para Fonoaudiologia (ZemdaFono - Regras 1 e 2)
@@ -56,8 +57,8 @@ export function isSpeechTherapistOrClinicManager(req: Request): boolean {
     clinicUser?.cu_practice_areas,
     clinicUser?.profession_name,
     clinicUser?.u_practice_areas,
-    tenant?.manager_profession,
-    tenant?.manager_practice_areas
+    req.user.role === 'clinic_admin' ? tenant?.manager_profession : null,
+    req.user.role === 'clinic_admin' ? tenant?.manager_practice_areas : null
   ].filter(Boolean).join(' ').toLowerCase();
 
   const isFonoArea =
@@ -81,8 +82,10 @@ export function isSpeechTherapistOrClinicManager(req: Request): boolean {
   } catch {}
 
   const isManager = req.user.role === 'clinic_admin' || clinicUser?.is_manager === 1 || clinicUser?.role === 'clinic_admin';
+  const isProfessional = req.user.role === 'professional';
 
   const isAuthorized =
+    (isProfessional && isFonoArea) ||
     (isManager && isFonoArea) ||
     perms.includes('access_zemda_fono') ||
     Number(prof?.zemda_fono_enabled) === 1 ||
@@ -617,6 +620,17 @@ export class SpeechTherapyController {
 
   // 10. FINALIZAÇÃO SEGURA DO ATENDIMENTO FONOAUDIOLÓGICO (Regra 56)
   static finishConsultation(req: Request, res: Response): void {
+    if (req.body.appointmentId) {
+      if (!isSpeechTherapistOrClinicManager(req)) { res.status(403).json({ error: 'Sem acesso ao módulo clínico.' }); return; }
+      const body = req.body;
+      req.params.id = body.appointmentId;
+      req.body = { ...body, evolution: {
+        ...body, moduleType: 'ZemdaFono', moduleData: { ...body },
+        clinicalEvolution: body.clinicalEvolution || 'Atendimento clínico registrado.'
+      }};
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
     try {
       const tenantId = req.tenantId;
       if (!isSpeechTherapistOrClinicManager(req)) {
@@ -651,6 +665,7 @@ export class SpeechTherapyController {
       const recTitle = title || 'Atendimento Fonoaudiológico (ZemdaFono)';
 
       const fonoModuleData = {
+        ...req.body,
         phonemes: phonemesData || null,
         language: languageData || null,
         voice: voiceData || null,

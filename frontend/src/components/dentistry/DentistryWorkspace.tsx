@@ -1,3 +1,4 @@
+import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import React, { useState, useEffect } from 'react';
 import {
   Activity,
@@ -47,6 +48,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   const { currentUser, currentTenant } = useAuth();
 
   // Pacientes e Seleção
+  const completion = useConsultationCompletion(onFinishConsultation);
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
@@ -390,20 +392,19 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
     setSaving(true);
     try {
-      await ApiClient.post('/v1/dentistry/consultations/finish', {
+      await completion.save('/v1/dentistry/consultations/finish', {
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId,
         clinicalEvolution: consultationEvolution,
         proceduresPerformed: consultationProcedures,
+        anamnesisData: anamnesis, periodontalData: perioForm, endodonticData: endoForm,
+        treatmentPlanData: planForm, prostheticData: prostheticForm, orthodonticData: orthoData, facialData: hofForm,
         odontogramData: odontogramData,
         toothChanges: pendingToothChanges,
         isSealed: true
       });
 
-      setSuccessMsg('Atendimento Odontológico finalizado e lacrado com sucesso!');
-      setTimeout(() => {
-        if (onFinishConsultation) onFinishConsultation();
-      }, 1500);
+
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao finalizar consulta');
     } finally {
@@ -418,6 +419,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
   return (
     <div className="space-y-6">
+      {completion.dialog}
       {/* Top Header do Módulo com Identidade Oficial ZemdaOdonto */}
       <div className="bg-gradient-to-r from-cyan-900 via-cyan-800 to-sky-900 text-white rounded-3xl p-6 shadow-md relative overflow-hidden">
         <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
