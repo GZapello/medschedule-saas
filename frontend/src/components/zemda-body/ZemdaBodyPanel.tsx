@@ -203,8 +203,8 @@ export const ZemdaBodyPanel: React.FC<ZemdaBodyPanelProps> = ({
         severity,
         notes,
         coordinates: {
-          x: (region.center.x - (region.view === 'front' ? 0 : region.view === 'back' ? 250 : region.view === 'left' ? 500 : 750)) / 250,
-          y: region.center.y / 1000
+          x: Number((region.center.x / 400).toFixed(4)),
+          y: Number((region.center.y / 760).toFixed(4))
         },
         detailsJson
       });
