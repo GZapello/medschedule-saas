@@ -7,6 +7,7 @@ import { comparePassword, hashPassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { logAudit } from '../middlewares/audit.middleware';
 import { v4 as uuidv4 } from 'uuid';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
 
 export class AuthController {
   static async login(req: Request, res: Response): Promise<void> {
@@ -1166,6 +1167,8 @@ export class AuthController {
             practiceAreas || null,
             finalSlug
           );
+
+          createDefaultSchedules(db, tenantId, profId);
         }
 
         // 4. Marca o convite como utilizado (uso único por padrão)

@@ -194,6 +194,8 @@ CREATE TABLE IF NOT EXISTS professionals (
   bio TEXT,
   buffer_minutes INTEGER NOT NULL DEFAULT 10,
   active INTEGER NOT NULL DEFAULT 1,
+  profession_change_used INTEGER NOT NULL DEFAULT 0,
+  profession_changed_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,

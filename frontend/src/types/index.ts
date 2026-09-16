@@ -120,6 +120,8 @@ export interface Professional {
   fixed_salary?: number;
   payment_day?: number;
   active: number;
+  profession_change_used?: number | boolean;
+  profession_changed_at?: string | null;
   email?: string;
   phone?: string;
 }

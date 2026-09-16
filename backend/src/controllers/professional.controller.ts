@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { hashPassword } from '../utils/password';
 import { logAudit } from '../middlewares/audit.middleware';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
 
 export class ProfessionalController {
   static list(req: Request, res: Response): void {
@@ -22,6 +23,7 @@ export class ProfessionalController {
           p.photo_url, p.profession_id, p.specialty_id, p.specialty_custom,
           p.registration_type, p.registration_number, p.bio, p.practice_areas, p.buffer_minutes, p.active,
           p.remuneration_type, p.commission_percentage, p.fixed_salary, p.payment_day,
+          p.profession_change_used, p.profession_changed_at,
           u.email, u.phone,
           COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name, spec.color as specialty_color,
           prof.name as profession_name
@@ -52,6 +54,7 @@ export class ProfessionalController {
           p.photo_url, p.profession_id, p.specialty_id, p.specialty_custom,
           p.registration_type, p.registration_number, p.bio, p.practice_areas, p.buffer_minutes, p.active,
           p.remuneration_type, p.commission_percentage, p.fixed_salary, p.payment_day,
+          p.profession_change_used, p.profession_changed_at,
           u.email, u.phone,
           COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
           prof.name as profession_name
@@ -178,14 +181,8 @@ export class ProfessionalController {
         paymentDay !== undefined ? Number(paymentDay) : 5
       );
 
-      // Cria grade de horários padrão de segunda a sexta
-      const insertSched = db.prepare(`
-        INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, break_start, break_end, is_active)
-        VALUES (?, ?, ?, ?, '08:00', '18:00', '12:00', '13:30', 1)
-      `);
-      for (let day = 1; day <= 5; day++) {
-        insertSched.run(`sch-${uuidv4().slice(0, 8)}`, tenantId, profId, day);
-      }
+      // Cria grade de horários padrão de segunda a sexta (ativo) e fim de semana (inativo)
+      createDefaultSchedules(db, tenantId, profId);
 
       logAudit(req, 'CREATE_PROFESSIONAL', 'professionals', profId, { name, email, slug: finalSlug });
       res.status(201).json({ id: profId, name, slug: finalSlug, message: 'Profissional cadastrado com sucesso' });
@@ -206,7 +203,40 @@ export class ProfessionalController {
         slug, publicBookingEnabled, remunerationType, commissionPercentage, fixedSalary, paymentDay
       } = req.body;
 
+      // 1. Busca profissional atual para validação de existência e verificação da alteração única de profissão
+      const currentProf = db.prepare(`
+        SELECT id, tenant_id, user_id, profession_id, practice_areas, profession_change_used
+        FROM professionals
+        WHERE id = ? AND tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!currentProf) {
+        res.status(404).json({ error: 'Profissional não encontrado' });
+        return;
+      }
+
+      // Se for profissional, valida se está editando o próprio perfil
+      if (req.user && req.user.role === 'professional' && currentProf.user_id && currentProf.user_id !== req.user.userId) {
+        res.status(403).json({ error: 'Você só pode editar o seu próprio perfil profissional' });
+        return;
+      }
+
       const customSpec = specialtyCustom !== undefined ? specialtyCustom : (specialtyName !== undefined ? specialtyName : null);
+
+      // 2. Regra: Alteração de profissão apenas uma vez durante toda a conta
+      const isChangingProfession = Boolean(professionId && professionId !== currentProf.profession_id);
+
+      if (isChangingProfession) {
+        if (Boolean(currentProf.profession_change_used)) {
+          res.status(403).json({
+            error: 'A alteração de profissão já foi utilizada para este profissional e não é mais permitida.'
+          });
+          return;
+        }
+      }
+
+      const markChangeUsed = isChangingProfession ? 1 : 0;
+      const nowIso = new Date().toISOString();
 
       const updateStmt = db.prepare(`
         UPDATE professionals SET
@@ -228,6 +258,8 @@ export class ProfessionalController {
           fixed_salary = COALESCE(?, fixed_salary),
           payment_day = COALESCE(?, payment_day),
           active = COALESCE(?, active),
+          profession_change_used = CASE WHEN ? = 1 THEN 1 ELSE profession_change_used END,
+          profession_changed_at = CASE WHEN ? = 1 THEN ? ELSE profession_changed_at END,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -251,9 +283,89 @@ export class ProfessionalController {
         fixedSalary !== undefined ? Number(fixedSalary) : null,
         paymentDay !== undefined ? Number(paymentDay) : null,
         active !== undefined ? (active ? 1 : 0) : null,
+        markChangeUsed,
+        markChangeUsed,
+        markChangeUsed ? nowIso : null,
         id,
         tenantId
       );
+
+      // 3. Atualização automática do módulo profissional correspondente à nova profissão escolhida
+      if (isChangingProfession) {
+        const newProfRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(professionId) as any;
+        const newProfName = newProfRow?.name || '';
+        const newProfSlug = newProfRow?.slug || '';
+        const combinedText = [professionId, newProfName, newProfSlug, practiceAreas || currentProf.practice_areas].filter(Boolean).join(' ').toLowerCase();
+
+        const isPhysio = combinedText.includes('fisio') || combinedText.includes('physio');
+        const isDentist = combinedText.includes('odonto') || combinedText.includes('dentis') || combinedText.includes('cro');
+        const isNutri = combinedText.includes('nutri') || combinedText.includes('crn') || combinedText.includes('diet');
+        const isTO = combinedText.includes('terapia ocupacional') || combinedText.includes('terapeuta ocupacional') || combinedText.includes('ocupacional');
+        const isFono = combinedText.includes('fono') || combinedText.includes('crfa');
+
+        const fEnabled = isPhysio ? 1 : 0;
+        const oEnabled = isDentist ? 1 : 0;
+        const nEnabled = isNutri ? 1 : 0;
+        const toEnabled = isTO ? 1 : 0;
+        const foEnabled = isFono ? 1 : 0;
+
+        // Atualiza sinalizadores de módulo no registro do profissional
+        db.prepare(`
+          UPDATE professionals SET
+            zemda_fisio_enabled = ?,
+            zemda_odonto_enabled = ?,
+            zemda_nutri_enabled = ?,
+            zemda_to_enabled = ?,
+            zemda_fono_enabled = ?
+          WHERE id = ? AND tenant_id = ?
+        `).run(fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, id, tenantId);
+
+        if (currentProf.user_id) {
+          // Atualiza usuário vinculado
+          db.prepare(`
+            UPDATE users SET
+              profession_id = ?,
+              profession_name = ?,
+              practice_areas = COALESCE(?, practice_areas),
+              zemda_fisio_enabled = ?,
+              zemda_odonto_enabled = ?,
+              zemda_nutri_enabled = ?,
+              zemda_to_enabled = ?,
+              zemda_fono_enabled = ?,
+              updated_at = datetime('now')
+            WHERE id = ?
+          `).run(professionId, newProfName || null, practiceAreas || null, fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, currentProf.user_id);
+
+          // Atualiza clinic_users
+          db.prepare(`
+            UPDATE clinic_users SET
+              zemda_fisio_enabled = ?,
+              zemda_odonto_enabled = ?,
+              zemda_nutri_enabled = ?,
+              zemda_to_enabled = ?,
+              zemda_fono_enabled = ?,
+              profession_custom = ?
+            WHERE user_id = ? AND tenant_id = ?
+          `).run(fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, newProfName || null, currentProf.user_id, tenantId);
+
+          // Se for gestor, sincroniza tenant
+          const cu = db.prepare('SELECT is_manager FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(currentProf.user_id, tenantId) as any;
+          if (cu?.is_manager) {
+            db.prepare(`
+              UPDATE tenants SET
+                manager_profession = ?,
+                manager_practice_areas = COALESCE(?, manager_practice_areas)
+              WHERE id = ?
+            `).run(newProfName || null, practiceAreas || null, tenantId);
+          }
+        }
+
+        logAudit(req, 'CHANGE_PROFESSION_ONCE', 'professionals', id, {
+          oldProfessionId: currentProf.profession_id,
+          newProfessionId: professionId,
+          newProfessionName: newProfName
+        });
+      }
 
       logAudit(req, 'UPDATE_PROFESSIONAL', 'professionals', id);
       res.json({ message: 'Profissional atualizado com sucesso' });

@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hashPassword } from '../utils/password';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
 
 /**
  * Purga com segurança colaboradores desativados há mais de 30 dias (Item 3).
@@ -201,6 +202,10 @@ export class StaffController {
   static updateRoleProfession(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
       const { id } = req.params;
       const { role, professionName, practiceAreas } = req.body;
 
@@ -243,12 +248,7 @@ export class StaffController {
           VALUES (?, ?, ?, ?, 'Conselho', ?, 1)
         `).run(profId, tenantId, id, user.name, practiceAreas || null);
 
-        for (let d = 1; d <= 5; d++) {
-          db.prepare(`
-            INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, break_start, break_end, is_active)
-            VALUES (?, ?, ?, ?, '08:00', '18:00', '12:00', '13:00', 1)
-          `).run('sch-' + uuidv4().slice(0, 8), tenantId, profId, d);
-        }
+        createDefaultSchedules(db, tenantId, profId);
       }
 
       logAudit(req, 'UPDATE_ROLE_PROFESSION', 'users', id, { role: newRole, professionName, practiceAreas });

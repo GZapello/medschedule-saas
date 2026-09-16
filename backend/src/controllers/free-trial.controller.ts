@@ -5,6 +5,7 @@ import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/da
 import { hashPassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { logAudit } from '../middlewares/audit.middleware';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
 
 const VALID_PERIODS: Record<number, string> = {
   7: '7 dias',
@@ -494,6 +495,9 @@ export class FreeTrialController {
           nowIso,
           nowIso
         );
+
+        // 5.2 Cria grade de horários padrão de segunda a sexta (ativo) e sábado/domingo (inativo)
+        createDefaultSchedules(db, tenantId, profRecordId);
 
         // 6. Criar vínculo na tabela clinic_users
         db.prepare(`

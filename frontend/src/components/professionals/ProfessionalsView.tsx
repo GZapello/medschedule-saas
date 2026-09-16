@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { Professional, Profession, Specialty } from '../../types';
 import {
   UserCog,
@@ -17,16 +18,22 @@ import {
   Share2,
   Link,
   Wallet,
-  DollarSign
+  DollarSign,
+  AlertTriangle
 } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
 
 export const ProfessionalsView: React.FC = () => {
   const { showToast } = useToast();
+  const { reloadSession } = useAuth();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [professions, setProfessions] = useState<Profession[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Controle de alteração única de profissão (Item 2)
+  const [isProfessionUnlocked, setIsProfessionUnlocked] = useState<boolean>(false);
+  const [showConfirmChangeModal, setShowConfirmChangeModal] = useState<boolean>(false);
 
   // Modal Novo Profissional (Item 9: Sexo e Tratamento Dr./Dra.)
   const [showNewModal, setShowNewModal] = useState<boolean>(false);
@@ -184,7 +191,9 @@ export const ProfessionalsView: React.FC = () => {
       });
 
       showToast('Profissional atualizado com sucesso!', 'success');
+      setIsProfessionUnlocked(false);
       setEditingProf(null);
+      await reloadSession();
       fetchData();
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar profissional', 'error');
@@ -312,6 +321,8 @@ export const ProfessionalsView: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setEditingProf(p);
+                  setIsProfessionUnlocked(false);
+                  setShowConfirmChangeModal(false);
                   setEditName(p.name);
                   setEditGender((p as any).gender || 'M');
                   const currentPProfId = p.profession_id || (professions[0]?.id || '');
@@ -671,21 +682,55 @@ export const ProfessionalsView: React.FC = () => {
               {/* Estrutura: Profissão -> Especialidade -> Atendimentos/áreas de atuação livres */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Profissão *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">Profissão *</label>
+                    {isProfessionUnlocked && (
+                      <span className="text-[10px] text-amber-700 font-bold bg-amber-100 px-1.5 py-0.5 rounded">Liberada</span>
+                    )}
+                  </div>
                   <select
                     value={editProfessionId}
+                    disabled={!isProfessionUnlocked}
                     onChange={e => {
                       const newPId = e.target.value;
                       setEditProfessionId(newPId);
                       const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
                       setEditSpecialtyId(matching.length > 0 ? matching[0].id : '');
                     }}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-medium transition-all ${
+                      isProfessionUnlocked
+                        ? 'border-amber-300 bg-amber-50/50 text-slate-900 ring-2 ring-amber-400/50'
+                        : 'border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed opacity-85'
+                    }`}
                   >
                     {professions.map(p => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
+
+                  {/* Controle de alteração única de profissão */}
+                  {!Boolean(editingProf.profession_change_used) && !isProfessionUnlocked && (
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmChangeModal(true)}
+                      className="mt-1.5 text-[11px] text-amber-600 hover:text-amber-700 hover:underline font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <AlertTriangle className="w-3 h-3 text-amber-500" />
+                      <span>Errei minha profissão, preciso alterar</span>
+                    </button>
+                  )}
+
+                  {isProfessionUnlocked && (
+                    <p className="mt-1.5 text-[10px] text-amber-700 font-medium leading-tight">
+                      Atenção: A profissão será bloqueada permanentemente após salvar.
+                    </p>
+                  )}
+
+                  {Boolean(editingProf.profession_change_used) && (
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      A alteração única de profissão já foi utilizada para este profissional.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -878,6 +923,52 @@ export const ProfessionalsView: React.FC = () => {
                   Salvar Alterações
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação: Alteração Única de Profissão (Item 2) */}
+      {showConfirmChangeModal && (
+        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 animate-in zoom-in-95 duration-200 space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Alterar Profissão Cadastrada</h3>
+                <p className="text-xs text-slate-500">Recurso de uso único por profissional</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-900 space-y-2 leading-relaxed">
+              <p className="font-semibold">
+                Esta alteração só pode ser feita uma única vez durante toda a existência da conta.
+              </p>
+              <p className="text-slate-600 text-[11px]">
+                Ao confirmar, o campo de profissão será liberado para correção agora. Após salvar as alterações, a profissão ficará <strong>permanentemente bloqueada</strong> para novas edições e o módulo profissional será atualizado automaticamente pelo sistema.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowConfirmChangeModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmChangeModal(false);
+                  setIsProfessionUnlocked(true);
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                Sim, quero alterar
+              </button>
             </div>
           </div>
         </div>

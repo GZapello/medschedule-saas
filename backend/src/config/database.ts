@@ -247,6 +247,10 @@ export function initializeDatabase(): void {
     addColIfMissing('clinic_users', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('users', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
 
+    // Alteração de profissão única durante o ciclo de vida da conta
+    addColIfMissing('professionals', 'profession_change_used', 'INTEGER DEFAULT 0');
+    addColIfMissing('professionals', 'profession_changed_at', 'TEXT');
+
     // Suporte a snapshots de odontograma vinculados a prontuários
     addColIfMissing('odontograms', 'record_id', 'TEXT');
 
