@@ -20,6 +20,7 @@ import {
 import { Student, TavProtocol, StrengthTestItem, EnduranceTestItem } from './types';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { FileImageUploader } from '../common/FileImageUploader';
 
 interface PersonalAssessmentModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ interface PersonalAssessmentModalProps {
   onSaved: () => void;
   student?: Student | null;
   studentsList?: Student[];
+  assessmentToEdit?: any;
 }
 
 export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = ({
@@ -34,7 +36,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   onClose,
   onSaved,
   student,
-  studentsList = []
+  studentsList = [],
+  assessmentToEdit
 }) => {
   const { showToast } = useToast();
 
@@ -148,6 +151,26 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
       if (student.height) setHeight(student.height);
     }
   }, [student]);
+
+  useEffect(() => {
+    if (assessmentToEdit && isOpen) {
+      if (assessmentToEdit.patient_id) setSelectedStudentId(assessmentToEdit.patient_id);
+      if (assessmentToEdit.assessment_date) setAssessmentDate(assessmentToEdit.assessment_date);
+      if (assessmentToEdit.weight) setWeight(assessmentToEdit.weight);
+      if (assessmentToEdit.height) setHeight(assessmentToEdit.height);
+      if (assessmentToEdit.notes) setNotes(assessmentToEdit.notes);
+
+      // Carrega fotos existentes vinculadas à avaliação
+      if (Array.isArray(assessmentToEdit.photos)) {
+        for (const p of assessmentToEdit.photos) {
+          if (p.photo_type === 'front') setPhotoFront(p.photo_url || '');
+          else if (p.photo_type === 'back') setPhotoBack(p.photo_url || '');
+          else if (p.photo_type === 'right') setPhotoRight(p.photo_url || '');
+          else if (p.photo_type === 'left') setPhotoLeft(p.photo_url || '');
+        }
+      }
+    }
+  }, [assessmentToEdit, isOpen]);
 
   const loadTavProtocols = async () => {
     try {
@@ -356,7 +379,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
       if (enduranceSquats !== '') enduranceTests.push({ test_name: 'Agachamento', result_value: Number(enduranceSquats), unit: 'reps' });
       if (endurancePlankSeconds !== '') enduranceTests.push({ test_name: 'Prancha Isométrica', result_value: Number(endurancePlankSeconds), unit: 'segundos' });
 
-      await ApiClient.post('/v1/personal/assessments', {
+      const payload = {
         patient_id: selectedStudentId,
         assessment_date: assessmentDate,
         protocol: skinfoldsProtocol,
@@ -433,9 +456,15 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
         notes,
         photos
-      });
+      };
 
-      showToast('Avaliação física completa registrada com sucesso!', 'success');
+      if (assessmentToEdit?.id) {
+        await ApiClient.put(`/v1/personal/assessments/${assessmentToEdit.id}`, payload);
+        showToast('Avaliação física atualizada com sucesso!', 'success');
+      } else {
+        await ApiClient.post('/v1/personal/assessments', payload);
+        showToast('Avaliação física completa registrada com sucesso!', 'success');
+      }
       onSaved();
       onClose();
     } catch (err) {
@@ -1558,72 +1587,56 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               <div className="space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                   <Camera className="w-4 h-4 text-purple-600" />
-                  <span>Fotos da Avaliação Corporal (URLs das Imagens)</span>
+                  <span>Fotos da Avaliação Corporal</span>
                 </h4>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Foto Frontal</label>
-                    <input
-                      type="url"
-                      placeholder="https://..."
-                      value={photoFront}
-                      onChange={(e) => setPhotoFront(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none mb-1.5"
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                    <FileImageUploader
+                      label="Foto Frontal"
+                      buttonText="+ Adicionar foto"
+                      patientId={selectedStudentId || undefined}
+                      category="personal_assessment_front"
+                      initialUrl={photoFront}
+                      onUploaded={(info) => setPhotoFront(info.url || '')}
+                      onRemoved={() => setPhotoFront('')}
                     />
-                    {photoFront && (
-                      <div className="w-full h-32 rounded-xl bg-slate-100 overflow-hidden border border-slate-200">
-                        <img src={photoFront} alt="Frente" className="w-full h-full object-cover" />
-                      </div>
-                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Foto Posterior (Costas)</label>
-                    <input
-                      type="url"
-                      placeholder="https://..."
-                      value={photoBack}
-                      onChange={(e) => setPhotoBack(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none mb-1.5"
+                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                    <FileImageUploader
+                      label="Foto Posterior"
+                      buttonText="+ Adicionar foto"
+                      patientId={selectedStudentId || undefined}
+                      category="personal_assessment_back"
+                      initialUrl={photoBack}
+                      onUploaded={(info) => setPhotoBack(info.url || '')}
+                      onRemoved={() => setPhotoBack('')}
                     />
-                    {photoBack && (
-                      <div className="w-full h-32 rounded-xl bg-slate-100 overflow-hidden border border-slate-200">
-                        <img src={photoBack} alt="Costas" className="w-full h-full object-cover" />
-                      </div>
-                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lateral Direita</label>
-                    <input
-                      type="url"
-                      placeholder="https://..."
-                      value={photoRight}
-                      onChange={(e) => setPhotoRight(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none mb-1.5"
+                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                    <FileImageUploader
+                      label="Lateral Direita"
+                      buttonText="+ Adicionar foto"
+                      patientId={selectedStudentId || undefined}
+                      category="personal_assessment_right"
+                      initialUrl={photoRight}
+                      onUploaded={(info) => setPhotoRight(info.url || '')}
+                      onRemoved={() => setPhotoRight('')}
                     />
-                    {photoRight && (
-                      <div className="w-full h-32 rounded-xl bg-slate-100 overflow-hidden border border-slate-200">
-                        <img src={photoRight} alt="Lateral Dir" className="w-full h-full object-cover" />
-                      </div>
-                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lateral Esquerda</label>
-                    <input
-                      type="url"
-                      placeholder="https://..."
-                      value={photoLeft}
-                      onChange={(e) => setPhotoLeft(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none mb-1.5"
+                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                    <FileImageUploader
+                      label="Lateral Esquerda"
+                      buttonText="+ Adicionar foto"
+                      patientId={selectedStudentId || undefined}
+                      category="personal_assessment_left"
+                      initialUrl={photoLeft}
+                      onUploaded={(info) => setPhotoLeft(info.url || '')}
+                      onRemoved={() => setPhotoLeft('')}
                     />
-                    {photoLeft && (
-                      <div className="w-full h-32 rounded-xl bg-slate-100 overflow-hidden border border-slate-200">
-                        <img src={photoLeft} alt="Lateral Esq" className="w-full h-full object-cover" />
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

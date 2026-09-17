@@ -20,7 +20,8 @@ import {
   Flame,
   ArrowLeft,
   Copy,
-  GitCompare
+  GitCompare,
+  X
 } from 'lucide-react';
 import { Student, Workout, Assessment, WorkoutLog, PersonalRecord, AttendanceStats } from './types';
 import { ApiClient } from '../../api/client';
@@ -73,6 +74,68 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [compareCurrentId, setCompareCurrentId] = useState<string | undefined>(undefined);
   const [comparePreviousId, setComparePreviousId] = useState<string | undefined>(undefined);
+
+  // Modal de Edição de Aluno
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editStatus, setEditStatus] = useState('active');
+  const [editGoal, setEditGoal] = useState('');
+  const [editLevel, setEditLevel] = useState('iniciante');
+  const [editFrequency, setEditFrequency] = useState<number>(3);
+  const [editWeight, setEditWeight] = useState<number | ''>('');
+  const [editHeight, setEditHeight] = useState<number | ''>('');
+  const [editRestrictions, setEditRestrictions] = useState('');
+  const [savingStudent, setSavingStudent] = useState(false);
+
+  const handleOpenEditStudent = () => {
+    if (!student) return;
+    setEditName(student.name || '');
+    setEditPhone(student.phone || '');
+    setEditEmail(student.email || '');
+    setEditStatus(student.status || 'active');
+    setEditGoal(student.goal || '');
+    setEditLevel(student.experience_level || 'iniciante');
+    setEditFrequency(student.weekly_frequency || 3);
+    setEditWeight(student.current_weight || '');
+    setEditHeight(student.height || '');
+    setEditRestrictions(student.restrictions || '');
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) {
+      showToast('Nome do aluno é obrigatório', 'error');
+      return;
+    }
+
+    try {
+      setSavingStudent(true);
+      await ApiClient.put(`/v1/personal/students/${studentId}`, {
+        name: editName.trim(),
+        phone: editPhone.trim() || undefined,
+        email: editEmail.trim() || undefined,
+        status: editStatus,
+        goal: editGoal,
+        experience_level: editLevel,
+        weekly_frequency: Number(editFrequency) || 3,
+        current_weight: editWeight !== '' ? Number(editWeight) : null,
+        height: editHeight !== '' ? Number(editHeight) : null,
+        restrictions: editRestrictions
+      });
+
+      showToast('Dados do aluno atualizados com sucesso!', 'success');
+      setIsEditModalOpen(false);
+      loadAllStudentData();
+    } catch (err: any) {
+      console.error('Erro ao atualizar dados do aluno:', err);
+      showToast(err.message || 'Erro ao atualizar dados do aluno', 'error');
+    } finally {
+      setSavingStudent(false);
+    }
+  };
 
   useEffect(() => {
     loadAllStudentData();
@@ -224,6 +287,14 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
               >
                 {student.status === 'active' ? 'Ativo' : 'Inativo'}
               </span>
+              <button
+                onClick={handleOpenEditStudent}
+                title="Editar dados e perfil do aluno"
+                className="px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:bg-indigo-50 border border-indigo-200 rounded-lg flex items-center gap-1 transition-colors ml-1"
+              >
+                <Edit2 className="w-3 h-3" />
+                <span>Editar Aluno</span>
+              </button>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-500">
@@ -771,6 +842,169 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           initialCurrentId={compareCurrentId}
           initialPreviousId={comparePreviousId}
         />
+      )}
+
+      {/* MODAL DE EDIÇÃO DE ALUNO */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-bold text-slate-800">Editar Dados do Aluno</h3>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStudent} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Nome Completo *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Telefone / WhatsApp</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">E-mail</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                  >
+                    <option value="active">Ativo</option>
+                    <option value="inactive">Inativo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Objetivo Principal</label>
+                  <input
+                    type="text"
+                    value={editGoal}
+                    onChange={(e) => setEditGoal(e.target.value)}
+                    placeholder="Ex: Hipertrofia"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nível de Treinamento</label>
+                  <select
+                    value={editLevel}
+                    onChange={(e) => setEditLevel(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 capitalize"
+                  >
+                    <option value="iniciante">Iniciante</option>
+                    <option value="intermediario">Intermediário</option>
+                    <option value="avancado">Avançado</option>
+                    <option value="atleta">Atleta</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Frequência Semanal</label>
+                  <select
+                    value={editFrequency}
+                    onChange={(e) => setEditFrequency(Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7].map((f) => (
+                      <option key={f} value={f}>
+                        {f}x por semana
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Peso Atual (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="Ex: 75.5"
+                    value={editWeight}
+                    onChange={(e) => setEditWeight(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Altura (cm)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    placeholder="Ex: 178"
+                    value={editHeight}
+                    onChange={(e) => setEditHeight(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Restrições / Lesões / Observações</label>
+                <textarea
+                  rows={2}
+                  placeholder="Ex: Condromalácia patelar grau II no joelho esquerdo; evitar agachamento profundo..."
+                  value={editRestrictions}
+                  onChange={(e) => setEditRestrictions(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingStudent}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-sm transition-colors"
+                >
+                  {savingStudent ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

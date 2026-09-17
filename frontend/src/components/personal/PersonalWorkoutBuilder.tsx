@@ -11,7 +11,10 @@ import {
   Layers,
   Clock,
   Activity,
-  Flame
+  Flame,
+  ArrowUp,
+  ArrowDown,
+  RefreshCw
 } from 'lucide-react';
 import { Student, Workout, WorkoutExercise, Exercise } from './types';
 import { ApiClient } from '../../api/client';
@@ -61,6 +64,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
   const [saving, setSaving] = useState(false);
 
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
 
   useEffect(() => {
@@ -93,33 +97,81 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
     }
   };
 
-  const handleAddExerciseFromLibrary = (exercise: Exercise) => {
-    const newEx: WorkoutExercise = {
-      exercise_id: exercise.id,
-      order_index: exercises.length + 1,
-      name: exercise.name,
-      muscle_group: exercise.muscle_group,
-      sets: 3,
-      reps: '10-12',
-      load_kg: 0,
-      rest_seconds: 60,
-      cadence: '2-0-2',
-      rpe: 8,
-      rir: 2,
-      technique: 'Direta',
-      photo_url: exercise.photo_url,
-      exercise_default_photo: exercise.photo_url,
-      instructions: exercise.instructions
-    };
-    setExercises([...exercises, newEx]);
+  const handleSelectExerciseFromLibrary = (exercise: Exercise) => {
+    if (replaceIndex !== null && replaceIndex >= 0 && replaceIndex < exercises.length) {
+      // Substituir o exercício preservando parâmetros de treino: séries, repetições, carga, descanso, cadência, RPE, RIR, técnica, notas
+      const updated = [...exercises];
+      const prev = updated[replaceIndex];
+      updated[replaceIndex] = {
+        ...prev,
+        exercise_id: exercise.id,
+        name: exercise.name,
+        muscle_group: exercise.muscle_group,
+        photo_url: exercise.photo_url,
+        exercise_default_photo: exercise.photo_url,
+        instructions: exercise.instructions
+      };
+      setExercises(updated);
+      setReplaceIndex(null);
+      showToast(`Exercício alterado para "${exercise.name}". Séries, repetições e cargas preservadas!`, 'success');
+    } else {
+      // Adicionar novo exercício ao final do treino
+      const newEx: WorkoutExercise = {
+        exercise_id: exercise.id,
+        order_index: exercises.length + 1,
+        name: exercise.name,
+        muscle_group: exercise.muscle_group,
+        sets: 3,
+        reps: '10-12',
+        load_kg: 0,
+        rest_seconds: 60,
+        cadence: '2-0-2',
+        rpe: 8,
+        rir: 2,
+        technique: 'Direta',
+        photo_url: exercise.photo_url,
+        exercise_default_photo: exercise.photo_url,
+        instructions: exercise.instructions
+      };
+      setExercises([...exercises, newEx]);
+    }
     setIsLibraryOpen(false);
+  };
+
+  const handleOpenReplace = (index: number) => {
+    setReplaceIndex(index);
+    setIsLibraryOpen(true);
+  };
+
+  const handleMoveUp = (index: number) => {
+    if (index <= 0) return;
+    const updated = [...exercises];
+    const temp = updated[index];
+    updated[index] = updated[index - 1];
+    updated[index - 1] = temp;
+    updated.forEach((ex, i) => {
+      ex.order_index = i + 1;
+    });
+    setExercises(updated);
+  };
+
+  const handleMoveDown = (index: number) => {
+    if (index >= exercises.length - 1) return;
+    const updated = [...exercises];
+    const temp = updated[index];
+    updated[index] = updated[index + 1];
+    updated[index + 1] = temp;
+    updated.forEach((ex, i) => {
+      ex.order_index = i + 1;
+    });
+    setExercises(updated);
   };
 
   const handleAddBlankExercise = () => {
     const newEx: WorkoutExercise = {
       order_index: exercises.length + 1,
       name: 'Novo Exercício',
-      muscle_group: 'peito',
+      muscle_group: 'peitoral',
       sets: 3,
       reps: '10-12',
       load_kg: 0,
@@ -140,6 +192,9 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
 
   const handleRemoveExercise = (index: number) => {
     const updated = exercises.filter((_, idx) => idx !== index);
+    updated.forEach((ex, i) => {
+      ex.order_index = i + 1;
+    });
     setExercises(updated);
   };
 
@@ -388,6 +443,39 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {/* Botões de Reordenação ▲ / ▼ */}
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                          <button
+                            type="button"
+                            disabled={index === 0}
+                            onClick={() => handleMoveUp(index)}
+                            title="Mover para cima"
+                            className="p-1 text-slate-500 hover:text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={index === exercises.length - 1}
+                            onClick={() => handleMoveDown(index)}
+                            title="Mover para baixo"
+                            className="p-1 text-slate-500 hover:text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Botão de Substituição Preservando Parâmetros */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReplace(index)}
+                          title="Substituir exercício mantendo séries, repetições, carga e anotações"
+                          className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors"
+                        >
+                          <RefreshCw className="w-3 h-3 text-slate-500" />
+                          <span>Substituir</span>
+                        </button>
+
                         {/* Seletor de Técnica Avançada */}
                         <select
                           value={ex.technique || 'Direta'}
@@ -404,6 +492,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRemoveExercise(index)}
+                          title="Remover exercício do treino"
                           className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -548,9 +637,12 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
         {/* Modal Seletor de Exercício com Foto */}
         <PersonalExerciseLibraryModal
           isOpen={isLibraryOpen}
-          onClose={() => setIsLibraryOpen(false)}
+          onClose={() => {
+            setIsLibraryOpen(false);
+            setReplaceIndex(null);
+          }}
           isPickerMode={true}
-          onSelectExercise={handleAddExerciseFromLibrary}
+          onSelectExercise={handleSelectExerciseFromLibrary}
         />
 
         {/* Zoom de Foto */}

@@ -23,13 +23,15 @@ export interface FileUploadedInfo {
 }
 
 export interface FileImageUploaderProps {
-  patientId: string;
+  patientId?: string;
   appointmentId?: string;
   category?: string;
   initialUrl?: string;
   initialFileId?: string;
   initialFilename?: string;
   label?: string;
+  buttonText?: string;
+  autoUpload?: boolean;
   className?: string;
   onUploaded?: (fileInfo: FileUploadedInfo) => void;
   onRemoved?: () => void;
@@ -48,6 +50,8 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
   initialFileId,
   initialFilename,
   label = 'Imagem / Anexo',
+  buttonText = '+ Adicionar imagem',
+  autoUpload = true,
   className = '',
   onUploaded,
   onRemoved,
@@ -146,6 +150,92 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     setSelectedFile(file);
     setSelectedPreview(objectUrl);
     setUploadSuccess(false);
+
+    if (autoUpload) {
+      uploadDirectly(file);
+    }
+  };
+
+  // Upload directo para Cloudflare R2
+  const uploadDirectly = async (fileToUpload: File) => {
+    const effectivePatientId = patientId || 'clinic';
+
+    setIsUploading(true);
+    setErrorMessage(null);
+    setUploadSuccess(false);
+
+    try {
+      // 1. Solicita URL assinada do Cloudflare R2 ao backend
+      const uploadUrlResponse = await ApiClient.post<{
+        uploadUrl: string;
+        objectKey: string;
+        expiresIn: number;
+      }>('/files/upload-url', {
+        patientId: effectivePatientId,
+        category,
+        filename: fileToUpload.name,
+        mimeType: fileToUpload.type || 'image/jpeg',
+        fileSize: fileToUpload.size
+      });
+
+      const { uploadUrl, objectKey } = uploadUrlResponse;
+      if (!uploadUrl || !objectKey) {
+        throw new Error('Falha ao obter URL de envio pré-assinada.');
+      }
+
+      // 2. Upload direto do navegador para o Cloudflare R2
+      const putResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': fileToUpload.type || 'image/jpeg'
+        },
+        body: fileToUpload
+      });
+
+      if (!putResponse.ok) {
+        throw new Error(`Falha no upload direto para o armazenamento R2 (HTTP ${putResponse.status}).`);
+      }
+
+      // 3. Completa e persiste metadados no backend
+      const completeResponse = await ApiClient.post<{
+        success: boolean;
+        file: FileUploadedInfo;
+      }>('/files/complete', {
+        patientId: effectivePatientId,
+        appointmentId,
+        category,
+        objectKey,
+        originalFilename: fileToUpload.name,
+        mimeType: fileToUpload.type || 'image/jpeg',
+        fileSize: fileToUpload.size
+      });
+
+      const savedFile = completeResponse.file;
+
+      // Atualiza estados
+      setCurrentFileId(savedFile.id);
+      setCurrentFilename(savedFile.originalFilename);
+      setCurrentFileSize(savedFile.fileSize);
+      setCurrentUrl(savedFile.url || null);
+      setUploadSuccess(true);
+
+      // Limpa prévia local
+      if (selectedPreview && selectedPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(selectedPreview);
+      }
+      setSelectedFile(null);
+      setSelectedPreview(null);
+
+      // Notifica componente pai
+      onUploaded?.(savedFile);
+    } catch (err: any) {
+      console.error('[FileImageUploader] Erro no upload:', err);
+      const msg = err.message || 'Erro ao enviar o arquivo para o Cloudflare R2.';
+      setErrorMessage(msg);
+      onError?.(msg);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // Cancel selected file before upload
@@ -158,91 +248,10 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     setErrorMessage(null);
   };
 
-  // Direct upload to Cloudflare R2
+  // Direct upload to Cloudflare R2 (manual trigger se autoUpload for falso)
   const handleStartUpload = async () => {
-    if (!selectedFile || !patientId) {
-      if (!patientId) {
-        setErrorMessage('Paciente não identificado para vínculo do anexo.');
-      }
-      return;
-    }
-
-    setIsUploading(true);
-    setErrorMessage(null);
-    setUploadSuccess(false);
-
-    try {
-      // 1. Request presigned upload URL from backend
-      const uploadUrlResponse = await ApiClient.post<{
-        uploadUrl: string;
-        objectKey: string;
-        expiresIn: number;
-      }>('/files/upload-url', {
-        patientId,
-        category,
-        filename: selectedFile.name,
-        mimeType: selectedFile.type || 'image/jpeg',
-        fileSize: selectedFile.size
-      });
-
-      const { uploadUrl, objectKey } = uploadUrlResponse;
-      if (!uploadUrl || !objectKey) {
-        throw new Error('Falha ao obter URL de envio pré-assinada.');
-      }
-
-      // 2. Direct upload (PUT) from browser directly to Cloudflare R2
-      // Do NOT send credentials, do NOT pass through Railway
-      const putResponse = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': selectedFile.type || 'image/jpeg'
-        },
-        body: selectedFile
-      });
-
-      if (!putResponse.ok) {
-        throw new Error(`Falha no upload direto para o armazenamento R2 (HTTP ${putResponse.status}).`);
-      }
-
-      // 3. Complete and persist metadata in backend
-      const completeResponse = await ApiClient.post<{
-        success: boolean;
-        file: FileUploadedInfo;
-      }>('/files/complete', {
-        patientId,
-        appointmentId,
-        category,
-        objectKey,
-        originalFilename: selectedFile.name,
-        mimeType: selectedFile.type || 'image/jpeg',
-        fileSize: selectedFile.size
-      });
-
-      const savedFile = completeResponse.file;
-
-      // Update states
-      setCurrentFileId(savedFile.id);
-      setCurrentFilename(savedFile.originalFilename);
-      setCurrentFileSize(savedFile.fileSize);
-      setCurrentUrl(savedFile.url || null);
-      setUploadSuccess(true);
-
-      // Clean local blob preview
-      if (selectedPreview && selectedPreview.startsWith('blob:')) {
-        URL.revokeObjectURL(selectedPreview);
-      }
-      setSelectedFile(null);
-      setSelectedPreview(null);
-
-      // Notify parent
-      onUploaded?.(savedFile);
-    } catch (err: any) {
-      const msg = err.message || 'Erro ao processar o upload do arquivo.';
-      setErrorMessage(msg);
-      onError?.(msg);
-    } finally {
-      setIsUploading(false);
-    }
+    if (!selectedFile) return;
+    await uploadDirectly(selectedFile);
   };
 
   // Open viewer modal with signed temporary URL
@@ -341,8 +350,19 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         </div>
       )}
 
-      {/* STATE 1: Selected file pending upload */}
-      {selectedFile && selectedPreview && (
+      {/* Loading state during upload */}
+      {isUploading && (
+        <div className="flex items-center gap-3 p-4 bg-teal-50/80 rounded-xl border border-teal-200 animate-pulse">
+          <Loader2 className="w-5 h-5 animate-spin text-teal-600 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-teal-900">Enviando para o Cloudflare R2...</p>
+            <p className="text-[11px] text-teal-700">Aguarde a conclusão do upload seguro.</p>
+          </div>
+        </div>
+      )}
+
+      {/* STATE 1: Selected file pending upload (quando autoUpload for falso) */}
+      {!isUploading && selectedFile && selectedPreview && (
         <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
           <div className="flex items-center gap-3">
             <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0 border border-slate-300">
@@ -377,24 +397,15 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
               disabled={isUploading}
               className="px-4 py-1.5 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
             >
-              {isUploading ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Enviando...</span>
-                </>
-              ) : (
-                <>
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Enviar</span>
-                </>
-              )}
+              <Upload className="w-3.5 h-3.5" />
+              <span>Enviar</span>
             </button>
           </div>
         </div>
       )}
 
       {/* STATE 2: Existing or uploaded file view */}
-      {!selectedFile && hasExistingFile && (
+      {!isUploading && !selectedFile && hasExistingFile && (
         <div className="flex items-center justify-between p-3 bg-slate-50/80 rounded-xl border border-slate-200 gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-14 h-14 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0 border border-slate-300">
@@ -454,17 +465,18 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
               type="button"
               onClick={handleRemoveFile}
               disabled={disabled || isUploading}
-              className="p-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 border border-transparent rounded-lg transition disabled:opacity-50"
+              className="px-2.5 py-1.5 text-xs font-medium text-rose-600 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs disabled:opacity-50"
               title="Remover anexo"
             >
               <Trash2 className="w-3.5 h-3.5" />
+              <span>Remover</span>
             </button>
           </div>
         </div>
       )}
 
       {/* STATE 3: Empty state with button to add image */}
-      {!selectedFile && !hasExistingFile && (
+      {!isUploading && !selectedFile && !hasExistingFile && (
         <div className="text-center py-4 px-2">
           <button
             type="button"
@@ -473,7 +485,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
             className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition shadow-2xs disabled:opacity-50"
           >
             <Upload className="w-4 h-4 text-teal-600" />
-            <span>+ Adicionar imagem</span>
+            <span>{buttonText}</span>
           </button>
           <p className="text-[11px] text-slate-400 mt-2">
             Aceita JPG, PNG e WebP até 10 MB (Câmera, Galeria ou Arquivos)

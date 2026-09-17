@@ -170,21 +170,15 @@ export const ZemdaPersonalView: React.FC = () => {
 
     try {
       setSavingStudent(true);
-      // Cria o paciente no Zemda
-      const patRes = await ApiClient.post<{ id: string }>('/v1/patients', {
+      // Cria o aluno de forma atômica no ZemdaPersonal
+      const res = await ApiClient.post<{ success: boolean; student: Student }>('/v1/personal/students', {
         name: newStudentName.trim(),
         phone: newStudentPhone.trim(),
-        email: newStudentEmail.trim()
+        email: newStudentEmail.trim(),
+        goal: newStudentGoal,
+        experience_level: 'iniciante',
+        weekly_frequency: 3
       });
-
-      // Cria o perfil inicial de treinamento
-      if (patRes.id) {
-        await ApiClient.post(`/v1/personal/students/${patRes.id}/profile`, {
-          goal: newStudentGoal,
-          experience_level: 'iniciante',
-          weekly_frequency: 3
-        });
-      }
 
       showToast('Aluno cadastrado com sucesso no ZemdaPersonal!', 'success');
       setIsNewStudentModalOpen(false);
@@ -193,10 +187,10 @@ export const ZemdaPersonalView: React.FC = () => {
       setNewStudentEmail('');
       loadStudents();
       loadDashboard();
-      if (patRes.id) setSelectedStudentId(patRes.id);
-    } catch (err) {
+      if (res.student?.id) setSelectedStudentId(res.student.id);
+    } catch (err: any) {
       console.error('Erro ao criar aluno:', err);
-      showToast('Erro ao cadastrar aluno', 'error');
+      showToast(err.message || 'Erro ao cadastrar aluno', 'error');
     } finally {
       setSavingStudent(false);
     }

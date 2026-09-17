@@ -38,8 +38,18 @@ export interface Exercise {
   name: string;
   muscle_group: string;
   secondary_muscles_json?: string;
+  body_region?: string;
+  equipment?: string;
+  category?: string;
+  execution_type?: string;
+  mechanics?: string;
+  level?: string;
+  description?: string;
+  technical_notes?: string;
   instructions?: string;
   photo_url?: string;
+  exercise_file_id?: string;
+  is_active?: number;
   is_custom?: number;
   created_by?: string;
 }
