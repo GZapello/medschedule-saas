@@ -28,11 +28,12 @@ export class FileController {
         assessmentId,
         exerciseId,
         position,
-        category,
-        filename,
-        mimeType,
-        fileSize
+        category
       } = req.body;
+
+      const filename = req.body.filename || req.body.originalFilename;
+      const mimeType = req.body.mimeType || req.body.contentType;
+      const fileSize = req.body.fileSize !== undefined ? req.body.fileSize : req.body.size;
 
       const safeCategory = String(category || 'general').trim();
       const isExercise = safeCategory === 'exercises' || safeCategory.includes('exercise') || patientId === 'exercises';
@@ -282,21 +283,26 @@ export class FileController {
       }
 
       const {
-        objectKey,
         patientId,
         appointmentId,
-        category,
-        filename,
-        mimeType,
-        fileSize
+        assessmentId,
+        exerciseId,
+        category
       } = req.body;
+
+      const objectKey = String(req.body.objectKey || '').trim();
+      const filename = String(req.body.filename || req.body.originalFilename || '').trim();
+      const mimeType = String(req.body.mimeType || req.body.contentType || '').trim();
+      const fileSize = req.body.fileSize !== undefined && req.body.fileSize !== null
+        ? Number(req.body.fileSize)
+        : (req.body.size !== undefined && req.body.size !== null ? Number(req.body.size) : null);
 
       const safeCategory = String(category || 'general').trim();
       const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || safeCategory === 'exercises' || safeCategory.includes('exercise') || String(objectKey).includes('/exercises/');
 
-      if (!objectKey || (!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || !fileSize) {
+      if (!objectKey || (!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || fileSize === null || isNaN(fileSize) || fileSize <= 0) {
         res.status(400).json({
-          error: 'objectKey, filename, mimeType e fileSize são obrigatórios'
+          error: 'objectKey, filename, mimeType e fileSize são obrigatórios' + (!isClinicOrExerciseAsset ? ' (e patientId para arquivos de pacientes)' : '')
         });
         return;
       }

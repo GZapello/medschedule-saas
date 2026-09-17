@@ -171,21 +171,21 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     setUploadSuccess(false);
 
     try {
-      // 1. Solicita ticket de upload assinado ao backend
+      // 1. POST /api/files/upload-ticket
       const ticketResponse = await ApiClient.post<{
         uploadUrl: string;
         uploadToken: string;
         objectKey: string;
       }>('/files/upload-ticket', {
-        patientId: effectivePatientId,
-        appointmentId,
-        assessmentId,
-        exerciseId,
-        position,
-        category,
         filename: fileToUpload.name,
         mimeType: fileToUpload.type || 'image/jpeg',
-        fileSize: fileToUpload.size
+        fileSize: fileToUpload.size,
+        category,
+        patientId: effectivePatientId,
+        appointmentId: appointmentId || undefined,
+        assessmentId: assessmentId || undefined,
+        exerciseId: exerciseId || undefined,
+        position: position || undefined
       });
 
       const { uploadUrl, uploadToken, objectKey } = ticketResponse;
@@ -193,7 +193,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         throw new Error('Falha ao obter ticket de envio para o Cloudflare Worker.');
       }
 
-      // 2. Upload direto do navegador para o Cloudflare Worker
+      // 2. PUT para o Cloudflare Worker
       const putResponse = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
@@ -217,21 +217,27 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
       }
 
       // 3. Lê resposta JSON retornada pelo Worker
-      const workerResult = await putResponse.json();
+      let workerResult: any = {};
+      try {
+        workerResult = await putResponse.json();
+      } catch (_) {}
       const finalObjectKey = workerResult.objectKey || objectKey;
 
-      // 4. Completa e persiste metadados no backend
+      // 4. POST /api/files/complete
       const completeResponse = await ApiClient.post<{
         success: boolean;
         file: FileUploadedInfo;
       }>('/files/complete', {
-        patientId: effectivePatientId,
-        appointmentId,
-        category,
         objectKey: finalObjectKey,
+        filename: fileToUpload.name,
         originalFilename: fileToUpload.name,
-        mimeType: fileToUpload.type || 'image/jpeg',
-        fileSize: fileToUpload.size
+        mimeType: fileToUpload.type || workerResult.contentType || 'image/jpeg',
+        fileSize: fileToUpload.size || workerResult.size,
+        category,
+        patientId: effectivePatientId,
+        appointmentId: appointmentId || undefined,
+        assessmentId: assessmentId || undefined,
+        exerciseId: exerciseId || undefined
       });
 
       const savedFile = completeResponse.file;
