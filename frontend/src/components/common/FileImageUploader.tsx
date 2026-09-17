@@ -97,6 +97,31 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     }
   }, [initialUrl, initialFileId, initialFilename]);
 
+  // Se existir currentFileId e a URL atual estiver vazia ou apontando para R2 direto, busca a URL segura do Worker
+  useEffect(() => {
+    if (currentFileId && (!currentUrl || currentUrl.includes('r2.cloudflarestorage.com'))) {
+      let isMounted = true;
+      ApiClient.get<{ url: string; originalFilename?: string; filename?: string; fileSize?: number }>(`/files/${encodeURIComponent(currentFileId)}/url`)
+        .then((res) => {
+          if (isMounted && res.url) {
+            setCurrentUrl(res.url);
+            if (res.originalFilename || res.filename) {
+              setCurrentFilename(res.originalFilename || res.filename || null);
+            }
+            if (res.fileSize) {
+              setCurrentFileSize(res.fileSize);
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('[FileImageUploader] Falha ao recuperar URL temporária do Worker:', err);
+        });
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [currentFileId]);
+
   // Clean up object URLs on unmount or file change
   useEffect(() => {
     return () => {
@@ -115,6 +140,12 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
   // Trigger file chooser
   const handleOpenFileDialog = () => {
     if (disabled || isUploading) return;
+    if (category?.startsWith('personal_assessment') && !patientId) {
+      const msg = 'Selecione um aluno para adicionar fotos.';
+      setErrorMessage(msg);
+      onError?.(msg);
+      return;
+    }
     setErrorMessage(null);
     fileInputRef.current?.click();
   };
@@ -165,6 +196,14 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
 
   // Upload via Cloudflare Worker
   const uploadDirectly = async (fileToUpload: File) => {
+    if (category?.startsWith('personal_assessment') && !patientId) {
+      const msg = 'Selecione um aluno para adicionar fotos.';
+      setErrorMessage(msg);
+      onError?.(msg);
+      setIsUploading(false);
+      return;
+    }
+
     const effectivePatientId = patientId || 'clinic';
 
     setIsUploading(true);
@@ -528,18 +567,36 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
       {/* STATE 3: Empty state with button to add image */}
       {!isUploading && !selectedFile && !hasExistingFile && (
         <div className="text-center py-4 px-2">
-          <button
-            type="button"
-            onClick={handleOpenFileDialog}
-            disabled={disabled}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition shadow-2xs disabled:opacity-50"
-          >
-            <Upload className="w-4 h-4 text-teal-600" />
-            <span>{buttonText}</span>
-          </button>
-          <p className="text-[11px] text-slate-400 mt-2">
-            Aceita JPG, PNG e WebP até 10 MB (Câmera, Galeria ou Arquivos)
-          </p>
+          {category?.startsWith('personal_assessment') && !patientId ? (
+            <div className="space-y-2">
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded-xl cursor-not-allowed opacity-60"
+              >
+                <Upload className="w-4 h-4 text-slate-400" />
+                <span>{buttonText}</span>
+              </button>
+              <p className="text-[11px] text-amber-600 font-medium">
+                Selecione um aluno para adicionar fotos.
+              </p>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleOpenFileDialog}
+                disabled={disabled}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition shadow-2xs disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4 text-teal-600" />
+                <span>{buttonText}</span>
+              </button>
+              <p className="text-[11px] text-slate-400 mt-2">
+                Aceita JPG, PNG e WebP até 10 MB (Câmera, Galeria ou Arquivos)
+              </p>
+            </>
+          )}
         </div>
       )}
 

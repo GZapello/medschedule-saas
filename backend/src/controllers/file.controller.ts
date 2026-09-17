@@ -410,10 +410,20 @@ export class FileController {
         }
       }
 
-      let signedUrl = '';
-      try {
-        signedUrl = await r2StorageService.createDownloadUrl(objectKey, 300);
-      } catch (_) {}
+      // Gera exclusivamente URL temporária assinada pelo Cloudflare Worker
+      const signingSecret = process.env.ZEMDA_FILES_SIGNING_SECRET || 'zemda-files-signing-secret';
+      const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const readPayload = {
+        action: 'read',
+        clinicId: tenantId,
+        objectKey,
+        exp: nowInSeconds + 300
+      };
+      const payloadBase64 = Buffer.from(JSON.stringify(readPayload)).toString('base64url');
+      const signature = crypto.createHmac('sha256', signingSecret).update(payloadBase64).digest('base64url');
+      const readToken = `${payloadBase64}.${signature}`;
+      const workerFileUrl = `${workerBaseUrl}/file?token=${encodeURIComponent(readToken)}&expiresIn=300`;
 
       res.status(201).json({
         success: true,
@@ -437,7 +447,7 @@ export class FileController {
           assessment_id: targetAssessmentId || undefined,
           exerciseId: targetExerciseId || undefined,
           exercise_id: targetExerciseId || undefined,
-          url: signedUrl || undefined
+          url: workerFileUrl
         }
       });
     } catch (err: any) {
@@ -451,8 +461,8 @@ export class FileController {
 
   /**
    * GET /api/files/:id/url ou /api/v1/files/:id/url
-   * Valida clínica e gera URL assinada GET temporária (expiração = 5 min).
-   * Nunca gera URL pública permanente.
+   * Valida clínica e gera URL assinada GET temporária via Cloudflare Worker (expiração = 5 min).
+   * Nunca gera URL pública permanente nem expõe r2.cloudflarestorage.com.
    */
   static async getFileUrl(req: Request, res: Response): Promise<void> {
     try {
@@ -464,10 +474,18 @@ export class FileController {
         return;
       }
 
-      // Validação estrita por clínica: Clínica A NUNCA acessa arquivo da Clínica B
-      const file = db
+      const decodedId = decodeURIComponent(String(id || '')).trim();
+
+      // Validação estrita por clínica: busca por ID ou por object_key
+      let file = db
         .prepare('SELECT * FROM file_attachments WHERE id = ? AND clinic_id = ?')
-        .get(id, tenantId) as any;
+        .get(decodedId, tenantId) as any;
+
+      if (!file) {
+        file = db
+          .prepare('SELECT * FROM file_attachments WHERE object_key = ? AND clinic_id = ?')
+          .get(decodedId, tenantId) as any;
+      }
 
       if (!file) {
         res.status(404).json({
@@ -476,11 +494,24 @@ export class FileController {
         return;
       }
 
-      // Se armazenado no R2, gera URL assinada temporária (5 minutos)
+      // Se armazenado no R2, gera exclusivamente URL assinada temporária do Cloudflare Worker (5 minutos)
       if (file.storage_provider === 'cloudflare_r2') {
-        const signedUrl = await r2StorageService.createDownloadUrl(file.object_key, 300);
+        const signingSecret = process.env.ZEMDA_FILES_SIGNING_SECRET || 'zemda-files-signing-secret';
+        const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        const readPayload = {
+          action: 'read',
+          clinicId: tenantId,
+          objectKey: file.object_key,
+          exp: nowInSeconds + 300
+        };
+        const payloadBase64 = Buffer.from(JSON.stringify(readPayload)).toString('base64url');
+        const signature = crypto.createHmac('sha256', signingSecret).update(payloadBase64).digest('base64url');
+        const readToken = `${payloadBase64}.${signature}`;
+        const workerFileUrl = `${workerBaseUrl}/file?token=${encodeURIComponent(readToken)}&expiresIn=300`;
+
         res.status(200).json({
-          url: signedUrl,
+          url: workerFileUrl,
           expiresIn: 300,
           filename: file.original_filename,
           mimeType: file.mime_type,

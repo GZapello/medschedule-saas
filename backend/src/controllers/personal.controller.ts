@@ -1148,11 +1148,20 @@ export class PersonalController {
       // Salva fotos anexadas se fornecidas
       if (Array.isArray(b.photos)) {
         for (const p of b.photos) {
-          if (p.photo_url && p.photo_type) {
-            db.prepare(`
-              INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run('paph-' + uuidv4().slice(0, 8), tenantId, assessmentId, b.patient_id, p.photo_type, p.photo_url, assessmentDate, p.notes || null);
+          if ((p.photo_url || p.file_id || p.fileId) && p.photo_type) {
+            const effectivePhotoUrl = p.photo_url || '';
+            const effectiveFileId = p.file_id || p.fileId || null;
+            try {
+              db.prepare(`
+                INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).run('paph-' + uuidv4().slice(0, 8), tenantId, assessmentId, b.patient_id, p.photo_type, effectivePhotoUrl, assessmentDate, p.notes || null, effectiveFileId);
+            } catch (_) {
+              db.prepare(`
+                INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `).run('paph-' + uuidv4().slice(0, 8), tenantId, assessmentId, b.patient_id, p.photo_type, effectivePhotoUrl, assessmentDate, p.notes || null);
+            }
           }
         }
       }
@@ -1217,11 +1226,20 @@ export class PersonalController {
         db.prepare('DELETE FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').run(id, tenantId);
         
         for (const p of b.photos) {
-          if (p.photo_url && p.photo_type) {
-            db.prepare(`
-              INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run('paph-' + uuidv4().slice(0, 8), tenantId, id, existing.patient_id, p.photo_type, p.photo_url, b.assessment_date || new Date().toISOString().split('T')[0], p.notes || null);
+          if ((p.photo_url || p.file_id || p.fileId) && p.photo_type) {
+            const effectivePhotoUrl = p.photo_url || '';
+            const effectiveFileId = p.file_id || p.fileId || null;
+            try {
+              db.prepare(`
+                INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).run('paph-' + uuidv4().slice(0, 8), tenantId, id, existing.patient_id, p.photo_type, effectivePhotoUrl, b.assessment_date || new Date().toISOString().split('T')[0], p.notes || null, effectiveFileId);
+            } catch (_) {
+              db.prepare(`
+                INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `).run('paph-' + uuidv4().slice(0, 8), tenantId, id, existing.patient_id, p.photo_type, effectivePhotoUrl, b.assessment_date || new Date().toISOString().split('T')[0], p.notes || null);
+            }
           }
         }
       }

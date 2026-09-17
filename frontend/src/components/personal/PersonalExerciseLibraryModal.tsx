@@ -15,6 +15,7 @@ import { Exercise } from './types';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { FileImageUploader } from '../common/FileImageUploader';
+import { SecureFileImage } from '../common/SecureFileImage';
 
 interface PersonalExerciseLibraryModalProps {
   isOpen: boolean;
@@ -197,7 +198,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
         level: formLevel,
         instructions: formInstructions,
         technical_notes: formTechnicalNotes,
-        photo_url: formPhotoUrl,
+        photo_url: formFileId ? (formPhotoUrl && !formPhotoUrl.includes('workers.dev') && !formPhotoUrl.includes('r2.cloudflarestorage.com') ? formPhotoUrl : '') : formPhotoUrl,
         exercise_file_id: formFileId || null,
         is_active: formIsActive
       };
@@ -265,15 +266,13 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
           </div>
 
           <div className="flex items-center gap-2">
-            {!isFormOpen && (
-              <button
-                onClick={handleOpenCreateForm}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Criar Exercício
-              </button>
-            )}
+            <button
+              onClick={handleOpenCreateForm}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Criar Exercício
+            </button>
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
@@ -282,212 +281,6 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
             </button>
           </div>
         </div>
-
-        {/* Formulário Novo / Edição Exercício */}
-        {isFormOpen && (
-          <div className="p-5 bg-indigo-50/50 border-b border-indigo-100 max-h-[70vh] overflow-y-auto animate-slideDown">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900">
-                {editingExerciseId ? 'Editar Exercício' : 'Novo Exercício Customizado'}
-              </h4>
-              <button
-                onClick={() => {
-                  setIsFormOpen(false);
-                  setEditingExerciseId(null);
-                }}
-                className="text-xs text-slate-500 hover:text-slate-700 font-semibold"
-              >
-                Cancelar
-              </button>
-            </div>
-            <form onSubmit={handleSaveExercise} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nome do Exercício *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Supino Inclinado com Halteres"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Grupamento Principal *</label>
-                  <select
-                    value={formMuscle}
-                    onChange={(e) => setFormMuscle(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none capitalize"
-                  >
-                    {MUSCLE_CATEGORIES.filter((c) => c.id).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Equipamento</label>
-                  <select
-                    value={formEquipment}
-                    onChange={(e) => setFormEquipment(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  >
-                    {EQUIPMENT_LIST.filter((eq) => eq.id).map((eq) => (
-                      <option key={eq.id} value={eq.id}>
-                        {eq.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Categoria</label>
-                  <select
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  >
-                    {CATEGORY_LIST.filter((cat) => cat.id).map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Região Corporal</label>
-                  <select
-                    value={formRegion}
-                    onChange={(e) => setFormRegion(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  >
-                    <option value="membros_superiores">Membros Superiores</option>
-                    <option value="membros_inferiores">Membros Inferiores</option>
-                    <option value="tronco">Tronco</option>
-                    <option value="core">Core</option>
-                    <option value="corpo_inteiro">Corpo Inteiro</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Mecânica & Tipo</label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <select
-                      value={formMechanics}
-                      onChange={(e) => setFormMechanics(e.target.value)}
-                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    >
-                      <option value="composto">Composto</option>
-                      <option value="isolado">Isolado</option>
-                    </select>
-                    <select
-                      value={formExecutionType}
-                      onChange={(e) => setFormExecutionType(e.target.value)}
-                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    >
-                      <option value="bilateral">Bilateral</option>
-                      <option value="unilateral">Unilateral</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nível & Status</label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <select
-                      value={formLevel}
-                      onChange={(e) => setFormLevel(e.target.value)}
-                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    >
-                      <option value="iniciante">Iniciante</option>
-                      <option value="intermediario">Intermediário</option>
-                      <option value="avancado">Avançado</option>
-                    </select>
-                    <select
-                      value={formIsActive}
-                      onChange={(e) => setFormIsActive(Number(e.target.value))}
-                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-indigo-700"
-                    >
-                      <option value={1}>Ativo</option>
-                      <option value={0}>Inativo</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Upload de Imagem R2 / Foto do Exercício */}
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-200">
-                <FileImageUploader
-                  label="Foto do exercício"
-                  buttonText="+ Adicionar foto"
-                  category="exercises"
-                  patientId="exercises"
-                  exerciseId={editingExerciseId || undefined}
-                  initialUrl={formPhotoUrl}
-                  initialFileId={formFileId}
-                  onUploaded={(info) => {
-                    setFormPhotoUrl(info.url || '');
-                    setFormFileId(info.id);
-                  }}
-                  onRemoved={() => {
-                    setFormPhotoUrl('');
-                    setFormFileId('');
-                  }}
-                />
-              </div>
-
-              {/* Instruções e Notas Técnicas */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Instruções de Execução & Postura</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Pés firmes no solo, escápulas em retração e depressão, descida controlada em 3s..."
-                    value={formInstructions}
-                    onChange={(e) => setFormInstructions(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Notas Técnicas / Cuidados Articulares</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Evitar hiperextensão lombar, manter cotovelos a 45 graus, amplitude máxima segura..."
-                    value={formTechnicalNotes}
-                    onChange={(e) => setFormTechnicalNotes(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsFormOpen(false);
-                    setEditingExerciseId(null);
-                  }}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors"
-                >
-                  {saving ? 'Salvando...' : editingExerciseId ? 'Salvar Alterações' : 'Cadastrar Exercício'}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
 
         {/* Filtros e Busca */}
         <div className="p-4 border-b border-slate-100 bg-white space-y-3">
@@ -584,18 +377,12 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     >
                       {/* Thumbnail com Zoom */}
                       <div className="relative w-full h-36 bg-slate-100 rounded-xl overflow-hidden mb-3 flex items-center justify-center border border-slate-100">
-                        {ex.photo_url ? (
-                          <img
-                            src={ex.photo_url}
-                            alt={ex.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                        ) : (
-                          <div className="text-slate-300 flex flex-col items-center gap-1">
-                            <ImageIcon className="w-8 h-8" />
-                            <span className="text-[10px]">Sem foto</span>
-                          </div>
-                        )}
+                        <SecureFileImage
+                          fileId={ex.exercise_file_id}
+                          fallbackUrl={ex.photo_url}
+                          alt={ex.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
 
                         <button
                           onClick={() => setZoomedExercise(ex)}
@@ -725,14 +512,13 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
               </div>
 
               <div className="w-full h-64 bg-slate-100 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-200">
-                {zoomedExercise.photo_url ? (
-                  <img src={zoomedExercise.photo_url} alt={zoomedExercise.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="text-slate-400 flex flex-col items-center gap-2">
-                    <ImageIcon className="w-12 h-12 text-slate-300" />
-                    <span className="text-xs">Foto ou imagem não disponível</span>
-                  </div>
-                )}
+                <SecureFileImage
+                  fileId={zoomedExercise.exercise_file_id}
+                  fallbackUrl={zoomedExercise.photo_url}
+                  alt={zoomedExercise.name}
+                  className="w-full h-full object-cover"
+                  placeholderText="Foto ou imagem não disponível"
+                />
               </div>
 
               {/* Informações detalhadas */}
@@ -789,6 +575,220 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
           </div>
         )}
       </div>
+
+      {/* Modal Separado Criar / Editar Exercício (z-[70] sobre a Biblioteca z-50) */}
+      {isFormOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 my-auto max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+              <div>
+                <h4 className="text-sm sm:text-base font-bold text-slate-800 uppercase tracking-wider">
+                  {editingExerciseId ? 'Editar Exercício' : 'Novo Exercício Customizado'}
+                </h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Preencha os dados biomecânicos e selecione uma foto anatômica para o catálogo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFormOpen(false);
+                  setEditingExerciseId(null);
+                }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveExercise} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nome do Exercício *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Supino Inclinado com Halteres"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Grupamento Principal *</label>
+                  <select
+                    value={formMuscle}
+                    onChange={(e) => setFormMuscle(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none capitalize"
+                  >
+                    {MUSCLE_CATEGORIES.filter((c) => c.id).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Equipamento</label>
+                  <select
+                    value={formEquipment}
+                    onChange={(e) => setFormEquipment(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    {EQUIPMENT_LIST.filter((eq) => eq.id).map((eq) => (
+                      <option key={eq.id} value={eq.id}>
+                        {eq.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Categoria</label>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    {CATEGORY_LIST.filter((cat) => cat.id).map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Região Corporal</label>
+                  <select
+                    value={formRegion}
+                    onChange={(e) => setFormRegion(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    <option value="membros_superiores">Membros Superiores</option>
+                    <option value="membros_inferiores">Membros Inferiores</option>
+                    <option value="tronco">Tronco</option>
+                    <option value="core">Core</option>
+                    <option value="corpo_inteiro">Corpo Inteiro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Mecânica & Tipo</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <select
+                      value={formMechanics}
+                      onChange={(e) => setFormMechanics(e.target.value)}
+                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option value="composto">Composto</option>
+                      <option value="isolado">Isolado</option>
+                    </select>
+                    <select
+                      value={formExecutionType}
+                      onChange={(e) => setFormExecutionType(e.target.value)}
+                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option value="bilateral">Bilateral</option>
+                      <option value="unilateral">Unilateral</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Nível & Status</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <select
+                      value={formLevel}
+                      onChange={(e) => setFormLevel(e.target.value)}
+                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option value="iniciante">Iniciante</option>
+                      <option value="intermediario">Intermediário</option>
+                      <option value="avancado">Avançado</option>
+                    </select>
+                    <select
+                      value={formIsActive}
+                      onChange={(e) => setFormIsActive(Number(e.target.value))}
+                      className="w-full px-2 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-indigo-700"
+                    >
+                      <option value={1}>Ativo</option>
+                      <option value={0}>Inativo</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload de Imagem R2 / Foto do Exercício */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <FileImageUploader
+                  label="Foto do exercício"
+                  buttonText="+ Adicionar foto"
+                  category="exercises"
+                  patientId="exercises"
+                  exerciseId={editingExerciseId || undefined}
+                  initialUrl={formPhotoUrl}
+                  initialFileId={formFileId}
+                  onUploaded={(info) => {
+                    setFormFileId(info.id);
+                  }}
+                  onRemoved={() => {
+                    setFormFileId('');
+                    setFormPhotoUrl('');
+                  }}
+                />
+              </div>
+
+              {/* Instruções e Notas Técnicas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Instruções de Execução & Postura</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Pés firmes no solo, escápulas em retração e depressão, descida controlada em 3s..."
+                    value={formInstructions}
+                    onChange={(e) => setFormInstructions(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Notas Técnicas / Cuidados Articulares</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Evitar hiperextensão lombar, manter cotovelos a 45 graus, amplitude máxima segura..."
+                    value={formTechnicalNotes}
+                    onChange={(e) => setFormTechnicalNotes(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsFormOpen(false);
+                    setEditingExerciseId(null);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors"
+                >
+                  {saving ? 'Salvando...' : editingExerciseId ? 'Salvar Alterações' : 'Cadastrar Exercício'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

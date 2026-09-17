@@ -2344,6 +2344,23 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_file_attachments_category ON file_attachments(category);
   `);
 
+  try {
+    const attachCols = rawDb.prepare('PRAGMA table_info(file_attachments)').all().map((c: any) => c.name);
+    if (!attachCols.includes('assessment_id')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN assessment_id TEXT');
+    }
+    if (!attachCols.includes('exercise_id')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN exercise_id TEXT');
+    }
+  } catch (_) {}
+
+  try {
+    const photoCols = rawDb.prepare('PRAGMA table_info(personal_assessment_photos)').all().map((c: any) => c.name);
+    if (!photoCols.includes('file_id')) {
+      rawDb.exec('ALTER TABLE personal_assessment_photos ADD COLUMN file_id TEXT');
+    }
+  } catch (_) {}
+
   // Executa seed caso não existam categorias cadastradas
   try {
     const checkStmt = db.prepare("SELECT count(*) as total FROM categories");

@@ -130,9 +130,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
   // Tab 5: Fotos & Notas
   const [photoFront, setPhotoFront] = useState('');
+  const [photoFrontFileId, setPhotoFrontFileId] = useState('');
   const [photoBack, setPhotoBack] = useState('');
+  const [photoBackFileId, setPhotoBackFileId] = useState('');
   const [photoRight, setPhotoRight] = useState('');
+  const [photoRightFileId, setPhotoRightFileId] = useState('');
   const [photoLeft, setPhotoLeft] = useState('');
+  const [photoLeftFileId, setPhotoLeftFileId] = useState('');
   const [notes, setNotes] = useState('');
 
   const [saving, setSaving] = useState(false);
@@ -163,10 +167,20 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
       // Carrega fotos existentes vinculadas à avaliação
       if (Array.isArray(assessmentToEdit.photos)) {
         for (const p of assessmentToEdit.photos) {
-          if (p.photo_type === 'front') setPhotoFront(p.photo_url || '');
-          else if (p.photo_type === 'back') setPhotoBack(p.photo_url || '');
-          else if (p.photo_type === 'right') setPhotoRight(p.photo_url || '');
-          else if (p.photo_type === 'left') setPhotoLeft(p.photo_url || '');
+          const fileId = p.file_id || p.fileId || '';
+          if (p.photo_type === 'front') {
+            setPhotoFront(p.photo_url || '');
+            if (fileId) setPhotoFrontFileId(fileId);
+          } else if (p.photo_type === 'back') {
+            setPhotoBack(p.photo_url || '');
+            if (fileId) setPhotoBackFileId(fileId);
+          } else if (p.photo_type === 'right') {
+            setPhotoRight(p.photo_url || '');
+            if (fileId) setPhotoRightFileId(fileId);
+          } else if (p.photo_type === 'left') {
+            setPhotoLeft(p.photo_url || '');
+            if (fileId) setPhotoLeftFileId(fileId);
+          }
         }
       }
     }
@@ -366,11 +380,19 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
     try {
       setSaving(true);
-      const photos: Array<{ photo_type: string; photo_url: string }> = [];
-      if (photoFront.trim()) photos.push({ photo_type: 'front', photo_url: photoFront.trim() });
-      if (photoBack.trim()) photos.push({ photo_type: 'back', photo_url: photoBack.trim() });
-      if (photoRight.trim()) photos.push({ photo_type: 'right', photo_url: photoRight.trim() });
-      if (photoLeft.trim()) photos.push({ photo_type: 'left', photo_url: photoLeft.trim() });
+      const photos: Array<{ photo_type: string; photo_url: string; file_id?: string }> = [];
+      if (photoFront.trim() || photoFrontFileId) {
+        photos.push({ photo_type: 'front', photo_url: photoFront.trim(), file_id: photoFrontFileId || undefined });
+      }
+      if (photoBack.trim() || photoBackFileId) {
+        photos.push({ photo_type: 'back', photo_url: photoBack.trim(), file_id: photoBackFileId || undefined });
+      }
+      if (photoRight.trim() || photoRightFileId) {
+        photos.push({ photo_type: 'right', photo_url: photoRight.trim(), file_id: photoRightFileId || undefined });
+      }
+      if (photoLeft.trim() || photoLeftFileId) {
+        photos.push({ photo_type: 'left', photo_url: photoLeft.trim(), file_id: photoLeftFileId || undefined });
+      }
 
       // Agrupar testes de resistência muscular
       const enduranceTests: EnduranceTestItem[] = [];
@@ -1585,10 +1607,19 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {activeTab === 'photos_notes' && (
             <div className="space-y-6 animate-fadeIn">
               <div className="space-y-3">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                  <Camera className="w-4 h-4 text-purple-600" />
-                  <span>Fotos da Avaliação Corporal</span>
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-purple-600" />
+                    <span>Fotos da Avaliação Corporal</span>
+                  </h4>
+                </div>
+
+                {!selectedStudentId && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    <span>Selecione um aluno para adicionar fotos.</span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
@@ -1600,8 +1631,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       position="front"
                       category="personal_assessment_front"
                       initialUrl={photoFront}
-                      onUploaded={(info) => setPhotoFront(info.url || '')}
-                      onRemoved={() => setPhotoFront('')}
+                      initialFileId={photoFrontFileId}
+                      disabled={!selectedStudentId}
+                      onUploaded={(info) => {
+                        setPhotoFrontFileId(info.id);
+                        setPhotoFront(info.url || '');
+                      }}
+                      onRemoved={() => {
+                        setPhotoFrontFileId('');
+                        setPhotoFront('');
+                      }}
                     />
                   </div>
 
@@ -1614,8 +1653,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       position="back"
                       category="personal_assessment_back"
                       initialUrl={photoBack}
-                      onUploaded={(info) => setPhotoBack(info.url || '')}
-                      onRemoved={() => setPhotoBack('')}
+                      initialFileId={photoBackFileId}
+                      disabled={!selectedStudentId}
+                      onUploaded={(info) => {
+                        setPhotoBackFileId(info.id);
+                        setPhotoBack(info.url || '');
+                      }}
+                      onRemoved={() => {
+                        setPhotoBackFileId('');
+                        setPhotoBack('');
+                      }}
                     />
                   </div>
 
@@ -1628,8 +1675,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       position="right"
                       category="personal_assessment_right"
                       initialUrl={photoRight}
-                      onUploaded={(info) => setPhotoRight(info.url || '')}
-                      onRemoved={() => setPhotoRight('')}
+                      initialFileId={photoRightFileId}
+                      disabled={!selectedStudentId}
+                      onUploaded={(info) => {
+                        setPhotoRightFileId(info.id);
+                        setPhotoRight(info.url || '');
+                      }}
+                      onRemoved={() => {
+                        setPhotoRightFileId('');
+                        setPhotoRight('');
+                      }}
                     />
                   </div>
 
@@ -1642,8 +1697,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       position="left"
                       category="personal_assessment_left"
                       initialUrl={photoLeft}
-                      onUploaded={(info) => setPhotoLeft(info.url || '')}
-                      onRemoved={() => setPhotoLeft('')}
+                      initialFileId={photoLeftFileId}
+                      disabled={!selectedStudentId}
+                      onUploaded={(info) => {
+                        setPhotoLeftFileId(info.id);
+                        setPhotoLeft(info.url || '');
+                      }}
+                      onRemoved={() => {
+                        setPhotoLeftFileId('');
+                        setPhotoLeft('');
+                      }}
                     />
                   </div>
                 </div>
