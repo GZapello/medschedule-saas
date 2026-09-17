@@ -158,65 +158,65 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
   const levelColor = (level: string) => {
     switch (level) {
       case 'autonomous':
-        return 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300';
+        return 'text-emerald-700 bg-emerald-50/80 border-emerald-200';
       case 'supported':
-        return 'text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300';
+        return 'text-teal-700 bg-teal-50/80 border-teal-200';
       case 'restricted':
-        return 'text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300';
+        return 'text-amber-700 bg-amber-50/80 border-amber-200';
       case 'absent':
-        return 'text-red-700 bg-red-50 border-red-200 dark:bg-red-950/30 dark:text-red-300';
+        return 'text-rose-700 bg-rose-50/80 border-rose-200';
       default:
         return 'text-slate-700 bg-slate-50 border-slate-200';
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/40">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
               <Heart className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 Participação Ocupacional (Modelo da Ocupação Humana - MOHO)
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-500">
                 Engajamento em papéis significativos, satisfação e barreiras contextuais {patientName ? `• ${patientName}` : ''}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#fafbfc]">
           <div className="grid grid-cols-1 gap-4">
             {domains.map((d, idx) => (
               <div
                 key={d.key}
-                className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3 shadow-xs"
+                className="p-4 rounded-2xl border border-slate-200/80 bg-white space-y-3 shadow-xs"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
                   <div>
-                    <h3 className="text-xs font-bold text-slate-900 dark:text-white">
+                    <h3 className="text-xs font-bold text-slate-900">
                       {d.name}
                     </h3>
-                    <p className="text-[11px] text-slate-400">{d.description}</p>
+                    <p className="text-[11px] text-slate-500">{d.description}</p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <select
                       value={d.level}
                       onChange={e => handleUpdate(idx, 'level', e.target.value)}
-                      className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${levelColor(d.level)}`}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-xl border ${levelColor(d.level)} cursor-pointer outline-none`}
                     >
                       <option value="autonomous">Autônomo / Independente</option>
                       <option value="supported">Participa com Suporte</option>
@@ -224,8 +224,8 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
                       <option value="absent">Ausente / Não Engajado</option>
                     </select>
 
-                    <div className="flex items-center gap-1 bg-amber-50 dark:bg-amber-950/30 px-2 py-1 rounded-xl border border-amber-200 dark:border-amber-800">
-                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">Satisfação:</span>
+                    <div className="flex items-center gap-1 bg-amber-50/70 px-2 py-1 rounded-xl border border-amber-200">
+                      <span className="text-[10px] font-bold text-amber-800">Satisfação:</span>
                       {[1, 2, 3, 4, 5].map(star => (
                         <button
                           key={star}
@@ -237,7 +237,7 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
                             className={`w-3.5 h-3.5 ${
                               star <= d.satisfaction
                                 ? 'text-amber-500 fill-amber-500'
-                                : 'text-slate-300 dark:text-slate-600'
+                                : 'text-slate-300'
                             }`}
                           />
                         </button>
@@ -248,7 +248,7 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       Papéis Desempenhados Atualmente
                     </label>
                     <input
@@ -256,12 +256,12 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
                       value={d.currentRoles}
                       placeholder="Ex: Estudante, filho(a), trabalhador..."
                       onChange={e => handleUpdate(idx, 'currentRoles', e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                      className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50/60 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       Papéis Desejados / Metas de Identidade
                     </label>
                     <input
@@ -269,12 +269,12 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
                       value={d.desiredRoles}
                       placeholder="Ex: Cozinhar para si, frequentar academia..."
                       onChange={e => handleUpdate(idx, 'desiredRoles', e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                      className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50/60 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                       Barreiras Encontradas
                     </label>
                     <input
@@ -282,7 +282,7 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
                       value={d.barriers || ''}
                       placeholder="Ex: Acessibilidade física, atitudes..."
                       onChange={e => handleUpdate(idx, 'barriers', e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                      className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50/60 text-slate-900 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -290,8 +290,8 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
             ))}
           </div>
 
-          <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+          <div className="space-y-1.5 pt-2">
+            <label className="block text-xs font-bold text-slate-800">
               Parecer Terapêutico Ocupacional Geral sobre Volição e Hábitos
             </label>
             <textarea
@@ -299,17 +299,17 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
               placeholder="Síntese da volição (motivação intrínseca para agir), habituação (padrões de rotina) e capacidade de desempenho..."
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+              className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all shadow-xs"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex justify-end gap-3">
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/70 flex justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
           >
             Fechar
           </button>
@@ -317,7 +317,7 @@ export const OccupationalParticipationModal: React.FC<OccupationalParticipationM
             type="button"
             disabled={saving}
             onClick={handleSave}
-            className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-colors cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             {saving ? 'Salvando...' : 'Salvar Participação'}

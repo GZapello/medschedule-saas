@@ -108,24 +108,24 @@ ${prog.instructions}
   const getSettingIcon = (st: HomeProgramItem['setting']) => {
     switch (st) {
       case 'school':
-        return <School className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
+        return <School className="w-4 h-4 text-emerald-600" />;
       case 'community':
-        return <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />;
+        return <BookOpen className="w-4 h-4 text-amber-600" />;
       case 'home':
       default:
-        return <Home className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />;
+        return <Home className="w-4 h-4 text-teal-600" />;
     }
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm space-y-4">
+    <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-teal-600" />
             Programa de Atividades e Orientações (Casa / Escola)
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="text-xs text-slate-500">
             Orientações estruturadas para continuidade do tratamento na rotina diária
           </p>
         </div>
@@ -133,7 +133,7 @@ ${prog.instructions}
           <button
             type="button"
             onClick={() => setIsAdding(!isAdding)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
             {isAdding ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
             {isAdding ? 'Cancelar' : '+ Nova Orientação'}
@@ -142,10 +142,10 @@ ${prog.instructions}
       </div>
 
       {isAdding && (
-        <form onSubmit={handleCreate} className="p-3.5 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl space-y-3">
+        <form onSubmit={handleCreate} className="p-4 bg-teal-50/50 border border-teal-100 rounded-2xl space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Título da Orientação / Atividade *
               </label>
               <input
@@ -154,17 +154,17 @@ ${prog.instructions}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ex: Treino de abotoamento na rotina matinal"
-                className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Ambiente de Aplicação
               </label>
               <select
                 value={setting}
                 onChange={(e) => setSetting(e.target.value as any)}
-                className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs cursor-pointer"
               >
                 <option value="home">Casa / Família</option>
                 <option value="school">Escola / Educadores</option>
@@ -176,7 +176,7 @@ ${prog.instructions}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Frequência Sugerida
               </label>
               <input
@@ -184,11 +184,11 @@ ${prog.instructions}
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value)}
                 placeholder="Ex: Diário ao acordar, 2x por semana"
-                className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Materiais ou Adaptações Necessárias
               </label>
               <input
@@ -196,13 +196,13 @@ ${prog.instructions}
                 value={materialsNeeded}
                 onChange={(e) => setMaterialsNeeded(e.target.value)}
                 placeholder="Ex: Quadro de rotina visual, adaptador de lápis"
-                className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
               Instruções Detalhadas para Pais ou Educadores *
             </label>
             <textarea
@@ -211,7 +211,7 @@ ${prog.instructions}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="Descreva passo a passo como realizar o estímulo, quando intervir e como incentivar a autonomia..."
-              className="w-full text-xs px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white resize-none"
+              className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs resize-none"
             />
           </div>
 
@@ -219,13 +219,13 @@ ${prog.instructions}
             <button
               type="button"
               onClick={() => setIsAdding(false)}
-              className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-800"
+              className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold"
+              className="px-4 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               Salvar Orientação
             </button>
@@ -237,25 +237,25 @@ ${prog.instructions}
         {isLoading ? (
           <div className="text-center py-6 text-xs text-slate-400">Carregando orientações...</div>
         ) : programs.length === 0 ? (
-          <div className="text-center py-6 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 text-xs">
+          <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl text-slate-400 text-xs">
             Nenhuma orientação para casa ou escola registrada ainda.
           </div>
         ) : (
           programs.map(prog => (
             <div
               key={prog.id}
-              className="p-3.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition"
+              className="p-3.5 bg-white border border-slate-200/80 rounded-2xl space-y-2 hover:border-slate-300 transition-colors shadow-xs"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="p-1.5 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="p-1.5 bg-slate-50 rounded-lg border border-slate-200">
                     {getSettingIcon(prog.setting)}
                   </span>
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                    <h4 className="text-xs font-bold text-slate-900">
                       {prog.title}
                     </h4>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    <span className="text-[10px] text-slate-500 font-medium">
                       Ambiente: {prog.setting === 'home' ? 'Casa / Família' : prog.setting === 'school' ? 'Escola / Educadores' : 'Geral'} • {prog.frequency || 'Sob demanda'}
                     </span>
                   </div>
@@ -265,7 +265,7 @@ ${prog.instructions}
                   <button
                     type="button"
                     onClick={() => copyToClipboard(prog)}
-                    className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition"
+                    className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
                     title="Copiar texto formatado para enviar pelo WhatsApp ou e-mail"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -274,7 +274,7 @@ ${prog.instructions}
                     value={prog.status}
                     onChange={(e) => handleStatusChange(prog.id, e.target.value)}
                     disabled={readOnly}
-                    className="text-[11px] font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1"
+                    className="text-[11px] font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none cursor-pointer focus:border-teal-500"
                   >
                     <option value="active">Ativo</option>
                     <option value="completed">Concluído</option>
@@ -284,12 +284,12 @@ ${prog.instructions}
                 </div>
               </div>
 
-              <div className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line bg-white/70 dark:bg-slate-900/40 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800/80">
+              <div className="text-xs text-slate-700 whitespace-pre-line bg-slate-50/70 p-3 rounded-xl border border-slate-100 leading-relaxed">
                 {prog.instructions}
               </div>
 
               {prog.materials_needed && (
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <div className="text-[11px] text-slate-500 flex items-center gap-1">
                   <strong>Materiais sugeridos:</strong> {prog.materials_needed}
                 </div>
               )}

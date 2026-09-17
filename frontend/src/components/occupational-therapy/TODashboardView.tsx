@@ -41,65 +41,73 @@ export const TODashboardView: React.FC<TODashboardViewProps> = ({ patientId }) =
       {/* 4 Cards de Métricas Principais */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Taxa de Independência em AVD */}
-        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-2 shadow-sm">
+        <div className="p-5 bg-white border border-slate-200/80 rounded-3xl space-y-2 shadow-xs">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500">
             <span>Índice Geral de AVDs</span>
-            <Activity className="w-4 h-4 text-indigo-600" />
+            <div className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600">
+              <Activity className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-black text-indigo-600 dark:text-indigo-400">
+          <div className="text-3xl font-black text-teal-600">
             {independenceRate}%
           </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
             <div
               className={`h-full transition-all duration-500 ${
-                independenceRate >= 75 ? 'bg-emerald-500' : independenceRate >= 45 ? 'bg-indigo-500' : 'bg-amber-500'
+                independenceRate >= 75 ? 'bg-emerald-500' : independenceRate >= 45 ? 'bg-teal-500' : 'bg-amber-500'
               }`}
               style={{ width: `${independenceRate}%` }}
             />
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400 font-medium">
             {independenceRate >= 75 ? 'Independência funcional elevada' : 'Assistência requerida em rotinas'}
           </p>
         </div>
 
         {/* Metas Terapêuticas */}
-        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-2 shadow-sm">
+        <div className="p-5 bg-white border border-slate-200/80 rounded-3xl space-y-2 shadow-xs">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500">
             <span>Metas Terapêuticas</span>
-            <Target className="w-4 h-4 text-emerald-600" />
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+              <Target className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400">
+          <div className="text-3xl font-black text-emerald-600">
             {goalsCount.achieved} <span className="text-sm font-semibold text-slate-400">/ {goalsCount.total}</span>
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-slate-500">
-            <span className="text-blue-600 font-bold">{goalsCount.in_progress} em andamento</span>
+          <div className="flex items-center gap-2 text-[11px]">
+            <span className="text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100">{goalsCount.in_progress} em andamento</span>
           </div>
         </div>
 
         {/* Perfil Sensorial */}
-        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-2 shadow-sm">
+        <div className="p-5 bg-white border border-slate-200/80 rounded-3xl space-y-2 shadow-xs">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500">
             <span>Sistemas Sensoriais</span>
-            <Layers className="w-4 h-4 text-amber-600" />
+            <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
+              <Layers className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-black text-amber-600 dark:text-amber-400">
+          <div className="text-3xl font-black text-amber-600">
             {sensoryAlerts.length}
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400 font-medium">
             {sensoryAlerts.length === 0 ? 'Padrão típico em todos os 8 sistemas' : 'Sistemas com busca ou hiper-reatividade'}
           </p>
         </div>
 
         {/* Programa Casa/Escola */}
-        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-2 shadow-sm">
+        <div className="p-5 bg-white border border-slate-200/80 rounded-3xl space-y-2 shadow-xs">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500">
             <span>Orientações Ativas</span>
-            <BookOpen className="w-4 h-4 text-purple-600" />
+            <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600">
+              <BookOpen className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-black text-purple-600 dark:text-purple-400">
+          <div className="text-3xl font-black text-slate-700">
             {homeProgramsCount}
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400 font-medium">
             Programas para casa, escola e cuidadores
           </p>
         </div>
@@ -107,18 +115,18 @@ export const TODashboardView: React.FC<TODashboardViewProps> = ({ patientId }) =
 
       {/* Detalhamento de Alertas Sensoriais */}
       {sensoryAlerts.length > 0 && (
-        <div className="p-5 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-3xl space-y-3">
-          <h4 className="text-xs font-black text-amber-950 dark:text-amber-300 uppercase tracking-wider flex items-center gap-2">
+        <div className="p-5 bg-amber-50/70 border border-amber-200/80 rounded-3xl space-y-3">
+          <h4 className="text-xs font-black text-amber-950 uppercase tracking-wider flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-600" />
             Alertas de Regulação e Processamento Sensorial
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {sensoryAlerts.map((alert: any, idx: number) => (
-              <div key={idx} className="p-3 bg-white dark:bg-slate-800 rounded-2xl border border-amber-100 dark:border-amber-800 space-y-1">
-                <span className="text-xs font-bold text-slate-900 dark:text-white capitalize">
+              <div key={idx} className="p-3 bg-white rounded-2xl border border-amber-200/80 space-y-1 shadow-xs">
+                <span className="text-xs font-bold text-slate-900 capitalize">
                   {alert.system}
                 </span>
-                <div className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold">
+                <div className="text-[11px] text-amber-800 font-semibold">
                   Padrão: {alert.pattern}
                 </div>
                 {alert.notes && <p className="text-[10px] text-slate-500">{alert.notes}</p>}
@@ -130,18 +138,18 @@ export const TODashboardView: React.FC<TODashboardViewProps> = ({ patientId }) =
 
       {/* Histórico Recente de AVDs */}
       {recentAvd && (
-        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-3 shadow-sm">
+        <div className="p-5 bg-white border border-slate-200/80 rounded-3xl space-y-3 shadow-xs">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <Clock className="w-4 h-4 text-indigo-600" />
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <Clock className="w-4 h-4 text-teal-600" />
               Última Avaliação Funcional Registrada
             </h4>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-slate-400 font-medium">
               {recentAvd.assessment_date ? new Date(recentAvd.assessment_date).toLocaleDateString('pt-BR') : '-'}
             </span>
           </div>
           {recentAvd.general_notes && (
-            <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl">
+            <p className="text-xs text-slate-700 bg-slate-50 border border-slate-100 p-3.5 rounded-2xl leading-relaxed">
               {recentAvd.general_notes}
             </p>
           )}

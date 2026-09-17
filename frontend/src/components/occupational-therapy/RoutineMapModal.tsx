@@ -154,60 +154,60 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
   };
 
   const periodConfig = {
-    morning: { title: 'Manhã', icon: Sunrise, color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/30 border-amber-200' },
-    afternoon: { title: 'Tarde', icon: Sun, color: 'text-orange-500 bg-orange-50 dark:bg-orange-950/30 border-orange-200' },
-    evening: { title: 'Noite', icon: Sunset, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200' },
-    night: { title: 'Madrugada / Sono', icon: Moon, color: 'text-purple-500 bg-purple-50 dark:bg-purple-950/30 border-purple-200' }
+    morning: { title: 'Manhã', icon: Sunrise, color: 'text-amber-600 bg-amber-50 border-amber-200' },
+    afternoon: { title: 'Tarde', icon: Sun, color: 'text-orange-600 bg-orange-50 border-orange-200' },
+    evening: { title: 'Noite', icon: Sunset, color: 'text-teal-600 bg-teal-50 border-teal-200' },
+    night: { title: 'Madrugada / Sono', icon: Moon, color: 'text-slate-600 bg-slate-100 border-slate-200' }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/40">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center">
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 Mapa da Rotina Diária de Vida
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-500">
                 Mapeamento temporal das 24 horas, desafios sensoriais e engajamento ocupacional {patientName ? `• ${patientName}` : ''}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#fafbfc]">
           {(['morning', 'afternoon', 'evening', 'night'] as const).map(period => {
             const conf = periodConfig[period];
             const Icon = conf.icon;
             const periodBlocks = blocks.filter(b => b.period === period);
 
             return (
-              <div key={period} className="space-y-3">
+              <div key={period} className="space-y-3 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className={`p-1.5 rounded-lg border ${conf.color}`}>
                       <Icon className="w-4 h-4" />
                     </span>
-                    <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    <h3 className="text-xs font-bold text-slate-800">
                       {conf.title} ({periodBlocks.length} atividades)
                     </h3>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleAddBlock(period)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg hover:bg-indigo-100 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-teal-700 bg-teal-50 rounded-lg hover:bg-teal-100 transition-colors cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
                     Adicionar Bloco
@@ -216,14 +216,14 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
 
                 <div className="space-y-2">
                   {periodBlocks.length === 0 ? (
-                    <div className="p-3 text-center text-xs text-slate-400 bg-slate-50 dark:bg-slate-800/20 rounded-xl">
+                    <div className="p-3 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
                       Nenhum evento registrado para este turno.
                     </div>
                   ) : (
                     periodBlocks.map(b => (
                       <div
                         key={b.id}
-                        className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5 shadow-xs"
+                        className="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 space-y-2.5"
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="flex items-center gap-2 flex-1">
@@ -232,14 +232,14 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
                               value={b.timeRange}
                               placeholder="08:00 - 09:00"
                               onChange={e => handleUpdateBlock(b.id, 'timeRange', e.target.value)}
-                              className="w-28 px-2 py-1 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                              className="w-28 px-2 py-1 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-800"
                             />
                             <input
                               type="text"
                               value={b.activity}
                               placeholder="Atividade ou ocupação desempenhada..."
                               onChange={e => handleUpdateBlock(b.id, 'activity', e.target.value)}
-                              className="flex-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:outline-none"
+                              className="flex-1 px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                             />
                           </div>
 
@@ -247,7 +247,7 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
                             <select
                               value={b.engagement}
                               onChange={e => handleUpdateBlock(b.id, 'engagement', e.target.value)}
-                              className="text-[11px] font-semibold px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                              className="text-[11px] font-semibold px-2 py-1 rounded-lg border border-slate-200 bg-white text-slate-800"
                             >
                               <option value="high">Engajamento Alto</option>
                               <option value="medium">Engajamento Médio</option>
@@ -258,7 +258,7 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
                             <select
                               value={b.independence}
                               onChange={e => handleUpdateBlock(b.id, 'independence', e.target.value)}
-                              className="text-[11px] font-semibold px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
+                              className="text-[11px] font-semibold px-2 py-1 rounded-lg border border-slate-200 bg-white text-slate-800"
                             >
                               <option value="independent">Independente</option>
                               <option value="assisted">Com Assistência</option>
@@ -281,7 +281,7 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
                             value={b.sensoryChallenges}
                             placeholder="Desafios sensoriais, pistas ou sobrecarga observada..."
                             onChange={e => handleUpdateBlock(b.id, 'sensoryChallenges', e.target.value)}
-                            className="w-full px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400"
+                            className="w-full px-2.5 py-1 text-[11px] rounded-lg border border-slate-200 bg-white text-slate-700 focus:border-teal-500 focus:outline-none"
                           />
                         </div>
                       </div>
@@ -292,8 +292,8 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
             );
           })}
 
-          <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+          <div className="space-y-1.5 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <label className="block text-xs font-bold text-slate-800">
               Síntese Ocupacional da Rotina & Orientações de Reorganização
             </label>
             <textarea
@@ -301,17 +301,17 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
               placeholder="Identificação de picos de estresse, janelas de maior alerta funcional, propostas de pausas sensoriais..."
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-800 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex justify-end gap-3">
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/70 flex justify-end gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+            className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
           >
             Fechar
           </button>
@@ -319,7 +319,7 @@ export const RoutineMapModal: React.FC<RoutineMapModalProps> = ({
             type="button"
             disabled={saving}
             onClick={handleSave}
-            className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-colors cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             {saving ? 'Salvando...' : 'Salvar Mapa de Rotina'}

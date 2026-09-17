@@ -490,13 +490,13 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
       {/* CABEÇALHO DO MÓDULO ZEMDATO */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+          <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
             <Hand className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-slate-800">ZemdaTO</h1>
-              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
                 Terapia Ocupacional
               </span>
             </div>
@@ -514,7 +514,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             <select
               value={practiceArea}
               onChange={e => setPracticeArea(e.target.value as any)}
-              className="text-xs font-bold text-indigo-900 bg-transparent focus:outline-none cursor-pointer"
+              className="text-xs font-bold text-teal-900 bg-transparent focus:outline-none cursor-pointer"
             >
               <option value="pediatria">Pediatria e Desenvolvimento Infantil</option>
               <option value="neurologia">Neurologia Adulto / Infantil</option>
@@ -531,7 +531,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
               value={selectedPatientId}
               disabled={!!initialAppointmentId}
               onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors cursor-pointer"
+              className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-teal-500 focus:outline-none transition-colors cursor-pointer"
             >
               <option value="">Selecione um Paciente...</option>
               {patients.map(p => (
@@ -543,8 +543,8 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
           </div>
 
           {selectedPatient && (
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-semibold text-indigo-900">
-              <User className="w-3.5 h-3.5 text-indigo-600" />
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-200 rounded-xl text-xs font-semibold text-teal-900">
+              <User className="w-3.5 h-3.5 text-teal-600" />
               <span>{selectedPatient.full_name}</span>
             </div>
           )}
@@ -574,11 +574,11 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
                   isActive
-                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
+                    ? 'border-teal-600 text-teal-700 bg-teal-50/50'
                     : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
                 <span>{tab.label}</span>
               </button>
             );
@@ -591,30 +591,30 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             <button
               type="button"
               onClick={() => setIsTaskAnalysisOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-indigo-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-teal-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
             >
               Análise de Tarefas
             </button>
             <button
               type="button"
               onClick={() => setIsRoutineMapOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-indigo-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-teal-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
             >
               Mapa da Rotina
             </button>
             <button
               type="button"
               onClick={() => setIsParticipationOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-indigo-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-teal-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
             >
               Participação (MOHO)
             </button>
             <button
               type="button"
               onClick={() => setIsAIReportOpen(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 transition-colors cursor-pointer"
             >
-              <Sparkles className="w-3 h-3 text-indigo-600" />
+              <Sparkles className="w-3 h-3 text-teal-600" />
               Relatório IA
             </button>
           </div>
@@ -625,7 +625,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
       <div className="flex-1 p-6 overflow-y-auto">
         {!selectedPatientId ? (
           <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center mb-3">
               <Hand className="w-6 h-6" />
             </div>
             <h3 className="text-base font-bold text-slate-800">Selecione um Paciente</h3>
@@ -647,7 +647,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <User className="w-4 h-4 text-indigo-600" />
+                      <User className="w-4 h-4 text-teal-600" />
                       Perfil Ocupacional do Indivíduo
                     </h3>
                     <p className="text-xs text-slate-500">
@@ -664,7 +664,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       placeholder="Papéis ocupacionais atuais e anteriores (estudante, trabalhador, cuidador, aposentado)..."
                       value={profileData.occupationalHistory}
                       onChange={e => setProfileData({ ...profileData, occupationalHistory: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
 
@@ -675,7 +675,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       placeholder="Descreva a sequência de atividades ao acordar, refeições, ocupações produtivas e sono..."
                       value={profileData.dailyRoutine}
                       onChange={e => setProfileData({ ...profileData, dailyRoutine: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
 
@@ -686,7 +686,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       placeholder="O que é verdadeiramente importante para o paciente? Hobbies, espiritualidade, convívio..."
                       value={profileData.interestsAndValues}
                       onChange={e => setProfileData({ ...profileData, interestsAndValues: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
 
@@ -697,7 +697,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       placeholder="Acessibilidade física, apoio familiar, barreiras arquitetônicas ou atitudinais..."
                       value={profileData.contextualBarriers}
                       onChange={e => setProfileData({ ...profileData, contextualBarriers: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -707,7 +707,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     type="button"
                     disabled={saving}
                     onClick={handleSaveProfile}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     {saving ? 'Salvando...' : 'Salvar Perfil Ocupacional'}
                   </button>
@@ -721,7 +721,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-4">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-indigo-600" />
+                      <Activity className="w-4 h-4 text-teal-600" />
                       Avaliação de Atividades de Vida Diária (AVDs e AIVDs)
                     </h3>
                     <p className="text-xs text-slate-500">
@@ -733,19 +733,19 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     <button
                       type="button"
                       onClick={handleOpenAdlComparison}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl border border-teal-200 transition-colors cursor-pointer"
                     >
-                      <History className="w-3.5 h-3.5 text-indigo-600" />
+                      <History className="w-3.5 h-3.5 text-teal-600" />
                       <span>Comparar Evolução</span>
                     </button>
 
-                    <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-xl">
+                    <div className="flex items-center gap-3 px-4 py-2 bg-teal-50 border border-teal-200 rounded-xl">
                       <div className="text-right">
-                        <span className="text-[10px] uppercase font-bold text-indigo-800">Taxa de Independência</span>
-                        <p className="text-lg font-extrabold text-indigo-700">{adlSummary.pct}%</p>
+                        <span className="text-[10px] uppercase font-bold text-teal-800">Taxa de Independência</span>
+                        <p className="text-lg font-extrabold text-teal-700">{adlSummary.pct}%</p>
                       </div>
-                      <div className="h-8 w-px bg-indigo-200" />
-                      <div className="text-xs text-indigo-900 font-semibold">
+                      <div className="h-8 w-px bg-teal-200" />
+                      <div className="text-xs text-teal-900 font-semibold">
                         {adlSummary.total} de {adlSummary.max} pontos
                       </div>
                     </div>
@@ -833,7 +833,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     type="button"
                     disabled={saving}
                     onClick={handleSaveAdl}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     {saving ? 'Salvando...' : 'Salvar Avaliação de AVDs'}
                   </button>
@@ -847,7 +847,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Eye className="w-4 h-4 text-indigo-600" />
+                      <Eye className="w-4 h-4 text-teal-600" />
                       Avaliação do Processamento Sensorial (8 Sistemas)
                     </h3>
                     <p className="text-xs text-slate-500">
@@ -880,7 +880,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                                 [sys.key]: { ...currentSys, pattern: e.target.value }
                               });
                             }}
-                            className="text-xs px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-semibold"
+                            className="text-xs px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-semibold cursor-pointer outline-none focus:border-teal-500"
                           >
                             <option value="typical">Sensibilidade Típica</option>
                             <option value="hyperreactive">Hiper-reativo (Evitação / Desconforto)</option>
@@ -899,7 +899,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                               [sys.key]: { ...currentSys, notes: e.target.value }
                             });
                           }}
-                          className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg"
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                         />
                       </div>
                     );
@@ -913,7 +913,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     placeholder="Estratégias sensoriais calmantes, alerta e adaptações para sala de aula ou lar..."
                     value={sensoryNotes}
                     onChange={e => setSensoryNotes(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                   />
                 </div>
 
@@ -922,7 +922,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     type="button"
                     disabled={saving}
                     onClick={handleSaveSensory}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     {saving ? 'Salvando...' : 'Salvar Perfil Sensorial'}
                   </button>
@@ -936,7 +936,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Brain className="w-4 h-4 text-indigo-600" />
+                      <Brain className="w-4 h-4 text-teal-600" />
                       Avaliação Motora Fina, Grossa e Cognitiva
                     </h3>
                     <p className="text-xs text-slate-500">
@@ -952,7 +952,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       type="text"
                       value={motorCognitiveData.fineMotorCoordination}
                       onChange={e => setMotorCognitiveData({ ...motorCognitiveData, fineMotorCoordination: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
 
@@ -962,7 +962,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       type="text"
                       value={motorCognitiveData.digitalPinches}
                       onChange={e => setMotorCognitiveData({ ...motorCognitiveData, digitalPinches: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
 
@@ -972,7 +972,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       type="text"
                       value={motorCognitiveData.motorPlanningPraxis}
                       onChange={e => setMotorCognitiveData({ ...motorCognitiveData, motorPlanningPraxis: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
 
@@ -982,7 +982,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       type="text"
                       value={motorCognitiveData.attentionConcentration}
                       onChange={e => setMotorCognitiveData({ ...motorCognitiveData, attentionConcentration: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -992,7 +992,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     type="button"
                     disabled={saving}
                     onClick={handleSaveMotorCognitive}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     {saving ? 'Salvando...' : 'Salvar Avaliação Motora / Cognitiva'}
                   </button>
@@ -1006,7 +1006,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Target className="w-4 h-4 text-indigo-600" />
+                      <Target className="w-4 h-4 text-teal-600" />
                       Plano Terapêutico Singular (PTS)
                     </h3>
                     <p className="text-xs text-slate-500">
@@ -1022,7 +1022,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       type="text"
                       value={planForm.title}
                       onChange={e => setPlanForm({ ...planForm, title: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
 
@@ -1033,7 +1033,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                         rows={3}
                         value={planForm.shortTermGoals}
                         onChange={e => setPlanForm({ ...planForm, shortTermGoals: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                       />
                     </div>
                     <div>
@@ -1042,7 +1042,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                         rows={3}
                         value={planForm.mediumTermGoals}
                         onChange={e => setPlanForm({ ...planForm, mediumTermGoals: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                       />
                     </div>
                     <div>
@@ -1051,7 +1051,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                         rows={3}
                         value={planForm.longTermGoals}
                         onChange={e => setPlanForm({ ...planForm, longTermGoals: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                       />
                     </div>
                   </div>
@@ -1063,7 +1063,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                         rows={2}
                         value={planForm.interventions}
                         onChange={e => setPlanForm({ ...planForm, interventions: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                       />
                     </div>
                     <div>
@@ -1072,7 +1072,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                         rows={2}
                         value={planForm.familyGuidelines}
                         onChange={e => setPlanForm({ ...planForm, familyGuidelines: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                       />
                     </div>
                   </div>
@@ -1083,7 +1083,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     type="button"
                     disabled={saving}
                     onClick={handleSaveTreatmentPlan}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     {saving ? 'Salvando...' : 'Salvar Plano Terapêutico'}
                   </button>
@@ -1117,7 +1117,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Wrench className="w-4 h-4 text-indigo-600" />
+                      <Wrench className="w-4 h-4 text-teal-600" />
                       Tecnologia Assistiva, Adaptações e Órteses
                     </h3>
                     <p className="text-xs text-slate-500">
@@ -1134,7 +1134,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       placeholder="Ex: Órtese de punho termoplástica, engrossador de talher, prancha CAA..."
                       value={assistiveForm.resourceType}
                       onChange={e => setAssistiveForm({ ...assistiveForm, resourceType: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
                   <div>
@@ -1144,7 +1144,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       placeholder="Ex: Estabilizar punho para escrita sem dor..."
                       value={assistiveForm.objective}
                       onChange={e => setAssistiveForm({ ...assistiveForm, objective: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
                   <div>
@@ -1154,7 +1154,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       placeholder="Ex: Termoplástico de baixa temperatura 3.2mm, velcro, neoprene..."
                       value={assistiveForm.materialsUsed}
                       onChange={e => setAssistiveForm({ ...assistiveForm, materialsUsed: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
                   <div>
@@ -1164,7 +1164,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       placeholder="Ex: Avaliar pontos de pressão em 15 dias..."
                       value={assistiveForm.maintenanceFollowup}
                       onChange={e => setAssistiveForm({ ...assistiveForm, maintenanceFollowup: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -1174,7 +1174,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     type="button"
                     disabled={saving}
                     onClick={handleSaveAssistiveTech}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     Adicionar Recurso
                   </button>
@@ -1200,7 +1200,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {assistiveList.map(a => (
                         <div key={a.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                          <span className="text-xs font-bold text-indigo-900">{a.resource_type}</span>
+                          <span className="text-xs font-bold text-teal-900">{a.resource_type}</span>
                           <p className="text-xs text-slate-600">{a.objective}</p>
                           <span className="text-[10px] text-slate-400 block">Materiais: {a.materials_used || 'Não especificado'}</span>
                         </div>
@@ -1217,7 +1217,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                      <CheckCircle2 className="w-4 h-4 text-teal-600" />
                       Finalizar Atendimento (Gravação Longitudinal no Prontuário)
                     </h3>
                     <p className="text-xs text-slate-500">
@@ -1228,9 +1228,9 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                   <button
                     type="button"
                     onClick={() => setIsAIReportOpen(true)}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all cursor-pointer shadow-xs"
+                    className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all cursor-pointer shadow-xs"
                   >
-                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    <Sparkles className="w-4 h-4 text-teal-600" />
                     <span>Gerar Relatório com IA</span>
                   </button>
                 </div>
@@ -1241,7 +1241,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     type="text"
                     value={consultationTitle}
                     onChange={e => setConsultationTitle(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                   />
                 </div>
 
@@ -1252,7 +1252,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     placeholder="Descreva as atividades realizadas na sessão, desempenho do paciente, respostas sensoriais e nível de engajamento..."
                     value={consultationEvolution}
                     onChange={e => setConsultationEvolution(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                   />
                 </div>
 
@@ -1263,7 +1263,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     placeholder="Orientações de rotina para os cuidadores, treinos para casa, encaminhamentos e próxima sessão..."
                     value={consultationConducts}
                     onChange={e => setConsultationConducts(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
                   />
                 </div>
 
@@ -1272,7 +1272,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     type="button"
                     disabled={saving}
                     onClick={handleFinishConsultation}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 shadow-md shadow-indigo-500/20 transition-all cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-xs transition-all cursor-pointer disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>{saving ? 'Finalizando...' : 'Finalizar Atendimento e Gravar Prontuário'}</span>
