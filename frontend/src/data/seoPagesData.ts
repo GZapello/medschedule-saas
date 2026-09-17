@@ -55,7 +55,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       'Redução comprovada do tempo de espera na recepção',
       'Eliminação de erros de prontuário em papel e perdas de ficha',
       'Total conformidade com resoluções CFM, CFP, Crefito e LGPD',
-      'Acesso sincronizado no navegador web, Windows e aplicativo Android'
+      'Acesso sincronizado no navegador web e aplicativo Desktop Windows'
     ],
     faqs: [
       {
@@ -103,7 +103,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       'Sigilo estrito garantido por criptografia de ponta a ponta',
       'Controle visual imediato de sessões pagas e pendentes',
       'Agenda intuitiva com bloqueio de intervalos para estudo de casos',
-      'Total mobilidade para consultar fichas pelo celular ou computador'
+      'Total mobilidade e agilidade para consultar fichas no computador ou notebook'
     ],
     faqs: [
       {
@@ -252,7 +252,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
     faqs: [
       {
         question: 'Posso usar o Zemda para atendimentos online e presenciais?',
-        answer: 'Sim, o Zemda funciona em nuvem em qualquer navegador ou celular, permitindo atender tanto presencialmente quanto via teleconsulta.'
+        answer: 'Sim, o Zemda funciona 100% em nuvem em qualquer navegador moderno, permitindo atender tanto presencialmente quanto via teleconsulta.'
       },
       {
         question: 'O paciente pode agendar sozinho pela internet?',
@@ -294,7 +294,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
     benefits: [
       'Menos tempo digitando e mais tempo olhando para o paciente',
       'Documentos médicos gerados em folha A4 com logotipo da clínica',
-      'Acesso seguro de qualquer lugar (consultório, hospital ou smartphone)',
+      'Acesso seguro de qualquer lugar (consultório, hospital ou notebook)',
       'Organização impecável da recepção com controle de sala de espera'
     ],
     faqs: [
@@ -303,8 +303,8 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
         answer: 'Sim, os documentos contêm dados completos do médico (nome, CRM, especialidade, endereço do consultório e data) prontos para assinatura e carimbo ou certificado digital.'
       },
       {
-        question: 'Posso usar minha conta médica no tablet ou celular Android?',
-        answer: 'Sim, o Zemda possui aplicativo Android dedicado e versão web responsiva que se adapta com perfeição a tablets e notebooks.'
+        question: 'Posso usar minha conta médica em múltiplos computadores e navegadores?',
+        answer: 'Sim, o Zemda possui aplicativo desktop dedicado para Windows e versão web moderna que se adapta com perfeição a computadores e notebooks.'
       }
     ],
     ctaHeadline: 'Mais modernidade e precisão para seu consultório médico',
@@ -327,7 +327,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
         description: 'Disponibilize seu link no Instagram, WhatsApp e site. Os pacientes selecionam o profissional, o serviço e o horário disponível sem intermediários.'
       },
       {
-        title: 'Lembretes Automáticos via E-mail e Celular',
+        title: 'Lembretes Automáticos via E-mail e Notificações',
         description: 'Alertas pontuais avisam o paciente no dia anterior à consulta, reduzindo drasticamente o índice de faltas e horários ociosos.'
       },
       {
@@ -336,7 +336,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
       },
       {
         title: 'Sincronização em Tempo Real entre Dispositivos',
-        description: 'Qualquer agendamento realizado no balcão reflete instantaneamente no aplicativo do profissional e na tela da recepção.'
+        description: 'Qualquer agendamento realizado no balcão reflete instantaneamente no painel do profissional e na tela da recepção.'
       }
     ],
     benefits: [
@@ -396,7 +396,7 @@ export const SEO_PAGES: Record<string, SeoPageData> = {
     faqs: [
       {
         question: 'O prontuário pode ser acessado fora da clínica?',
-        answer: 'Sim, você pode acessar com suas credenciais seguras de qualquer computador ou celular com internet.'
+        answer: 'Sim, você pode acessar com suas credenciais seguras de qualquer computador ou notebook com internet.'
       },
       {
         question: 'Como funciona a exclusão ou alteração de registros?',

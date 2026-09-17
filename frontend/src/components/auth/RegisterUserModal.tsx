@@ -59,12 +59,12 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, on
 
         <div className="space-y-4 pt-4 text-left">
           {/* Aviso Informativo do Novo Fluxo de Convites (Itens 14 e 21) */}
-          <div className="p-4 bg-indigo-50/80 border border-indigo-200/80 rounded-2xl space-y-2">
-            <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs">
-              <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+          <div className="p-4 bg-teal-50/80 border border-teal-200/80 rounded-2xl space-y-2">
+            <div className="flex items-center gap-2 text-teal-900 font-bold text-xs">
+              <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0" />
               <span>Vínculo Exclusivo por Link Único da Clínica</span>
             </div>
-            <p className="text-[11px] text-indigo-800 leading-relaxed">
+            <p className="text-[11px] text-teal-800 leading-relaxed">
               Por segurança e conformidade, novos funcionários e profissionais de saúde não selecionam manualmente uma clínica na tela de registro. O vínculo é estabelecido exclusivamente através de um <strong>Link Único de Convite</strong> emitido pelo gestor da clínica.
             </p>
           </div>
@@ -82,13 +82,13 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({ isOpen, on
                   value={inviteInput}
                   onChange={e => setInviteInput(e.target.value)}
                   placeholder="Cole aqui o link ou código do convite"
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-teal-500"
                 />
               </div>
               <button
                 type="button"
                 onClick={handleGoToInvite}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
               >
                 <span>Acessar</span>
                 <ArrowRight className="w-3.5 h-3.5" />

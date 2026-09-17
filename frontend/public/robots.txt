@@ -1,16 +1,21 @@
 User-agent: *
 Allow: /
+Allow: /planos
 Allow: /sistema-para-clinicas
+Allow: /sistema-para-medicos
 Allow: /sistema-para-psicologos
 Allow: /sistema-para-fonoaudiologos
 Allow: /sistema-para-fisioterapeutas
 Allow: /sistema-para-nutricionistas
-Allow: /sistema-para-medicos
 Allow: /agenda-online
 Allow: /prontuario
 Allow: /gestao-financeira
 Allow: /blog
-Allow: /downloads
+Allow: /termos-de-uso
+Allow: /privacidade
+Allow: /cookies
+
+# Áreas Privadas e Técnicas (Não Indexar)
 Disallow: /api/
 Disallow: /v1/
 Disallow: /dashboard
@@ -25,5 +30,8 @@ Disallow: /staff
 Disallow: /settings
 Disallow: /superadmin
 Disallow: /audit
+Disallow: /assinatura/
+Disallow: /convite/
+Disallow: /teste-gratis/
 
 Sitemap: https://zemda.com.br/sitemap.xml

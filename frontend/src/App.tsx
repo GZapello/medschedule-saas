@@ -615,7 +615,7 @@ const AppContent: React.FC = () => {
   // Se o gestor precisa concluir o Onboarding obrigatório da clínica
   if (currentUser.needsOnboarding) {
     return (
-      <div className="min-h-screen bg-slate-900 py-10 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-[#fafbfc] py-10 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           <OnboardingWizardView
             onComplete={async () => {
@@ -628,7 +628,7 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[#fafbfc] flex flex-col">
       <BillingBanner summary={billingSummary} />
       {/* Top Navbar */}
       <Navbar

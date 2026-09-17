@@ -296,46 +296,46 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-3xl space-y-6">
         {/* Top Branding & Greeting */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-bold uppercase tracking-wider border border-indigo-500/30">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-bold uppercase tracking-wider border border-teal-200/80">
+            <Sparkles className="w-3.5 h-3.5 text-teal-600" />
             Configuração Inicial Obrigatória
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Vamos configurar sua clínica!
           </h1>
-          <p className="text-xs text-slate-400 max-w-lg mx-auto">
+          <p className="text-xs text-slate-600 max-w-lg mx-auto">
             Complete as informações institucionais e os dados fiscais de recibos para liberar o painel operacional da sua clínica.
           </p>
         </div>
 
         {/* Barra de Progresso com Percentual */}
-        <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/60 shadow-xl space-y-2">
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-200">
-              Progresso da Configuração: <span className="text-indigo-400">{percentage}% concluída</span>
+            <span className="font-bold text-slate-700">
+              Progresso da Configuração: <span className="text-teal-700 font-extrabold">{percentage}% concluída</span>
             </span>
-            <span className="text-slate-400">Etapa {step} de 5</span>
+            <span className="text-slate-500 font-medium">Etapa {step} de 5</span>
           </div>
-          <div className="w-full h-2.5 bg-slate-700 rounded-full overflow-hidden">
+          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-teal-400 to-indigo-500 transition-all duration-500 rounded-full"
+              className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-500 rounded-full"
               style={{ width: `${percentage}%` }}
             />
           </div>
         </div>
 
         {/* Card do Formulário */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-800 space-y-6 border border-slate-100">
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-900/5 text-slate-800 space-y-6 border border-slate-100">
           {/* ========================================================== */}
           {/* ETAPA 1: Confirmação do Gestor Responsável */}
           {/* ========================================================== */}
           {step === 1 && (
             <div className="space-y-6 text-center py-4">
-              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <div className="w-16 h-16 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
                 <UserCheck className="w-9 h-9" />
               </div>
               <div>
@@ -376,7 +376,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
           {step === 2 && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                <Building2 className="w-5 h-5 text-indigo-600" />
+                <Building2 className="w-5 h-5 text-teal-600" />
                 <h3 className="font-extrabold text-slate-800 text-sm">
                   Etapa 2 — Dados Institucionais do Estabelecimento
                 </h3>
@@ -391,7 +391,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.corporateName}
                     onChange={e => setFormData({ ...formData, corporateName: e.target.value })}
                     placeholder="Clínica Exemplo Serviços Médicos Ltda"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -402,7 +402,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.tradeName}
                     onChange={e => setFormData({ ...formData, tradeName: e.target.value })}
                     placeholder="Espaço Viver Bem"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -411,7 +411,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                   <select
                     value={formData.personType}
                     onChange={e => setFormData({ ...formData, personType: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   >
                     <option value="pj">Pessoa Jurídica (CNPJ)</option>
                     <option value="pf">Pessoa Física (CPF - Profissional Liberal)</option>
@@ -428,7 +428,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.cnpjCpf}
                     onChange={e => setFormData({ ...formData, cnpjCpf: e.target.value })}
                     placeholder={formData.personType === 'pj' ? '00.000.000/0001-00' : '000.000.000-00'}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -439,7 +439,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.municipalRegistration}
                     onChange={e => setFormData({ ...formData, municipalRegistration: e.target.value })}
                     placeholder="Ex: 12345678"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -450,7 +450,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.stateRegistration}
                     onChange={e => setFormData({ ...formData, stateRegistration: e.target.value })}
                     placeholder="Isento ou número"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -461,7 +461,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.phone}
                     onChange={e => setFormData({ ...formData, phone: e.target.value })}
                     placeholder="(11) 3344-5566"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -472,7 +472,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.whatsapp}
                     onChange={e => setFormData({ ...formData, whatsapp: e.target.value })}
                     placeholder="(11) 98888-7777"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
               </div>
@@ -482,7 +482,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                   type="button"
                   onClick={() => handleSaveStep(3)}
                   disabled={loading}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer flex items-center gap-2"
                 >
                   Continuar para Endereço
                   <ArrowRight className="w-4 h-4" />
@@ -497,7 +497,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
           {step === 3 && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                <MapPin className="w-5 h-5 text-indigo-600" />
+                <MapPin className="w-5 h-5 text-teal-600" />
                 <h3 className="font-extrabold text-slate-800 text-sm">
                   Etapa 3 — Endereço Físico do Estabelecimento
                 </h3>
@@ -513,13 +513,13 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                       placeholder="00000-000"
                       value={formData.zipCode}
                       onChange={e => setFormData({ ...formData, zipCode: e.target.value })}
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                     <button
                       type="button"
                       onClick={handleCepSearch}
                       disabled={searchingCep}
-                      className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl font-bold flex items-center gap-1 cursor-pointer"
                     >
                       <Search className="w-3.5 h-3.5" />
                       {searchingCep ? '...' : 'Buscar'}
@@ -535,7 +535,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.street}
                     onChange={e => setFormData({ ...formData, street: e.target.value })}
                     placeholder="Av. Paulista"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -547,7 +547,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.number}
                     onChange={e => setFormData({ ...formData, number: e.target.value })}
                     placeholder="1000"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -558,7 +558,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.complement}
                     onChange={e => setFormData({ ...formData, complement: e.target.value })}
                     placeholder="Conjunto 501"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -570,7 +570,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.neighborhood}
                     onChange={e => setFormData({ ...formData, neighborhood: e.target.value })}
                     placeholder="Bela Vista"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -582,7 +582,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.city}
                     onChange={e => setFormData({ ...formData, city: e.target.value })}
                     placeholder="São Paulo"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -595,7 +595,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.state}
                     onChange={e => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
                     placeholder="SP"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -624,7 +624,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                   type="button"
                   onClick={() => handleSaveStep(4)}
                   disabled={loading}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer flex items-center gap-2"
                 >
                   Continuar para Gestor
                   <ArrowRight className="w-4 h-4" />
@@ -639,7 +639,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
           {step === 4 && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                <FileCheck className="w-5 h-5 text-indigo-600" />
+                <FileCheck className="w-5 h-5 text-teal-600" />
                 <h3 className="font-extrabold text-slate-800 text-sm">
                   Etapa 4 — Dados do Responsável Legal da Clínica
                 </h3>
@@ -654,7 +654,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.responsibleName}
                     onChange={e => setFormData({ ...formData, responsibleName: e.target.value })}
                     placeholder="Dra. Camila Santos"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -666,7 +666,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.responsibleCpf}
                     onChange={e => setFormData({ ...formData, responsibleCpf: e.target.value })}
                     placeholder="000.000.000-00"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -677,7 +677,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.responsibleEmail}
                     onChange={e => setFormData({ ...formData, responsibleEmail: e.target.value })}
                     placeholder="diretoria@viverbem.com"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -688,7 +688,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.responsiblePhone}
                     onChange={e => setFormData({ ...formData, responsiblePhone: e.target.value })}
                     placeholder="(11) 98888-0000"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -699,7 +699,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.responsibleRole}
                     onChange={e => setFormData({ ...formData, responsibleRole: e.target.value })}
                     placeholder="Diretor Geral / Responsável Técnico"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -711,14 +711,14 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                       placeholder="CRM/CRP"
                       value={formData.professionalBoard}
                       onChange={e => setFormData({ ...formData, professionalBoard: e.target.value })}
-                      className="w-1/3 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
+                      className="w-1/3 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                     <input
                       type="text"
                       placeholder="Número"
                       value={formData.professionalRegistry}
                       onChange={e => setFormData({ ...formData, professionalRegistry: e.target.value })}
-                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
                 </div>
@@ -738,7 +738,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                   type="button"
                   onClick={() => handleSaveStep(5)}
                   disabled={loading}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer flex items-center gap-2"
                 >
                   Configurar Dados para Recibos
                   <ArrowRight className="w-4 h-4" />
@@ -753,7 +753,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
           {step === 5 && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                <Receipt className="w-5 h-5 text-indigo-600" />
+                <Receipt className="w-5 h-5 text-teal-600" />
                 <div>
                   <h3 className="font-extrabold text-slate-800 text-sm">
                     Etapa 5 — Dados para Emissão de Recibos da Clínica
@@ -780,7 +780,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.emitterName}
                     onChange={e => setFormData({ ...formData, emitterName: e.target.value })}
                     placeholder="Nome da clínica ou do profissional emissor"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 
@@ -792,7 +792,7 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
                     value={formData.emitterDocument}
                     onChange={e => setFormData({ ...formData, emitterDocument: e.target.value })}
                     placeholder="00.000.000/0001-00"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
 

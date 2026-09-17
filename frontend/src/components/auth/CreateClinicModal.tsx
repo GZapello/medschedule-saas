@@ -267,14 +267,14 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs overflow-y-auto">
       <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 my-8">
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-indigo-950 p-6 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-teal-950 via-slate-900 to-teal-900 p-6 text-white flex items-center justify-between">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[11px] font-bold tracking-wider uppercase mb-1">
               <Building2 className="w-3.5 h-3.5 text-teal-400" />
               Plataforma Multi-Clínicas Zemda
             </div>
             <h2 className="text-xl font-extrabold tracking-tight">Criar Minha Clínica</h2>
-            <p className="text-xs text-indigo-200">
+            <p className="text-xs text-teal-200/90">
               Cadastre seu estabelecimento para ter seu próprio ambiente exclusivo na plataforma.
             </p>
           </div>
@@ -317,7 +317,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
 
               <button
                 onClick={()=>window.location.assign('/assinatura')}
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all"
+                className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 cursor-pointer transition-all"
               >
                 Entrar e escolher o plano
               </button>
@@ -325,8 +325,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Informação sobre aprovação */}
-              <div className="p-3.5 bg-indigo-50 border border-indigo-100 rounded-2xl text-xs text-indigo-900 flex items-start gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+              <div className="p-3.5 bg-teal-50/80 border border-teal-100 rounded-2xl text-xs text-teal-950 flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
                 <p>
                   Cada clínica possui ambiente 100% isolado. Após enviar seus dados, sua solicitação ficará com status <strong>"Pendente de aprovação"</strong> até validação pelo administrador da plataforma.
                 </p>
@@ -335,7 +335,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
               {/* Seção 1: Dados do Responsável / Gestor */}
               <div>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-indigo-600" />
+                  <User className="w-3.5 h-3.5 text-teal-600" />
                   1. Dados do Gestor Responsável
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -349,7 +349,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="Ex: Dra. Mariana Albuquerque"
                       value={formData.responsibleName}
                       onChange={e => setFormData({ ...formData, responsibleName: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
@@ -363,7 +363,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="mariana@clinicaprime.com"
                       value={formData.email}
                       onChange={e => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
@@ -376,7 +376,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="(11) 98765-4321"
                       value={formData.phone}
                       onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
@@ -390,7 +390,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="••••••••"
                       value={formData.password}
                       onChange={e => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
@@ -404,14 +404,14 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="••••••••"
                       value={formData.confirmPassword}
                       onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
                   {/* Atuação Profissional do Gerenciador / Admin */}
                   <div className="sm:col-span-2 pt-2 border-t border-slate-100">
                     <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center gap-1.5">
-                      <Briefcase className="w-3.5 h-3.5 text-indigo-600" />
+                      <Briefcase className="w-3.5 h-3.5 text-teal-600" />
                       Área de Atuação Profissional do Responsável / Gerenciador *
                     </label>
                     <p className="text-[11px] text-slate-500 mb-2">
@@ -420,7 +420,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                     <select
                       value={formData.managerProfession}
                       onChange={e => handleManagerProfessionChange(e.target.value)}
-                      className="w-full px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     >
                       <option value="Fisioterapia">Fisioterapia (Acesso ao ZemdaFisio e Prontuários Fisioterapêuticos)</option>
                       <option value="Psicologia">Psicologia (Prontuário Psicológico e Evolução)</option>
@@ -445,7 +445,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                           placeholder="Ex: CREFITO, CRM, CRP"
                           value={formData.managerRegistrationType}
                           onChange={e => setFormData({ ...formData, managerRegistrationType: e.target.value })}
-                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 uppercase"
+                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500 uppercase"
                         />
                       </div>
 
@@ -460,7 +460,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                             placeholder="Ex: 12345-F / SP"
                             value={formData.managerRegistrationNumber}
                             onChange={e => setFormData({ ...formData, managerRegistrationNumber: e.target.value })}
-                            className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                            className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                           />
                         </div>
                       </div>
@@ -491,7 +491,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                                     onClick={() => toggleManagerPracticeArea(sug)}
                                     className={`text-[10px] px-2 py-0.5 rounded-lg font-medium transition-all cursor-pointer ${
                                       isSelected
-                                        ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                                        ? 'bg-teal-600 text-white shadow-xs font-bold'
                                         : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
                                     }`}
                                   >
@@ -508,7 +508,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                           placeholder="Ex: Traumato-Ortopédica, Fisioterapia Esportiva, Reabilitação"
                           value={formData.managerPracticeAreas}
                           onChange={e => setFormData({ ...formData, managerPracticeAreas: e.target.value })}
-                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                         />
                       </div>
                     </>
@@ -538,7 +538,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
               {/* Seção 2: Dados Básicos da Clínica */}
               <div>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                  <Building2 className="w-3.5 h-3.5 text-teal-600" />
                   2. Dados do Estabelecimento / Clínica
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -552,7 +552,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="Ex: Clínica Prime Saúde & Bem-Estar"
                       value={formData.clinicName}
                       onChange={e => setFormData({ ...formData, clinicName: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
@@ -565,7 +565,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="Ex: Espaço Prime"
                       value={formData.tradeName}
                       onChange={e => setFormData({ ...formData, tradeName: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
@@ -578,7 +578,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="00.000.000/0001-00 ou 000.000.000-00"
                       value={formData.cnpjCpf}
                       onChange={e => setFormData({ ...formData, cnpjCpf: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
@@ -592,7 +592,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                         placeholder="00000-000"
                         value={formData.cep}
                         onChange={e => setFormData({ ...formData, cep: e.target.value })}
-                        className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                        className="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                       />
                       <button
                         type="button"
@@ -615,7 +615,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="São Paulo"
                       value={formData.city}
                       onChange={e => setFormData({ ...formData, city: e.target.value })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
 
@@ -629,7 +629,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       placeholder="SP"
                       value={formData.state}
                       onChange={e => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
-                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
                 </div>
@@ -643,7 +643,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                     required
                     checked={formData.termsAccepted}
                     onChange={e => setFormData({ ...formData, termsAccepted: e.target.checked })}
-                    className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
                   />
                   <span>
                     Li e aceito os{' '}
@@ -651,7 +651,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       href="/termos-de-uso"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-bold text-indigo-600 underline hover:text-indigo-700 inline-flex items-center gap-0.5"
+                      className="font-bold text-teal-600 underline hover:text-teal-700 inline-flex items-center gap-0.5"
                     >
                       Termos de Uso
                       <ExternalLink className="w-3 h-3" />
@@ -666,7 +666,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                     required
                     checked={formData.privacyAccepted}
                     onChange={e => setFormData({ ...formData, privacyAccepted: e.target.checked })}
-                    className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                    className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
                   />
                   <span>
                     Li e estou ciente da{' '}
@@ -674,7 +674,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       href="/privacidade"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-bold text-indigo-600 underline hover:text-indigo-700 inline-flex items-center gap-0.5"
+                      className="font-bold text-teal-600 underline hover:text-teal-700 inline-flex items-center gap-0.5"
                     >
                       Política de Privacidade e Proteção de Dados
                       <ExternalLink className="w-3 h-3" />
@@ -689,7 +689,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       type="checkbox"
                       checked={marketingAccepted}
                       onChange={e => setMarketingAccepted(e.target.checked)}
-                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                      className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
                     />
                     <span>
                       (Opcional) Desejo receber comunicações sobre novidades, recursos de IA e atualizações da plataforma Zemda.
@@ -710,7 +710,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer disabled:opacity-50"
                 >
                   {loading ? 'Cadastrando...' : 'Finalizar Solicitação de Cadastro'}
                 </button>

@@ -214,11 +214,11 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
   // 1. Estado de Carregamento
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white/10 backdrop-blur-md p-8 rounded-3xl border border-white/10 text-center max-w-sm w-full text-white space-y-4 shadow-2xl">
-          <div className="w-12 h-12 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
-          <h3 className="text-lg font-extrabold">Validando Teste Grátis</h3>
-          <p className="text-xs text-slate-300">Aguarde um instante enquanto verificamos seu link exclusivo...</p>
+      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-3xl border border-slate-100 text-center max-w-sm w-full text-slate-800 space-y-4 shadow-xl shadow-teal-900/5">
+          <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <h3 className="text-lg font-extrabold text-slate-900">Validando Teste Grátis</h3>
+          <p className="text-xs text-slate-500">Aguarde um instante enquanto verificamos seu link exclusivo...</p>
         </div>
       </div>
     );
@@ -231,8 +231,8 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
     const isAlreadyUsed = errorState.code === 'LINK_ALREADY_USED';
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border border-slate-100 space-y-6">
+      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-xl shadow-slate-900/5 border border-slate-100 space-y-6">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-inner bg-rose-50 text-rose-600">
             {isExpired && <Clock className="w-8 h-8 text-rose-600" />}
             {isRevoked && <Ban className="w-8 h-8 text-rose-600" />}
@@ -252,21 +252,20 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
             </p>
           </div>
 
-          <div className="pt-2 flex flex-col gap-2.5">
-            {isAlreadyUsed ? (
+          <div className="pt-2">
+            {isExpired || isRevoked || isAlreadyUsed ? (
               <button
-                onClick={onBackToHome}
-                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl text-xs transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                onClick={() => window.location.assign('/')}
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
               >
-                Fazer Login na Plataforma
-                <ArrowRight className="w-4 h-4" />
+                Conhecer os Planos do Zemda
               </button>
             ) : (
               <button
-                onClick={onBackToHome}
-                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl text-xs transition-all shadow-md cursor-pointer"
+                onClick={() => window.location.assign('/login')}
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
               >
-                Ir para a Página Inicial
+                Ir para o Login
               </button>
             )}
           </div>
@@ -278,8 +277,8 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
   // 3. Estado de Sucesso na Ativação
   if (activationSuccess) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in-95 duration-300">
+      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-xl shadow-teal-900/5 border border-slate-100 space-y-5 animate-in fade-in zoom-in-95 duration-300">
           <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto text-emerald-600">
             <CheckCircle2 className="w-10 h-10" />
           </div>
@@ -303,24 +302,24 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
 
   // 4. Formulário de Ativação
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 py-10 px-4 sm:px-6 flex items-center justify-center">
+    <div className="min-h-screen bg-[#fafbfc] py-10 px-4 sm:px-6 flex items-center justify-center">
       <div className="max-w-xl w-full space-y-6">
         {/* Banner Superior */}
-        <div className="text-center space-y-2 text-white">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-400/20 border border-amber-400/30 text-amber-300 text-xs font-black uppercase tracking-wider">
-            <Gift className="w-4 h-4 text-amber-400" />
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-black uppercase tracking-wider">
+            <Gift className="w-4 h-4 text-teal-600" />
             Convite Especial de Teste Grátis
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
             Ative seu Teste de {trialData?.durationLabel}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
             Preencha os dados abaixo para configurar sua clínica e começar a utilizar todos os módulos do Zemda sem nenhum custo.
           </p>
         </div>
 
         {/* Card do Formulário */}
-        <div className="bg-white rounded-3xl shadow-2xl border border-white/20 p-6 sm:p-8 space-y-6">
+        <div className="bg-white rounded-3xl shadow-xl shadow-teal-900/5 border border-slate-100 p-6 sm:p-8 space-y-6">
           <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-center gap-3">
             <div className="p-2 bg-amber-500 rounded-xl text-slate-950 shrink-0">
               <Sparkles className="w-4 h-4" />
@@ -470,11 +469,11 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                 />
                 <span className="leading-relaxed">
                   Declaro que li e concordo com os{' '}
-                  <a href="/termos-de-uso" target="_blank" className="text-indigo-600 font-bold hover:underline">
+                  <a href="/termos-de-uso" target="_blank" className="text-teal-600 font-bold hover:underline">
                     Termos de Uso
                   </a>{' '}
                   e a{' '}
-                  <a href="/privacidade" target="_blank" className="text-indigo-600 font-bold hover:underline">
+                  <a href="/privacidade" target="_blank" className="text-teal-600 font-bold hover:underline">
                     Política de Privacidade (LGPD)
                   </a>{' '}
                   do Zemda.

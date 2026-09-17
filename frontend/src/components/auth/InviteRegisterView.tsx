@@ -287,10 +287,10 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   // 1. Estado de Carregamento
   if (loadingInvite) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
         <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-slate-300 text-sm font-semibold">Validando convite da clínica...</p>
+          <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-slate-600 text-sm font-semibold">Validando convite da clínica...</p>
         </div>
       </div>
     );
@@ -299,8 +299,8 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   // 2. Estado de Erro / Convite Inválido / Expirado
   if (inviteError || !inviteData) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-2xl space-y-5 border border-slate-100">
+      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-xl shadow-slate-900/5 space-y-5 border border-slate-100">
           <div className="w-16 h-16 rounded-3xl bg-red-50 text-red-500 flex items-center justify-center mx-auto shadow-inner">
             <XCircle className="w-9 h-9" />
           </div>
@@ -314,7 +314,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
 
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left text-xs text-slate-600 space-y-1.5">
             <div className="font-bold text-slate-800 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              <ShieldCheck className="w-4 h-4 text-teal-600" />
               Por que isso acontece?
             </div>
             <p className="text-[11px] text-slate-500 leading-normal">
@@ -324,7 +324,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
 
           <button
             onClick={onBackToLogin}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+            className="w-full py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer"
           >
             Ir para a Tela de Login
           </button>
@@ -336,8 +336,8 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   // 3. Sucesso após cadastro
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-2xl space-y-4 border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-xl shadow-teal-900/5 space-y-4 border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
           <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
             <CheckCircle2 className="w-9 h-9" />
           </div>
@@ -355,11 +355,11 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
 
   // 4. Formulário de Cadastro por Convite
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 py-8">
-      <div className="bg-white rounded-3xl max-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6">
+    <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4 py-8">
+      <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-100 space-y-6">
         {/* Cabeçalho com identificação fixa e inalterável da Clínica */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50 border border-indigo-200/70 rounded-full text-indigo-700 text-xs font-bold">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-teal-50 border border-teal-200/70 rounded-full text-teal-700 text-xs font-bold">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Convite Oficial da Clínica</span>
           </div>
@@ -370,7 +370,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
 
           {/* Banner de vínculo fixo inalterável */}
           <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center gap-3 text-left">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-600 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
               {inviteData.tenant.logoUrl ? (
                 <img
                   src={inviteData.tenant.logoUrl}
@@ -407,7 +407,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                 <select
                   value={prefix}
                   onChange={e => setPrefix(e.target.value as any)}
-                  className="w-24 px-2 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-24 px-2 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 >
                   <option value="Dr.">Dr.</option>
                   <option value="Dra.">Dra.</option>
@@ -422,7 +422,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                   placeholder="Seu nome completo"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
             </div>
@@ -442,7 +442,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                   placeholder="seuemail@exemplo.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
             </div>
@@ -458,7 +458,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                   placeholder="(00) 00000-0000"
                   value={phone}
                   onChange={e => setPhone(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
             </div>
@@ -478,7 +478,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                   placeholder="Mínimo 6 caracteres"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
             </div>
@@ -495,7 +495,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                   placeholder="Repita sua senha"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
             </div>
@@ -511,7 +511,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
               <select
                 value={selectedProfession}
                 onChange={e => handleProfessionChange(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
               >
                 {PROFESSIONS_LIST.map(p => (
                   <option key={p} value={p}>
@@ -527,7 +527,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                 placeholder="Especifique sua profissão ou especialidade"
                 value={customProfession}
                 onChange={e => setCustomProfession(e.target.value)}
-                className="w-full mt-2 px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                className="w-full mt-2 px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
               />
             )}
           </div>
@@ -546,7 +546,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                     placeholder="CREFITO, CRP, CRM, etc."
                     value={registrationType}
                     onChange={e => setRegistrationType(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
               </div>
@@ -560,7 +560,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                   placeholder="Ex: 12345/SP"
                   value={registrationNumber}
                   onChange={e => setRegistrationNumber(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
             </div>
@@ -576,7 +576,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
               placeholder="Ex: Traumato-Ortopédica, Fisioterapia Esportiva..."
               value={practiceAreas}
               onChange={e => setPracticeAreas(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+              className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
             />
             {getSuggestions().length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5 items-center">
@@ -586,7 +586,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                     key={s}
                     type="button"
                     onClick={() => handleAddArea(s)}
-                    className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/50 transition-colors cursor-pointer"
+                    className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200/50 transition-colors cursor-pointer"
                   >
                     + {s}
                   </button>
@@ -607,7 +607,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {submitting ? 'Criando Conta...' : 'Concluir Cadastro na Clínica'}
               <ArrowRight className="w-4 h-4" />
