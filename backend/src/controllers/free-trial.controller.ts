@@ -6,6 +6,7 @@ import { hashPassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { logAudit } from '../middlewares/audit.middleware';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
+import { ensureDefaultClinicService } from '../services/default-service.service';
 
 const VALID_PERIODS: Record<number, string> = {
   7: '7 dias',
@@ -558,6 +559,9 @@ export class FreeTrialController {
           nowIso,
           trial.id
         );
+
+        // 10.1 Criação automática e idempotente do serviço inicial padrão 'Atendimento / Consulta' (R$ 180,00)
+        ensureDefaultClinicService(tenantId);
 
         // 11. Gerar token JWT para login instantâneo
         const authToken = generateToken({

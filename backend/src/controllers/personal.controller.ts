@@ -1179,6 +1179,69 @@ export class PersonalController {
     }
   }
 
+  static async updateAssessment(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const b = req.body;
+
+      const existing = db.prepare('SELECT id, patient_id FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Avaliação física não encontrada' });
+        return;
+      }
+
+      if (b.weight !== undefined || b.height !== undefined || b.notes !== undefined || b.body_fat_percentage !== undefined) {
+        db.prepare(`
+          UPDATE personal_assessments
+          SET weight = COALESCE(?, weight),
+              height = COALESCE(?, height),
+              body_fat_percentage = COALESCE(?, body_fat_percentage),
+              notes = COALESCE(?, notes),
+              updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          b.weight !== undefined ? Number(b.weight) : null,
+          b.height !== undefined ? Number(b.height) : null,
+          b.body_fat_percentage !== undefined ? Number(b.body_fat_percentage) : null,
+          b.notes !== undefined ? b.notes : null,
+          id, tenantId
+        );
+      }
+
+      if (Array.isArray(b.photos)) {
+        db.prepare('DELETE FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').run(id, tenantId);
+        
+        for (const p of b.photos) {
+          if (p.photo_url && p.photo_type) {
+            db.prepare(`
+              INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run('paph-' + uuidv4().slice(0, 8), tenantId, id, existing.patient_id, p.photo_type, p.photo_url, b.assessment_date || new Date().toISOString().split('T')[0], p.notes || null);
+          }
+        }
+      }
+
+      logAudit(req, 'UPDATE_ASSESSMENT', 'personal_assessments', id, { photosCount: Array.isArray(b.photos) ? b.photos.length : undefined });
+      
+      const updatedPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ? ORDER BY photo_type ASC').all(id, tenantId);
+      const updatedAssessment = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+
+      res.json({
+        message: 'Avaliação física atualizada com sucesso',
+        assessment: updatedAssessment,
+        photos: updatedPhotos
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.updateAssessment] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar avaliação física' });
+    }
+  }
+
   static async deleteAssessment(req: Request, res: Response): Promise<void> {
     try {
       if (!hasPersonalAccess(req)) {
@@ -1596,8 +1659,8 @@ export class PersonalController {
             level = COALESCE(?, level),
             instructions = COALESCE(?, instructions),
             technical_notes = COALESCE(?, technical_notes),
-            photo_url = COALESCE(?, photo_url),
-            exercise_file_id = COALESCE(?, exercise_file_id),
+            photo_url = CASE WHEN ? = 1 THEN ? ELSE photo_url END,
+            exercise_file_id = CASE WHEN ? = 1 THEN ? ELSE exercise_file_id END,
             is_active = COALESCE(?, is_active),
             updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
@@ -1613,8 +1676,10 @@ export class PersonalController {
           level !== undefined ? level : null,
           instructions !== undefined ? instructions : null,
           technical_notes !== undefined ? technical_notes : null,
-          photo_url !== undefined ? photo_url : null,
-          exercise_file_id !== undefined ? exercise_file_id : null,
+          photo_url !== undefined ? 1 : 0,
+          photo_url ? String(photo_url).trim() : null,
+          exercise_file_id !== undefined ? 1 : 0,
+          exercise_file_id ? String(exercise_file_id).trim() : null,
           is_active !== undefined ? (is_active ? 1 : 0) : null,
           id, tenantId
         );

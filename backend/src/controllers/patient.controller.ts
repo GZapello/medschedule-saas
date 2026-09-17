@@ -134,7 +134,7 @@ export class PatientController {
           address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
           notes_admin, is_child, pet_metadata_json, active
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `);
 
       insertStmt.run(

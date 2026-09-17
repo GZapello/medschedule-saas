@@ -502,6 +502,7 @@ api.get('/v1/personal/students/:studentId/assessments', requireTenant, requireRo
 api.get('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAssessment);
 api.get('/v1/personal/assessments/:id/compare/:compareId', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.compareAssessments);
 api.post('/v1/personal/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createAssessment);
+api.put('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateAssessment);
 api.delete('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteAssessment);
 api.get('/v1/personal/students/:studentId/evolution', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getEvolutionData);
 api.get('/v1/personal/students/:studentId/photos', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listPhotos);

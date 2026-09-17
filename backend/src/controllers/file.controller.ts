@@ -224,6 +224,11 @@ export class FileController {
         }
       }
 
+      let signedUrl = '';
+      try {
+        signedUrl = await r2StorageService.createDownloadUrl(objectKey, 300);
+      } catch (_) {}
+
       res.status(201).json({
         success: true,
         message: 'Upload confirmado e registrado com sucesso',
@@ -238,7 +243,8 @@ export class FileController {
           original_filename: filename,
           mime_type: mimeType,
           file_size: Number(fileSize),
-          category: safeCategory
+          category: safeCategory,
+          url: signedUrl
         }
       });
     } catch (err: any) {

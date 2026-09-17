@@ -7,6 +7,7 @@ import { hashPassword, comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { v4 as uuidv4 } from 'uuid';
 import { globalAudit, purgeClinic } from '../services/clinic-control.service';
+import { ensureDefaultClinicService } from '../services/default-service.service';
 
 
 export class TenantController {
@@ -211,6 +212,10 @@ export class TenantController {
       }
 
       db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
+      
+      // Criação automática e idempotente do serviço inicial padrão 'Atendimento / Consulta' (R$ 180,00)
+      ensureDefaultClinicService(tenantId);
+
       logAudit(req, 'REGISTER_CLINIC_REQUEST', 'tenants', tenantId, {
         clinicName,
         responsibleName,
@@ -315,6 +320,9 @@ export class TenantController {
           ?, ?, 'pj', ?, ?, '00.000.000/0001-00', 'REC-', 1, 0
         )
       `).run('rec-set-' + id, id, tenant.name, tenant.name);
+
+      // 4. Garante de forma idempotente que a clínica possui o serviço inicial padrão 'Atendimento / Consulta' (R$ 180,00)
+      ensureDefaultClinicService(String(id));
 
       logAudit(req, 'ADMIN_APPROVE_CLINIC', 'tenants', id, { clinicName: tenant.name });
 
