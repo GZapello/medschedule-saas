@@ -42,6 +42,8 @@ import { PersonalAIController } from '../controllers/personal-ai.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
 import { FreeTrialController } from '../controllers/free-trial.controller';
 import { FileController } from '../controllers/file.controller';
+import { ClinicalReassessmentController } from '../controllers/clinical-reassessment.controller';
+import { ClinicalGoalsController } from '../controllers/clinical-goals.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -329,6 +331,18 @@ api.post('/v1/clinical-records', requireTenant, requireRole('clinic_admin', 'pro
 api.put('/v1/clinical-records/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.update);
 
 // ==========================================
+// REAVALIAÇÕES LONGITUDINAIS & METAS TERAPÊUTICAS
+// ==========================================
+api.get('/v1/clinical/reassessments/:specialty/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalReassessmentController.getReassessments);
+api.post('/v1/clinical/reassessments', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalReassessmentController.saveReassessment);
+api.post('/v1/clinical/reassessments/compare', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalReassessmentController.compare);
+
+api.get('/v1/clinical/goals/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.listByPatient);
+api.post('/v1/clinical/goals', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.create);
+api.put('/v1/clinical/goals/:id/progress', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.updateProgress);
+api.delete('/v1/clinical/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.delete);
+
+// ==========================================
 // 8.1 ZEMDAFISIO: PRONTUÁRIO & EVOLUÇÃO FISIOTERAPÊUTICA
 // ==========================================
 api.get('/v1/physiotherapy/assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listAssessmentsByPatient);
@@ -369,6 +383,16 @@ api.post('/v1/dentistry/orthodontics', requireTenant, requireRole('clinic_admin'
 
 api.get('/v1/dentistry/hof/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listHof);
 api.post('/v1/dentistry/hof', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveHof);
+
+// Itens Novos: Dossiê do Dente, Exames Independentes, Implantes, Fotos Clínicas, Prótese Pendente
+api.get('/v1/dentistry/teeth/:patientId/:toothNumber/dossier', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.getToothDossier);
+api.get('/v1/dentistry/exams/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listExams);
+api.post('/v1/dentistry/exams', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveExam);
+api.get('/v1/dentistry/implants/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listImplants);
+api.post('/v1/dentistry/implants', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.saveImplant);
+api.get('/v1/dentistry/photos/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listPhotos);
+api.post('/v1/dentistry/photos', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.savePhoto);
+api.get('/v1/dentistry/prosthetics-lab/pending', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.listPendingProsthetics);
 
 api.post('/v1/dentistry/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), DentistryController.finishConsultation);
 
@@ -420,6 +444,18 @@ api.post('/v1/occupational-therapy/treatment-plans', requireTenant, requireRole(
 api.get('/v1/occupational-therapy/assistive-tech/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listAssistiveTech);
 api.post('/v1/occupational-therapy/assistive-tech', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveAssistiveTech);
 
+// Itens Novos: Análise de Tarefas, Mapa de Rotina, Participação, Programa Casa/Escola, Painel Funcional
+api.get('/v1/occupational-therapy/task-analyses/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listTaskAnalyses);
+api.post('/v1/occupational-therapy/task-analyses', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveTaskAnalysis);
+api.get('/v1/occupational-therapy/routine-map/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getRoutineMap);
+api.post('/v1/occupational-therapy/routine-map', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveRoutineMap);
+api.get('/v1/occupational-therapy/participation/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getParticipation);
+api.post('/v1/occupational-therapy/participation', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveParticipation);
+api.get('/v1/occupational-therapy/home-programs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.listHomePrograms);
+api.post('/v1/occupational-therapy/home-programs', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.saveHomeProgram);
+api.put('/v1/occupational-therapy/home-programs/:id/status', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.updateHomeProgramStatus);
+api.get('/v1/occupational-therapy/dashboard/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.getFunctionalDashboard);
+
 api.post('/v1/occupational-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), OccupationalTherapyController.finishConsultation);
 
 // ==========================================
@@ -451,6 +487,17 @@ api.post('/v1/speech-therapy/audiology', requireTenant, requireRole('clinic_admi
 
 api.get('/v1/speech-therapy/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listTreatmentPlans);
 api.post('/v1/speech-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveTreatmentPlan);
+
+// Itens Novos: Matriz de Disfagia, Processos Fonológicos, Amostras de Fluência, CAA/AAC, Análise de Linguagem
+api.get('/v1/speech-therapy/dysphagia-matrix/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getDysphagiaMatrix);
+api.post('/v1/speech-therapy/dysphagia-matrix', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveDysphagiaMatrix);
+api.get('/v1/speech-therapy/phonological-processes/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonologicalProcesses);
+api.post('/v1/speech-therapy/phonological-processes', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.savePhonologicalProcesses);
+api.get('/v1/speech-therapy/fluency-samples/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listFluencySamples);
+api.post('/v1/speech-therapy/fluency-samples', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveFluencySample);
+api.get('/v1/speech-therapy/aac/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listAacRecords);
+api.post('/v1/speech-therapy/aac', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAacRecord);
+api.post('/v1/speech-therapy/analyze-language', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.analyzeLanguageSample);
 
 api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.finishConsultation);
 
@@ -633,6 +680,9 @@ api.get('/v1/ai/conversations', requireTenant, AIController.listConversations);
 api.post('/v1/ai/conversations', requireTenant, AIController.saveConversation);
 api.delete('/v1/ai/conversations/:id', requireTenant, AIController.deleteConversation);
 api.post('/v1/ai/feedback', requireTenant, AIController.recordFeedback);
+api.post('/v1/ai/dental/parse-dictation', requireTenant, requireRole('clinic_admin', 'professional'), AIController.parseDentalDictation);
+api.post('/v1/ai/to/generate-evolution-report', requireTenant, requireRole('clinic_admin', 'professional'), AIController.generateTOEvolutionReport);
+api.post('/v1/ai/fono/generate-evolution-report', requireTenant, requireRole('clinic_admin', 'professional'), AIController.generateFonoEvolutionReport);
 
 // Importação Inteligente de Dados (Word .docx, Planilhas .xlsx/.csv/.txt, Heurística e Lotes)
 api.post('/v1/import/parse-file', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), ImportController.parseFile);

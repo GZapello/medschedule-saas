@@ -24,11 +24,24 @@ import {
   Wrench,
   BookOpen,
   Target,
-  Smile
+  Smile,
+  LayoutDashboard,
+  Calendar,
+  Columns
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+
+import { TODashboardView } from './TODashboardView';
+import { TaskAnalysisModal } from './TaskAnalysisModal';
+import { RoutineMapModal } from './RoutineMapModal';
+import { OccupationalParticipationModal } from './OccupationalParticipationModal';
+import { TOEvolutionReportModal } from './TOEvolutionReportModal';
+import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
+import { HomeSchoolProgramManager } from '../common/HomeSchoolProgramManager';
+import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
+import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 
 interface OccupationalTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -50,10 +63,36 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
 
+  // Switcher de Área de Atuação da TO
+  const [practiceArea, setPracticeArea] = useState<
+    'pediatria' | 'neurologia' | 'saude_mental' | 'gerontologia' | 'reabilitacao_fisica' | 'hospitalar'
+  >('pediatria');
+
+  // Modais especializados de TO
+  const [isTaskAnalysisOpen, setIsTaskAnalysisOpen] = useState(false);
+  const [isRoutineMapOpen, setIsRoutineMapOpen] = useState(false);
+  const [isParticipationOpen, setIsParticipationOpen] = useState(false);
+  const [isAIReportOpen, setIsAIReportOpen] = useState(false);
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
+  const [comparisonItems, setComparisonItems] = useState<any[]>([]);
+  const [comparisonTitle, setComparisonTitle] = useState('Comparativo de Reavaliação Longitudinal');
+
+  // Fotos de evolução (Tecnologia Assistiva / Órteses / Postura)
+  const [assistivePhotos, setAssistivePhotos] = useState<any[]>([]);
+
   // Abas do Módulo ZemdaTO
   const [activeTab, setActiveTab] = useState<
-    'profile' | 'adl' | 'sensory' | 'motor_cognitive' | 'treatment_plans' | 'assistive_tech' | 'finish'
-  >('profile');
+    | 'dashboard'
+    | 'profile'
+    | 'adl'
+    | 'sensory'
+    | 'motor_cognitive'
+    | 'goals'
+    | 'treatment_plans'
+    | 'home_program'
+    | 'assistive_tech'
+    | 'finish'
+  >('dashboard');
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -399,6 +438,44 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
     }
   };
 
+  // Helper para abrir modal comparativo longitudinal de AVDs
+  const handleOpenAdlComparison = () => {
+    if (!adlList || adlList.length === 0) {
+      showToast('Não há avaliações anteriores registradas para comparação', 'info');
+      return;
+    }
+    const current = adlItems;
+    const previous = adlList.length > 1 ? adlList[1].items : adlList[0].items;
+    const initial = adlList[adlList.length - 1].items || [];
+
+    const items: any[] = current.map(c => {
+      const p = previous?.find((x: any) => x.key === c.key);
+      const init = initial?.find((x: any) => x.key === c.key);
+      const currScore = c.score || 0;
+      const prevScore = p?.score ?? currScore;
+      const initScore = init?.score ?? prevScore;
+
+      let status: 'improved' | 'maintained' | 'worsened' | 'not_evaluated' = 'maintained';
+      if (currScore > prevScore) status = 'improved';
+      else if (currScore < prevScore) status = 'worsened';
+
+      return {
+        id: c.key,
+        name: c.label,
+        category: 'AVD / AIVD',
+        initialValue: `Nível ${initScore} / 6`,
+        previousValue: `Nível ${prevScore} / 6`,
+        currentValue: `Nível ${currScore} / 6`,
+        status,
+        notes: c.notes
+      };
+    });
+
+    setComparisonTitle('Comparativo Longitudinal de AVDs e AIVDs (6 Níveis)');
+    setComparisonItems(items);
+    setIsComparisonModalOpen(true);
+  };
+
   // Calcula taxa média de independência de AVD
   const adlSummary = React.useMemo(() => {
     const total = adlItems.reduce((acc, curr) => acc + (curr.score || 0), 0);
@@ -429,15 +506,32 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
           </div>
         </div>
 
-        {/* SELETOR DE PACIENTE */}
-        <div className="flex items-center gap-3">
-          <div className="relative min-w-[260px]">
+        {/* CONTROLES DO CABEÇALHO: ÁREA DE ATUAÇÃO E SELETOR DE PACIENTE */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* SWITCHER DE ÁREA DE ATUAÇÃO */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="text-[10px] font-extrabold uppercase text-slate-400">Área:</span>
+            <select
+              value={practiceArea}
+              onChange={e => setPracticeArea(e.target.value as any)}
+              className="text-xs font-bold text-indigo-900 bg-transparent focus:outline-none cursor-pointer"
+            >
+              <option value="pediatria">Pediatria e Desenvolvimento Infantil</option>
+              <option value="neurologia">Neurologia Adulto / Infantil</option>
+              <option value="saude_mental">Saúde Mental e Psicossocial</option>
+              <option value="gerontologia">Gerontologia / Saúde do Idoso</option>
+              <option value="reabilitacao_fisica">Reabilitação Física / Membro Superior</option>
+              <option value="hospitalar">Contextos Hospitalares / Leito</option>
+            </select>
+          </div>
+
+          <div className="relative min-w-[240px]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
               value={selectedPatientId}
               disabled={!!initialAppointmentId}
               onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors"
+              className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors cursor-pointer"
             >
               <option value="">Selecione um Paciente...</option>
               {patients.map(p => (
@@ -457,34 +551,74 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
         </div>
       </div>
 
-      {/* ABAS DE NAVEGAÇÃO */}
-      <div className="bg-white border-b border-slate-200 px-6 flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {[
-          { id: 'profile', label: 'Perfil Ocupacional', icon: User },
-          { id: 'adl', label: 'AVDs & AIVDs (6 Níveis)', icon: Activity },
-          { id: 'sensory', label: 'Perfil Sensorial (8 Sistemas)', icon: Eye },
-          { id: 'motor_cognitive', label: 'Motor & Cognitivo', icon: Brain },
-          { id: 'treatment_plans', label: 'Plano Terapêutico Singular', icon: Target },
-          { id: 'assistive_tech', label: 'Tecnologia Assistiva / Órteses', icon: Wrench },
-          { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
+      {/* ABAS DE NAVEGAÇÃO E AÇÕES RÁPIDAS */}
+      <div className="bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+          {[
+            { id: 'dashboard', label: 'Painel Funcional', icon: LayoutDashboard },
+            { id: 'profile', label: 'Perfil Ocupacional', icon: User },
+            { id: 'adl', label: 'AVDs & AIVDs (6 Níveis)', icon: Activity },
+            { id: 'sensory', label: 'Perfil Sensorial (8 Sistemas)', icon: Eye },
+            { id: 'motor_cognitive', label: 'Motor & Cognitivo', icon: Brain },
+            { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
+            { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
+            { id: 'treatment_plans', label: 'Plano Singular', icon: Layers },
+            { id: 'assistive_tech', label: 'Tecnologia Assistiva', icon: Wrench },
+            { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
+                  isActive
+                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* BOTÕES DE FERRAMENTAS AVANÇADAS DE TO */}
+        {selectedPatientId && (
+          <div className="hidden xl:flex items-center gap-1.5 shrink-0 pl-3">
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
-                isActive
-                  ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-              }`}
+              type="button"
+              onClick={() => setIsTaskAnalysisOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-indigo-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-              <span>{tab.label}</span>
+              Análise de Tarefas
             </button>
-          );
-        })}
+            <button
+              type="button"
+              onClick={() => setIsRoutineMapOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-indigo-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
+            >
+              Mapa da Rotina
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsParticipationOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-indigo-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
+            >
+              Participação (MOHO)
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAIReportOpen(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-3 h-3 text-indigo-600" />
+              Relatório IA
+            </button>
+          </div>
+        )}
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}
@@ -501,6 +635,11 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
           </div>
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
+
+            {/* ABA 0: PAINEL FUNCIONAL LONGITUDINAL */}
+            {activeTab === 'dashboard' && (
+              <TODashboardView patientId={selectedPatientId} />
+            )}
 
             {/* ABA 1: PERFIL OCUPACIONAL */}
             {activeTab === 'profile' && (
@@ -590,14 +729,25 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-xl">
-                    <div className="text-right">
-                      <span className="text-[10px] uppercase font-bold text-indigo-800">Taxa de Independência</span>
-                      <p className="text-lg font-extrabold text-indigo-700">{adlSummary.pct}%</p>
-                    </div>
-                    <div className="h-8 w-px bg-indigo-200" />
-                    <div className="text-xs text-indigo-900 font-semibold">
-                      {adlSummary.total} de {adlSummary.max} pontos
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleOpenAdlComparison}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 transition-colors cursor-pointer"
+                    >
+                      <History className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Comparar Evolução</span>
+                    </button>
+
+                    <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-xl">
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold text-indigo-800">Taxa de Independência</span>
+                        <p className="text-lg font-extrabold text-indigo-700">{adlSummary.pct}%</p>
+                      </div>
+                      <div className="h-8 w-px bg-indigo-200" />
+                      <div className="text-xs text-indigo-900 font-semibold">
+                        {adlSummary.total} de {adlSummary.max} pontos
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -941,6 +1091,26 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
               </div>
             )}
 
+            {/* ABA: METAS TERAPÊUTICAS MENSURÁVEIS (LONGITUDINAIS) */}
+            {activeTab === 'goals' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                <MeasurableGoalsManager
+                  patientId={selectedPatientId}
+                  specialty="to"
+                />
+              </div>
+            )}
+
+            {/* ABA: PROGRAMAS DOMICILIARES E ESCOLARES */}
+            {activeTab === 'home_program' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                <HomeSchoolProgramManager
+                  patientId={selectedPatientId}
+                  specialty="to"
+                />
+              </div>
+            )}
+
             {/* ABA 6: TECNOLOGIA ASSISTIVA & ÓRTESES */}
             {activeTab === 'assistive_tech' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
@@ -1010,6 +1180,17 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                   </button>
                 </div>
 
+                {/* REGISTRO FOTOGRÁFICO EVOLUTIVO DE RECURSO / ÓRTESE */}
+                <div className="border-t border-slate-100 pt-4">
+                  <EvolutionPhotoField
+                    label="Registro Fotográfico Evolutivo da Órtese / Adaptação (Antes & Depois)"
+                    patientId={selectedPatientId}
+                    category="assistive_tech"
+                    photos={assistivePhotos}
+                    onChangePhotos={setAssistivePhotos}
+                  />
+                </div>
+
                 {/* LISTA DE RECURSOS CADASTRADOS */}
                 <div className="border-t border-slate-100 pt-4 space-y-3">
                   <h4 className="text-xs font-bold text-slate-800">Recursos Registrados</h4>
@@ -1033,7 +1214,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             {/* ABA 7: FINALIZAR ATENDIMENTO */}
             {activeTab === 'finish' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-indigo-600" />
@@ -1043,6 +1224,15 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                       Grava no prontuário do paciente com módulo ZemdaTO de forma atômica e segura.
                     </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAIReportOpen(true)}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all cursor-pointer shadow-xs"
+                  >
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    <span>Gerar Relatório com IA</span>
+                  </button>
                 </div>
 
                 <div>
@@ -1094,6 +1284,46 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
           </div>
         )}
       </div>
+
+      {/* MODAIS AVANÇADOS DE TERAPIA OCUPACIONAL */}
+      {selectedPatientId && (
+        <>
+          <TaskAnalysisModal
+            isOpen={isTaskAnalysisOpen}
+            onClose={() => setIsTaskAnalysisOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+          />
+          <RoutineMapModal
+            isOpen={isRoutineMapOpen}
+            onClose={() => setIsRoutineMapOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+          />
+          <OccupationalParticipationModal
+            isOpen={isParticipationOpen}
+            onClose={() => setIsParticipationOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+          />
+          <TOEvolutionReportModal
+            isOpen={isAIReportOpen}
+            onClose={() => setIsAIReportOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+            onInsertIntoConsultation={reportText => {
+              setConsultationEvolution(prev => (prev ? `${prev}\n\n${reportText}` : reportText));
+              setActiveTab('finish');
+            }}
+          />
+          <EvolutionComparisonModal
+            isOpen={isComparisonModalOpen}
+            onClose={() => setIsComparisonModalOpen(false)}
+            title={comparisonTitle}
+            items={comparisonItems}
+          />
+        </>
+      )}
     </div>
   );
 };

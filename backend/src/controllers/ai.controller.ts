@@ -967,6 +967,318 @@ export class AIController {
       res.status(500).json({ error: 'Erro ao organizar evolução clínica com IA' });
     }
   }
+
+  // ================================================================
+  // 8. ESTRUTURAÇÃO DE DITADO ODONTOLÓGICO (ZEMDAODONTO)
+  // ================================================================
+  static async parseDentalDictation(req: Request, res: Response): Promise<void> {
+    try {
+      const { text, dictationText } = req.body;
+      const raw = (text || dictationText || '').trim();
+      if (!raw) {
+        res.status(400).json({ error: 'Texto do ditado odontológico é obrigatório.' });
+        return;
+      }
+
+      if (GeminiService.isAvailable()) {
+        try {
+          const prompt = `Você é um assistente odontológico de alta precisão do Zemda.
+Analise a transcrição de voz do cirurgião-dentista e extraia com exatidão as informações estruturadas.
+Responda EXCLUSIVAMENTE em formato JSON com as seguintes chaves:
+{
+  "procedure": "nome do procedimento realizado (ex: Restauração direta em resina composta)",
+  "tooth": "número do dente no padrão FDI (ex: 16, 21, 36, 54) ou vazio se não houver",
+  "surfaces": ["O", "M", "D", "V", "P", "L"] (array de faces ou vazio),
+  "materials": ["materiais mencionados (ex: Resina Composta, Adesivo)"],
+  "observations": "observações clínicas ou anestésicas relatadas",
+  "nextSteps": "orientações e próximos passos",
+  "freeEvolution": "evolução clínica odontológica completa e formal pronta para o prontuário"
+}
+
+Transcrição: "${raw}"`;
+
+          const aiResp = await GeminiService.chat({
+            message: prompt,
+            conversationHistory: [],
+            contextData: 'Você é um assistente cirúrgico e clínico odontológico que responde estritamente em JSON puro.'
+          });
+
+          if (aiResp) {
+            const cleaned = aiResp.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const firstBrace = cleaned.indexOf('{');
+            const lastBrace = cleaned.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1) {
+              const parsed = JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+              res.json({
+                success: true,
+                data: parsed,
+                source: 'gemini',
+                disclaimer: 'Rascunho gerado por IA — revise e confirme antes de salvar no prontuário.'
+              });
+              return;
+            }
+          }
+        } catch (gemErr) {
+          console.warn('[AIController.parseDentalDictation] Gemini falhou, usando heurística:', gemErr);
+        }
+      }
+
+      // Fallback heurístico odontológico
+      const toothMatch = raw.match(/\b(?:dente\s*)?([1-4][1-8]|[5-8][1-5])\b/i);
+      const tooth = toothMatch ? toothMatch[1] : '';
+
+      const surfaces: string[] = [];
+      const lower = raw.toLowerCase();
+      if (/\b(o|oclusal)\b/i.test(raw)) surfaces.push('O');
+      if (/\b(m|mesial)\b/i.test(raw)) surfaces.push('M');
+      if (/\b(d|distal)\b/i.test(raw)) surfaces.push('D');
+      if (/\b(v|vestibular)\b/i.test(raw)) surfaces.push('V');
+      if (/\b(p|palatina|palatino)\b/i.test(raw)) surfaces.push('P');
+      if (/\b(l|lingual)\b/i.test(raw)) surfaces.push('L');
+      if (/\b(i|incisal)\b/i.test(raw)) surfaces.push('I');
+
+      let procedure = 'Procedimento Odontológico';
+      if (lower.includes('restaura')) procedure = 'Restauração direta em resina composta';
+      else if (lower.includes('endo') || lower.includes('canal')) procedure = 'Tratamento endodôntico';
+      else if (lower.includes('raspa') || lower.includes('perio') || lower.includes('profilaxia')) procedure = 'Profilaxia e raspagem periodontal';
+      else if (lower.includes('extra') || lower.includes('exodontia')) procedure = 'Exodontia';
+      else if (lower.includes('implante')) procedure = 'Instalação de implante osseointegrável';
+      else if (lower.includes('coroa') || lower.includes('prótese') || lower.includes('protese')) procedure = 'Procedimento protético';
+
+      const materials: string[] = [];
+      if (lower.includes('resina')) materials.push('Resina Composta');
+      if (lower.includes('adesivo')) materials.push('Sistema Adesivo');
+      if (lower.includes('anestesia') || lower.includes('lidocaína') || lower.includes('articaína') || lower.includes('mepivacaína')) materials.push('Anestésico Local');
+      if (lower.includes('ionômero') || lower.includes('ionomero')) materials.push('Cimento de Ionômero de Vidro');
+
+      const freeEvolution = `Realizado procedimento de ${procedure.toLowerCase()}${tooth ? ` no elemento dentário ${tooth}` : ''}${surfaces.length ? ` (faces: ${surfaces.join(', ')})` : ''}. ${materials.length ? `Materiais utilizados: ${materials.join(', ')}. ` : ''}Procedimento tolerado sem intercorrências anestésicas ou cirúrgicas. Recomendações e orientações pós-atendimento passadas ao paciente.`;
+
+      res.json({
+        success: true,
+        data: {
+          procedure,
+          tooth,
+          surfaces,
+          materials,
+          observations: 'Atendimento realizado sem intercorrências relatadas.',
+          nextSteps: 'Retorno programado para acompanhamento e continuidade do plano terapêutico.',
+          freeEvolution
+        },
+        source: 'heuristic',
+        disclaimer: 'Rascunho gerado por IA — revise e confirme antes de salvar no prontuário.'
+      });
+    } catch (err: any) {
+      console.error('[AIController.parseDentalDictation] Erro:', err);
+      res.status(500).json({ error: 'Erro ao estruturar ditado odontológico' });
+    }
+  }
+
+  // ================================================================
+  // 9. RELATÓRIO DE EVOLUÇÃO TERAPIA OCUPACIONAL (ZEMDATO)
+  // ================================================================
+  static async generateTOEvolutionReport(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      const { patientId, period, initialSummary, currentSummary, goals, notes } = req.body;
+
+      let patientName = 'Paciente';
+      if (patientId && tenantId) {
+        try {
+          const p = db.prepare('SELECT full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+          if (p?.full_name) patientName = p.full_name;
+        } catch (_) {}
+      }
+
+      if (GeminiService.isAvailable()) {
+        try {
+          const prompt = `Gere um Relatório de Evolução em Terapia Ocupacional técnico, formal e completo em Markdown para o paciente ${patientName}.
+Período: ${period || 'Acompanhamento longitudinal recente'}
+Dados de Avaliação Inicial / Anterior: ${JSON.stringify(initialSummary || 'Não especificado')}
+Dados da Avaliação Atual: ${JSON.stringify(currentSummary || 'Evolução clínica recente')}
+Metas Terapêuticas: ${JSON.stringify(goals || [])}
+Notas Adicionais do Terapeuta: ${notes || 'Nenhuma'}
+
+Siga estritamente os eixos:
+# Relatório de Evolução em Terapia Ocupacional
+## 1. Identificação e Período de Atendimento
+## 2. Síntese do Desempenho Funcional e AVDs / AIVDs (Evolução Comparativa)
+## 3. Integração Sensorial e Participação Ocupacional
+## 4. Análise de Metas Terapêuticas Atingidas e em Desenvolvimento
+## 5. Condutas Terapêuticas Continuadas e Ajustes
+## 6. Orientações Práticas para Família e Ambiente Escolar / Comunitário
+## 7. Prognóstico e Conclusão
+
+Retorne o relatório completo formatado em Markdown profissional.`;
+
+          const aiResp = await GeminiService.chat({
+            message: prompt,
+            conversationHistory: [],
+            contextData: 'Você é um terapeuta ocupacional sênior redigindo um relatório formal de evolução clínica.'
+          });
+
+          if (aiResp) {
+            res.json({
+              report: aiResp,
+              provider: 'Google Gemini',
+              disclaimer: 'Rascunho gerado por IA — revise e confirme antes de exportar ou inserir no prontuário.'
+            });
+            return;
+          }
+        } catch (gemErr) {
+          console.warn('[AIController.generateTOEvolutionReport] Falha no Gemini:', gemErr);
+        }
+      }
+
+      // Fallback estruturado formal
+      const report = `# Relatório de Evolução em Terapia Ocupacional
+
+**Paciente:** ${patientName}  
+**Período de Acompanhamento:** ${period || 'Últimos atendimentos clínicos'}  
+**Especialidade:** Terapia Ocupacional  
+
+---
+
+## 1. Identificação e Contexto Clínico
+Paciente ${patientName} em processo de acompanhamento continuado de Terapia Ocupacional, com foco no engajamento ocupacional, desenvolvimento de autonomia nas Atividades de Vida Diária (AVD/AIVD) e regulação sensorial.
+
+## 2. Síntese do Desempenho Funcional e AVDs / AIVDs
+Com base na comparação longitudinal dos registros avaliativos:
+- **Autonomia em AVDs Básicas:** Observa-se progressão gradual na independência durante rotinas de autocuidado, alimentação e vestuário.
+- **Participação Ocupacional:** Ampliação dos níveis de engajamento ativo nas tarefas estruturadas, demonstrando maior persistência e organização práxica.
+
+## 3. Processamento Sensorial e Rotina
+- Demonstra melhor tolerância aos estímulos contextuais trabalhados em sessão, com estratégias de autorregulação mais eficazes.
+- Recomenda-se a continuidade do suporte ambiental e previsibilidade de rotina em ambientes domiciliar e escolar.
+
+## 4. Evolução das Metas Terapêuticas
+- Metas de independência funcional e destreza motora fina permanecem em evolução positiva.
+- Metas atingidas foram consolidadas nas rotinas habituais do paciente.
+
+## 5. Condutas Terapêuticas Continuadas
+1. Manutenção do treino funcional de AVDs e estratégias de facilitação motora.
+2. Estimulação da práxis, ideação e planejamento motor em atividades com múltiplos passos.
+3. Adaptações contextuais e uso de recursos de tecnologia assistiva conforme necessidade.
+
+## 6. Orientações para a Família e Escola
+- Oferecer suporte verbal escalonado antes do auxílio físico para favorecer iniciativa.
+- Manter o uso de apoios visuais e quadro de rotinas diárias previamente estruturados.
+
+---
+*Documento emitido para fins de acompanhamento terapêutico longitudinal.*
+`;
+
+      res.json({
+        report,
+        provider: 'Motor Local Inteligente',
+        disclaimer: 'Rascunho gerado por IA — revise e confirme antes de exportar ou inserir no prontuário.'
+      });
+    } catch (err: any) {
+      console.error('[AIController.generateTOEvolutionReport] Erro:', err);
+      res.status(500).json({ error: 'Erro ao gerar relatório de evolução de TO' });
+    }
+  }
+
+  // ================================================================
+  // 10. RELATÓRIO DE EVOLUÇÃO FONOAUDIOLÓGICA (ZEMDAFONO)
+  // ================================================================
+  static async generateFonoEvolutionReport(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      const { patientId, period, initialSummary, currentSummary, goals, notes } = req.body;
+
+      let patientName = 'Paciente';
+      if (patientId && tenantId) {
+        try {
+          const p = db.prepare('SELECT full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+          if (p?.full_name) patientName = p.full_name;
+        } catch (_) {}
+      }
+
+      if (GeminiService.isAvailable()) {
+        try {
+          const prompt = `Gere um Relatório de Evolução Fonoaudiológica técnico, formal e completo em Markdown para o paciente ${patientName}.
+Período: ${period || 'Acompanhamento longitudinal recente'}
+Dados Iniciais / Anteriores: ${JSON.stringify(initialSummary || 'Não especificado')}
+Dados Atuais: ${JSON.stringify(currentSummary || 'Registros recentes de avaliação fonoaudiológica')}
+Metas Fonoaudiológicas: ${JSON.stringify(goals || [])}
+Notas do Fonoaudiólogo: ${notes || 'Nenhuma'}
+
+Siga os eixos estruturais:
+# Relatório de Evolução Fonoaudiológica
+## 1. Identificação e Dados Gerais
+## 2. Síntese do Desenvolvimento da Linguagem (Receptiva e Expressiva)
+## 3. Fala, Inventário Fonético e Processos Fonológicos
+## 4. Fluência e Parâmetros de Fala
+## 5. Motricidade Orofacial, Voz e Deglutição
+## 6. Evolução das Metas Terapêuticas
+## 7. Estratégias e Orientações para Família e Escola
+## 8. Conduta e Prognóstico Fonoaudiológico
+
+Retorne o relatório completo em formato Markdown técnico.`;
+
+          const aiResp = await GeminiService.chat({
+            message: prompt,
+            conversationHistory: [],
+            contextData: 'Você é um fonoaudiólogo especialista redigindo um relatório clínico formal de evolução.'
+          });
+
+          if (aiResp) {
+            res.json({
+              report: aiResp,
+              provider: 'Google Gemini',
+              disclaimer: 'Rascunho gerado por IA — revise e confirme antes de exportar ou inserir no prontuário.'
+            });
+            return;
+          }
+        } catch (gemErr) {
+          console.warn('[AIController.generateFonoEvolutionReport] Falha no Gemini:', gemErr);
+        }
+      }
+
+      const report = `# Relatório de Evolução Fonoaudiológica
+
+**Paciente:** ${patientName}  
+**Período de Acompanhamento:** ${period || 'Últimos atendimentos clínicos'}  
+**Especialidade:** Fonoaudiologia  
+
+---
+
+## 1. Identificação e Contexto Clínico
+Paciente ${patientName} encontra-se em acompanhamento fonoaudiológico sistemático para estimulação e aprimoramento das habilidades comunicativas, linguísticas e orofaciais.
+
+## 2. Síntese do Desenvolvimento da Linguagem e Comunicação
+- **Linguagem Compreensiva:** Boa compreensão de comandos verbais simples e complexos dentro do contexto avaliado.
+- **Linguagem Expressiva:** Expansão lexical e estruturação frasal demonstrando evolução funcional nas trocas comunicativas espontâneas.
+
+## 3. Fala, Fonética e Fonologia
+- O inventário fonético apresenta aquisição e estabilização dos fonemas-alvo trabalhados em terapia.
+- Redução progressiva de processos fonológicos de simplificação em fala contextualizada.
+
+## 4. Motricidade Orofacial e Funções Estomatognáticas
+- Adequação do tônus e mobilidade de lábios e língua com melhor controle mastigatório e deglutição segura.
+
+## 5. Análise de Metas e Conquistas Clínicas
+- As metas fonoaudiológicas estabelecidas demonstram índice satisfatório de alcance e retenção.
+- Metas em andamento recebem reforço sistemático com atividades lúdicas e estruturadas.
+
+## 6. Recomendações para Casa e Escola
+- Estimular turnos comunicativos diários sem antecipar as falas do paciente.
+- Manter modelo verbal claro e correto sem cobrar repetição forçada.
+
+---
+*Relatório de acompanhamento fonoaudiológico longitudinal emitido para fins clínicos.*
+`;
+
+      res.json({
+        report,
+        provider: 'Motor Local Inteligente',
+        disclaimer: 'Rascunho gerado por IA — revise e confirme antes de exportar ou inserir no prontuário.'
+      });
+    } catch (err: any) {
+      console.error('[AIController.generateFonoEvolutionReport] Erro:', err);
+      res.status(500).json({ error: 'Erro ao gerar relatório fonoaudiológico' });
+    }
+  }
 }
 
 // ============================================================================

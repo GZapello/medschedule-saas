@@ -39,7 +39,14 @@ export const DENTAL_CONDITIONS: ToothCondition[] = [
   { id: 'fracture', label: 'Dente Fraturado', color: '#e11d48', bgColor: 'bg-rose-500', borderColor: 'border-rose-600', description: 'Trinca ou fratura de esmalte/raiz', affectsFace: true },
   { id: 'sealant', label: 'Selante Preventivo', color: '#06b6d4', bgColor: 'bg-cyan-500', borderColor: 'border-cyan-600', description: 'Selamento de fóssulas e fissuras', affectsFace: true },
   { id: 'veneer', label: 'Faceta / Lente', color: '#0d9488', bgColor: 'bg-teal-600', borderColor: 'border-teal-700', description: 'Laminado cerâmico ou resina direta', affectsFace: true },
-  { id: 'periapical_lesion', label: 'Lesão Periapical', color: '#b91c1c', bgColor: 'bg-red-700', borderColor: 'border-red-800', description: 'Radiolucência periapical / granuloma / cisto', affectsWholeTooth: true }
+  { id: 'periapical_lesion', label: 'Lesão Periapical', color: '#b91c1c', bgColor: 'bg-red-700', borderColor: 'border-red-800', description: 'Radiolucência periapical / granuloma / cisto', affectsWholeTooth: true },
+  // Condições Odontopediátricas e Especiais
+  { id: 'amelogenesis', label: 'Amelogênese Imperfeita', color: '#c084fc', bgColor: 'bg-purple-400', borderColor: 'border-purple-500', description: 'Defeito estrutural de mineralização do esmalte', affectsWholeTooth: true },
+  { id: 'hmi', label: 'HMI (Hipomineralização)', color: '#f97316', bgColor: 'bg-orange-500', borderColor: 'border-orange-600', description: 'Hipomineralização molar-incisivo', affectsFace: true },
+  { id: 'natal_tooth', label: 'Dente Natal / Neonatal', color: '#06b6d4', bgColor: 'bg-cyan-500', borderColor: 'border-cyan-600', description: 'Dente irrompido ao nascimento ou dias após', affectsWholeTooth: true },
+  { id: 'anodontia', label: 'Agenesia / Anodontia', color: '#64748b', bgColor: 'bg-slate-500', borderColor: 'border-slate-600', description: 'Ausência congênita do elemento dental', affectsWholeTooth: true },
+  { id: 'supernumerary', label: 'Dente Supranumerário', color: '#a855f7', bgColor: 'bg-purple-600', borderColor: 'border-purple-700', description: 'Elemento dental supranumerário / mesiodens', affectsWholeTooth: true },
+  { id: 'trauma', label: 'Traumatismo Dental', color: '#ef4444', bgColor: 'bg-red-500', borderColor: 'border-red-600', description: 'Subluxação, intrusão, extrusão ou fratura por trauma infantil', affectsFace: true }
 ];
 
 export interface ToothStatus {
@@ -60,6 +67,7 @@ interface OdontogramCanvasProps {
   currentData?: OdontogramData;
   onChange?: (updatedCurrent: OdontogramData, changes: any[]) => void;
   onToothClick?: (toothNumber: number, face?: ToothFace) => void;
+  onOpenToothDossier?: (toothNumber: number) => void;
   readOnly?: boolean;
 }
 
@@ -69,14 +77,22 @@ const UPPER_LEFT = [21, 22, 23, 24, 25, 26, 27, 28];
 const LOWER_RIGHT = [48, 47, 46, 45, 44, 43, 42, 41];
 const LOWER_LEFT = [31, 32, 33, 34, 35, 36, 37, 38];
 
+// Numeração FDI decídua (infantil)
+const DECIDUOUS_UPPER_RIGHT = [55, 54, 53, 52, 51];
+const DECIDUOUS_UPPER_LEFT = [61, 62, 63, 64, 65];
+const DECIDUOUS_LOWER_RIGHT = [85, 84, 83, 82, 81];
+const DECIDUOUS_LOWER_LEFT = [71, 72, 73, 74, 75];
+
 export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
   initialData = {},
   currentData = {},
   onChange,
   onToothClick,
+  onOpenToothDossier,
   readOnly = false
 }) => {
   const [data, setData] = useState<OdontogramData>(currentData);
+  const [dentitionType, setDentitionType] = useState<'permanent' | 'deciduous' | 'mixed'>('permanent');
   const [activeCondition, setActiveCondition] = useState<string>('decay');
   const [viewMode, setViewMode] = useState<'current' | 'initial' | 'compare'>('current');
   const [selectedTeeth, setSelectedTeeth] = useState<number[]>([]);
@@ -95,7 +111,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
     return num >= 1 && num <= 3; // 11-13, 21-23, 31-33, 41-43
   };
 
-  const isUpper = (tooth: number) => tooth >= 11 && tooth <= 28;
+  const isUpper = (tooth: number) => (tooth >= 11 && tooth <= 28) || (tooth >= 51 && tooth <= 65);
 
   const handleFaceClick = (toothNumber: number, face: ToothFace, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -349,17 +365,32 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
           )}
         </div>
 
-        {/* Botão rápido para marcar dente inteiro */}
-        {!readOnly && viewMode !== 'initial' && (
-          <button
-            type="button"
-            title="Aplicar condição no dente inteiro"
-            onClick={(e) => handleFaceClick(toothNumber, 'whole', e)}
-            className="mt-1 text-[9px] font-bold text-slate-500 hover:text-cyan-600 hover:underline px-1 py-0.5"
-          >
-            Dente
-          </button>
-        )}
+        {/* Botões de Ação Rápida */}
+        <div className="flex items-center gap-1 mt-1">
+          {!readOnly && viewMode !== 'initial' && (
+            <button
+              type="button"
+              title="Aplicar condição no dente inteiro"
+              onClick={(e) => handleFaceClick(toothNumber, 'whole', e)}
+              className="text-[9px] font-bold text-slate-500 hover:text-cyan-600 hover:underline px-1 py-0.5"
+            >
+              Face
+            </button>
+          )}
+          {onOpenToothDossier && (
+            <button
+              type="button"
+              title="Abrir Dossiê Clínico do Dente"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenToothDossier(toothNumber);
+              }}
+              className="text-[9px] font-bold text-cyan-600 hover:text-cyan-800 bg-cyan-50 dark:bg-cyan-950/40 px-1 py-0.5 rounded border border-cyan-200 dark:border-cyan-800 transition"
+            >
+              Dossiê
+            </button>
+          )}
+        </div>
       </div>
     );
   };
@@ -403,6 +434,43 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
           >
             <Layers className="w-3.5 h-3.5" />
             Comparativo
+          </button>
+        </div>
+
+        {/* Seletor de Dentição (Permanente / Decídua / Mista) */}
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+          <button
+            type="button"
+            onClick={() => setDentitionType('permanent')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              dentitionType === 'permanent'
+                ? 'bg-cyan-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Permanente
+          </button>
+          <button
+            type="button"
+            onClick={() => setDentitionType('deciduous')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              dentitionType === 'deciduous'
+                ? 'bg-cyan-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Decídua (Infantil)
+          </button>
+          <button
+            type="button"
+            onClick={() => setDentitionType('mixed')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              dentitionType === 'mixed'
+                ? 'bg-cyan-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Mista
           </button>
         </div>
 
@@ -480,25 +548,44 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
       {/* Exibição Odontograma: Arcada Superior e Inferior */}
       <div className="bg-slate-50/70 border border-slate-200 rounded-3xl p-6 space-y-8 shadow-sm">
         {/* ARCADA SUPERIOR */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-2">
-            <span className="text-xs font-black uppercase tracking-wider text-slate-600">
-              Arcada Superior (Maxila) — Quadrante 1 & 2
-            </span>
-            <span className="text-[11px] text-slate-500 font-bold">Direita ← | → Esquerda</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Quadrante 1: 18 a 11 */}
-            <div className="flex justify-end gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
-              {UPPER_RIGHT.map((tooth) => renderTooth(tooth))}
+        <div className="space-y-4">
+          {(dentitionType === 'permanent' || dentitionType === 'mixed') && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-2">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-600">
+                  Arcada Superior Permanente (Maxila) — Quadrante 1 & 2
+                </span>
+                <span className="text-[11px] text-slate-500 font-bold">Direita ← | → Esquerda</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex justify-end gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
+                  {UPPER_RIGHT.map((tooth) => renderTooth(tooth))}
+                </div>
+                <div className="flex justify-start gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
+                  {UPPER_LEFT.map((tooth) => renderTooth(tooth))}
+                </div>
+              </div>
             </div>
+          )}
 
-            {/* Quadrante 2: 21 a 28 */}
-            <div className="flex justify-start gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
-              {UPPER_LEFT.map((tooth) => renderTooth(tooth))}
+          {(dentitionType === 'deciduous' || dentitionType === 'mixed') && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-2">
+                <span className="text-xs font-black uppercase tracking-wider text-cyan-700">
+                  Arcada Superior Decídua (Infantil) — Quadrante 5 & 6
+                </span>
+                <span className="text-[11px] text-slate-500 font-bold">55 a 51 ← | → 61 a 65</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex justify-end gap-1.5 p-2.5 bg-cyan-50/60 rounded-2xl border border-cyan-200 overflow-x-auto">
+                  {DECIDUOUS_UPPER_RIGHT.map((tooth) => renderTooth(tooth))}
+                </div>
+                <div className="flex justify-start gap-1.5 p-2.5 bg-cyan-50/60 rounded-2xl border border-cyan-200 overflow-x-auto">
+                  {DECIDUOUS_UPPER_LEFT.map((tooth) => renderTooth(tooth))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Divisor com Linha Média */}
@@ -510,25 +597,44 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
         </div>
 
         {/* ARCADA INFERIOR */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between px-2">
-            <span className="text-xs font-black uppercase tracking-wider text-slate-600">
-              Arcada Inferior (Mandíbula) — Quadrante 4 & 3
-            </span>
-            <span className="text-[11px] text-slate-500 font-bold">Direita ← | → Esquerda</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Quadrante 4: 48 a 41 */}
-            <div className="flex justify-end gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
-              {LOWER_RIGHT.map((tooth) => renderTooth(tooth))}
+        <div className="space-y-4">
+          {(dentitionType === 'deciduous' || dentitionType === 'mixed') && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-2">
+                <span className="text-xs font-black uppercase tracking-wider text-cyan-700">
+                  Arcada Inferior Decídua (Infantil) — Quadrante 8 & 7
+                </span>
+                <span className="text-[11px] text-slate-500 font-bold">85 a 81 ← | → 71 a 75</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex justify-end gap-1.5 p-2.5 bg-cyan-50/60 rounded-2xl border border-cyan-200 overflow-x-auto">
+                  {DECIDUOUS_LOWER_RIGHT.map((tooth) => renderTooth(tooth))}
+                </div>
+                <div className="flex justify-start gap-1.5 p-2.5 bg-cyan-50/60 rounded-2xl border border-cyan-200 overflow-x-auto">
+                  {DECIDUOUS_LOWER_LEFT.map((tooth) => renderTooth(tooth))}
+                </div>
+              </div>
             </div>
+          )}
 
-            {/* Quadrante 3: 31 a 38 */}
-            <div className="flex justify-start gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
-              {LOWER_LEFT.map((tooth) => renderTooth(tooth))}
+          {(dentitionType === 'permanent' || dentitionType === 'mixed') && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-2">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-600">
+                  Arcada Inferior Permanente (Mandíbula) — Quadrante 4 & 3
+                </span>
+                <span className="text-[11px] text-slate-500 font-bold">Direita ← | → Esquerda</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex justify-end gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
+                  {LOWER_RIGHT.map((tooth) => renderTooth(tooth))}
+                </div>
+                <div className="flex justify-start gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
+                  {LOWER_LEFT.map((tooth) => renderTooth(tooth))}
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

@@ -33,6 +33,13 @@ import {
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { OdontogramCanvas, OdontogramData } from './OdontogramCanvas';
+import { ToothDossierDrawer } from './ToothDossierDrawer';
+import { DentalAIDictationModal, DentalParsedData } from './DentalAIDictationModal';
+import { ProcedureSuggestionModal, ProcedureSuggestionItem } from './ProcedureSuggestionModal';
+import { Perio6SitesGrid } from './Perio6SitesGrid';
+import { DentalImplantsManager } from './DentalImplantsManager';
+import { DentalProstheticsKanban } from './DentalProstheticsKanban';
+import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
@@ -56,8 +63,22 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
   // Abas do Módulo
   const [activeTab, setActiveTab] = useState<
-    'odontogram' | 'perio' | 'endo' | 'anamnesis' | 'treatment_plans' | 'prosthetics' | 'ortho_hof' | 'documents'
+    'odontogram' | 'perio' | 'endo' | 'anamnesis' | 'treatment_plans' | 'prosthetics' | 'ortho_hof' | 'implants' | 'photos_exams' | 'documents'
   >('odontogram');
+
+  // Dossiê do dente
+  const [dossierToothNumber, setDossierToothNumber] = useState<number | null>(null);
+  const [isDossierOpen, setIsDossierOpen] = useState<boolean>(false);
+
+  // Ditado por IA
+  const [isDictationModalOpen, setIsDictationModalOpen] = useState<boolean>(false);
+
+  // Sugestões de atualização de odontograma
+  const [procedureSuggestions, setProcedureSuggestions] = useState<ProcedureSuggestionItem[]>([]);
+  const [isProcedureSuggestionOpen, setIsProcedureSuggestionOpen] = useState<boolean>(false);
+
+  // Fotos clínicas
+  const [clinicalPhotos, setClinicalPhotos] = useState<any[]>([]);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -404,7 +425,32 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         isSealed: true
       });
 
+      // Detecção de procedimentos para sugestão de atualização no odontograma
+      const textCombined = `${consultationEvolution} ${consultationProcedures}`;
+      const matches = Array.from(textCombined.matchAll(/\b(?:dente|el\.|elemento)?\s*([1-4][1-8]|[5-8][1-5])\b/gi));
+      const suggestions: ProcedureSuggestionItem[] = [];
+      for (const m of matches) {
+        const toothNum = parseInt(m[1]);
+        if (toothNum && !suggestions.some(s => s.toothNumber === toothNum)) {
+          let cond = 'restoration_resin';
+          const lower = textCombined.toLowerCase();
+          if (lower.includes('canal') || lower.includes('endo')) cond = 'endodontics';
+          else if (lower.includes('extra') || lower.includes('exodontia')) cond = 'missing';
+          else if (lower.includes('implante')) cond = 'implant';
+          else if (lower.includes('coroa') || lower.includes('bloco')) cond = 'crown_prosthesis';
 
+          suggestions.push({
+            toothNumber: toothNum,
+            suggestedCondition: cond,
+            procedureText: `Intervenção relatada no elemento ${toothNum}`
+          });
+        }
+      }
+
+      if (suggestions.length > 0) {
+        setProcedureSuggestions(suggestions);
+        setIsProcedureSuggestionOpen(true);
+      }
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao finalizar consulta');
     } finally {
@@ -639,6 +685,32 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
               <Shield className="w-4 h-4" />
               Anamnese Odonto
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('implants')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+                activeTab === 'implants'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Implantes & Cirurgia
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('photos_exams')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+                activeTab === 'photos_exams'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <Camera className="w-4 h-4" />
+              Fotos & Exames
+            </button>
           </div>
 
           {/* ========================================================================= */}
@@ -656,20 +728,35 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={handleSaveOdontogram}
-                  className="px-4 py-2 bg-cyan-600 text-white rounded-2xl text-xs font-bold hover:bg-cyan-700 shadow-sm flex items-center gap-2 disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  {saving ? 'Salvando...' : 'Salvar Odontograma'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDictationModalOpen(true)}
+                    className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white rounded-2xl text-xs font-bold hover:from-cyan-700 hover:to-indigo-700 shadow-sm flex items-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Ditado por IA
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleSaveOdontogram}
+                    className="px-4 py-2 bg-cyan-600 text-white rounded-2xl text-xs font-bold hover:bg-cyan-700 shadow-sm flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    {saving ? 'Salvando...' : 'Salvar Odontograma'}
+                  </button>
+                </div>
               </div>
 
               <OdontogramCanvas
                 initialData={initialOdontogramData}
                 currentData={odontogramData}
+                onOpenToothDossier={(toothNum) => {
+                  setDossierToothNumber(toothNum);
+                  setIsDossierOpen(true);
+                }}
                 onChange={(updated, changes) => {
                   setOdontogramData(updated);
                   setPendingToothChanges(prev => [...prev, ...changes]);
@@ -936,6 +1023,21 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                   </p>
                 </div>
               </div>
+
+              {/* Grade de 6 Sítios com Indicadores Automatizados */}
+              <Perio6SitesGrid
+                onSave={async (recs) => {
+                  try {
+                    await ApiClient.post('/v1/dentistry/perio', {
+                      patientId: selectedPatientId,
+                      records: recs
+                    });
+                    setSuccessMsg('Periodontograma de 6 sítios salvo com sucesso!');
+                  } catch (err) {
+                    setErrorMsg('Erro ao salvar periodontograma');
+                  }
+                }}
+              />
 
               {/* Registro Rápido de Sítio Periodontal */}
               <div className="p-6 bg-white border border-slate-200 rounded-3xl space-y-4 shadow-sm">
@@ -1237,6 +1339,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                 </div>
               </div>
 
+              {/* Painel Kanban do Laboratório Protético */}
+              <DentalProstheticsKanban patientId={selectedPatientId} />
+
               {/* Formulário de Envio ao Laboratório */}
               <div className="p-6 bg-white border border-slate-200 rounded-3xl space-y-4 shadow-sm">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1514,8 +1619,88 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
               </div>
             </div>
           )}
+
+          {/* ========================================================================= */}
+          {/* ABA 8: IMPLANTES & CIRURGIA */}
+          {/* ========================================================================= */}
+          {activeTab === 'implants' && (
+            <DentalImplantsManager patientId={selectedPatientId} />
+          )}
+
+          {/* ========================================================================= */}
+          {/* ABA 9: FOTOS & EXAMES */}
+          {/* ========================================================================= */}
+          {activeTab === 'photos_exams' && (
+            <div className="space-y-6">
+              <EvolutionPhotoField
+                label="Documentação Fotográfica Odontológica"
+                category="dental_photos"
+                patientId={selectedPatientId}
+                appointmentId={initialAppointmentId}
+                photos={clinicalPhotos}
+                onChangePhotos={setClinicalPhotos}
+              />
+            </div>
+          )}
         </div>
       )}
+
+      {/* Dossiê do Dente Drawer */}
+      <ToothDossierDrawer
+        isOpen={isDossierOpen}
+        onClose={() => setIsDossierOpen(false)}
+        patientId={selectedPatientId}
+        toothNumber={dossierToothNumber}
+      />
+
+      {/* Ditado Odontológico por IA (GERAR -> REVISAR -> CONFIRMAR -> SALVAR) */}
+      <DentalAIDictationModal
+        isOpen={isDictationModalOpen}
+        onClose={() => setIsDictationModalOpen(false)}
+        onApply={({ parsed, target }) => {
+          if (target === 'both' || target === 'evolution') {
+            setConsultationEvolution(prev => prev ? `${prev}\n\n${parsed.freeEvolution}` : parsed.freeEvolution);
+          }
+          if (target === 'both' || target === 'structured') {
+            if (parsed.procedure) {
+              const detail = `${parsed.procedure}${parsed.tooth ? ` dente ${parsed.tooth}` : ''}${parsed.surfaces.length ? ` (${parsed.surfaces.join(', ')})` : ''}`;
+              setConsultationProcedures(prev => prev ? `${prev}; ${detail}` : detail);
+            }
+            if (parsed.tooth) {
+              const toothNum = parseInt(parsed.tooth);
+              if (toothNum) {
+                setOdontogramData(prev => ({
+                  ...prev,
+                  [toothNum]: {
+                    ...prev[toothNum],
+                    whole: parsed.procedure.toLowerCase().includes('canal') ? 'endodontics' : 'restoration_resin'
+                  }
+                }));
+              }
+            }
+          }
+          setSuccessMsg('Ditado estruturado aplicado com sucesso!');
+        }}
+      />
+
+      {/* Sugestão de Atualização de Odontograma */}
+      <ProcedureSuggestionModal
+        isOpen={isProcedureSuggestionOpen}
+        onClose={() => setIsProcedureSuggestionOpen(false)}
+        suggestions={procedureSuggestions}
+        onConfirm={(accepted) => {
+          accepted.forEach(item => {
+            setOdontogramData(prev => ({
+              ...prev,
+              [item.toothNumber]: {
+                ...prev[item.toothNumber],
+                whole: item.suggestedCondition
+              }
+            }));
+          });
+          setSuccessMsg(`${accepted.length} elemento(s) atualizado(s) no Odontograma!`);
+        }}
+      />
     </div>
   );
 };

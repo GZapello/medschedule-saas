@@ -26,11 +26,22 @@ import {
   Target,
   BookOpen,
   MessageSquare,
-  Wind
+  Wind,
+  Layers
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+
+import { InteractiveAudiogram, AudiogramData } from './InteractiveAudiogram';
+import { FluencyCounterModal } from './FluencyCounterModal';
+import { LanguageSampleModal } from './LanguageSampleModal';
+import { DysphagiaMatrixModal } from './DysphagiaMatrixModal';
+import { AACManagerModal } from './AACManagerModal';
+import { FonoEvolutionReportModal } from './FonoEvolutionReportModal';
+import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
+import { HomeSchoolProgramManager } from '../common/HomeSchoolProgramManager';
+import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
 
 interface SpeechTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -52,9 +63,43 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
 
+  // Switcher de Área da Fonoaudiologia
+  const [practiceArea, setPracticeArea] = useState<
+    'fala_fonologia' | 'linguagem' | 'audiologia' | 'motricidade_orofacial' | 'voz' | 'disfagia' | 'fluencia' | 'educacional'
+  >('fala_fonologia');
+
+  // Modais Especializados de ZemdaFono
+  const [isFluencyModalOpen, setIsFluencyModalOpen] = useState(false);
+  const [isLanguageSampleModalOpen, setIsLanguageSampleModalOpen] = useState(false);
+  const [isDysphagiaModalOpen, setIsDysphagiaModalOpen] = useState(false);
+  const [isAACModalOpen, setIsAACModalOpen] = useState(false);
+  const [isAIReportOpen, setIsAIReportOpen] = useState(false);
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
+  const [comparisonItems, setComparisonItems] = useState<any[]>([]);
+  const [comparisonTitle, setComparisonTitle] = useState('Comparativo de Reavaliação Fonoaudiológica');
+
+  // Dados do Audiograma Interativo
+  const [audiogramData, setAudiogramData] = useState<AudiogramData>({
+    rightAir: { 250: 15, 500: 15, 1000: 10, 2000: 15, 4000: 20, 8000: 15 },
+    leftAir: { 250: 15, 500: 10, 1000: 15, 2000: 15, 4000: 15, 8000: 20 },
+    rightBone: {},
+    leftBone: {}
+  });
+
   // Abas do Módulo ZemdaFono
   const [activeTab, setActiveTab] = useState<
-    'anamnesis' | 'language' | 'phonemes' | 'orofacial' | 'voice' | 'fluency' | 'dysphagia' | 'audiology' | 'treatment_plans' | 'finish'
+    | 'phonemes'
+    | 'language'
+    | 'audiology'
+    | 'fluency'
+    | 'dysphagia'
+    | 'orofacial'
+    | 'voice'
+    | 'aac'
+    | 'goals'
+    | 'home_program'
+    | 'treatment_plans'
+    | 'finish'
   >('phonemes');
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -430,15 +475,34 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
           </div>
         </div>
 
-        {/* SELETOR DE PACIENTE */}
-        <div className="flex items-center gap-3">
-          <div className="relative min-w-[260px]">
+        {/* CONTROLES DO CABEÇALHO: ÁREA DE ATUAÇÃO E SELETOR DE PACIENTE */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* SWITCHER DE ÁREA DA FONOAUDIOLOGIA */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="text-[10px] font-extrabold uppercase text-slate-400">Área:</span>
+            <select
+              value={practiceArea}
+              onChange={e => setPracticeArea(e.target.value as any)}
+              className="text-xs font-bold text-sky-900 bg-transparent focus:outline-none cursor-pointer"
+            >
+              <option value="fala_fonologia">Fala e Fonologia Clínica</option>
+              <option value="linguagem">Linguagem Infantil / Adulto / TEA</option>
+              <option value="audiologia">Audiologia Clínica e PAC</option>
+              <option value="motricidade_orofacial">Motricidade Orofacial</option>
+              <option value="voz">Voz Clínica e Canto</option>
+              <option value="disfagia">Disfagia Orofaríngea e IDDSI</option>
+              <option value="fluencia">Fluência e Gagueira</option>
+              <option value="educacional">Fonoaudiologia Educacional / Escrita</option>
+            </select>
+          </div>
+
+          <div className="relative min-w-[240px]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <select
               value={selectedPatientId}
               disabled={!!initialAppointmentId}
               onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 focus:outline-none transition-colors"
+              className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 focus:outline-none transition-colors cursor-pointer"
             >
               <option value="">Selecione um Paciente...</option>
               {patients.map(p => (
@@ -458,36 +522,83 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* ABAS DE NAVEGAÇÃO */}
-      <div className="bg-white border-b border-slate-200 px-6 flex items-center gap-2 overflow-x-auto no-scrollbar">
-        {[
-          { id: 'phonemes', label: 'Painel Fonêmico', icon: MessageSquare },
-          { id: 'voice', label: 'Voz & Amostra de Áudio', icon: Volume2 },
-          { id: 'orofacial', label: 'Motricidade Orofacial', icon: Smile },
-          { id: 'language', label: 'Avaliação de Linguagem', icon: BookOpen },
-          { id: 'fluency', label: 'Fluência da Fala', icon: Wind },
-          { id: 'dysphagia', label: 'Disfagia & Deglutição', icon: Activity },
-          { id: 'audiology', label: 'Audiologia & PAC', icon: Ear },
-          { id: 'treatment_plans', label: 'Plano Terapêutico', icon: Target },
-          { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
+      {/* ABAS DE NAVEGAÇÃO E AÇÕES RÁPIDAS */}
+      <div className="bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+          {[
+            { id: 'phonemes', label: 'Painel Fonêmico', icon: MessageSquare },
+            { id: 'language', label: 'Linguagem', icon: BookOpen },
+            { id: 'audiology', label: 'Audiologia & Audiograma', icon: Ear },
+            { id: 'fluency', label: 'Fluência da Fala', icon: Wind },
+            { id: 'dysphagia', label: 'Disfagia & IDDSI', icon: Activity },
+            { id: 'orofacial', label: 'Motricidade Orofacial', icon: Smile },
+            { id: 'voice', label: 'Voz & Áudio', icon: Volume2 },
+            { id: 'aac', label: 'Comunicação CAA', icon: Layers },
+            { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
+            { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
+            { id: 'treatment_plans', label: 'Plano Singular', icon: FileText },
+            { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
+                  isActive
+                    ? 'border-sky-600 text-sky-700 bg-sky-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* FERRAMENTAS CLÍNICAS RÁPIDAS DE FONOAUDIOLOGIA */}
+        {selectedPatientId && (
+          <div className="hidden xl:flex items-center gap-1.5 shrink-0 pl-3">
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
-                isActive
-                  ? 'border-sky-600 text-sky-700 bg-sky-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-              }`}
+              type="button"
+              onClick={() => setIsFluencyModalOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-sky-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-sky-600' : 'text-slate-400'}`} />
-              <span>{tab.label}</span>
+              Contador de Fluência
             </button>
-          );
-        })}
+            <button
+              type="button"
+              onClick={() => setIsLanguageSampleModalOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-sky-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
+            >
+              Amostra Linguagem
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsDysphagiaModalOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-sky-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
+            >
+              Matriz Disfagia
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAACModalOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-sky-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
+            >
+              Gestor CAA
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAIReportOpen(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-3 h-3 text-sky-600" />
+              Relatório IA
+            </button>
+          </div>
+        )}
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}
@@ -881,7 +992,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             {/* ABA 4: AVALIAÇÃO DE LINGUAGEM */}
             {activeTab === 'language' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <BookOpen className="w-4 h-4 text-sky-600" />
@@ -891,6 +1002,15 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                       Níveis compreensivo, expressivo, pragmático e discurso narrativo.
                     </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsLanguageSampleModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-xl border border-sky-200 transition-colors cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Analisar Amostra (TTR & MLU)</span>
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -937,13 +1057,25 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             {/* ABA 5: FLUÊNCIA */}
             {activeTab === 'fluency' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <Wind className="w-4 h-4 text-sky-600" />
                       Avaliação da Fluência da Fala (Disfluências Comuns vs Gagueira)
                     </h3>
+                    <p className="text-xs text-slate-500">
+                      Taxa de elocução, disfluências típicas e rupturas gagas (SLD).
+                    </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsFluencyModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl border border-teal-200 transition-colors cursor-pointer"
+                  >
+                    <Wind className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Abrir Contador com Cronômetro</span>
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -972,13 +1104,25 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             {/* ABA 6: DISFAGIA */}
             {activeTab === 'dysphagia' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <Activity className="w-4 h-4 text-sky-600" />
                       Disfagia e Deglutição Funcional
                     </h3>
+                    <p className="text-xs text-slate-500">
+                      Rastreio de risco de broncoaspiração, sinais clínicos e matriz IDDSI.
+                    </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsDysphagiaModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 transition-colors cursor-pointer"
+                  >
+                    <Activity className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Matriz de Consistências IDDSI</span>
+                  </button>
                 </div>
 
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
@@ -1007,38 +1151,92 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 7: AUDIOLOGIA */}
+            {/* ABA 7: AUDIOLOGIA COM AUDIOGRAMA INTERATIVO SVG */}
             {activeTab === 'audiology' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="space-y-6">
+                <InteractiveAudiogram
+                  data={audiogramData}
+                  onChange={setAudiogramData}
+                />
+
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Exames Complementares de Audiologia e PAC
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Logoaudiometria (LRF e IPRF)</label>
+                      <input
+                        type="text"
+                        value={audiologyData.speechAudiometry}
+                        onChange={e => setAudiologyData({ ...audiologyData, speechAudiometry: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Imitanciometria / Timpanometria</label>
+                      <input
+                        type="text"
+                        value={audiologyData.tympanometry}
+                        onChange={e => setAudiologyData({ ...audiologyData, tympanometry: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ABA: COMUNICAÇÃO AUMENTATIVA E ALTERNATIVA (CAA / AAC) */}
+            {activeTab === 'aac' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Ear className="w-4 h-4 text-sky-600" />
-                      Audiologia Clínica e Processamento Auditivo Central
+                      <Layers className="w-4 h-4 text-purple-600" />
+                      Comunicação Aumentativa e Alternativa (CAA)
                     </h3>
+                    <p className="text-xs text-slate-500">
+                      Gestão de recursos de baixa e alta tecnologia, repertório de símbolos e parceiros comunicativos.
+                    </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAACModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-xl border border-purple-200 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Gerenciar Pranchas & Recursos CAA</span>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Audiometria Tonal Limiar (OD)</label>
-                    <input
-                      type="text"
-                      value={audiologyData.pureToneAudiometryRight}
-                      onChange={e => setAudiologyData({ ...audiologyData, pureToneAudiometryRight: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Audiometria Tonal Limiar (OE)</label>
-                    <input
-                      type="text"
-                      value={audiologyData.pureToneAudiometryLeft}
-                      onChange={e => setAudiologyData({ ...audiologyData, pureToneAudiometryLeft: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
+                <div className="p-4 rounded-2xl bg-purple-50/40 border border-purple-100 text-xs text-purple-900 space-y-1">
+                  <span className="font-bold block">Abordagem de Comunicação Inclusiva:</span>
+                  <p className="text-purple-800">
+                    O módulo CAA permite acompanhar o nível de comunicador (emergente, dependente do contexto ou independente), símbolos utilizados e rotinas de modelagem em casa e na escola.
+                  </p>
                 </div>
+              </div>
+            )}
+
+            {/* ABA: METAS TERAPÊUTICAS MENSURÁVEIS (LONGITUDINAIS) */}
+            {activeTab === 'goals' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                <MeasurableGoalsManager
+                  patientId={selectedPatientId}
+                  specialty="fono"
+                />
+              </div>
+            )}
+
+            {/* ABA: PROGRAMAS DOMICILIARES E ESCOLARES */}
+            {activeTab === 'home_program' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                <HomeSchoolProgramManager
+                  patientId={selectedPatientId}
+                  specialty="fono"
+                />
               </div>
             )}
 
@@ -1080,7 +1278,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             {/* ABA 9: FINALIZAR ATENDIMENTO */}
             {activeTab === 'finish' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-sky-600" />
@@ -1090,6 +1288,15 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                       Gera o registro oficial com todas as avaliações fonêmicas, vocais e plano fonoaudiológico vinculado de forma definitiva.
                     </p>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsAIReportOpen(true)}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all cursor-pointer shadow-xs"
+                  >
+                    <Sparkles className="w-4 h-4 text-teal-600" />
+                    <span>Gerar Relatório com IA</span>
+                  </button>
                 </div>
 
                 <div>
@@ -1141,6 +1348,63 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
           </div>
         )}
       </div>
+
+      {/* MODAIS AVANÇADOS DE FONOAUDIOLOGIA */}
+      {selectedPatientId && (
+        <>
+          <FluencyCounterModal
+            isOpen={isFluencyModalOpen}
+            onClose={() => setIsFluencyModalOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+          />
+          <LanguageSampleModal
+            isOpen={isLanguageSampleModalOpen}
+            onClose={() => setIsLanguageSampleModalOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+            onInsertAnalysis={text => {
+              setLanguageData((prev: any) => ({
+                ...prev,
+                notes: prev.notes ? `${prev.notes}\n\n${text}` : text
+              }));
+              setActiveTab('language');
+            }}
+          />
+          <DysphagiaMatrixModal
+            isOpen={isDysphagiaModalOpen}
+            onClose={() => setIsDysphagiaModalOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+            onInsertPrescription={text => {
+              setConsultationConducts(prev => (prev ? `${prev}\n\n${text}` : text));
+              setActiveTab('finish');
+            }}
+          />
+          <AACManagerModal
+            isOpen={isAACModalOpen}
+            onClose={() => setIsAACModalOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+          />
+          <FonoEvolutionReportModal
+            isOpen={isAIReportOpen}
+            onClose={() => setIsAIReportOpen(false)}
+            patientId={selectedPatientId}
+            patientName={selectedPatient?.full_name}
+            onInsertIntoConsultation={reportText => {
+              setConsultationEvolution(prev => (prev ? `${prev}\n\n${reportText}` : reportText));
+              setActiveTab('finish');
+            }}
+          />
+          <EvolutionComparisonModal
+            isOpen={isComparisonModalOpen}
+            onClose={() => setIsComparisonModalOpen(false)}
+            title={comparisonTitle}
+            items={comparisonItems}
+          />
+        </>
+      )}
     </div>
   );
 };

@@ -4,6 +4,7 @@ import fs from 'fs';
 import { runSeed } from './seed';
 import { migrateBilling } from './billing-migration';
 import { migrateConsultations } from './consultation-migration';
+import { migrateLongitudinalClinical } from './longitudinal-clinical.migration';
 import { seedExerciseLibrary } from './exercise-library.seed';
 
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
@@ -2374,4 +2375,5 @@ export function initializeDatabase(): void {
     console.error('[Database] Erro ao inicializar banco de dados:', err);
   }
   migrateBilling(rawDb);
+  migrateLongitudinalClinical(rawDb);
 }

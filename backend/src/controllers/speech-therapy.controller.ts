@@ -177,7 +177,28 @@ export class SpeechTherapyController {
       }
 
       const row = db.prepare('SELECT * FROM fono_language_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1').get(patientId, tenantId) as any;
-      res.json(row || null);
+      if (!row) {
+        res.json(null);
+        return;
+      }
+
+      const mappedData = {
+        ...row,
+        comprehensiveLanguage: row.comprehension || '',
+        expressiveLanguage: row.expression || '',
+        pragmatics: row.pragmatics || '',
+        semantics: row.semantics || '',
+        morphosyntax: row.morphosyntax || '',
+        narrativeDiscourse: row.narrative || '',
+        functionalComm: row.functional_comm || '',
+        aacDetails: row.aac_details || '',
+        notes: row.notes || ''
+      };
+
+      res.json({
+        ...mappedData,
+        data: mappedData
+      });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao buscar avaliação de linguagem' });
     }
@@ -191,11 +212,25 @@ export class SpeechTherapyController {
         return;
       }
 
-      const {
-        patientId, appointmentId, comprehension, expression, vocabulary,
-        semantics, morphosyntax, pragmatics, narrative, functionalComm,
-        aacDetails, notes
-      } = req.body;
+      const raw = req.body.data || req.body;
+      const patientId = req.body.patientId || raw.patientId;
+      const appointmentId = req.body.appointmentId || raw.appointmentId;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'patientId é obrigatório' });
+        return;
+      }
+
+      const comprehension = raw.comprehension || raw.comprehensiveLanguage || null;
+      const expression = raw.expression || raw.expressiveLanguage || null;
+      const vocabulary = raw.vocabulary || null;
+      const semantics = raw.semantics || null;
+      const morphosyntax = raw.morphosyntax || null;
+      const pragmatics = raw.pragmatics || null;
+      const narrative = raw.narrative || raw.narrativeDiscourse || null;
+      const functionalComm = raw.functionalComm || raw.functional_comm || null;
+      const aacDetails = raw.aacDetails || raw.aac_details || null;
+      const notes = raw.notes || null;
 
       let profId: string | null = null;
       if (req.user?.role === 'professional') {
@@ -212,12 +247,11 @@ export class SpeechTherapyController {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
-        comprehension || null, expression || null, vocabulary || null, semantics || null,
-        morphosyntax || null, pragmatics || null, narrative || null, functionalComm || null,
-        aacDetails || null, notes || null
+        comprehension, expression, vocabulary, semantics, morphosyntax,
+        pragmatics, narrative, functionalComm, aacDetails, notes
       );
 
-      res.status(201).json({ id, message: 'Avaliação de linguagem registrada' });
+      res.status(201).json({ id, message: 'Avaliação de linguagem registrada com sucesso' });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao salvar avaliação de linguagem' });
     }
@@ -239,9 +273,12 @@ export class SpeechTherapyController {
         return;
       }
 
+      let phonemesArr: any[] = [];
+      try { phonemesArr = JSON.parse(row.phonemes_json || '[]'); } catch { phonemesArr = []; }
+
       res.json({
         ...row,
-        phonemes: JSON.parse(row.phonemes_json || '{}')
+        phonemes: phonemesArr
       });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao buscar painel fonêmico' });
@@ -256,7 +293,14 @@ export class SpeechTherapyController {
         return;
       }
 
-      const { patientId, appointmentId, phonemes, phonologicalProcesses, intelligibility, articulationNotes, spontaneousSpeech, repetition } = req.body;
+      const { patientId, appointmentId } = req.body;
+      const phonemes = req.body.phonemes || req.body.phonemesData?.phonemes || req.body.data;
+      const phonologicalProcesses = req.body.phonologicalProcesses || null;
+      const intelligibility = req.body.intelligibility || null;
+      const articulationNotes = req.body.articulationNotes || null;
+      const spontaneousSpeech = req.body.spontaneousSpeech || null;
+      const repetition = req.body.repetition || null;
+
       if (!patientId || !phonemes) {
         res.status(400).json({ error: 'patientId e phonemes são obrigatórios' });
         return;
@@ -277,8 +321,8 @@ export class SpeechTherapyController {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
-        JSON.stringify(phonemes), phonologicalProcesses || null, intelligibility || null,
-        articulationNotes || null, spontaneousSpeech || null, repetition || null
+        JSON.stringify(phonemes), phonologicalProcesses, intelligibility,
+        articulationNotes, spontaneousSpeech, repetition
       );
 
       res.status(201).json({ id, message: 'Painel de fala e fonologia salvo com sucesso' });
@@ -302,9 +346,26 @@ export class SpeechTherapyController {
         res.json(null);
         return;
       }
+
+      let structures: any = {};
+      try { structures = JSON.parse(row.structures_json || '{}'); } catch { structures = {}; }
+
+      const combinedData = {
+        ...structures,
+        breathingMode: row.breathing || structures.breathingMode || 'nasal',
+        chewingPattern: row.chewing || structures.chewingPattern || 'bilateral_alternated',
+        swallowingPattern: row.swallowing || structures.swallowingPattern || 'typical',
+        speechMotor: row.speech_motor || structures.speechMotor || '',
+        mobility: row.mobility || structures.mobility || '',
+        force: row.force || structures.force || '',
+        tonus: row.tonus || structures.tonus || '',
+        notes: row.notes || structures.notes || ''
+      };
+
       res.json({
         ...row,
-        structures: row.structures_json ? JSON.parse(row.structures_json) : {}
+        structures,
+        data: combinedData
       });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao buscar motricidade orofacial' });
@@ -319,7 +380,33 @@ export class SpeechTherapyController {
         return;
       }
 
-      const { patientId, appointmentId, structures, mobility, force, tonus, breathing, chewing, swallowing, speechMotor, notes } = req.body;
+      const raw = req.body.data || req.body;
+      const patientId = req.body.patientId || raw.patientId;
+      const appointmentId = req.body.appointmentId || raw.appointmentId;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'patientId é obrigatório' });
+        return;
+      }
+
+      const structures = req.body.structures || {
+        lips: raw.lips,
+        tongue: raw.tongue,
+        cheeks: raw.cheeks,
+        hardSoftPalate: raw.hardSoftPalate,
+        mandibleOcclusion: raw.mandibleOcclusion,
+        frenulum: raw.frenulum
+      };
+
+      const mobility = raw.mobility || null;
+      const force = raw.force || null;
+      const tonus = raw.tonus || null;
+      const breathing = raw.breathing || raw.breathingMode || null;
+      const chewing = raw.chewing || raw.chewingPattern || null;
+      const swallowing = raw.swallowing || raw.swallowingPattern || null;
+      const speechMotor = raw.speechMotor || raw.speech_motor || null;
+      const notes = raw.notes || null;
+
       let profId: string | null = null;
       if (req.user?.role === 'professional') {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
@@ -334,8 +421,8 @@ export class SpeechTherapyController {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
-        structures ? JSON.stringify(structures) : null, mobility || null, force || null, tonus || null,
-        breathing || null, chewing || null, swallowing || null, speechMotor || null, notes || null
+        JSON.stringify(structures), mobility, force, tonus,
+        breathing, chewing, swallowing, speechMotor, notes
       );
 
       res.status(201).json({ id, message: 'Motricidade orofacial registrada com sucesso' });
@@ -355,7 +442,31 @@ export class SpeechTherapyController {
       }
 
       const rows = db.prepare('SELECT * FROM fono_voice_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
-      res.json(rows);
+      const latest = rows[0] || null;
+
+      let latestData: any = null;
+      if (latest) {
+        let sympObj: any = {};
+        try { sympObj = JSON.parse(latest.symptoms || '{}'); } catch { sympObj = {}; }
+
+        latestData = {
+          ...latest,
+          degreeOfDeviation: latest.vocal_quality || '0',
+          roughness: sympObj.roughness || '0',
+          breathiness: sympObj.breathiness || '0',
+          asthenia: sympObj.asthenia || '0',
+          strain: sympObj.strain || '0',
+          instability: sympObj.instability || '0',
+          pitch: latest.pitch || 'adequado',
+          loudness: latest.loudness || 'adequada',
+          tmfSSeconds: sympObj.tmfSSeconds || '16',
+          tmfZSeconds: sympObj.tmfZSeconds || '16',
+          audioUrl: latest.audio_url || '',
+          notes: latest.notes || ''
+        };
+      }
+
+      res.json(Object.assign(rows, { data: latestData }));
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao buscar avaliações de voz' });
     }
@@ -369,7 +480,38 @@ export class SpeechTherapyController {
         return;
       }
 
-      const { patientId, appointmentId, vocalQuality, pitch, loudness, resonance, vocalAttack, pneumophonoCoordination, audioUrl, symptoms, habits, professionalUse, notes } = req.body;
+      const raw = req.body.data || req.body;
+      const patientId = req.body.patientId || raw.patientId;
+      const appointmentId = req.body.appointmentId || raw.appointmentId;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'patientId é obrigatório' });
+        return;
+      }
+
+      const vocalQuality = raw.degreeOfDeviation || raw.vocalQuality || null;
+      const pitch = raw.pitch || null;
+      const loudness = raw.loudness || null;
+      const resonance = raw.resonance || null;
+      const vocalAttack = raw.vocalAttack || null;
+      const pneumophonoCoordination = raw.pneumophonoCoordination || null;
+      const audioUrl = raw.audioUrl || raw.audio_url || null;
+
+      const symptomsObj = {
+        roughness: raw.roughness,
+        breathiness: raw.breathiness,
+        asthenia: raw.asthenia,
+        strain: raw.strain,
+        instability: raw.instability,
+        tmfSSeconds: raw.tmfSSeconds,
+        tmfZSeconds: raw.tmfZSeconds
+      };
+
+      const symptoms = JSON.stringify(symptomsObj);
+      const habits = raw.habits || null;
+      const professionalUse = raw.professionalUse || null;
+      const notes = raw.notes || null;
+
       let profId: string | null = null;
       if (req.user?.role === 'professional') {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
@@ -385,8 +527,8 @@ export class SpeechTherapyController {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
-        vocalQuality || null, pitch || null, loudness || null, resonance || null, vocalAttack || null,
-        pneumophonoCoordination || null, audioUrl || null, symptoms || null, habits || null, professionalUse || null, notes || null
+        vocalQuality, pitch, loudness, resonance, vocalAttack,
+        pneumophonoCoordination, audioUrl, symptoms, habits, professionalUse, notes
       );
 
       res.status(201).json({ id, message: 'Avaliação vocal salva com sucesso' });
@@ -406,7 +548,22 @@ export class SpeechTherapyController {
       }
 
       const rows = db.prepare('SELECT * FROM fono_fluency_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
-      res.json(rows);
+      const latest = rows[0] || null;
+
+      let latestData: any = null;
+      if (latest) {
+        latestData = {
+          ...latest,
+          wordsPerMinute: latest.frequency || '120',
+          typicalDisfluencies: latest.disfluency_types || '',
+          atypicalDisfluencies: latest.blocks || '',
+          physicalTension: latest.tension || '',
+          diagnosisFluency: latest.impact || '',
+          notes: latest.notes || ''
+        };
+      }
+
+      res.json(Object.assign(rows, { data: latestData }));
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao buscar avaliações de fluência' });
     }
@@ -420,7 +577,25 @@ export class SpeechTherapyController {
         return;
       }
 
-      const { patientId, appointmentId, disfluencyTypes, frequency, tension, blocks, prolongations, repetitions, associatedBehaviors, impact, notes } = req.body;
+      const raw = req.body.data || req.body;
+      const patientId = req.body.patientId || raw.patientId;
+      const appointmentId = req.body.appointmentId || raw.appointmentId;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'patientId é obrigatório' });
+        return;
+      }
+
+      const disfluencyTypes = raw.typicalDisfluencies || raw.disfluencyTypes || null;
+      const frequency = raw.wordsPerMinute || raw.frequency || null;
+      const tension = raw.physicalTension || raw.tension || null;
+      const blocks = raw.atypicalDisfluencies || raw.blocks || null;
+      const prolongations = raw.prolongations || null;
+      const repetitions = raw.repetitions || null;
+      const associatedBehaviors = raw.associatedBehaviors || null;
+      const impact = raw.diagnosisFluency || raw.impact || null;
+      const notes = raw.notes || null;
+
       let profId: string | null = null;
       if (req.user?.role === 'professional') {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
@@ -436,8 +611,8 @@ export class SpeechTherapyController {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
-        disfluencyTypes || null, frequency || null, tension || null, blocks || null, prolongations || null,
-        repetitions || null, associatedBehaviors || null, impact || null, notes || null
+        disfluencyTypes, frequency, tension, blocks, prolongations,
+        repetitions, associatedBehaviors, impact, notes
       );
 
       res.status(201).json({ id, message: 'Avaliação de fluência registrada' });
@@ -457,7 +632,26 @@ export class SpeechTherapyController {
       }
 
       const rows = db.prepare('SELECT * FROM fono_dysphagia_assessments WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
-      res.json(rows);
+      const latest = rows[0] || null;
+
+      let latestData: any = null;
+      if (latest) {
+        let tested: any = {};
+        let signs: any = {};
+        try { tested = JSON.parse(latest.food_consistency || '{}'); } catch { tested = {}; }
+        try { signs = JSON.parse(latest.clinical_signs || '{}'); } catch { signs = {}; }
+
+        latestData = {
+          ...latest,
+          testedConsistencies: tested,
+          penetrationAspirationSigns: signs,
+          compensatoryManeuvers: latest.recommendations || '',
+          dietaryConsistencyPrescribed: latest.dietary_consistency || 'Geral',
+          notes: latest.notes || ''
+        };
+      }
+
+      res.json(Object.assign(rows, { data: latestData }));
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao buscar avaliações de disfagia' });
     }
@@ -471,7 +665,28 @@ export class SpeechTherapyController {
         return;
       }
 
-      const { patientId, appointmentId, foodConsistency, utensil, posture, lipClosure, chewing, oralTransit, clinicalSigns, coughChoke, wetVoice, feedingTime, recommendations, notes } = req.body;
+      const raw = req.body.data || req.body;
+      const patientId = req.body.patientId || raw.patientId;
+      const appointmentId = req.body.appointmentId || raw.appointmentId;
+
+      if (!patientId) {
+        res.status(400).json({ error: 'patientId é obrigatório' });
+        return;
+      }
+
+      const foodConsistency = raw.testedConsistencies ? JSON.stringify(raw.testedConsistencies) : (raw.foodConsistency || null);
+      const utensil = raw.utensil || null;
+      const posture = raw.posture || null;
+      const lipClosure = raw.lipClosure || null;
+      const chewing = raw.chewing || null;
+      const oralTransit = raw.oralTransit || null;
+      const clinicalSigns = raw.penetrationAspirationSigns ? JSON.stringify(raw.penetrationAspirationSigns) : (raw.clinicalSigns || null);
+      const coughChoke = raw.coughChoke || null;
+      const wetVoice = raw.wetVoice || null;
+      const feedingTime = raw.feedingTime || null;
+      const recommendations = raw.compensatoryManeuvers || raw.recommendations || null;
+      const notes = raw.notes || null;
+
       let profId: string | null = null;
       if (req.user?.role === 'professional') {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
@@ -487,8 +702,8 @@ export class SpeechTherapyController {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
-        foodConsistency || null, utensil || null, posture || null, lipClosure || null, chewing || null,
-        oralTransit || null, clinicalSigns || null, coughChoke || null, wetVoice || null, feedingTime || null, recommendations || null, notes || null
+        foodConsistency, utensil, posture, lipClosure, chewing,
+        oralTransit, clinicalSigns, coughChoke, wetVoice, feedingTime, recommendations, notes
       );
 
       res.status(201).json({ id, message: 'Avaliação de disfagia/alimentação salva com sucesso' });
@@ -497,7 +712,332 @@ export class SpeechTherapyController {
     }
   }
 
-  // 8. AUDIOLOGIA & EXAMES
+  // 7.1 MATRIZ DE CONSISTÊNCIAS DE DISFAGIA (Item 46)
+  static getDysphagiaMatrix(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const row = db.prepare(`
+        SELECT * FROM fono_dysphagia_matrix
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY created_at DESC LIMIT 1
+      `).get(patientId, tenantId) as any;
+
+      if (!row) {
+        res.json(null);
+        return;
+      }
+
+      res.json({
+        ...row,
+        trials: (() => { try { return JSON.parse(row.trials_json); } catch { return []; } })()
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao buscar matriz de consistências' });
+    }
+  }
+
+  static saveDysphagiaMatrix(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const { patientId, trials, generalObservations } = req.body;
+      if (!patientId || !trials) {
+        res.status(400).json({ error: 'patientId e trials são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const id = 'f-mat-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO fono_dysphagia_matrix (
+          id, tenant_id, patient_id, professional_id, trials_json, general_observations
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, tenantId, patientId, profId, JSON.stringify(trials), generalObservations || null);
+
+      res.status(201).json({ id, message: 'Matriz de consistências salva com sucesso' });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar matriz de consistências' });
+    }
+  }
+
+  // 7.2 PROCESSOS FONOLÓGICOS ESTRUTURADOS (Item 37)
+  static getPhonologicalProcesses(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const row = db.prepare(`
+        SELECT * FROM fono_phonological_processes
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY created_at DESC LIMIT 1
+      `).get(patientId, tenantId) as any;
+
+      if (!row) {
+        res.json(null);
+        return;
+      }
+
+      res.json({
+        ...row,
+        processes: (() => { try { return JSON.parse(row.processes_json); } catch { return []; } })()
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao buscar processos fonológicos' });
+    }
+  }
+
+  static savePhonologicalProcesses(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const { patientId, processes, notes } = req.body;
+      if (!patientId || !processes) {
+        res.status(400).json({ error: 'patientId e processes são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const id = 'f-prc-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO fono_phonological_processes (
+          id, tenant_id, patient_id, professional_id, processes_json, notes
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, tenantId, patientId, profId, JSON.stringify(processes), notes || null);
+
+      res.status(201).json({ id, message: 'Processos fonológicos registrados com sucesso' });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar processos fonológicos' });
+    }
+  }
+
+  // 7.3 CONTADOR DE FLUÊNCIA E AMOSTRAS (Item 38)
+  static listFluencySamples(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT * FROM fono_fluency_samples
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao listar amostras de fluência' });
+    }
+  }
+
+  static saveFluencySample(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const {
+        patientId, durationSeconds, wordsCount, syllablesCount,
+        repetitions = 0, prolongations = 0, blocks = 0,
+        interjections = 0, revisions = 0, pauses = 0, notes
+      } = req.body;
+
+      if (!patientId || !durationSeconds || wordsCount === undefined || syllablesCount === undefined) {
+        res.status(400).json({ error: 'patientId, durationSeconds, wordsCount e syllablesCount são obrigatórios' });
+        return;
+      }
+
+      const durMin = durationSeconds > 0 ? durationSeconds / 60 : 1;
+      const wpm = Math.round((wordsCount / durMin) * 10) / 10;
+      const spm = Math.round((syllablesCount / durMin) * 10) / 10;
+
+      const stutteringDisfluencies = Number(repetitions) + Number(prolongations) + Number(blocks);
+      const totalDisfluencies = stutteringDisfluencies + Number(interjections) + Number(revisions) + Number(pauses);
+
+      const disfluencyPct = syllablesCount > 0 ? Math.round((totalDisfluencies / syllablesCount) * 1000) / 10 : 0;
+      const stutteringPct = syllablesCount > 0 ? Math.round((stutteringDisfluencies / syllablesCount) * 1000) / 10 : 0;
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const id = 'f-flu-smp-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO fono_fluency_samples (
+          id, tenant_id, patient_id, professional_id, duration_seconds,
+          words_count, syllables_count, repetitions, prolongations, blocks,
+          interjections, revisions, pauses, disfluency_percentage,
+          stuttering_percentage, speaking_rate_wpm, speaking_rate_spm, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, durationSeconds,
+        wordsCount, syllablesCount, repetitions, prolongations, blocks,
+        interjections, revisions, pauses, disfluencyPct, stutteringPct,
+        wpm, spm, notes || null
+      );
+
+      res.status(201).json({
+        id,
+        wpm,
+        spm,
+        disfluencyPct,
+        stutteringPct,
+        message: 'Amostra de fluência computada com sucesso'
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar amostra de fluência' });
+    }
+  }
+
+  // 7.4 COMUNICAÇÃO AUMENTATIVA E ALTERNATIVA - CAA (Item 42)
+  static listAacRecords(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT * FROM fono_aac_records
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao buscar registros de CAA' });
+    }
+  }
+
+  static saveAacRecord(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const {
+        patientId, systemUsed, modality, accessMethod, symbolsType,
+        vocabularyDetails, communicativeIntention, supportLevel,
+        communicationPartners, environments, evolutionLevel = 'emergent', notes
+      } = req.body;
+
+      if (!patientId || !systemUsed) {
+        res.status(400).json({ error: 'patientId e systemUsed são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const id = 'f-aac-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO fono_aac_records (
+          id, tenant_id, patient_id, professional_id, system_used,
+          modality, access_method, symbols_type, vocabulary_details,
+          communicative_intention, support_level, communication_partners,
+          environments, evolution_level, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, systemUsed,
+        modality || null, accessMethod || null, symbolsType || null, vocabularyDetails || null,
+        communicativeIntention || null, supportLevel || null, communicationPartners || null,
+        environments || null, evolutionLevel, notes || null
+      );
+
+      res.status(201).json({ id, message: 'Registro de CAA cadastrado com sucesso' });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar registro de CAA' });
+    }
+  }
+
+  // 7.5 ANÁLISE DE AMOSTRA DE LINGUAGEM (Item 41)
+  static analyzeLanguageSample(req: Request, res: Response): void {
+    try {
+      const { text } = req.body;
+      if (!text || typeof text !== 'string') {
+        res.status(400).json({ error: 'Texto da transcrição é obrigatório' });
+        return;
+      }
+
+      const cleaned = text.trim();
+      const words = cleaned.toLowerCase().match(/[\p{L}\p{N}']+/gu) || [];
+      const totalWords = words.length;
+
+      // Enunciados divididos por pontuação (. ! ? \n)
+      const utterances = cleaned.split(/[.!?\n]+/).map(u => u.trim()).filter(u => u.length > 0);
+      const totalUtterances = utterances.length || 1;
+
+      // Diversidade lexical (TTR = tipos únicos / total de palavras)
+      const uniqueWords = new Set(words);
+      const lexicalDiversityTTR = totalWords > 0 ? Math.round((uniqueWords.size / totalWords) * 100) / 100 : 0;
+
+      // Extensão média do enunciado (MLU em palavras)
+      const meanLengthUtterance = totalWords > 0 ? Math.round((totalWords / totalUtterances) * 10) / 10 : 0;
+
+      // Frequência das 10 palavras mais comuns
+      const freqMap: Record<string, number> = {};
+      for (const w of words) {
+        freqMap[w] = (freqMap[w] || 0) + 1;
+      }
+      const topWords = Object.entries(freqMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([word, count]) => ({ word, count }));
+
+      res.json({
+        totalWords,
+        totalUtterances,
+        uniqueWordsCount: uniqueWords.size,
+        lexicalDiversityTTR,
+        meanLengthUtterance,
+        topWords
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao analisar amostra de linguagem' });
+    }
+  }
+
   static listAudiology(req: Request, res: Response): void {
     try {
       const patientId = String(req.params.patientId);
