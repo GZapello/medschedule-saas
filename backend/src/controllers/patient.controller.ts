@@ -119,8 +119,11 @@ export class PatientController {
         notesAdmin, isChild, petMetadata, guardians
       } = req.body;
 
-      if (!fullName || !phone) {
-        res.status(400).json({ error: 'Nome completo e telefone são obrigatórios' });
+      const effectiveFullName = String(fullName || req.body.name || '').trim();
+      const effectivePhone = String(phone || req.body.telephone || '').trim() || '(00) 00000-0000';
+
+      if (!effectiveFullName) {
+        res.status(400).json({ error: 'Nome completo é obrigatório' });
         return;
       }
 
@@ -131,18 +134,18 @@ export class PatientController {
           address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
           notes_admin, is_child, pet_metadata_json, active
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `);
 
       insertStmt.run(
         patientId,
         tenantId,
-        fullName,
+        effectiveFullName,
         socialName || null,
         birthDate || null,
         cpf || null,
         email || null,
-        phone,
+        effectivePhone,
         whatsapp || phone,
         address || null,
         city || null,
@@ -201,6 +204,9 @@ export class PatientController {
         guardians
       } = req.body;
 
+      const effectiveFullName = fullName !== undefined ? (fullName ? String(fullName).trim() : null) : (req.body.name !== undefined ? (req.body.name ? String(req.body.name).trim() : null) : null);
+      const effectivePhoto = photoUrl !== undefined ? photoUrl : (req.body.avatar_url !== undefined ? req.body.avatar_url : null);
+
       const updateStmt = db.prepare(`
         UPDATE patients SET
           full_name = COALESCE(?, full_name),
@@ -228,7 +234,7 @@ export class PatientController {
       `);
 
       updateStmt.run(
-        fullName || null,
+        effectiveFullName || null,
         socialName || null,
         birthDate || null,
         cpf || null,
@@ -239,7 +245,7 @@ export class PatientController {
         city || null,
         state || null,
         zipCode || null,
-        photoUrl || null,
+        effectivePhoto || null,
         emergencyContact || null,
         emergencyPhone || null,
         notesAdmin || null,

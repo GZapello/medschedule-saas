@@ -478,8 +478,15 @@ api.get('/v1/personal/search', requireTenant, requireRole('clinic_admin', 'profe
 
 // Alunos
 api.get('/v1/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listStudents);
+api.get('/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listStudents);
 api.get('/v1/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getStudent);
+api.get('/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getStudent);
+api.post('/v1/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createStudent);
+api.post('/personal/students', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createStudent);
+api.put('/v1/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateStudent);
+api.put('/personal/students/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateStudent);
 api.post('/v1/personal/students/:id/profile', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.upsertProfile);
+api.post('/personal/students/:id/profile', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.upsertProfile);
 api.get('/v1/personal/students/:studentId/attendance', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAttendanceStats);
 api.get('/v1/personal/students/:studentId/records', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getRecords);
 
@@ -503,9 +510,13 @@ api.delete('/v1/personal/photos/:id', requireTenant, requireRole('clinic_admin',
 
 // Exercícios
 api.get('/v1/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listExercises);
+api.get('/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listExercises);
 api.post('/v1/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createExercise);
+api.post('/personal/exercises', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createExercise);
 api.put('/v1/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateExercise);
+api.put('/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateExercise);
 api.delete('/v1/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteExercise);
+api.delete('/personal/exercises/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteExercise);
 
 // Treinos
 api.get('/v1/personal/workouts', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listWorkouts);

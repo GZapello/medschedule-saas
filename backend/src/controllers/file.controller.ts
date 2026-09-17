@@ -21,10 +21,12 @@ export class FileController {
       }
 
       const { patientId, appointmentId, category, filename, mimeType, fileSize } = req.body;
+      const safeCategory = String(category || 'general').trim();
+      const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || safeCategory === 'exercises';
 
-      if (!patientId || !filename || !mimeType || fileSize === undefined || fileSize === null) {
+      if ((!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || fileSize === undefined || fileSize === null) {
         res.status(400).json({
-          error: 'patientId, filename, mimeType e fileSize são obrigatórios'
+          error: 'filename, mimeType e fileSize são obrigatórios' + (!isClinicOrExerciseAsset ? ' (e patientId para arquivos de pacientes)' : '')
         });
         return;
       }
@@ -49,16 +51,18 @@ export class FileController {
         return;
       }
 
-      // Validação de acesso ao paciente pela clínica autenticada
-      const patient = db
-        .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
-        .get(patientId, tenantId) as any;
+      // Validação de acesso ao paciente pela clínica autenticada (se for anexo de paciente)
+      if (!isClinicOrExerciseAsset && patientId) {
+        const patient = db
+          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
+          .get(patientId, tenantId) as any;
 
-      if (!patient) {
-        res.status(404).json({
-          error: 'Paciente não encontrado ou não pertence a esta clínica'
-        });
-        return;
+        if (!patient) {
+          res.status(404).json({
+            error: 'Paciente não encontrado ou não pertence a esta clínica'
+          });
+          return;
+        }
       }
 
       // Se fornecido appointmentId, valida também vínculo com a clínica
@@ -75,10 +79,9 @@ export class FileController {
       }
 
       // Geração de chave de objeto anônima e segura
-      const safeCategory = String(category || 'general').trim();
       const objectKey = r2StorageService.generateObjectKey(
         tenantId,
-        patientId,
+        isClinicOrExerciseAsset ? null : patientId,
         safeCategory,
         String(filename)
       );
@@ -122,33 +125,45 @@ export class FileController {
         fileSize
       } = req.body;
 
-      if (!objectKey || !patientId || !filename || !mimeType || !fileSize) {
+      const safeCategory = String(category || 'general').trim();
+      const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || safeCategory === 'exercises';
+
+      if (!objectKey || (!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || !fileSize) {
         res.status(400).json({
-          error: 'objectKey, patientId, filename, mimeType e fileSize são obrigatórios'
+          error: 'objectKey, filename, mimeType e fileSize são obrigatórios'
         });
         return;
       }
 
       // Validação estrita de isolamento multiclínica na chave do objeto
-      // A chave DEVE iniciar com clinics/{tenantId}/patients/{patientId}/
-      const expectedPrefix = `clinics/${tenantId}/patients/${patientId}/`;
-      if (!String(objectKey).startsWith(expectedPrefix)) {
+      // A chave DEVE iniciar com clinics/{tenantId}/
+      if (!String(objectKey).startsWith(`clinics/${tenantId}/`)) {
         res.status(403).json({
-          error: 'Chave de objeto incompatível com o contexto da clínica e paciente autenticados'
+          error: 'Chave de objeto incompatível com o contexto da clínica autenticada'
         });
         return;
       }
 
-      // Validação de acesso ao paciente
-      const patient = db
-        .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
-        .get(patientId, tenantId) as any;
+      if (!isClinicOrExerciseAsset && patientId) {
+        const expectedPrefix = `clinics/${tenantId}/patients/${patientId}/`;
+        if (!String(objectKey).startsWith(expectedPrefix)) {
+          res.status(403).json({
+            error: 'Chave de objeto incompatível com o contexto da clínica e paciente autenticados'
+          });
+          return;
+        }
 
-      if (!patient) {
-        res.status(404).json({
-          error: 'Paciente não encontrado ou não pertence a esta clínica'
-        });
-        return;
+        // Validação de acesso ao paciente
+        const patient = db
+          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
+          .get(patientId, tenantId) as any;
+
+        if (!patient) {
+          res.status(404).json({
+            error: 'Paciente não encontrado ou não pertence a esta clínica'
+          });
+          return;
+        }
       }
 
       // Verificação de existência real no Cloudflare R2 via HeadObject
@@ -162,26 +177,52 @@ export class FileController {
 
       // Persistência exclusiva de metadados no banco de dados relacional
       const attachmentId = 'att-' + uuidv4();
-      const safeCategory = String(category || 'general').trim();
+      const targetPatientId = isClinicOrExerciseAsset ? null : patientId;
 
-      db.prepare(`
-        INSERT INTO file_attachments (
-          id, clinic_id, patient_id, appointment_id, uploaded_by,
-          storage_provider, object_key, original_filename, mime_type,
-          file_size, category, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-      `).run(
-        attachmentId,
-        tenantId,
-        patientId,
-        appointmentId || null,
-        userId,
-        objectKey,
-        String(filename),
-        String(mimeType),
-        Number(fileSize),
-        safeCategory
-      );
+      try {
+        db.prepare(`
+          INSERT INTO file_attachments (
+            id, clinic_id, patient_id, appointment_id, uploaded_by,
+            storage_provider, object_key, original_filename, mime_type,
+            file_size, category, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(
+          attachmentId,
+          tenantId,
+          targetPatientId,
+          appointmentId || null,
+          userId,
+          objectKey,
+          String(filename),
+          String(mimeType),
+          Number(fileSize),
+          safeCategory
+        );
+      } catch (insertErr: any) {
+        // Se banco legado exigir NOT NULL em patient_id, fallback seguro
+        if (String(insertErr?.message || '').includes('NOT NULL constraint failed: file_attachments.patient_id')) {
+          db.prepare(`
+            INSERT INTO file_attachments (
+              id, clinic_id, patient_id, appointment_id, uploaded_by,
+              storage_provider, object_key, original_filename, mime_type,
+              file_size, category, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          `).run(
+            attachmentId,
+            tenantId,
+            'clinic',
+            appointmentId || null,
+            userId,
+            objectKey,
+            String(filename),
+            String(mimeType),
+            Number(fileSize),
+            safeCategory
+          );
+        } else {
+          throw insertErr;
+        }
+      }
 
       res.status(201).json({
         success: true,

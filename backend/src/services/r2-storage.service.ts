@@ -46,12 +46,13 @@ export class R2StorageService {
    */
   generateObjectKey(
     clinicId: string,
-    patientId: string,
+    patientId?: string | null,
     category: string = 'general',
     originalFilename: string = 'image.webp'
   ): string {
     const sanitizedClinicId = clinicId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
-    const sanitizedPatientId = patientId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+    const isClinicAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || category === 'exercises';
+    const sanitizedPatientId = !isClinicAsset && patientId ? patientId.trim().replace(/[^a-zA-Z0-9_-]/g, '') : null;
     const sanitizedCategory = category.trim().toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '') || 'general';
 
     // Determina a extensão baseada no nome original ou padrão webp
@@ -64,7 +65,10 @@ export class R2StorageService {
     }
 
     const uniqueId = uuidv4();
-    return `clinics/${sanitizedClinicId}/patients/${sanitizedPatientId}/${sanitizedCategory}/${uniqueId}${ext}`;
+    if (sanitizedPatientId) {
+      return `clinics/${sanitizedClinicId}/patients/${sanitizedPatientId}/${sanitizedCategory}/${uniqueId}${ext}`;
+    }
+    return `clinics/${sanitizedClinicId}/exercises/${sanitizedCategory}/${uniqueId}${ext}`;
   }
 
   /**

@@ -514,6 +514,173 @@ export class PersonalController {
     }
   }
 
+  static async createStudent(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const {
+        name, fullName, phone, email, birth_date, birthDate, cpf, gender, avatar_url, photo_url,
+        goal, experience_level, weekly_frequency, restrictions, notes, height, current_weight
+      } = req.body;
+
+      const effectiveName = String(name || fullName || '').trim();
+      if (!effectiveName) {
+        res.status(400).json({ error: 'Nome do aluno é obrigatório' });
+        return;
+      }
+
+      const effectivePhone = String(phone || '').trim() || '(00) 00000-0000';
+      const effectiveEmail = email ? String(email).trim() : null;
+      const effectiveBirth = birth_date || birthDate || null;
+      const effectivePhoto = avatar_url || photo_url || null;
+
+      const patientId = 'pat-' + uuidv4().slice(0, 8);
+
+      const tx = db.transaction(() => {
+        // Insere paciente
+        db.prepare(`
+          INSERT INTO patients (
+            id, tenant_id, full_name, phone, whatsapp, email, birth_date, cpf, gender, photo_url, active, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+        `).run(
+          patientId, tenantId, effectiveName, effectivePhone, effectivePhone,
+          effectiveEmail, effectiveBirth, cpf || null, gender || null, effectivePhoto
+        );
+
+        // Insere perfil de treinamento
+        const pspId = 'psp-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO personal_student_profiles (
+            id, tenant_id, patient_id, goal, experience_level, weekly_frequency,
+            restrictions, notes, height, current_weight, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(
+          pspId, tenantId, patientId,
+          goal || 'Hipertrofia',
+          experience_level || 'iniciante',
+          Number(weekly_frequency) || 3,
+          restrictions || null,
+          notes || null,
+          height ? Number(height) : null,
+          current_weight ? Number(current_weight) : null
+        );
+      });
+
+      tx();
+
+      logAudit(req, 'CREATE_STUDENT', 'patients', patientId, { name: effectiveName });
+
+      res.status(201).json({
+        success: true,
+        id: patientId,
+        student: {
+          id: patientId,
+          name: effectiveName,
+          phone: effectivePhone,
+          email: effectiveEmail,
+          goal: goal || 'Hipertrofia',
+          experience_level: experience_level || 'iniciante',
+          weekly_frequency: Number(weekly_frequency) || 3,
+          restrictions: restrictions || null,
+          status: 'active'
+        },
+        message: 'Aluno cadastrado com sucesso no ZemdaPersonal'
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.createStudent] Erro:', err);
+      res.status(500).json({ error: 'Erro ao cadastrar aluno no ZemdaPersonal' });
+    }
+  }
+
+  static async updateStudent(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const {
+        name, fullName, phone, email, birth_date, birthDate, cpf, gender, avatar_url, photo_url, active, status,
+        goal, experience_level, weekly_frequency, restrictions, notes, height, current_weight
+      } = req.body;
+
+      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      if (!patient) {
+        res.status(404).json({ error: 'Aluno não encontrado' });
+        return;
+      }
+
+      const effectiveName = (name !== undefined || fullName !== undefined) ? String(name || fullName || '').trim() : null;
+      const effectivePhoto = avatar_url !== undefined ? avatar_url : (photo_url !== undefined ? photo_url : null);
+      const isActive = status !== undefined ? (status === 'active' ? 1 : 0) : (active !== undefined ? (active ? 1 : 0) : null);
+
+      const tx = db.transaction(() => {
+        db.prepare(`
+          UPDATE patients SET
+            full_name = COALESCE(?, full_name),
+            phone = COALESCE(?, phone),
+            email = COALESCE(?, email),
+            birth_date = COALESCE(?, birth_date),
+            cpf = COALESCE(?, cpf),
+            gender = COALESCE(?, gender),
+            photo_url = COALESCE(?, photo_url),
+            active = COALESCE(?, active),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          effectiveName, phone ? String(phone).trim() : null, email ? String(email).trim() : null,
+          birth_date || birthDate || null, cpf || null, gender || null, effectivePhoto, isActive, id, tenantId
+        );
+
+        const existingProfile = db.prepare('SELECT id FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+        if (existingProfile) {
+          db.prepare(`
+            UPDATE personal_student_profiles SET
+              goal = COALESCE(?, goal),
+              experience_level = COALESCE(?, experience_level),
+              weekly_frequency = COALESCE(?, weekly_frequency),
+              restrictions = COALESCE(?, restrictions),
+              notes = COALESCE(?, notes),
+              height = COALESCE(?, height),
+              current_weight = COALESCE(?, current_weight),
+              updated_at = datetime('now')
+            WHERE id = ?
+          `).run(
+            goal || null, experience_level || null, weekly_frequency ? Number(weekly_frequency) : null,
+            restrictions !== undefined ? restrictions : null, notes !== undefined ? notes : null,
+            height ? Number(height) : null, current_weight ? Number(current_weight) : null,
+            existingProfile.id
+          );
+        } else {
+          const pspId = 'psp-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO personal_student_profiles (
+              id, tenant_id, patient_id, goal, experience_level, weekly_frequency,
+              restrictions, notes, height, current_weight, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          `).run(
+            pspId, tenantId, id, goal || 'Hipertrofia', experience_level || 'iniciante',
+            Number(weekly_frequency) || 3, restrictions || null, notes || null,
+            height ? Number(height) : null, current_weight ? Number(current_weight) : null
+          );
+        }
+      });
+
+      tx();
+
+      logAudit(req, 'UPDATE_STUDENT', 'patients', id, { name: effectiveName });
+
+      res.json({ success: true, message: 'Dados do aluno atualizados com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.updateStudent] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar dados do aluno' });
+    }
+  }
+
   // ==========================================
   // PROTOCOLOS & CLASSIFICAÇÃO DE TAV
   // ==========================================
@@ -993,6 +1160,7 @@ export class PersonalController {
       logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
       res.status(201).json({
         id: assessmentId,
+        assessment: { id: assessmentId },
         bmi,
         whr,
         whtr,
@@ -1285,7 +1453,12 @@ export class PersonalController {
       }
       const tenantId = req.tenantId!;
       const muscle = req.query.muscle ? String(req.query.muscle).trim() : '';
+      const region = req.query.region || req.query.body_region ? String(req.query.region || req.query.body_region).trim() : '';
+      const equipment = req.query.equipment ? String(req.query.equipment).trim() : '';
+      const category = req.query.category ? String(req.query.category).trim() : '';
+      const level = req.query.level ? String(req.query.level).trim() : '';
       const q = req.query.q ? String(req.query.q).trim() : '';
+      const includeInactive = req.query.include_inactive === '1' || req.query.include_inactive === 'true' || req.query.all === '1';
 
       let sql = `
         SELECT * FROM personal_exercises
@@ -1293,14 +1466,44 @@ export class PersonalController {
       `;
       const params: any[] = [tenantId];
 
+      if (!includeInactive) {
+        sql += ` AND (is_active = 1 OR is_active IS NULL)`;
+      }
       if (muscle) {
-        sql += ` AND LOWER(muscle_group) = LOWER(?)`;
-        params.push(muscle);
+        sql += ` AND (LOWER(muscle_group) = LOWER(?) OR LOWER(muscle_group) LIKE LOWER(?))`;
+        params.push(muscle, `%${muscle}%`);
+      }
+      if (region) {
+        sql += ` AND LOWER(body_region) = LOWER(?)`;
+        params.push(region);
+      }
+      if (equipment) {
+        sql += ` AND (LOWER(equipment) = LOWER(?) OR LOWER(equipment) LIKE LOWER(?))`;
+        params.push(equipment, `%${equipment}%`);
+      }
+      if (category) {
+        const normCat = category.toLowerCase();
+        if (normCat.includes('hipertrof') || normCat.includes('muscula')) {
+          sql += ` AND (LOWER(category) LIKE '%muscul%' OR LOWER(category) LIKE '%hipertrof%')`;
+        } else {
+          sql += ` AND (LOWER(category) = LOWER(?) OR LOWER(category) LIKE LOWER(?))`;
+          params.push(category, `%${category}%`);
+        }
+      }
+      if (level) {
+        sql += ` AND LOWER(level) = LOWER(?)`;
+        params.push(level);
       }
       if (q) {
-        sql += ` AND (LOWER(name) LIKE LOWER(?) OR LOWER(instructions) LIKE LOWER(?))`;
+        sql += ` AND (
+          LOWER(name) LIKE LOWER(?) OR
+          LOWER(COALESCE(instructions, '')) LIKE LOWER(?) OR
+          LOWER(COALESCE(technical_notes, '')) LIKE LOWER(?) OR
+          LOWER(COALESCE(equipment, '')) LIKE LOWER(?) OR
+          LOWER(muscle_group) LIKE LOWER(?)
+        )`;
         const wild = `%${q}%`;
-        params.push(wild, wild);
+        params.push(wild, wild, wild, wild, wild);
       }
 
       sql += ` ORDER BY name ASC`;
@@ -1320,7 +1523,11 @@ export class PersonalController {
         return;
       }
       const tenantId = req.tenantId!;
-      const { name, muscle_group, secondary_muscles_json, instructions, photo_url } = req.body;
+      const {
+        name, muscle_group, secondary_muscles_json,
+        body_region, equipment, category, execution_type, mechanics, level,
+        instructions, technical_notes, photo_url, exercise_file_id, is_active
+      } = req.body;
 
       if (!name || !muscle_group) {
         res.status(400).json({ error: 'Nome e grupamento muscular são obrigatórios' });
@@ -1329,15 +1536,23 @@ export class PersonalController {
 
       const id = 'pex-' + uuidv4().slice(0, 8);
       db.prepare(`
-        INSERT INTO personal_exercises (id, tenant_id, name, muscle_group, secondary_muscles_json, instructions, photo_url, is_custom, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+        INSERT INTO personal_exercises (
+          id, tenant_id, name, muscle_group, secondary_muscles_json,
+          body_region, equipment, category, execution_type, mechanics, level,
+          instructions, technical_notes, photo_url, exercise_file_id, is_custom, is_active, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
       `).run(
         id, tenantId, name.trim(), muscle_group.trim(),
         secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : null,
-        instructions || null, photo_url || null, req.user?.userId || null
+        body_region || null, equipment || null, category || 'Musculação',
+        execution_type || 'bilateral', mechanics || null, level || 'todos',
+        instructions || null, technical_notes || null, photo_url || null, exercise_file_id || null,
+        is_active !== undefined ? (is_active ? 1 : 0) : 1,
+        req.user?.userId || null
       );
 
-      res.status(201).json({ id, message: 'Exercício cadastrado com sucesso' });
+      const exercise = db.prepare('SELECT * FROM personal_exercises WHERE id = ?').get(id) as any;
+      res.status(201).json({ id, exercise, message: 'Exercício cadastrado com sucesso' });
     } catch (err: any) {
       console.error('[PersonalController.createExercise] Erro:', err);
       res.status(500).json({ error: 'Erro ao cadastrar exercício' });
@@ -1352,32 +1567,88 @@ export class PersonalController {
       }
       const tenantId = req.tenantId!;
       const { id } = req.params;
-      const { name, muscle_group, secondary_muscles_json, instructions, photo_url } = req.body;
+      const {
+        name, muscle_group, secondary_muscles_json,
+        body_region, equipment, category, execution_type, mechanics, level,
+        instructions, technical_notes, photo_url, exercise_file_id, is_active
+      } = req.body;
 
-      const result = db.prepare(`
-        UPDATE personal_exercises SET
-          name = COALESCE(?, name),
-          muscle_group = COALESCE(?, muscle_group),
-          secondary_muscles_json = ?,
-          instructions = ?,
-          photo_url = COALESCE(?, photo_url),
-          updated_at = datetime('now')
-        WHERE id = ? AND tenant_id = ?
-      `).run(
-        name ? name.trim() : null,
-        muscle_group ? muscle_group.trim() : null,
-        secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : null,
-        instructions || null,
-        photo_url || null,
-        id, tenantId
-      );
-
-      if (result.changes === 0) {
-        res.status(404).json({ error: 'Exercício customizado não encontrado ou não pertence a esta clínica' });
+      // Verifica se o exercício existe (na clínica ou no global)
+      const existing = db.prepare("SELECT * FROM personal_exercises WHERE id = ? AND (tenant_id = ? OR tenant_id = 'global')").get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Exercício não encontrado' });
         return;
       }
 
-      res.json({ message: 'Exercício atualizado com sucesso' });
+      let targetId = id;
+      if (existing.tenant_id === tenantId) {
+        // Atualiza exercício customizado da própria clínica
+        db.prepare(`
+          UPDATE personal_exercises SET
+            name = COALESCE(?, name),
+            muscle_group = COALESCE(?, muscle_group),
+            secondary_muscles_json = COALESCE(?, secondary_muscles_json),
+            body_region = COALESCE(?, body_region),
+            equipment = COALESCE(?, equipment),
+            category = COALESCE(?, category),
+            execution_type = COALESCE(?, execution_type),
+            mechanics = COALESCE(?, mechanics),
+            level = COALESCE(?, level),
+            instructions = COALESCE(?, instructions),
+            technical_notes = COALESCE(?, technical_notes),
+            photo_url = COALESCE(?, photo_url),
+            exercise_file_id = COALESCE(?, exercise_file_id),
+            is_active = COALESCE(?, is_active),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          name ? name.trim() : null,
+          muscle_group ? muscle_group.trim() : null,
+          secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : null,
+          body_region !== undefined ? body_region : null,
+          equipment !== undefined ? equipment : null,
+          category !== undefined ? category : null,
+          execution_type !== undefined ? execution_type : null,
+          mechanics !== undefined ? mechanics : null,
+          level !== undefined ? level : null,
+          instructions !== undefined ? instructions : null,
+          technical_notes !== undefined ? technical_notes : null,
+          photo_url !== undefined ? photo_url : null,
+          exercise_file_id !== undefined ? exercise_file_id : null,
+          is_active !== undefined ? (is_active ? 1 : 0) : null,
+          id, tenantId
+        );
+      } else {
+        // Se for global, clona para a clínica como custom para preservar isolamento
+        targetId = 'pex-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO personal_exercises (
+            id, tenant_id, name, muscle_group, secondary_muscles_json,
+            body_region, equipment, category, execution_type, mechanics, level,
+            instructions, technical_notes, photo_url, exercise_file_id, is_custom, is_active, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+        `).run(
+          targetId, tenantId,
+          name ? name.trim() : existing.name,
+          muscle_group ? muscle_group.trim() : existing.muscle_group,
+          secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : existing.secondary_muscles_json,
+          body_region !== undefined ? body_region : existing.body_region,
+          equipment !== undefined ? equipment : existing.equipment,
+          category !== undefined ? category : existing.category,
+          execution_type !== undefined ? execution_type : existing.execution_type,
+          mechanics !== undefined ? mechanics : existing.mechanics,
+          level !== undefined ? level : existing.level,
+          instructions !== undefined ? instructions : existing.instructions,
+          technical_notes !== undefined ? technical_notes : existing.technical_notes,
+          photo_url !== undefined ? photo_url : existing.photo_url,
+          exercise_file_id !== undefined ? exercise_file_id : existing.exercise_file_id,
+          is_active !== undefined ? (is_active ? 1 : 0) : 1,
+          req.user?.userId || null
+        );
+      }
+
+      const updatedEx = db.prepare('SELECT * FROM personal_exercises WHERE id = ?').get(targetId) as any;
+      res.json({ message: 'Exercício atualizado com sucesso', exercise: updatedEx, id: targetId });
     } catch (err: any) {
       console.error('[PersonalController.updateExercise] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar exercício' });
@@ -1393,9 +1664,19 @@ export class PersonalController {
       const tenantId = req.tenantId!;
       const { id } = req.params;
 
+      // Se o exercício estiver vinculado a prescrições históricas, desativa para manter histórico
+      const inUse = db.prepare('SELECT COUNT(*) as count FROM personal_workout_exercises WHERE exercise_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (inUse && inUse.count > 0) {
+        db.prepare("UPDATE personal_exercises SET is_active = 0, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?").run(id, tenantId);
+        res.json({ message: 'Exercício desativado para preservar histórico dos treinos.', deactivated: true });
+        return;
+      }
+
       const result = db.prepare('DELETE FROM personal_exercises WHERE id = ? AND tenant_id = ? AND is_custom = 1').run(id, tenantId);
       if (result.changes === 0) {
-        res.status(400).json({ error: 'Exercícios padrão do sistema não podem ser excluídos, apenas exercícios customizados.' });
+        // Se for global, marca desativação para o contexto ou avisa
+        db.prepare('UPDATE personal_exercises SET is_active = 0 WHERE id = ?').run(id);
+        res.json({ message: 'Exercício desativado com sucesso', deactivated: true });
         return;
       }
       res.json({ message: 'Exercício excluído com sucesso' });
@@ -1537,7 +1818,7 @@ export class PersonalController {
       transaction();
 
       logAudit(req, 'CREATE_WORKOUT', 'personal_workouts', workoutId, { patient_id, title, division });
-      res.status(201).json({ id: workoutId, message: 'Treino criado com sucesso' });
+      res.status(201).json({ id: workoutId, workout: { id: workoutId }, message: 'Treino criado com sucesso' });
     } catch (err: any) {
       console.error('[PersonalController.createWorkout] Erro:', err);
       res.status(500).json({ error: 'Erro ao criar treino' });
