@@ -267,7 +267,7 @@ async function runTests() {
     const clinicPlan = plansDb.find(p => p.code === 'CLINIC');
     assert(soloPlan && soloPlan.max_users === 1, 'Limite do plano Solo preservado em 1');
     assert(teamPlan && teamPlan.max_users === 5, 'Limite do plano Equipe preservado em 5');
-    assert(clinicPlan && clinicPlan.max_users === 30, 'Limite do plano Clínica preservado em 30');
+    assert(clinicPlan && clinicPlan.max_users === 20, 'Limite do plano Clínica atualizado para 20');
 
     console.log('\n====================================================');
     console.log(`RESULTADO DOS TESTES: ${passedTests} PASSOU, ${failedTests} FALHOU`);

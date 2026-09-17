@@ -10,6 +10,11 @@ import fs from 'fs';
 
 dotenv.config();
 
+if (process.env.NODE_ENV === 'production' && !process.env.ZEMDA_FILES_SIGNING_SECRET) {
+  console.error('[FATAL] ZEMDA_FILES_SIGNING_SECRET é obrigatório em ambiente de produção para assinar tokens do Cloudflare Worker!');
+  throw new Error('ZEMDA_FILES_SIGNING_SECRET não configurado em ambiente de produção');
+}
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 

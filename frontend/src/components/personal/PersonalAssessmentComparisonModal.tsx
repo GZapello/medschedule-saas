@@ -18,6 +18,7 @@ import {
 import { Assessment, AssessmentComparison, AssessmentPhoto, Student } from './types';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { SecureFileImage } from '../common/SecureFileImage';
 
 interface PersonalAssessmentComparisonModalProps {
   isOpen: boolean;
@@ -237,6 +238,34 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
               ))}
             </select>
           </div>
+
+          {assessmentsList.length >= 2 && (
+            <div className="flex items-center gap-2 pt-1 md:col-span-2 flex-wrap">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Comparação rápida:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const sorted = [...assessmentsList].sort((a, b) => new Date(b.assessment_date).getTime() - new Date(a.assessment_date).getTime());
+                  setCurrentId(sorted[0].id);
+                  setPreviousId(sorted[1].id);
+                }}
+                className="px-2.5 py-1 text-[11px] font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition border border-indigo-200 cursor-pointer"
+              >
+                Anterior vs Atual (Evolução Recente)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const sorted = [...assessmentsList].sort((a, b) => new Date(b.assessment_date).getTime() - new Date(a.assessment_date).getTime());
+                  setCurrentId(sorted[0].id);
+                  setPreviousId(sorted[sorted.length - 1].id);
+                }}
+                className="px-2.5 py-1 text-[11px] font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg transition border border-purple-200 cursor-pointer"
+              >
+                Primeira vs Atual (Evolução Total)
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Sub-abas de Categoria */}
@@ -474,11 +503,13 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                                 Anterior
                               </span>
                               <div className="w-full h-36 bg-slate-200 rounded-xl overflow-hidden flex items-center justify-center">
-                                {prevPhoto ? (
-                                  <img src={prevPhoto.photo_url} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  <span className="text-[10px] text-slate-400">Sem foto</span>
-                                )}
+                                <SecureFileImage
+                                  fileId={prevPhoto?.file_id || prevPhoto?.fileId}
+                                  fallbackUrl={prevPhoto?.photo_url}
+                                  alt="Foto Anterior"
+                                  className="w-full h-full object-cover"
+                                  placeholderText="Sem foto"
+                                />
                               </div>
                             </div>
 
@@ -487,11 +518,13 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                                 Atual
                               </span>
                               <div className="w-full h-36 bg-indigo-50 border border-indigo-200 rounded-xl overflow-hidden flex items-center justify-center">
-                                {curPhoto ? (
-                                  <img src={curPhoto.photo_url} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  <span className="text-[10px] text-slate-400">Sem foto</span>
-                                )}
+                                <SecureFileImage
+                                  fileId={curPhoto?.file_id || curPhoto?.fileId}
+                                  fallbackUrl={curPhoto?.photo_url}
+                                  alt="Foto Atual"
+                                  className="w-full h-full object-cover"
+                                  placeholderText="Sem foto"
+                                />
                               </div>
                             </div>
                           </div>

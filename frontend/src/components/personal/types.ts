@@ -72,6 +72,7 @@ export interface WorkoutExercise {
   technique_custom?: string;
   notes?: string;
   photo_url?: string;
+  exercise_file_id?: string;
   exercise_default_photo?: string;
   instructions?: string;
 }
@@ -104,6 +105,8 @@ export interface AssessmentPhoto {
   notes?: string;
   weight?: number;
   body_fat_percentage?: number;
+  file_id?: string;
+  fileId?: string;
 }
 
 export interface StrengthTestItem {

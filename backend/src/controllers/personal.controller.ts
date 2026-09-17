@@ -171,6 +171,55 @@ function getProfessionalId(req: Request): string {
   return newId;
 }
 
+function sanitizePhotoUrl(url: any): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('data:') ||
+    trimmed.includes('workers.dev') ||
+    trimmed.includes('r2.cloudflarestorage.com')
+  ) {
+    return null;
+  }
+  return trimmed;
+}
+
+function extractFileIdFromPhotoInput(p: any, tenantId: string): string | null {
+  if (!p) return null;
+  let directId = p.file_id || p.fileId || null;
+  if (directId && typeof directId === 'string' && directId.trim()) {
+    return directId.trim();
+  }
+  const url = String(p.photo_url || '').trim();
+  if (url.startsWith('att-')) {
+    return url;
+  }
+  let objectKey: string | null = null;
+  if (url.includes('token=')) {
+    try {
+      const match = url.match(/token=([^&]+)/);
+      if (match && match[1]) {
+        const tokenPart = decodeURIComponent(match[1]).split('.')[0];
+        const jsonStr = Buffer.from(tokenPart, 'base64url').toString('utf8');
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && parsed.objectKey) objectKey = parsed.objectKey;
+      }
+    } catch (_) {}
+  } else if (url.includes('clinics/')) {
+    const match = url.match(/clinics\/[^\s?]+/);
+    if (match) objectKey = match[0];
+  }
+
+  if (objectKey) {
+    try {
+      const attach = db.prepare('SELECT id FROM file_attachments WHERE object_key = ? AND clinic_id = ?').get(objectKey, tenantId) as any;
+      if (attach && attach.id) return attach.id;
+    } catch (_) {}
+  }
+  return null;
+}
+
 /**
  * Classificação rigorosa de TAV (Tecido Adiposo Visceral):
  * - Cada equipamento ou protocolo possui sua tabela e faixas específicas.
@@ -1148,9 +1197,9 @@ export class PersonalController {
       // Salva fotos anexadas se fornecidas
       if (Array.isArray(b.photos)) {
         for (const p of b.photos) {
-          if ((p.photo_url || p.file_id || p.fileId) && p.photo_type) {
-            const effectivePhotoUrl = p.photo_url || '';
-            const effectiveFileId = p.file_id || p.fileId || null;
+          const effectiveFileId = extractFileIdFromPhotoInput(p, tenantId);
+          const effectivePhotoUrl = sanitizePhotoUrl(p.photo_url) || '';
+          if ((effectiveFileId || effectivePhotoUrl) && p.photo_type) {
             try {
               db.prepare(`
                 INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
@@ -1226,9 +1275,9 @@ export class PersonalController {
         db.prepare('DELETE FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').run(id, tenantId);
         
         for (const p of b.photos) {
-          if ((p.photo_url || p.file_id || p.fileId) && p.photo_type) {
-            const effectivePhotoUrl = p.photo_url || '';
-            const effectiveFileId = p.file_id || p.fileId || null;
+          const effectiveFileId = extractFileIdFromPhotoInput(p, tenantId);
+          const effectivePhotoUrl = sanitizePhotoUrl(p.photo_url) || '';
+          if ((effectiveFileId || effectivePhotoUrl) && p.photo_type) {
             try {
               db.prepare(`
                 INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
@@ -1482,18 +1531,28 @@ export class PersonalController {
         return;
       }
       const tenantId = req.tenantId!;
-      const { patient_id, assessment_id, photo_type, photo_url, photo_date, notes } = req.body;
+      const { patient_id, assessment_id, photo_type, photo_url, photo_date, notes, file_id, fileId } = req.body;
 
-      if (!patient_id || !photo_type || !photo_url) {
-        res.status(400).json({ error: 'Campos patient_id, photo_type e photo_url são obrigatórios' });
+      const effectiveFileId = extractFileIdFromPhotoInput({ file_id, fileId, photo_url }, tenantId);
+      const effectivePhotoUrl = sanitizePhotoUrl(photo_url) || '';
+
+      if (!patient_id || !photo_type || (!effectiveFileId && !effectivePhotoUrl)) {
+        res.status(400).json({ error: 'Campos patient_id, photo_type e foto (file_id) são obrigatórios' });
         return;
       }
 
       const id = 'paph-' + uuidv4().slice(0, 8);
-      db.prepare(`
-        INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, tenantId, assessment_id || null, patient_id, photo_type, photo_url, photo_date || new Date().toISOString().split('T')[0], notes || null);
+      try {
+        db.prepare(`
+          INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, tenantId, assessment_id || null, patient_id, photo_type, effectivePhotoUrl, photo_date || new Date().toISOString().split('T')[0], notes || null, effectiveFileId);
+      } catch (_) {
+        db.prepare(`
+          INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, tenantId, assessment_id || null, patient_id, photo_type, effectivePhotoUrl, photo_date || new Date().toISOString().split('T')[0], notes || null);
+      }
 
       res.status(201).json({ id, message: 'Foto registrada com sucesso' });
     } catch (err: any) {
@@ -1616,6 +1675,9 @@ export class PersonalController {
       }
 
       const id = 'pex-' + uuidv4().slice(0, 8);
+      const effectiveExerciseFileId = extractFileIdFromPhotoInput({ file_id: exercise_file_id, photo_url }, tenantId);
+      const sanitizedPhoto = sanitizePhotoUrl(photo_url);
+
       db.prepare(`
         INSERT INTO personal_exercises (
           id, tenant_id, name, muscle_group, secondary_muscles_json,
@@ -1627,7 +1689,7 @@ export class PersonalController {
         secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : null,
         body_region || null, equipment || null, category || 'Musculação',
         execution_type || 'bilateral', mechanics || null, level || 'todos',
-        instructions || null, technical_notes || null, photo_url || null, exercise_file_id || null,
+        instructions || null, technical_notes || null, sanitizedPhoto || null, effectiveExerciseFileId || null,
         is_active !== undefined ? (is_active ? 1 : 0) : 1,
         req.user?.userId || null
       );
@@ -1660,6 +1722,11 @@ export class PersonalController {
         res.status(404).json({ error: 'Exercício não encontrado' });
         return;
       }
+
+      const effectiveExerciseFileId = exercise_file_id !== undefined
+        ? extractFileIdFromPhotoInput({ file_id: exercise_file_id, photo_url }, tenantId)
+        : (photo_url !== undefined ? extractFileIdFromPhotoInput({ photo_url }, tenantId) : undefined);
+      const sanitizedPhoto = photo_url !== undefined ? sanitizePhotoUrl(photo_url) : undefined;
 
       let targetId = id;
       if (existing.tenant_id === tenantId) {
@@ -1695,9 +1762,9 @@ export class PersonalController {
           instructions !== undefined ? instructions : null,
           technical_notes !== undefined ? technical_notes : null,
           photo_url !== undefined ? 1 : 0,
-          photo_url ? String(photo_url).trim() : null,
-          exercise_file_id !== undefined ? 1 : 0,
-          exercise_file_id ? String(exercise_file_id).trim() : null,
+          sanitizedPhoto || null,
+          effectiveExerciseFileId !== undefined ? 1 : 0,
+          effectiveExerciseFileId || null,
           is_active !== undefined ? (is_active ? 1 : 0) : null,
           id, tenantId
         );
@@ -1723,8 +1790,8 @@ export class PersonalController {
           level !== undefined ? level : existing.level,
           instructions !== undefined ? instructions : existing.instructions,
           technical_notes !== undefined ? technical_notes : existing.technical_notes,
-          photo_url !== undefined ? photo_url : existing.photo_url,
-          exercise_file_id !== undefined ? exercise_file_id : existing.exercise_file_id,
+          photo_url !== undefined ? (sanitizedPhoto || null) : existing.photo_url,
+          effectiveExerciseFileId !== undefined ? (effectiveExerciseFileId || null) : existing.exercise_file_id,
           is_active !== undefined ? (is_active ? 1 : 0) : 1,
           req.user?.userId || null
         );

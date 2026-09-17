@@ -20,6 +20,7 @@ import { Student, Workout, WorkoutExercise, Exercise } from './types';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { PersonalExerciseLibraryModal } from './PersonalExerciseLibraryModal';
+import { SecureFileImage } from '../common/SecureFileImage';
 
 interface PersonalWorkoutBuilderProps {
   isOpen: boolean;
@@ -65,7 +66,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
 
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
-  const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
+  const [zoomedPhoto, setZoomedPhoto] = useState<{ fileId?: string; url?: string } | null>(null);
 
   useEffect(() => {
     if (student) {
@@ -108,6 +109,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
         name: exercise.name,
         muscle_group: exercise.muscle_group,
         photo_url: exercise.photo_url,
+        exercise_file_id: exercise.exercise_file_id,
         exercise_default_photo: exercise.photo_url,
         instructions: exercise.instructions
       };
@@ -130,6 +132,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
         rir: 2,
         technique: 'Direta',
         photo_url: exercise.photo_url,
+        exercise_file_id: exercise.exercise_file_id,
         exercise_default_photo: exercise.photo_url,
         instructions: exercise.instructions
       };
@@ -418,14 +421,16 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
 
                         {/* Foto Thumbnail com Zoom */}
                         <div
-                          onClick={() => ex.photo_url && setZoomedPhoto(ex.photo_url)}
+                          onClick={() => (ex.exercise_file_id || ex.photo_url || ex.exercise_default_photo) && setZoomedPhoto({ fileId: ex.exercise_file_id, url: ex.photo_url || ex.exercise_default_photo })}
                           className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
                         >
-                          {ex.photo_url ? (
-                            <img src={ex.photo_url} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <Dumbbell className="w-4 h-4 text-slate-300" />
-                          )}
+                          <SecureFileImage
+                            fileId={ex.exercise_file_id}
+                            fallbackUrl={ex.photo_url || ex.exercise_default_photo}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            placeholderText=""
+                          />
                         </div>
 
                         <div className="flex-1 min-w-[200px]">
@@ -652,7 +657,13 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
             className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn cursor-pointer"
           >
             <div className="max-w-md w-full bg-white rounded-2xl overflow-hidden p-2 shadow-2xl">
-              <img src={zoomedPhoto} alt="" className="w-full h-auto rounded-xl object-contain" />
+              <SecureFileImage
+                fileId={zoomedPhoto.fileId}
+                fallbackUrl={zoomedPhoto.url}
+                alt=""
+                className="w-full h-auto rounded-xl object-contain max-h-[80vh]"
+                placeholderText="Imagem não disponível"
+              />
             </div>
           </div>
         )}

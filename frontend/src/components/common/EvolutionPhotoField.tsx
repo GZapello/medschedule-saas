@@ -2,14 +2,17 @@ import React, { useState, useRef } from 'react';
 import { Camera, RefreshCw, History, Columns, Trash2, Eye, ShieldAlert, Check, X, ZoomIn } from 'lucide-react';
 import { optimizeImageFile } from '../../utils/imageOptimizer';
 import { ApiClient } from '../../api/client';
+import { SecureFileImage } from './SecureFileImage';
 
 export interface EvolutionPhotoItem {
   id: string;
-  url: string;
+  url?: string;
   capturedAt: string;
   isInitial?: boolean;
   notes?: string;
   fileId?: string;
+  appointmentId?: string;
+  isCurrentSession?: boolean;
 }
 
 export interface EvolutionPhotoFieldProps {
@@ -36,10 +39,25 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
   const [isDiagnostic, setIsDiagnostic] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
-  const [zoomUrl, setZoomUrl] = useState<string | null>(null);
+  const [zoomPhoto, setZoomPhoto] = useState<EvolutionPhotoItem | null>(null);
 
-  const initialPhoto = photos.find(p => p.isInitial) || photos[0] || null;
+  // Rastreia IDs de fotos adicionadas na sessão/consulta atual em aberto
+  const sessionPhotoIdsRef = useRef<Set<string>>(new Set());
+
+  // Foto Inicial é a primeira marcada como isInitial, ou a primeira do histórico
+  const initialPhoto = photos.find(p => p.isInitial) || (photos.length > 0 ? photos[0] : null);
+  // Foto Atual é a mais recente
   const currentPhoto = photos.length > 0 ? photos[photos.length - 1] : null;
+
+  const canDeletePhoto = (photo: EvolutionPhotoItem): boolean => {
+    if (disabled) return false;
+    // Apenas a foto da consulta atual em aberto pode ser excluída
+    return Boolean(
+      photo.isCurrentSession ||
+      sessionPhotoIdsRef.current.has(photo.id) ||
+      (photo.fileId && sessionPhotoIdsRef.current.has(photo.fileId))
+    );
+  };
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -48,7 +66,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
     try {
       setIsUploading(true);
 
-      // Client-side image optimization (skips if isDiagnostic is true)
+      // 0. Otimização no cliente (mantém original se for diagnóstico)
       const optimizedFile = await optimizeImageFile(file, {
         isDiagnostic,
         maxWidth: 1800,
@@ -56,82 +74,122 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
         quality: 0.85
       });
 
-      let fileId = 'photo-' + Date.now();
-      let photoUrl = '';
+      // 1. Solicita ticket de upload assinado
+      const ticket = await ApiClient.post<any>('/files/upload-ticket', {
+        filename: optimizedFile.name,
+        mimeType: optimizedFile.type || 'image/jpeg',
+        fileSize: optimizedFile.size,
+        category,
+        patientId: patientId || 'clinic',
+        appointmentId
+      });
 
-      try {
-        const ticket = await ApiClient.post<any>('/files/upload-ticket', {
-          filename: optimizedFile.name,
-          mimeType: optimizedFile.type || 'image/jpeg',
-          fileSize: optimizedFile.size,
-          category,
-          patientId: patientId || 'clinic',
-          appointmentId
-        });
+      if (!ticket?.uploadUrl || !ticket?.uploadToken || !ticket?.objectKey) {
+        throw new Error('Não foi possível obter autorização de envio para o Cloudflare Worker.');
+      }
 
-        if (ticket?.uploadUrl && ticket?.uploadToken) {
-          const putRes = await fetch(ticket.uploadUrl, {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${ticket.uploadToken}`,
-              'Content-Type': optimizedFile.type || 'image/jpeg'
-            },
-            body: optimizedFile
-          });
+      // 2. Envio direto via PUT no Cloudflare Worker
+      const putRes = await fetch(ticket.uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${ticket.uploadToken}`,
+          'Content-Type': optimizedFile.type || 'image/jpeg'
+        },
+        body: optimizedFile
+      });
 
-          if (putRes.ok) {
-            const comp = await ApiClient.post<any>('/files/complete', {
-              objectKey: ticket.objectKey,
-              originalFilename: optimizedFile.name,
-              mimeType: optimizedFile.type || 'image/jpeg',
-              fileSize: optimizedFile.size,
-              category,
-              patientId: patientId || 'clinic',
-              appointmentId
-            });
-            fileId = comp?.id || ticket.objectKey;
-            photoUrl = comp?.url || '';
-          }
+      if (!putRes.ok) {
+        throw new Error(`Falha no upload para o Cloudflare Worker (HTTP ${putRes.status}).`);
+      }
+
+      // 3. Confirmação do upload no backend
+      const comp = await ApiClient.post<any>('/files/complete', {
+        objectKey: ticket.objectKey,
+        originalFilename: optimizedFile.name,
+        mimeType: optimizedFile.type || 'image/jpeg',
+        fileSize: optimizedFile.size,
+        category,
+        patientId: patientId || 'clinic',
+        appointmentId
+      });
+
+      // CORREÇÃO CRÍTICA: o backend retorna { success: true, file: { id, objectKey, url, ... } }
+      const savedFile = comp?.file;
+      const confirmedFileId = savedFile?.id;
+      const confirmedUrl = savedFile?.url || '';
+
+      if (!confirmedFileId) {
+        throw new Error('O servidor não confirmou o identificador do arquivo gravado.');
+      }
+
+      // 4. Fluxo de Substituição na mesma consulta:
+      // Se o usuário já adicionou uma foto nesta mesma consulta e está trocando antes de salvar,
+      // exclui a anterior do R2 após o upload confirmado para não acumular lixo
+      const currentSessionPhoto = photos.find(p => canDeletePhoto(p));
+      if (currentSessionPhoto) {
+        const previousFileId = currentSessionPhoto.fileId || currentSessionPhoto.id;
+        try {
+          await ApiClient.delete(`/files/${encodeURIComponent(previousFileId)}`);
+        } catch (delErr) {
+          console.warn('[EvolutionPhotoField] Aviso ao excluir foto substituída da sessão:', delErr);
         }
-      } catch (uploadErr) {
-        console.warn('[EvolutionPhotoField] Upload via ticket falhou, usando blob URL local:', uploadErr);
+        sessionPhotoIdsRef.current.delete(currentSessionPhoto.id);
+        if (currentSessionPhoto.fileId) sessionPhotoIdsRef.current.delete(currentSessionPhoto.fileId);
       }
 
-      if (!photoUrl) {
-        photoUrl = URL.createObjectURL(optimizedFile);
-      }
+      sessionPhotoIdsRef.current.add(confirmedFileId);
+
+      const hasInitialPhoto = photos.some(p => p.isInitial);
 
       const newPhoto: EvolutionPhotoItem = {
-        id: fileId,
-        url: photoUrl,
+        id: confirmedFileId,
+        fileId: confirmedFileId,
+        url: confirmedUrl,
         capturedAt: new Date().toISOString(),
-        isInitial: photos.length === 0,
-        fileId
+        isInitial: !hasInitialPhoto,
+        appointmentId,
+        isCurrentSession: true
       };
 
-      onChangePhotos([...photos, newPhoto]);
+      if (currentSessionPhoto) {
+        // Substitui a foto da mesma consulta
+        const updated = photos.map(p => p.id === currentSessionPhoto.id ? newPhoto : p);
+        onChangePhotos(updated);
+      } else {
+        // Adiciona como nova foto no histórico (reconsulta preserva a foto inicial)
+        onChangePhotos([...photos, newPhoto]);
+      }
     } catch (err: any) {
-      console.error('[EvolutionPhotoField] Upload error:', err);
-      // Local preview fallback if upload endpoint fails
-      const localUrl = URL.createObjectURL(file);
-      const newPhoto: EvolutionPhotoItem = {
-        id: 'photo-loc-' + Date.now(),
-        url: localUrl,
-        capturedAt: new Date().toISOString(),
-        isInitial: photos.length === 0
-      };
-      onChangePhotos([...photos, newPhoto]);
+      console.error('[EvolutionPhotoField] Erro no upload:', err);
+      alert('Erro ao enviar foto para o servidor: ' + (err.message || 'Verifique sua conexão e tente novamente.'));
+      // REGRA OBRIGATÓRIA: NUNCA adiciona blob: local ao histórico de fotos
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleDeletePhoto = (id: string, e?: React.MouseEvent) => {
+  const handleDeletePhoto = async (photo: EvolutionPhotoItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (!confirm('Deseja realmente remover esta foto?')) return;
-    const remaining = photos.filter(p => p.id !== id);
-    // If we deleted initial photo and there are photos left, designate first as initial
+
+    if (!canDeletePhoto(photo)) {
+      alert('Apenas a foto registrada na consulta atual pode ser excluída. Fotos de consultas anteriores são preservadas para integridade do prontuário.');
+      return;
+    }
+
+    if (!confirm('Deseja realmente remover esta foto da consulta atual?')) return;
+
+    try {
+      const targetToDelete = photo.fileId || photo.id;
+      await ApiClient.delete(`/files/${encodeURIComponent(targetToDelete)}`);
+    } catch (err) {
+      console.warn('[EvolutionPhotoField] Erro ao excluir do storage:', err);
+    }
+
+    sessionPhotoIdsRef.current.delete(photo.id);
+    if (photo.fileId) sessionPhotoIdsRef.current.delete(photo.fileId);
+
+    const remaining = photos.filter(p => p.id !== photo.id);
     if (remaining.length > 0 && !remaining.some(p => p.isInitial)) {
       remaining[0].isInitial = true;
     }
@@ -173,22 +231,28 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
           </div>
           {initialPhoto ? (
             <div className="relative aspect-video rounded-md overflow-hidden bg-black/10 flex items-center justify-center">
-              <img src={initialPhoto.url} alt="Foto Inicial" className="w-full h-full object-cover" />
+              <SecureFileImage
+                fileId={initialPhoto.fileId || initialPhoto.id}
+                fallbackUrl={initialPhoto.url}
+                alt="Foto Inicial"
+                className="w-full h-full object-cover"
+                placeholderText="Foto Inicial"
+              />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setZoomUrl(initialPhoto.url)}
-                  className="p-1.5 bg-white/90 text-slate-800 rounded-full hover:bg-white transition"
+                  onClick={() => setZoomPhoto(initialPhoto)}
+                  className="p-1.5 bg-white/90 text-slate-800 rounded-full hover:bg-white transition cursor-pointer"
                   title="Ampliar"
                 >
                   <ZoomIn className="w-4 h-4" />
                 </button>
-                {!disabled && (
+                {canDeletePhoto(initialPhoto) && (
                   <button
                     type="button"
-                    onClick={(e) => handleDeletePhoto(initialPhoto.id, e)}
-                    className="p-1.5 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition"
-                    title="Excluir"
+                    onClick={(e) => handleDeletePhoto(initialPhoto, e)}
+                    className="p-1.5 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition cursor-pointer"
+                    title="Excluir da consulta atual"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -215,22 +279,28 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
           </div>
           {currentPhoto ? (
             <div className="relative aspect-video rounded-md overflow-hidden bg-black/10 flex items-center justify-center">
-              <img src={currentPhoto.url} alt="Foto Atual" className="w-full h-full object-cover" />
+              <SecureFileImage
+                fileId={currentPhoto.fileId || currentPhoto.id}
+                fallbackUrl={currentPhoto.url}
+                alt="Foto Atual"
+                className="w-full h-full object-cover"
+                placeholderText="Foto Atual"
+              />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setZoomUrl(currentPhoto.url)}
-                  className="p-1.5 bg-white/90 text-slate-800 rounded-full hover:bg-white transition"
+                  onClick={() => setZoomPhoto(currentPhoto)}
+                  className="p-1.5 bg-white/90 text-slate-800 rounded-full hover:bg-white transition cursor-pointer"
                   title="Ampliar"
                 >
                   <ZoomIn className="w-4 h-4" />
                 </button>
-                {!disabled && (
+                {canDeletePhoto(currentPhoto) && (
                   <button
                     type="button"
-                    onClick={(e) => handleDeletePhoto(currentPhoto.id, e)}
-                    className="p-1.5 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition"
-                    title="Excluir"
+                    onClick={(e) => handleDeletePhoto(currentPhoto, e)}
+                    className="p-1.5 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition cursor-pointer"
+                    title="Excluir da consulta atual"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -246,7 +316,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
         </div>
       </div>
 
-      {/* Action Buttons: [ Atualizar foto ] [ Histórico ] [ Comparação ] */}
+      {/* Action Buttons: [ Adicionar Foto / Atualizar Foto ] [ Histórico ] [ Comparação ] */}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <input
           type="file"
@@ -261,7 +331,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled || isUploading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
         >
           {isUploading ? (
             <>
@@ -280,7 +350,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
           <button
             type="button"
             onClick={() => setShowHistoryModal(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium transition-colors"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium transition-colors cursor-pointer"
           >
             <History className="w-3.5 h-3.5 text-slate-500" />
             Histórico ({photos.length})
@@ -291,7 +361,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
           <button
             type="button"
             onClick={() => setShowCompareModal(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-medium transition-colors"
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-medium transition-colors cursor-pointer"
           >
             <Columns className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
             Comparação
@@ -300,13 +370,21 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
       </div>
 
       {/* Full-screen Zoom Modal */}
-      {zoomUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setZoomUrl(null)}>
-          <div className="relative max-w-4xl max-h-[90vh] bg-transparent">
-            <img src={zoomUrl} alt="Visualização ampliada" className="max-w-full max-h-[85vh] rounded-lg shadow-2xl object-contain mx-auto" />
+      {zoomPhoto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setZoomPhoto(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] bg-transparent" onClick={(e) => e.stopPropagation()}>
+            <div className="max-w-full max-h-[85vh] rounded-lg overflow-hidden flex items-center justify-center">
+              <SecureFileImage
+                fileId={zoomPhoto.fileId || zoomPhoto.id}
+                fallbackUrl={zoomPhoto.url}
+                alt="Visualização ampliada"
+                className="max-w-full max-h-[85vh] rounded-lg shadow-2xl object-contain mx-auto"
+                placeholderText="Foto"
+              />
+            </div>
             <button
-              onClick={() => setZoomUrl(null)}
-              className="absolute -top-3 -right-3 p-2 bg-white text-slate-800 rounded-full shadow-lg hover:bg-slate-100"
+              onClick={() => setZoomPhoto(null)}
+              className="absolute -top-3 -right-3 p-2 bg-white text-slate-800 rounded-full shadow-lg hover:bg-slate-100 cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -323,7 +401,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
                 <Columns className="w-5 h-5 text-indigo-600" />
                 Comparação Fotográfica: {label}
               </h3>
-              <button onClick={() => setShowCompareModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowCompareModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -333,20 +411,36 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
                   <span>Foto Inicial</span>
                   <span className="font-normal text-slate-400">{new Date(initialPhoto.capturedAt).toLocaleDateString('pt-BR')}</span>
                 </div>
-                <img src={initialPhoto.url} alt="Inicial" className="w-full aspect-video object-cover rounded-lg" />
+                <div className="w-full aspect-video rounded-lg overflow-hidden">
+                  <SecureFileImage
+                    fileId={initialPhoto.fileId || initialPhoto.id}
+                    fallbackUrl={initialPhoto.url}
+                    alt="Inicial"
+                    className="w-full h-full object-cover"
+                    placeholderText="Foto Inicial"
+                  />
+                </div>
               </div>
               <div className="border border-indigo-200 dark:border-indigo-800 rounded-xl overflow-hidden bg-indigo-50/30 dark:bg-indigo-950/20 p-2">
                 <div className="text-xs font-bold text-indigo-700 dark:text-indigo-300 mb-1.5 flex justify-between">
                   <span>Foto Atual</span>
                   <span className="font-normal text-indigo-400">{new Date(currentPhoto.capturedAt).toLocaleDateString('pt-BR')}</span>
                 </div>
-                <img src={currentPhoto.url} alt="Atual" className="w-full aspect-video object-cover rounded-lg" />
+                <div className="w-full aspect-video rounded-lg overflow-hidden">
+                  <SecureFileImage
+                    fileId={currentPhoto.fileId || currentPhoto.id}
+                    fallbackUrl={currentPhoto.url}
+                    alt="Atual"
+                    className="w-full h-full object-cover"
+                    placeholderText="Foto Atual"
+                  />
+                </div>
               </div>
             </div>
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setShowCompareModal(false)}
-                className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-900"
+                className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-900 cursor-pointer"
               >
                 Concluir
               </button>
@@ -364,14 +458,22 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
                 <History className="w-5 h-5 text-indigo-600" />
                 Histórico Fotográfico ({photos.length})
               </h3>
-              <button onClick={() => setShowHistoryModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600">
+              <button onClick={() => setShowHistoryModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-3 p-1">
               {photos.map((photo, idx) => (
                 <div key={photo.id} className="relative group border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800/40 p-1.5">
-                  <img src={photo.url} alt={`Foto ${idx + 1}`} className="w-full aspect-square object-cover rounded" />
+                  <div className="w-full aspect-square rounded overflow-hidden">
+                    <SecureFileImage
+                      fileId={photo.fileId || photo.id}
+                      fallbackUrl={photo.url}
+                      alt={`Foto ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                      placeholderText={`Foto #${idx + 1}`}
+                    />
+                  </div>
                   <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
                     <span className="font-semibold">{photo.isInitial ? 'Inicial' : `#${idx + 1}`}</span>
                     <span>{new Date(photo.capturedAt).toLocaleDateString('pt-BR')}</span>
@@ -379,16 +481,18 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setZoomUrl(photo.url)}
-                      className="p-1 bg-white text-slate-800 rounded-full"
+                      onClick={() => setZoomPhoto(photo)}
+                      className="p-1 bg-white text-slate-800 rounded-full cursor-pointer hover:bg-slate-100 transition"
+                      title="Ampliar"
                     >
                       <ZoomIn className="w-3.5 h-3.5" />
                     </button>
-                    {!disabled && (
+                    {canDeletePhoto(photo) && (
                       <button
                         type="button"
-                        onClick={(e) => handleDeletePhoto(photo.id, e)}
-                        className="p-1 bg-rose-600 text-white rounded-full"
+                        onClick={(e) => handleDeletePhoto(photo, e)}
+                        className="p-1 bg-rose-600 text-white rounded-full cursor-pointer hover:bg-rose-700 transition"
+                        title="Excluir da consulta atual"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -400,7 +504,7 @@ export const EvolutionPhotoField: React.FC<EvolutionPhotoFieldProps> = ({
             <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-slate-800">
               <button
                 onClick={() => setShowHistoryModal(false)}
-                className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-900"
+                className="px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-semibold hover:bg-slate-900 cursor-pointer"
               >
                 Fechar
               </button>

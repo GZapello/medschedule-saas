@@ -64,7 +64,7 @@ let server,eventCounter=0;
     for(let i=0;i<100;i++) {await BillingWebhookService.processPending();if(!BillingWebhookService.running)break;await new Promise(r=>setTimeout(r,5));}
     return {id,...r};
   };
-  assert.deepEqual(BillingService.plans().map(p=>[p.code,p.monthly_price,p.max_users]),[['SOLO',59.9,1],['TEAM',119.9,5],['CLINIC',359.9,30]]);
+  assert.deepEqual(BillingService.plans().map(p=>[p.code,p.monthly_price,p.max_users]),[['SOLO',69.9,1],['TEAM',249.9,5],['CLINIC',619.9,20]]);
   // End-to-end registration creates only a pending owner with access to billing.
   let r=await call('/v1/public/tenants/register',{responsibleName:'Owner',email:'new@test.invalid',password:'password123',clinicName:'New Clinic',cnpjCpf:'12345678909',termsAccepted:true,privacyAccepted:true});
   assert.equal(r.status,201,JSON.stringify(r));const clinic=r.body.clinicId;
@@ -85,15 +85,15 @@ let server,eventCounter=0;
   const sid=db.prepare('SELECT id FROM subscriptions WHERE clinic_id=? AND managed=1 AND is_current=1').get(clinic).id;
   const sub=()=>db.prepare('SELECT * FROM subscriptions WHERE id=?').get(sid);
   const checkout=checkouts.get(sub().asaas_checkout_id);
-  assert.equal(checkout.items[0].value,59.9);assert.deepEqual(checkout.billingTypes,['CREDIT_CARD']);assert.deepEqual(checkout.chargeTypes,['RECURRENT']);assert.equal(checkout.subscription.cycle,'MONTHLY');
+  assert.equal(checkout.items[0].value,69.9);assert.deepEqual(checkout.billingTypes,['CREDIT_CARD']);assert.deepEqual(checkout.chargeTypes,['RECURRENT']);assert.equal(checkout.subscription.cycle,'MONTHLY');
   assert.equal(sub().status,'PENDING_PAYMENT'); // Callback rendering performs only a read.
   await call('/subscriptions/current',null,signupToken);assert.equal(sub().status,'PENDING_PAYMENT');
   const callsBefore=checkoutCounter;assert.equal((await call('/subscriptions/checkout',{planCode:'SOLO'},signupToken)).status,200);assert.equal(checkoutCounter,callsBefore);
   assert.equal(customerCounter,1);
   assert.equal((await call('/webhooks/asaas',{id:'forged',event:'CHECKOUT_PAID',checkout},{},'POST')).status,401);
   assert.equal(db.prepare("SELECT id FROM asaas_webhook_events WHERE asaas_event_id='forged'").get(),undefined);
-  const gatewaySub={id:'sub_real',customer:sub().asaas_customer_id,value:59.9,status:'ACTIVE',cycle:'MONTHLY',externalReference:sub().external_reference};remoteSubscriptions.set(gatewaySub.id,gatewaySub);
-  const payment={id:'pay_initial',customer:gatewaySub.customer,subscription:gatewaySub.id,checkoutSession:checkout.id,status:'CONFIRMED',billingType:'CREDIT_CARD',value:59.9,dueDate:currentDay(),invoiceUrl:'https://sandbox.asaas.com/i/pay_initial',creditCard:{creditCardToken:'NEVER_STORE',cvv:'999'}};payments.set(payment.id,payment);
+  const gatewaySub={id:'sub_real',customer:sub().asaas_customer_id,value:69.9,status:'ACTIVE',cycle:'MONTHLY',externalReference:sub().external_reference};remoteSubscriptions.set(gatewaySub.id,gatewaySub);
+  const payment={id:'pay_initial',customer:gatewaySub.customer,subscription:gatewaySub.id,checkoutSession:checkout.id,status:'CONFIRMED',billingType:'CREDIT_CARD',value:69.9,dueDate:currentDay(),invoiceUrl:'https://sandbox.asaas.com/i/pay_initial',creditCard:{creditCardToken:'NEVER_STORE',cvv:'999'}};payments.set(payment.id,payment);
   payment.status='PENDING';await event('PAYMENT_CREATED',{payment});assert.equal(sub().status,'PENDING_PAYMENT');
   await event('PAYMENT_CREDIT_CARD_CAPTURE_REFUSED',{payment});assert.equal(sub().status,'PENDING_PAYMENT');
   payment.status='CONFIRMED';await event('CHECKOUT_PAID',{checkout:{id:checkout.id,customer:gatewaySub.customer}});assert.equal(sub().status,'ACTIVE');
@@ -111,13 +111,13 @@ let server,eventCounter=0;
   assert.equal(activeUsers('C'),5);assert.throws(()=>account('team-six','C'),/PLAN_USER_LIMIT_REACHED/);
   assert.equal((await call('/subscriptions/checkout',{planCode:'TEAM'},token('team-1','C','receptionist'))).status,403);
   db.prepare("UPDATE subscriptions SET plan_id='zemda-CLINIC' WHERE id='team'").run();
-  for(let i=5;i<=29;i++)account('clinic-'+i,'C','professional');assert.equal(activeUsers('C'),30);assert.throws(()=>account('clinic-31','C'),/PLAN_USER_LIMIT_REACHED/);
-  account('global-local','C','superadmin');assert.equal(activeUsers('C'),30);
+  for(let i=5;i<=19;i++)account('clinic-'+i,'C','professional');assert.equal(activeUsers('C'),20);assert.throws(()=>account('clinic-21','C'),/PLAN_USER_LIMIT_REACHED/);
+  account('global-local','C','superadmin');assert.equal(activeUsers('C'),20);
   assert.equal((await call('/subscriptions/change-plan',{planCode:'TEAM'})).status,409);
   // Upgrade is scheduled; no local entitlement is changed without payment.
   r=await call('/subscriptions/change-plan',{planCode:'TEAM'},signupToken);assert.equal(r.status,200,JSON.stringify(r));assert.equal(sub().plan_id,'zemda-SOLO');assert.equal(sub().pending_plan_id,'zemda-TEAM');
   clock=new OriginalDate(end+'T12:00:00Z').getTime();
-  const renewal={...payment,id:'pay_renewal',status:'OVERDUE',value:119.9,dueDate:end,invoiceUrl:'https://sandbox.asaas.com/i/pay_renewal'};payments.set(renewal.id,renewal);
+  const renewal={...payment,id:'pay_renewal',status:'OVERDUE',value:249.9,dueDate:end,invoiceUrl:'https://sandbox.asaas.com/i/pay_renewal'};payments.set(renewal.id,renewal);
   await event('PAYMENT_OVERDUE',{payment:renewal});assert.equal(sub().status,'PAST_DUE');const grace=sub().grace_period_until;assert.equal(canOperate(clinic),true);
   // Duplicate/late events cannot extend the five day grace window.
   await event('PAYMENT_OVERDUE',{payment:renewal});assert.equal(sub().grace_period_until,grace);
@@ -145,7 +145,7 @@ let server,eventCounter=0;
   assert.equal(db.prepare("SELECT cancelled_by FROM subscriptions WHERE id=?").get(sid).cancelled_by,ownerId);
   await event('PAYMENT_CONFIRMED',{payment:renewal});assert.equal(sub().status,'CANCELED');assert.ok(db.prepare('SELECT id FROM tenants WHERE id=?').get(clinic));
   db.prepare("UPDATE subscriptions SET status='ACTIVE',current_period_end=? WHERE id='team'").run(addMonth(currentDay()));
-  const admin=token('root',null,'superadmin');r=await call('/admin/subscriptions',null,admin);assert.equal(r.status,200);assert.equal(r.body.mrr,359.9);assert.equal(r.body.total,2);
+  const admin=token('root',null,'superadmin');r=await call('/admin/subscriptions',null,admin);assert.equal(r.status,200);assert.equal(r.body.mrr,619.9);assert.equal(r.body.total,2);
   assert.equal((await call('/admin/integrations/asaas/test',{},admin)).body.connected,true);
   process.env.ASAAS_ENV='production';assert.throws(()=>AsaasService.config());process.env.ASAAS_ENV='sandbox';
   // New checkout cancellation never grants an active subscription.
@@ -160,5 +160,5 @@ let server,eventCounter=0;
   const count=calls.filter(c=>c.resource==='/checkouts').length;
   r=await call('/subscriptions/checkout',{planCode:'TEAM'},cancelToken);assert.equal(r.status,409);assert.equal(calls.filter(c=>c.resource==='/checkouts').length,count);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);
-  console.log('PASS: registration → hosted checkout → authenticated webhook → activation; prices, 1/5/30 seats, duplicate events, grace/suspension/reactivation, next-cycle upgrade, downgrade, cancellation, ban isolation, ambiguous retries, admin metrics, environment and secret isolation. Sandbox live validation remains required.');
+  console.log('PASS: registration → hosted checkout → authenticated webhook → activation; prices, 1/5/20 seats, duplicate events, grace/suspension/reactivation, next-cycle upgrade, downgrade, cancellation, ban isolation, ambiguous retries, admin metrics, environment and secret isolation. Sandbox live validation remains required.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{global.fetch=actualFetch;global.Date=OriginalDate;BillingWebhookService.stop();server?.close();});

@@ -379,19 +379,26 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     }
 
     try {
-      setSaving(true);
+      const sanitizeCandidate = (url: string) => {
+        if (!url) return '';
+        if (url.startsWith('blob:') || url.includes('workers.dev') || url.includes('r2.cloudflarestorage.com')) {
+          return '';
+        }
+        return url.trim();
+      };
+
       const photos: Array<{ photo_type: string; photo_url: string; file_id?: string }> = [];
-      if (photoFront.trim() || photoFrontFileId) {
-        photos.push({ photo_type: 'front', photo_url: photoFront.trim(), file_id: photoFrontFileId || undefined });
+      if (photoFrontFileId || photoFront.trim()) {
+        photos.push({ photo_type: 'front', photo_url: sanitizeCandidate(photoFront), file_id: photoFrontFileId || undefined });
       }
-      if (photoBack.trim() || photoBackFileId) {
-        photos.push({ photo_type: 'back', photo_url: photoBack.trim(), file_id: photoBackFileId || undefined });
+      if (photoBackFileId || photoBack.trim()) {
+        photos.push({ photo_type: 'back', photo_url: sanitizeCandidate(photoBack), file_id: photoBackFileId || undefined });
       }
-      if (photoRight.trim() || photoRightFileId) {
-        photos.push({ photo_type: 'right', photo_url: photoRight.trim(), file_id: photoRightFileId || undefined });
+      if (photoRightFileId || photoRight.trim()) {
+        photos.push({ photo_type: 'right', photo_url: sanitizeCandidate(photoRight), file_id: photoRightFileId || undefined });
       }
-      if (photoLeft.trim() || photoLeftFileId) {
-        photos.push({ photo_type: 'left', photo_url: photoLeft.trim(), file_id: photoLeftFileId || undefined });
+      if (photoLeftFileId || photoLeft.trim()) {
+        photos.push({ photo_type: 'left', photo_url: sanitizeCandidate(photoLeft), file_id: photoLeftFileId || undefined });
       }
 
       // Agrupar testes de resistência muscular

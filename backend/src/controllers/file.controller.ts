@@ -8,6 +8,17 @@ import { r2StorageService } from '../services/r2-storage.service';
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
+export function getSigningSecret(): string {
+  const secret = process.env.ZEMDA_FILES_SIGNING_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('ZEMDA_FILES_SIGNING_SECRET é obrigatório em ambiente de produção');
+    }
+    return 'zemda-files-signing-secret';
+  }
+  return secret;
+}
+
 export class FileController {
   /**
    * POST /api/files/upload-ticket ou /api/v1/files/upload-ticket
@@ -135,7 +146,7 @@ export class FileController {
 
       // Token compatível com o Worker já publicado:
       // base64url(payload).base64url(HMAC_SHA256(payloadBase64, ZEMDA_FILES_SIGNING_SECRET))
-      const signingSecret = process.env.ZEMDA_FILES_SIGNING_SECRET || 'zemda-files-signing-secret';
+      const signingSecret = getSigningSecret();
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const exp = nowInSeconds + 300; // max 300 segundos
 
@@ -411,7 +422,7 @@ export class FileController {
       }
 
       // Gera exclusivamente URL temporária assinada pelo Cloudflare Worker
-      const signingSecret = process.env.ZEMDA_FILES_SIGNING_SECRET || 'zemda-files-signing-secret';
+      const signingSecret = getSigningSecret();
       const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const readPayload = {
@@ -496,7 +507,7 @@ export class FileController {
 
       // Se armazenado no R2, gera exclusivamente URL assinada temporária do Cloudflare Worker (5 minutos)
       if (file.storage_provider === 'cloudflare_r2') {
-        const signingSecret = process.env.ZEMDA_FILES_SIGNING_SECRET || 'zemda-files-signing-secret';
+        const signingSecret = getSigningSecret();
         const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
         const nowInSeconds = Math.floor(Date.now() / 1000);
         const readPayload = {
@@ -579,7 +590,7 @@ export class FileController {
       }
 
       // 1. Exclusão via Cloudflare Worker com token temporário assinado HMAC-SHA256
-      const signingSecret = process.env.ZEMDA_FILES_SIGNING_SECRET || 'zemda-files-signing-secret';
+      const signingSecret = getSigningSecret();
       const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const deletePayload = {

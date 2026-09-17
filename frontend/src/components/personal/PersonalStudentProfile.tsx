@@ -28,6 +28,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { PersonalEvolutionCharts } from './PersonalEvolutionCharts';
 import { PersonalBeforeAfterModal } from './PersonalBeforeAfterModal';
+import { SecureFileImage } from '../common/SecureFileImage';
 import { PersonalBodyMapIntegration } from './PersonalBodyMapIntegration';
 import { PersonalWorkoutExecutionModal } from './PersonalWorkoutExecutionModal';
 import { PersonalPdfExportModal } from './PersonalPdfExportModal';
@@ -667,7 +668,13 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                 {photos.map((p) => (
                   <div key={p.id} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden p-2 space-y-2">
                     <div className="w-full h-44 rounded-xl overflow-hidden bg-slate-200 flex items-center justify-center">
-                      <img src={p.photo_url} alt="" className="w-full h-full object-cover" />
+                      <SecureFileImage
+                        fileId={p.file_id || p.fileId}
+                        fallbackUrl={p.photo_url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        placeholderText="Foto"
+                      />
                     </div>
                     <div className="flex items-center justify-between text-[11px] px-1">
                       <span className="font-bold uppercase text-indigo-700">

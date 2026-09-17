@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Camera, ArrowRight, Sparkles, Scale, Activity } from 'lucide-react';
 import { AssessmentPhoto } from './types';
+import { SecureFileImage } from '../common/SecureFileImage';
 
 interface PersonalBeforeAfterModalProps {
   isOpen: boolean;
@@ -152,11 +153,13 @@ export const PersonalBeforeAfterModal: React.FC<PersonalBeforeAfterModalProps> =
                 </div>
 
                 <div className="w-full h-80 sm:h-96 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center relative shadow-sm">
-                  {beforePhoto ? (
-                    <img src={beforePhoto.photo_url} alt="Antes" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xs text-slate-400">Foto indisponível</span>
-                  )}
+                  <SecureFileImage
+                    fileId={beforePhoto?.file_id || beforePhoto?.fileId}
+                    fallbackUrl={beforePhoto?.photo_url}
+                    alt="Antes"
+                    className="w-full h-full object-cover"
+                    placeholderText="Foto indisponível"
+                  />
                 </div>
 
                 {beforePhoto && (
@@ -187,11 +190,13 @@ export const PersonalBeforeAfterModal: React.FC<PersonalBeforeAfterModalProps> =
                 </div>
 
                 <div className="w-full h-80 sm:h-96 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 flex items-center justify-center relative shadow-sm">
-                  {afterPhoto ? (
-                    <img src={afterPhoto.photo_url} alt="Depois" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-xs text-slate-400">Aguardando nova reavaliação</span>
-                  )}
+                  <SecureFileImage
+                    fileId={afterPhoto?.file_id || afterPhoto?.fileId}
+                    fallbackUrl={afterPhoto?.photo_url}
+                    alt="Depois"
+                    className="w-full h-full object-cover"
+                    placeholderText="Aguardando nova reavaliação"
+                  />
                 </div>
 
                 {afterPhoto && (

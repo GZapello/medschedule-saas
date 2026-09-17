@@ -2376,4 +2376,113 @@ export function initializeDatabase(): void {
   }
   migrateBilling(rawDb);
   migrateLongitudinalClinical(rawDb);
+  repairLegacyPhotoUrls(rawDb);
+}
+
+function repairLegacyPhotoUrls(rawDb: any): void {
+  try {
+    // 1. Repara personal_assessment_photos onde file_id é NULL ou photo_url contém worker/r2/blob
+    const brokenPhotos = rawDb.prepare(`
+      SELECT id, tenant_id, photo_url, file_id 
+      FROM personal_assessment_photos 
+      WHERE file_id IS NULL OR photo_url LIKE '%workers.dev%' OR photo_url LIKE '%r2.cloudflarestorage.com%' OR photo_url LIKE 'blob:%'
+    `).all() as any[];
+
+    for (const p of brokenPhotos) {
+      let recoveredFileId = p.file_id || null;
+      let objectKey: string | null = null;
+      const url = String(p.photo_url || '').trim();
+
+      if (!recoveredFileId && url) {
+        if (url.startsWith('att-')) {
+          recoveredFileId = url;
+        } else if (url.includes('token=')) {
+          try {
+            const tokenMatch = url.match(/token=([^&]+)/);
+            if (tokenMatch && tokenMatch[1]) {
+              const tokenPart = decodeURIComponent(tokenMatch[1]).split('.')[0];
+              const jsonStr = Buffer.from(tokenPart, 'base64url').toString('utf8');
+              const parsed = JSON.parse(jsonStr);
+              if (parsed && parsed.objectKey) {
+                objectKey = parsed.objectKey;
+              }
+            }
+          } catch (_) {}
+        } else if (url.includes('clinics/')) {
+          const match = url.match(/clinics\/[^\s?]+/);
+          if (match) objectKey = match[0];
+        }
+
+        if (objectKey) {
+          const attach = rawDb.prepare('SELECT id FROM file_attachments WHERE object_key = ?').get(objectKey) as any;
+          if (attach && attach.id) {
+            recoveredFileId = attach.id;
+          }
+        }
+      }
+
+      const isUnsafeUrl = url.includes('workers.dev') || url.includes('r2.cloudflarestorage.com') || url.startsWith('blob:');
+      if (recoveredFileId || isUnsafeUrl) {
+        rawDb.prepare(`
+          UPDATE personal_assessment_photos 
+          SET file_id = COALESCE(?, file_id),
+              photo_url = CASE WHEN ? = 1 THEN '' ELSE photo_url END
+          WHERE id = ?
+        `).run(recoveredFileId || null, isUnsafeUrl ? 1 : 0, p.id);
+      }
+    }
+
+    // 2. Repara personal_exercises onde exercise_file_id é NULL ou photo_url contém worker/r2/blob
+    const brokenExercises = rawDb.prepare(`
+      SELECT id, tenant_id, photo_url, exercise_file_id 
+      FROM personal_exercises 
+      WHERE (exercise_file_id IS NULL AND photo_url IS NOT NULL) OR photo_url LIKE '%workers.dev%' OR photo_url LIKE '%r2.cloudflarestorage.com%' OR photo_url LIKE 'blob:%'
+    `).all() as any[];
+
+    for (const ex of brokenExercises) {
+      let recoveredFileId = ex.exercise_file_id || null;
+      let objectKey: string | null = null;
+      const url = String(ex.photo_url || '').trim();
+
+      if (!recoveredFileId && url) {
+        if (url.startsWith('att-')) {
+          recoveredFileId = url;
+        } else if (url.includes('token=')) {
+          try {
+            const tokenMatch = url.match(/token=([^&]+)/);
+            if (tokenMatch && tokenMatch[1]) {
+              const tokenPart = decodeURIComponent(tokenMatch[1]).split('.')[0];
+              const jsonStr = Buffer.from(tokenPart, 'base64url').toString('utf8');
+              const parsed = JSON.parse(jsonStr);
+              if (parsed && parsed.objectKey) {
+                objectKey = parsed.objectKey;
+              }
+            }
+          } catch (_) {}
+        } else if (url.includes('clinics/')) {
+          const match = url.match(/clinics\/[^\s?]+/);
+          if (match) objectKey = match[0];
+        }
+
+        if (objectKey) {
+          const attach = rawDb.prepare('SELECT id FROM file_attachments WHERE object_key = ?').get(objectKey) as any;
+          if (attach && attach.id) {
+            recoveredFileId = attach.id;
+          }
+        }
+      }
+
+      const isUnsafeUrl = url.includes('workers.dev') || url.includes('r2.cloudflarestorage.com') || url.startsWith('blob:');
+      if (recoveredFileId || isUnsafeUrl) {
+        rawDb.prepare(`
+          UPDATE personal_exercises 
+          SET exercise_file_id = COALESCE(?, exercise_file_id),
+              photo_url = CASE WHEN ? = 1 THEN NULL ELSE photo_url END
+          WHERE id = ?
+        `).run(recoveredFileId || null, isUnsafeUrl ? 1 : 0, ex.id);
+      }
+    }
+  } catch (repairErr) {
+    console.warn('[Database] Aviso ao executar repairLegacyPhotoUrls:', repairErr);
+  }
 }

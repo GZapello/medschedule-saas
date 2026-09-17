@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
+import { SecureFileImage, fetchFreshFileUrl, isSafeFallbackUrl } from './SecureFileImage';
+import { optimizeImageFile } from '../../utils/imageOptimizer';
 import {
   Upload,
   Image as ImageIcon,
@@ -36,6 +38,7 @@ export interface FileImageUploaderProps {
   label?: string;
   buttonText?: string;
   autoUpload?: boolean;
+  isDiagnostic?: boolean;
   className?: string;
   onUploaded?: (fileInfo: FileUploadedInfo) => void;
   onRemoved?: () => void;
@@ -59,6 +62,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
   label = 'Imagem / Anexo',
   buttonText = '+ Adicionar imagem',
   autoUpload = true,
+  isDiagnostic = false,
   className = '',
   onUploaded,
   onRemoved,
@@ -211,15 +215,23 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     setUploadSuccess(false);
 
     try {
+      // 0. Otimização inteligente prévia da imagem no cliente (exceto se for diagnóstico)
+      const optimizedFile = await optimizeImageFile(fileToUpload, {
+        isDiagnostic,
+        maxWidth: 1800,
+        maxHeight: 1800,
+        quality: 0.85
+      });
+
       // 1. POST /api/files/upload-ticket
       const ticketResponse = await ApiClient.post<{
         uploadUrl: string;
         uploadToken: string;
         objectKey: string;
       }>('/files/upload-ticket', {
-        filename: fileToUpload.name,
-        mimeType: fileToUpload.type || 'image/jpeg',
-        fileSize: fileToUpload.size,
+        filename: optimizedFile.name,
+        mimeType: optimizedFile.type || 'image/jpeg',
+        fileSize: optimizedFile.size,
         category,
         patientId: effectivePatientId,
         appointmentId: appointmentId || undefined,
@@ -238,9 +250,9 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${uploadToken}`,
-          'Content-Type': fileToUpload.type || 'image/jpeg'
+          'Content-Type': optimizedFile.type || 'image/jpeg'
         },
-        body: fileToUpload
+        body: optimizedFile
       });
 
       if (!putResponse.ok) {
@@ -269,10 +281,10 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         file: FileUploadedInfo;
       }>('/files/complete', {
         objectKey: finalObjectKey,
-        filename: fileToUpload.name,
-        originalFilename: fileToUpload.name,
-        mimeType: fileToUpload.type || workerResult.contentType || 'image/jpeg',
-        fileSize: fileToUpload.size || workerResult.size,
+        filename: optimizedFile.name,
+        originalFilename: optimizedFile.name,
+        mimeType: optimizedFile.type || workerResult.contentType || 'image/jpeg',
+        fileSize: optimizedFile.size || workerResult.size,
         category,
         patientId: effectivePatientId,
         appointmentId: appointmentId || undefined,
@@ -294,8 +306,8 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
 
       // Atualiza estados
       setCurrentFileId(savedFile.id);
-      setCurrentFilename(savedFile.originalFilename || savedFile.filename || fileToUpload.name);
-      setCurrentFileSize(savedFile.fileSize || fileToUpload.size);
+      setCurrentFilename(savedFile.originalFilename || savedFile.filename || optimizedFile.name);
+      setCurrentFileSize(savedFile.fileSize || optimizedFile.size);
       setCurrentUrl(savedFile.url || null);
       setUploadSuccess(true);
 
@@ -339,23 +351,26 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     setIsViewerOpen(true);
     setErrorMessage(null);
 
-    // If it's a legacy external URL or already signed URL
-    if (currentUrl && (currentUrl.startsWith('http') || currentUrl.startsWith('/'))) {
-      setViewerUrl(currentUrl);
-      return;
-    }
-
-    // If we have an attachment ID, get fresh 5-minute signed URL from backend
+    // Prioridade absoluta para currentFileId: busca sempre URL fresca do Worker via backend
     if (currentFileId) {
       try {
         setIsLoadingViewUrl(true);
-        const res = await ApiClient.get<{ url: string; originalFilename?: string }>(`/files/${currentFileId}/url`);
-        setViewerUrl(res.url);
+        const freshUrl = await fetchFreshFileUrl(currentFileId, true);
+        setViewerUrl(freshUrl);
+        setCurrentUrl(freshUrl);
       } catch (err: any) {
+        console.warn('[FileImageUploader] Falha ao carregar visualização por fileId:', err);
         setErrorMessage('Não foi possível carregar a imagem para visualização.');
       } finally {
         setIsLoadingViewUrl(false);
       }
+      return;
+    }
+
+    // Se houver URL legada segura
+    if (currentUrl && isSafeFallbackUrl(currentUrl)) {
+      setViewerUrl(currentUrl);
+      return;
     }
   };
 
@@ -498,21 +513,13 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         <div className="flex items-center justify-between p-3 bg-slate-50/80 rounded-xl border border-slate-200 gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-14 h-14 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0 border border-slate-300">
-              {currentUrl ? (
-                <img
-                  src={currentUrl}
-                  alt={currentFilename || 'Anexo'}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    // Fallback thumbnail placeholder on error
-                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
-                  }}
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-400">
-                  <ImageIcon className="w-6 h-6" />
-                </div>
-              )}
+              <SecureFileImage
+                fileId={currentFileId}
+                fallbackUrl={currentUrl}
+                alt={currentFilename || 'Anexo'}
+                className="w-full h-full object-cover"
+                placeholderText="Anexo"
+              />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-slate-800 truncate" title={currentFilename || 'Imagem anexada'}>

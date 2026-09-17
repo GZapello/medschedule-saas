@@ -47,11 +47,11 @@ Depois, acesse **Painel Global → Integrações → Asaas → Testar conexão**
 
 Use apenas clínicas e pagadores de teste no Sandbox e os meios de simulação disponibilizados pelo Asaas.
 
-1. Cadastre uma clínica nova, entre como seu responsável e escolha **Solo**. Caso necessário, preencha **Dados de cobrança**. Confira que o checkout Asaas exibe R$ 59,90, cartão e recorrência mensal.
+1. Cadastre uma clínica nova, entre como seu responsável e escolha **Solo**. Caso necessário, preencha **Dados de cobrança**. Confira que o checkout Asaas exibe R$ 69,90, cartão e recorrência mensal.
 2. Antes de pagar, abra `/assinatura/sucesso` manualmente. O plano deve permanecer pendente, sem liberar operação.
 3. Conclua o pagamento no checkout hospedado. Confirme a entrega do webhook, o processamento e a assinatura `ACTIVE`. O gestor inicial deve contar como o único usuário do Solo.
 4. Tente criar/ativar outro acesso no Solo. Deve retornar `PLAN_USER_LIMIT_REACHED`, sem inserir um usuário ativo extra.
-5. Valide Equipe com cinco acessos e rejeição do sexto; Clínica com trinta e rejeição do 31º. SuperAdmin não conta.
+5. Valide Equipe com cinco acessos e rejeição do sexto; Clínica com vinte acessos e rejeição do 21º. SuperAdmin não conta.
 6. Reenvie o mesmo evento pelo Asaas. Deve haver um único registro de evento e de cobrança, sem somar um mês novamente.
 7. Simule atraso de uma renovação: `PAST_DUE`, aviso e tolerância de cinco dias a partir do vencimento. Confirme `SUSPENDED` após o prazo, preservando pacientes, agenda, documentos e financeiro. A área de assinatura deve permanecer acessível.
 8. Confirme a cobrança em atraso: `ACTIVE`, acesso restaurado. Uma clínica banida administrativamente deve continuar banida.
@@ -106,7 +106,7 @@ cd "C:\Users\gabri\OneDrive\Documents\antigravity-projects\frontend"
 npm run build
 ```
 
-O teste de billing cria SQLite temporário e simula apenas o gateway. Valida o percurso de cadastro, checkout, autenticação de webhook, confirmação, 1/5/30 acessos, inadimplência, tolerância, reativação, mudança de plano, estorno histórico, cancelamento, duplicidade, falha ambígua, autorização e isolamento de ambiente/segredos. A suíte administrativa anterior também passou.
+O teste de billing cria SQLite temporário e simula apenas o gateway. Valida o percurso de cadastro, checkout, autenticação de webhook, confirmação, 1/5/20 acessos, inadimplência, tolerância, reativação, mudança de plano, estorno histórico, cancelamento, duplicidade, falha ambígua, autorização e isolamento de ambiente/segredos. A suíte administrativa anterior também passou.
 
 Build do backend e TypeScript do frontend: aprovados. O build Vite completo falhou no ambiente desta sessão com `spawn EPERM` ao iniciar esbuild. Não houve verificação visual em navegador; confirme o build e as telas no Railway.
 

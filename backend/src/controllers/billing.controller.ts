@@ -9,7 +9,7 @@ import { tenantMiddleware } from '../middlewares/tenant.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 
 export function respondBillingError(res:Response,error:any):boolean {
-  if(error?.message?.includes('PLAN_USER_LIMIT_REACHED')) {res.status(409).json({code:'PLAN_USER_LIMIT_REACHED',error:'Limite do seu plano atingido.'});return true;}
+  if(error?.message?.includes('PLAN_USER_LIMIT_REACHED')) {res.status(409).json({code:'PLAN_USER_LIMIT_REACHED',error:'Limite de acessos do seu plano atingido.'});return true;}
   if(error instanceof BillingError) {res.status(error.httpStatus).json({code:error.code,error:error.message});return true;}
   return false;
 }
@@ -118,5 +118,9 @@ export function mountBillingRoutes(api:Router) {
     const result=await AsaasService.checkConnection(),lastTest=new Date().toISOString();
     db.prepare('INSERT INTO billing_integration_status(environment,connected,last_test_at,error) VALUES(?,?,?,?) ON CONFLICT(environment) DO UPDATE SET connected=excluded.connected,last_test_at=excluded.last_test_at,error=excluded.error').run(result.environment,result.connected?1:0,lastTest,result.error || null);
     res.json({...result,lastTest});
+  }));
+  api.post(['/admin/subscriptions/sync-prices','/v1/admin/subscriptions/sync-prices'],...guard,requireRole('superadmin'),handler(async(_req,res)=>{
+    const result=await BillingService.syncActiveSubscriptionPrices();
+    res.json({success:true,...result});
   }));
 }

@@ -29,7 +29,7 @@ export function requireCapacity(clinic: string, additional=1, excludeUser?: stri
   const limit=db.prepare('SELECT max_users FROM billing_user_limits WHERE clinic_id=?').get(clinic);
   if (!limit) return; // Preserve legacy clinics until they subscribe.
   if (excludeUser && db.prepare('SELECT 1 FROM billing_active_users WHERE clinic_id=? AND user_id=?').get(clinic,excludeUser)) return;
-  if (activeUsers(clinic)+additional > limit.max_users) throw new BillingError('PLAN_USER_LIMIT_REACHED','Limite do seu plano atingido.');
+  if (activeUsers(clinic)+additional > limit.max_users) throw new BillingError('PLAN_USER_LIMIT_REACHED','Limite de acessos do seu plano atingido.');
 }
 export function canOperate(clinic: string): boolean {
   const tenant=db.prepare('SELECT status,billing_required FROM tenants WHERE id=?').get(clinic);
@@ -221,5 +221,38 @@ export class BillingService {
         }
       }
     })();
+  }
+  static async syncActiveSubscriptionPrices(): Promise<{ synced: number; skipped: number; errors: number }> {
+    const activeSubs = db.prepare(`
+      SELECT s.id, s.clinic_id, s.asaas_subscription_id, s.status, s.plan_id, p.code, p.name, p.monthly_price
+      FROM subscriptions s
+      JOIN plans p ON p.id = s.plan_id
+      WHERE s.managed = 1 AND s.is_current = 1 AND s.status = 'ACTIVE' AND s.asaas_subscription_id IS NOT NULL
+    `).all() as any[];
+
+    let synced = 0, skipped = 0, errors = 0;
+    for (const sub of activeSubs) {
+      try {
+        const remote = await AsaasService.request(`/subscriptions/${encodeURIComponent(sub.asaas_subscription_id)}`);
+        if (remote && remote.value !== undefined && Math.abs(remote.value - sub.monthly_price) > 0.005) {
+          await AsaasService.request(`/subscriptions/${encodeURIComponent(sub.asaas_subscription_id)}`, {
+            method: 'PUT',
+            body: { value: sub.monthly_price, updatePendingPayments: false }
+          });
+          billingAudit(sub, 'PRICE_UPDATE_SYNC', sub.status, sub.status, null, {
+            previousPrice: remote.value,
+            newPrice: sub.monthly_price,
+            subscriptionId: sub.asaas_subscription_id
+          });
+          synced++;
+        } else {
+          skipped++;
+        }
+      } catch (err) {
+        console.warn(`[BillingService.syncActiveSubscriptionPrices] Erro na assinatura ${sub.id}:`, err);
+        errors++;
+      }
+    }
+    return { synced, skipped, errors };
   }
 }

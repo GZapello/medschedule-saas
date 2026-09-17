@@ -143,7 +143,13 @@ export class BillingWebhookService {
     const plan=db.prepare('SELECT * FROM plans WHERE id=?').get(historical?existing.plan_id:s.pending_plan_id && due>=s.pending_plan_effective_on ? s.pending_plan_id:s.plan_id);
     // Asaas may add interest to value; originalValue is the contract price.
     const contractAmount=historical?existing.contract_amount:plan.monthly_price;
-    if(Math.abs((p.originalValue ?? p.value)-contractAmount)>0.005 || p.billingType!=='CREDIT_CARD') throw new Error('PAYMENT_CONTRACT_MISMATCH');
+    const legacyPrices: Record<string, number> = { SOLO: 59.90, TEAM: 119.90, CLINIC: 359.90 };
+    const legacyPrice = legacyPrices[plan.code];
+    const val = p.originalValue ?? p.value;
+    const matchesCurrent = Math.abs(val - contractAmount) <= 0.005;
+    const matchesLegacy = legacyPrice !== undefined && Math.abs(val - legacyPrice) <= 0.005;
+    if ((!matchesCurrent && !matchesLegacy) || p.billingType!=='CREDIT_CARD') throw new Error('PAYMENT_CONTRACT_MISMATCH');
+    const effectiveContractAmount = matchesCurrent ? contractAmount : (legacyPrice || contractAmount);
     if(existing && existing.subscription_id!==s.id) throw new Error('PAYMENT_ALREADY_ASSIGNED');
     const state=p.deleted?'DELETED':p.status;
     if(!['PENDING','CONFIRMED','RECEIVED','OVERDUE','REFUNDED','DELETED','REFUND_REQUESTED','REFUND_IN_PROGRESS','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE','AWAITING_CHARGEBACK_REVERSAL','DUNNING_REQUESTED','DUNNING_RECEIVED','AWAITING_RISK_ANALYSIS'].includes(state)) return;
@@ -155,7 +161,7 @@ export class BillingWebhookService {
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(asaas_payment_id) DO UPDATE SET asaas_event_id=excluded.asaas_event_id,amount=excluded.amount,contract_amount=excluded.contract_amount,plan_id=excluded.plan_id,
       status=excluded.status,confirmed_at=COALESCE(excluded.confirmed_at,subscription_payments.confirmed_at),received_at=COALESCE(excluded.received_at,subscription_payments.received_at),
       invoice_url=COALESCE(excluded.invoice_url,subscription_payments.invoice_url),updated_at=datetime('now')`).run(existing?.id || randomUUID(),s.clinic_id,s.id,p.id,eventId,p.value,p.billingType,state,due,
-        ['CONFIRMED','RECEIVED'].includes(state)?date(p.confirmedDate || p.paymentDate || p.clientPaymentDate) || today():null,state==='RECEIVED'?date(p.paymentDate) || today():null,url,contractAmount,plan.id);
+        ['CONFIRMED','RECEIVED'].includes(state)?date(p.confirmedDate || p.paymentDate || p.clientPaymentDate) || today():null,state==='RECEIVED'?date(p.paymentDate) || today():null,url,effectiveContractAmount,plan.id);
     if(!s.asaas_subscription_id) {db.prepare('UPDATE subscriptions SET asaas_subscription_id=? WHERE id=?').run(p.subscription,s.id);s.asaas_subscription_id=p.subscription;}
   }
   private static recalculate(id:string) {

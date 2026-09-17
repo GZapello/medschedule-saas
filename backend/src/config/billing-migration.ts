@@ -28,10 +28,25 @@ export function migrateBilling(db: DatabaseSync): void {
     add('plans','code','TEXT'); add('plans','monthly_price','REAL'); add('plans','max_users','INTEGER');
     add('plans','active','INTEGER NOT NULL DEFAULT 1'); add('plans','updated_at','TEXT');
     db.exec('CREATE UNIQUE INDEX IF NOT EXISTS plans_code_unique ON plans(code)');
-    for (const [code,name,price,max] of [['SOLO','Zemda Solo',59.90,1],['TEAM','Zemda Equipe',119.90,5],['CLINIC','Zemda Clínica',359.90,30]]) {
+    for (const [code,name,price,max] of [['SOLO','Zemda Solo',69.90,1],['TEAM','Zemda Equipe',249.90,5],['CLINIC','Zemda Clínica',619.90,20]]) {
       db.prepare(`INSERT INTO plans(id,code,name,slug,price_monthly,monthly_price,max_users,max_professionals,max_patients,max_rooms,active,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,1000000,1000000,1,datetime('now')) ON CONFLICT(code) DO NOTHING`).run(`zemda-${code}`,code,name,`zemda-${String(code).toLowerCase()}`,price,price,max,max);
+        VALUES (?,?,?,?,?,?,?,?,1000000,1000000,1,datetime('now'))
+        ON CONFLICT(code) DO UPDATE SET
+          name=excluded.name,
+          price_monthly=excluded.price_monthly,
+          monthly_price=excluded.monthly_price,
+          max_users=excluded.max_users,
+          max_professionals=excluded.max_professionals,
+          active=1,
+          updated_at=datetime('now')`).run(`zemda-${code}`,code,name,`zemda-${String(code).toLowerCase()}`,price,price,max,max);
     }
+    db.exec(`UPDATE plans SET
+      price_monthly = CASE code WHEN 'SOLO' THEN 69.90 WHEN 'TEAM' THEN 249.90 WHEN 'CLINIC' THEN 619.90 ELSE price_monthly END,
+      monthly_price = CASE code WHEN 'SOLO' THEN 69.90 WHEN 'TEAM' THEN 249.90 WHEN 'CLINIC' THEN 619.90 ELSE monthly_price END,
+      max_users = CASE code WHEN 'SOLO' THEN 1 WHEN 'TEAM' THEN 5 WHEN 'CLINIC' THEN 20 ELSE max_users END,
+      max_professionals = CASE code WHEN 'SOLO' THEN 1 WHEN 'TEAM' THEN 5 WHEN 'CLINIC' THEN 20 ELSE max_professionals END,
+      updated_at = datetime('now')
+      WHERE code IN ('SOLO','TEAM','CLINIC');`);
     add('tenants','billing_required','INTEGER NOT NULL DEFAULT 0');
     add('tenants','billing_name','TEXT');
     add('tenants','billing_address_json','TEXT');
@@ -88,11 +103,20 @@ export function migrateBilling(db: DatabaseSync): void {
     `);
     // SQLite serializes writes. The guard covers every insert / activation path,
     // including concurrent requests and future controllers, not just visible buttons.
-    for (const table of ['users','clinic_users']) for (const action of ['INSERT','UPDATE']) {
-      const operation=action==='UPDATE' ? `UPDATE OF status,tenant_id,role${table==='clinic_users'?',user_id':''}` : action;
-      db.exec(`CREATE TRIGGER IF NOT EXISTS billing_limit_${table}_${action} AFTER ${operation} ON ${table}
-        WHEN EXISTS(SELECT 1 FROM billing_user_limits l WHERE
-          l.clinic_id IN (SELECT clinic_id FROM billing_active_users WHERE user_id=${table==='users'?'NEW.id':'NEW.user_id'})
+    for (const table of ['users','clinic_users']) {
+      db.exec(`DROP TRIGGER IF EXISTS billing_limit_${table}_INSERT;
+               DROP TRIGGER IF EXISTS billing_limit_${table}_UPDATE;`);
+      const userCol = table === 'users' ? 'NEW.id' : 'NEW.user_id';
+      db.exec(`CREATE TRIGGER billing_limit_${table}_INSERT AFTER INSERT ON ${table}
+        WHEN NEW.status='active' AND EXISTS(SELECT 1 FROM billing_user_limits l WHERE
+          l.clinic_id IN (SELECT clinic_id FROM billing_active_users WHERE user_id=${userCol})
+          AND (SELECT COUNT(*) FROM billing_active_users a WHERE a.clinic_id=l.clinic_id)>l.max_users)
+        BEGIN SELECT RAISE(ABORT,'PLAN_USER_LIMIT_REACHED'); END;`);
+      const updateOf = `status,tenant_id,role${table==='clinic_users'?',user_id':''}`;
+      db.exec(`CREATE TRIGGER billing_limit_${table}_UPDATE AFTER UPDATE OF ${updateOf} ON ${table}
+        WHEN NEW.status='active' AND (OLD.status!='active' OR OLD.tenant_id IS NOT NEW.tenant_id)
+          AND EXISTS(SELECT 1 FROM billing_user_limits l WHERE
+          l.clinic_id IN (SELECT clinic_id FROM billing_active_users WHERE user_id=${userCol})
           AND (SELECT COUNT(*) FROM billing_active_users a WHERE a.clinic_id=l.clinic_id)>l.max_users)
         BEGIN SELECT RAISE(ABORT,'PLAN_USER_LIMIT_REACHED'); END;`);
     }
