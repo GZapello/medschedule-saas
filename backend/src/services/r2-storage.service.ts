@@ -34,6 +34,7 @@ export class R2StorageService {
           accessKeyId,
           secretAccessKey
         },
+        forcePathStyle: true,
         requestChecksumCalculation: 'WHEN_REQUIRED',
         responseChecksumValidation: 'WHEN_REQUIRED'
       });
