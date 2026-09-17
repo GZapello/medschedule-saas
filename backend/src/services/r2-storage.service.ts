@@ -33,7 +33,9 @@ export class R2StorageService {
         credentials: {
           accessKeyId,
           secretAccessKey
-        }
+        },
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED'
       });
       this.isConfigured = true;
     }
