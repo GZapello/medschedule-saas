@@ -116,11 +116,17 @@ const AppContent: React.FC = () => {
   };
   const [activeTrialToken, setActiveTrialToken] = useState<string | null>(getInitialTrialToken);
 
-  // Roteamento para páginas legais (/termos-de-uso e /privacidade)
+  // Roteamento para páginas legais (/termos-de-uso, /privacidade e /cookies)
   const getInitialLegalPage = (): 'terms' | 'privacy' | null => {
     const cleanPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
     if (cleanPath === 'termos-de-uso') return 'terms';
     if (cleanPath === 'privacidade') return 'privacy';
+    if (cleanPath === 'cookies') {
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('open-cookie-preferences'));
+      }, 300);
+      return 'privacy';
+    }
     return null;
   };
   const [activeLegalPage, setActiveLegalPage] = useState<'terms' | 'privacy' | null>(getInitialLegalPage);
