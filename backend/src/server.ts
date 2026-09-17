@@ -102,6 +102,14 @@ app.all(['/api', '/api/*', '/v1', '/v1/*'], (req, res) => {
 });
 
 import { renderPreRenderedHtml } from './seo/preRender';
+import {
+  generateSitemapXml,
+  generateRobotsTxt,
+  isPublicRoute,
+  isValidInternalRoute,
+  isValidApplicationRoute,
+  normalizePath
+} from './seo/seoRoutes';
 
 // Servir downloads de executáveis oficiais (Windows e Android)
 const downloadsDir = path.resolve(__dirname, '../public/downloads');
@@ -113,36 +121,8 @@ if (fs.existsSync(downloadsDir)) {
 // Rota pública para robots.txt com cabeçalho text/plain
 app.get('/robots.txt', (req, res) => {
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.send(`User-agent: *
-Allow: /
-Allow: /sistema-para-clinicas
-Allow: /sistema-para-psicologos
-Allow: /sistema-para-fonoaudiologos
-Allow: /sistema-para-fisioterapeutas
-Allow: /sistema-para-nutricionistas
-Allow: /sistema-para-medicos
-Allow: /agenda-online
-Allow: /prontuario
-Allow: /gestao-financeira
-Allow: /blog
-Allow: /downloads
-Disallow: /api/
-Disallow: /v1/
-Disallow: /dashboard
-Disallow: /patients
-Disallow: /calendar
-Disallow: /clinical
-Disallow: /professionals
-Disallow: /services
-Disallow: /financial
-Disallow: /receipts
-Disallow: /staff
-Disallow: /settings
-Disallow: /superadmin
-Disallow: /audit
-
-Sitemap: https://zemda.com.br/sitemap.xml
-`);
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.send(generateRobotsTxt());
 });
 
 // Rota pública para sitemap.xml com cabeçalho rigoroso application/xml
@@ -152,86 +132,13 @@ const handleSitemap = (req: express.Request, res: express.Response) => {
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
-  res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://zemda.com.br/</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/sistema-para-clinicas</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/sistema-para-psicologos</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/sistema-para-fonoaudiologos</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/sistema-para-fisioterapeutas</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/sistema-para-nutricionistas</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/sistema-para-medicos</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/agenda-online</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/prontuario</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/gestao-financeira</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/blog</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://zemda.com.br/downloads</loc>
-    <lastmod>2026-09-13</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-</urlset>`.trim());
+  res.send(generateSitemapXml());
 };
 
 app.get('/sitemap.xml', handleSitemap);
 app.get('/sitemap', handleSitemap);
 app.get('/sitemap_index.xml', handleSitemap);
+
 
 // Servir arquivos estáticos do frontend em produção (Single Page Application unificada)
 const possibleFrontendDistPaths = [
@@ -246,7 +153,7 @@ const possibleFrontendDistPaths = [
 if (possibleFrontendDistPaths.length > 0) {
   const frontendDist = possibleFrontendDistPaths[0];
   console.log(`[Frontend SPA] Servindo aplicação estática a partir de: ${frontendDist}`);
-  app.use(express.static(frontendDist));
+  app.use(express.static(frontendDist, { index: false }));
 
   // Qualquer rota da interface web que não seja API ou health check retorna o index.html com SSR / pré-renderização de SEO
   app.get('*', (req, res, next) => {
@@ -261,13 +168,39 @@ if (possibleFrontendDistPaths.length > 0) {
       });
     }
 
+    // Padronização estrita de trailing slash para SEO: subpáginas não devem ter barra no final
+    if (req.path.length > 1 && req.path.endsWith('/')) {
+      const cleanPath = req.path.replace(/\/+$/, '');
+      const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+      return res.redirect(301, cleanPath + query);
+    }
+
     const indexPath = path.join(frontendDist, 'index.html');
     if (fs.existsSync(indexPath)) {
       try {
         const rawHtml = fs.readFileSync(indexPath, 'utf-8');
+        const normPath = normalizePath(req.path);
+        const isPublic = isPublicRoute(normPath);
+        const isInternal = isValidInternalRoute(normPath);
+        const isLegit = isPublic || isInternal;
+
+        if (isInternal && !isPublic) {
+          // Páginas privadas / autenticadas recebem cabeçalho noindex estrito
+          res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+        }
+
+        if (!isLegit) {
+          // URLs verdadeiramente inexistentes retornam status HTTP 404 real
+          res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+          res.status(404);
+          const renderedHtml = renderPreRenderedHtml(rawHtml, req.path);
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          return res.send(renderedHtml);
+        }
+
         const renderedHtml = renderPreRenderedHtml(rawHtml, req.path);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.send(renderedHtml);
+        res.status(200).send(renderedHtml);
       } catch (e) {
         res.sendFile(indexPath);
       }

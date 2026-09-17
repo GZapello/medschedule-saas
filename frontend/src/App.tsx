@@ -40,7 +40,9 @@ import { BudgetsView } from './components/budgets/BudgetsView';
 import { ProfessionalPayrollView } from './components/payroll/ProfessionalPayrollView';
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
-import { SEO_PAGES } from './data/seoPagesData';
+import { PublicHeader } from './components/public/PublicHeader';
+import { PublicFooter } from './components/public/PublicFooter';
+import { SEO_PAGES, isValidApplicationRoute, buildCanonical } from './data/seoPagesData';
 import { NewAppointmentModal } from './components/calendar/NewAppointmentModal';
 import { NewPatientModal } from './components/patients/NewPatientModal';
 import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
@@ -54,6 +56,47 @@ import { CookiePreferencesModal } from './components/common/CookiePreferencesMod
 import { LegalReacceptanceModal } from './components/common/LegalReacceptanceModal';
 import { trackPageView } from './utils/analytics';
 import { Sparkles, AlertCircle } from 'lucide-react';
+
+function updateDocumentSeo(options: {
+  title: string;
+  description?: string;
+  canonical?: string;
+  robots?: 'index, follow' | 'noindex, nofollow';
+}) {
+  document.title = options.title;
+
+  if (options.description) {
+    let descMeta = document.querySelector('meta[name="description"]');
+    if (!descMeta) {
+      descMeta = document.createElement('meta');
+      descMeta.setAttribute('name', 'description');
+      document.head.appendChild(descMeta);
+    }
+    descMeta.setAttribute('content', options.description);
+  }
+
+  let canonicalLink = document.querySelector('link[rel="canonical"]');
+  if (options.canonical) {
+    if (!canonicalLink) {
+      canonicalLink = document.createElement('link');
+      canonicalLink.setAttribute('rel', 'canonical');
+      document.head.appendChild(canonicalLink);
+    }
+    canonicalLink.setAttribute('href', options.canonical);
+  } else if (canonicalLink) {
+    canonicalLink.remove();
+  }
+
+  let robotsMeta = document.querySelector('meta[name="robots"]');
+  if (options.robots) {
+    if (!robotsMeta) {
+      robotsMeta = document.createElement('meta');
+      robotsMeta.setAttribute('name', 'robots');
+      document.head.appendChild(robotsMeta);
+    }
+    robotsMeta.setAttribute('content', options.robots);
+  }
+}
 
 const AppContent: React.FC = () => {
   const {
@@ -204,14 +247,37 @@ const AppContent: React.FC = () => {
     }
   }, [currentUser?.role]);
 
-  // Google Analytics 4: Rastreamento SPA global de páginas/visualizações (100% livre de PII ou dados clínicos)
+  // Sincronização dinâmica de Metadados de SEO, Canonical e Google Analytics 4 na SPA
   useEffect(() => {
     if (activeLegalPage === 'terms') {
+      updateDocumentSeo({
+        title: 'Termos de Uso | Zemda',
+        description: 'Termos e condições gerais de uso da plataforma Zemda de gestão para saúde.',
+        canonical: 'https://zemda.com.br/termos-de-uso',
+        robots: 'index, follow'
+      });
       trackPageView('/termos-de-uso', 'Zemda • Termos de Uso');
       return;
     }
     if (activeLegalPage === 'privacy') {
+      updateDocumentSeo({
+        title: 'Política de Privacidade e Proteção de Dados (LGPD) | Zemda',
+        description: 'Conheça nossa política de privacidade, tratamento e proteção de dados em conformidade rigorosa com a LGPD.',
+        canonical: 'https://zemda.com.br/privacidade',
+        robots: 'index, follow'
+      });
       trackPageView('/privacidade', 'Zemda • Política de Privacidade e LGPD');
+      return;
+    }
+
+    if (window.location.pathname === '/planos') {
+      updateDocumentSeo({
+        title: 'Planos e Preços Transparentes | Zemda',
+        description: 'Conheça os planos do Zemda para consultórios, profissionais autônomos e clínicas multiprofissionais. Sem fidelidade, sem taxas ocultas e com suporte especializado.',
+        canonical: 'https://zemda.com.br/planos',
+        robots: 'index, follow'
+      });
+      trackPageView('/planos', 'Zemda • Planos e Preços');
       return;
     }
 
@@ -244,17 +310,52 @@ const AppContent: React.FC = () => {
         onboarding: 'Configuração Inicial'
       };
       const title = viewTitles[currentView] ? `Zemda • ${viewTitles[currentView]}` : `Zemda • ${currentView}`;
+      updateDocumentSeo({
+        title,
+        robots: 'noindex, nofollow'
+      });
       trackPageView(`/${currentView}`, title);
     } else {
-      if (activeSeoSlug) {
-        trackPageView(`/${activeSeoSlug}`, `Zemda • ${SEO_PAGES[activeSeoSlug]?.title || 'Especialidade'}`);
+      if (activeSeoSlug && SEO_PAGES[activeSeoSlug]) {
+        const page = SEO_PAGES[activeSeoSlug];
+        updateDocumentSeo({
+          title: page.title,
+          description: page.metaDescription,
+          canonical: `https://zemda.com.br${page.path}`,
+          robots: 'index, follow'
+        });
+        trackPageView(`/${activeSeoSlug}`, `Zemda • ${page.title}`);
       } else if (activeProfSlug) {
+        updateDocumentSeo({
+          title: 'Zemda • Agendamento Online',
+          robots: 'noindex, nofollow'
+        });
         trackPageView('/agendar', 'Zemda • Agendamento Online');
       } else if (activeInvite) {
+        updateDocumentSeo({
+          title: 'Zemda • Convite',
+          robots: 'noindex, nofollow'
+        });
         trackPageView('/convite', 'Zemda • Convite');
       } else if (publicView === 'login') {
+        updateDocumentSeo({
+          title: 'Zemda • Acesso Seguro',
+          robots: 'noindex, nofollow'
+        });
         trackPageView('/login', 'Zemda • Login e Acesso');
+      } else if (!isValidApplicationRoute(window.location.pathname)) {
+        updateDocumentSeo({
+          title: 'Página não encontrada (404) | Zemda',
+          robots: 'noindex, nofollow'
+        });
+        trackPageView(window.location.pathname, 'Zemda • Página não encontrada (404)');
       } else {
+        updateDocumentSeo({
+          title: 'Zemda • Sistema de Gestão para Clínicas, Consultórios e Saúde',
+          description: 'Software completo para clínicas, consultórios médicos e terapêuticos. Agenda online inteligente, prontuário eletrônico seguro, gestão financeira, controle de caixa, emissão de recibos e aplicativo integrado para médicos, psicólogos, fonoaudiólogos e fisioterapeutas.',
+          canonical: 'https://zemda.com.br/',
+          robots: 'index, follow'
+        });
         trackPageView('/', 'Zemda • Sistema de Gestão em Saúde');
       }
     }
@@ -556,6 +657,57 @@ const AppContent: React.FC = () => {
   }
   // Se não estiver logado, exibe páginas de SEO de nicho, Landing Page ou Login
   if (!currentUser || billingReturnHome) {
+    // Se a rota acessada for inválida (404 real)
+    if (!isValidApplicationRoute(window.location.pathname)) {
+      return (
+        <div className="min-h-screen bg-[#fafbfc] text-slate-800 font-sans flex flex-col justify-between">
+          <PublicHeader
+            onLogin={() => {
+              window.history.pushState(null, '', '/login');
+              setPublicView('login');
+            }}
+            onRegisterClinic={() => {
+              window.history.pushState(null, '', '/cadastro');
+              setAuthInitialAction('create-clinic');
+              setPublicView('login');
+            }}
+            isLegalOrAuxiliary={true}
+            onNavigateHome={navigateToHome}
+          />
+          <main className="flex-1 flex flex-col items-center justify-center text-center px-4 py-20 max-w-xl mx-auto">
+            <span className="text-6xl sm:text-7xl font-black text-teal-600 mb-2">404</span>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">Página não encontrada</h1>
+            <p className="text-slate-500 mb-8 text-sm leading-relaxed">
+              O endereço que você tentou acessar não existe, foi removido ou está temporariamente indisponível.
+            </p>
+            <a
+              href="/"
+              onClick={(e) => {
+                e.preventDefault();
+                navigateToHome();
+              }}
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-sm shadow-md transition-all cursor-pointer inline-flex items-center gap-2"
+            >
+              Voltar para a página inicial
+            </a>
+          </main>
+          <PublicFooter
+            onLogin={() => {
+              window.history.pushState(null, '', '/login');
+              setPublicView('login');
+            }}
+            onRegisterClinic={() => {
+              window.history.pushState(null, '', '/cadastro');
+              setAuthInitialAction('create-clinic');
+              setPublicView('login');
+            }}
+            onNavigateSeoPage={navigateToSeoPage}
+            onNavigateHome={navigateToHome}
+          />
+        </div>
+      );
+    }
+
     if (activeSeoSlug && SEO_PAGES[activeSeoSlug]) {
       return (
         <PublicSeoPageView

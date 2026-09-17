@@ -33,8 +33,10 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10">
           {/* Coluna 1: Marca & Apresentação */}
           <div className="lg:col-span-2 space-y-4">
-            <div
-              onClick={() => {
+            <a
+              href="/"
+              onClick={(e) => {
+                e.preventDefault();
                 if (onNavigateHome) onNavigateHome();
                 else window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
@@ -56,7 +58,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
                   Saúde e Gestão em Harmonia
                 </span>
               </div>
-            </div>
+            </a>
             <p className="text-xs text-slate-500 leading-relaxed max-w-sm">
               Plataforma especializada de gestão clínica, prontuário eletrônico inteligente, agenda médica, controle financeiro e módulos direcionados para profissionais de saúde.
             </p>
@@ -74,49 +76,66 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('inicio')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScrollToSection('inicio');
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   Início
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('funcionalidades')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/#funcionalidades"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScrollToSection('funcionalidades');
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   Funcionalidades
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('profissoes')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/#profissoes"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScrollToSection('profissoes');
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   Áreas profissionais
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('planos')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/planos"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState(null, '', '/planos');
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   Planos e Preços
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('faq')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/#faq"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScrollToSection('faq');
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   Perguntas Frequentes (FAQ)
-                </button>
+                </a>
               </li>
             </ul>
           </div>
@@ -128,76 +147,122 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
-                <button
-                  type="button"
-                  onClick={() => onNavigateSeoPage ? onNavigateSeoPage('sistema-para-fonoaudiologos') : handleScrollToSection('profissoes')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/sistema-para-medicos"
+                  onClick={(e) => {
+                    if (onNavigateSeoPage) {
+                      e.preventDefault();
+                      onNavigateSeoPage('sistema-para-medicos');
+                    }
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
+                >
+                  ZemdaMed — Médicos e Clínicas
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/sistema-para-fonoaudiologos"
+                  onClick={(e) => {
+                    if (onNavigateSeoPage) {
+                      e.preventDefault();
+                      onNavigateSeoPage('sistema-para-fonoaudiologos');
+                    }
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   ZemdaFono — Fonoaudiologia
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => onNavigateSeoPage ? onNavigateSeoPage('sistema-para-psicologos') : handleScrollToSection('profissoes')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/sistema-para-psicologos"
+                  onClick={(e) => {
+                    if (onNavigateSeoPage) {
+                      e.preventDefault();
+                      onNavigateSeoPage('sistema-para-psicologos');
+                    }
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   ZemdaPsico — Psicologia
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('profissoes')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
-                >
-                  ZemdaTO — Terapia Ocupacional
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onNavigateSeoPage ? onNavigateSeoPage('sistema-para-nutricionistas') : handleScrollToSection('profissoes')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/sistema-para-nutricionistas"
+                  onClick={(e) => {
+                    if (onNavigateSeoPage) {
+                      e.preventDefault();
+                      onNavigateSeoPage('sistema-para-nutricionistas');
+                    }
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   ZemdaNutri — Nutrição
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => onNavigateSeoPage ? onNavigateSeoPage('sistema-para-fisioterapeutas') : handleScrollToSection('profissoes')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/sistema-para-fisioterapeutas"
+                  onClick={(e) => {
+                    if (onNavigateSeoPage) {
+                      e.preventDefault();
+                      onNavigateSeoPage('sistema-para-fisioterapeutas');
+                    }
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   ZemdaFisio — Fisioterapia
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('profissoes')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/#profissoes"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScrollToSection('profissoes');
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
+                >
+                  ZemdaTO — Terapia Ocupacional
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/#profissoes"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScrollToSection('profissoes');
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   ZemdaPersonal — Educ. Física
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('profissoes')}
-                  className="hover:text-teal-600 transition-colors cursor-pointer"
+                <a
+                  href="/#profissoes"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScrollToSection('profissoes');
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
                 >
                   ZemdaOdonto — Odontologia
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleScrollToSection('zemdabody')}
-                  className="hover:text-teal-600 font-medium transition-colors cursor-pointer"
+                <a
+                  href="/#zemdabody"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleScrollToSection('zemdabody');
+                  }}
+                  className="hover:text-teal-600 font-medium transition-colors cursor-pointer block"
                 >
                   ZemdaBody — Avaliação Corporal
-                </button>
+                </a>
               </li>
             </ul>
           </div>

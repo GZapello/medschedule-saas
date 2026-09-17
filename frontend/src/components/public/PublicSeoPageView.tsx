@@ -80,9 +80,16 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({
               <div className="max-w-3xl space-y-6">
                 {/* Breadcrumb */}
                 <div className="flex items-center gap-2 text-xs text-slate-500 font-medium justify-center sm:justify-start">
-                  <span onClick={onNavigateHome} className="hover:text-teal-600 cursor-pointer">
+                  <a
+                    href="/"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onNavigateHome();
+                    }}
+                    className="hover:text-teal-600 cursor-pointer"
+                  >
                     Início
-                  </span>
+                  </a>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                   <span className="text-teal-700 font-bold">{pageData.badge}</span>
                 </div>
@@ -299,11 +306,14 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                 {allPagesList.map(p => (
-                  <button
+                  <a
                     key={p.slug}
-                    type="button"
-                    onClick={() => onNavigatePage(p.slug)}
-                    className={`text-left p-3 rounded-2xl border transition-all cursor-pointer ${
+                    href={p.path}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onNavigatePage(p.slug);
+                    }}
+                    className={`text-left p-3 rounded-2xl border transition-all cursor-pointer block ${
                       p.slug === pageData.slug
                         ? 'bg-teal-50 border-teal-300 text-teal-900 font-bold shadow-xs'
                         : 'bg-white border-slate-200/80 text-slate-600 hover:text-teal-700 hover:border-teal-200 shadow-xs'
@@ -311,7 +321,7 @@ export const PublicSeoPageView: React.FC<PublicSeoPageViewProps> = ({
                   >
                     <span className="block text-[11px] truncate">{p.badge}</span>
                     <span className="text-[10px] text-slate-400 truncate block">{p.path}</span>
-                  </button>
+                  </a>
                 ))}
               </div>
             </div>

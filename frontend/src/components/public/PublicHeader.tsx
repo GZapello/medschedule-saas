@@ -20,39 +20,62 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
 
   const handleNavClick = (href: string) => {
     setMobileMenuOpen(false);
-    if (isLegalOrAuxiliary) {
-      if (onNavigateHome) {
-        onNavigateHome();
+
+    if (href === '/planos' || href === '#planos') {
+      window.history.pushState(null, '', '/planos');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (href === '/' || href === '#inicio') {
+      if (isLegalOrAuxiliary) {
+        if (onNavigateHome) onNavigateHome();
+        else window.location.assign('/');
       } else {
-        window.location.assign(`/${href}`);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
       return;
     }
 
-    if (href === '#inicio' || href === '/') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      const target = document.querySelector(href);
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth' });
+    const anchorId = href.replace(/^\/?#/, '');
+    if (isLegalOrAuxiliary) {
+      if (onNavigateHome) {
+        onNavigateHome();
+        setTimeout(() => {
+          const target = document.getElementById(anchorId);
+          if (target) target.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+      } else {
+        window.location.assign(`/#${anchorId}`);
       }
+      return;
+    }
+
+    const target = document.getElementById(anchorId);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
   const navLinks = [
-    { label: 'Início', href: '#inicio' },
-    { label: 'Funcionalidades', href: '#funcionalidades' },
-    { label: 'Áreas profissionais', href: '#profissoes' },
-    { label: 'Planos', href: '#planos' },
-    { label: 'FAQ', href: '#faq' }
+    { label: 'Início', href: '/' },
+    { label: 'Funcionalidades', href: '/#funcionalidades' },
+    { label: 'Áreas profissionais', href: '/#profissoes' },
+    { label: 'Planos', href: '/planos' },
+    { label: 'FAQ', href: '/#faq' }
   ];
 
   return (
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-100/90 shadow-xs transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-        {/* Brand Logo & Name */}
-        <div
-          onClick={() => handleNavClick('#inicio')}
+        {/* Brand Logo & Name (Link HTML Rastreável) */}
+        <a
+          href="/"
+          onClick={(e) => {
+            e.preventDefault();
+            handleNavClick('/');
+          }}
           className="flex items-center gap-3 cursor-pointer group select-none"
         >
           <div className="relative flex items-center justify-center">
@@ -73,23 +96,26 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
               Saúde e Gestão
             </span>
           </div>
-        </div>
+        </a>
 
-        {/* Desktop Navigation Links */}
+        {/* Desktop Navigation Links (Links HTML Rastreáveis) */}
         <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-slate-600">
           {navLinks.map(link => {
-            const isActive = activeSection === link.href.replace('#', '');
+            const isActive = activeSection === link.href.replace(/^\/?#/, '');
             return (
-              <button
+              <a
                 key={link.label}
-                type="button"
-                onClick={() => handleNavClick(link.href)}
+                href={link.href}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick(link.href);
+                }}
                 className={`hover:text-teal-600 transition-colors py-1 cursor-pointer font-medium ${
                   isActive ? 'text-teal-600 font-bold' : ''
                 }`}
               >
                 {link.label}
-              </button>
+              </a>
             );
           })}
         </nav>
@@ -139,19 +165,22 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
+      {/* Mobile Drawer Menu (Links HTML Rastreáveis) */}
       {mobileMenuOpen && (
         <div className="sm:hidden border-t border-slate-100 bg-white/95 backdrop-blur-md px-4 pt-3 pb-6 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex flex-col space-y-2">
             {navLinks.map(link => (
-              <button
+              <a
                 key={link.label}
-                type="button"
-                onClick={() => handleNavClick(link.href)}
-                className="text-left px-3 py-2 text-sm font-medium text-slate-700 hover:text-teal-600 hover:bg-teal-50/50 rounded-lg transition-colors cursor-pointer"
+                href={link.href}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleNavClick(link.href);
+                }}
+                className="text-left px-3 py-2 text-sm font-medium text-slate-700 hover:text-teal-600 hover:bg-teal-50/50 rounded-lg transition-colors cursor-pointer block"
               >
                 {link.label}
-              </button>
+              </a>
             ))}
           </div>
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">

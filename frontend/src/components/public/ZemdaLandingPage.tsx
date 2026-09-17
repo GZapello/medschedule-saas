@@ -364,16 +364,18 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {professionalAreas.map(area => {
               const IconComp = area.icon;
+              const cardHref = area.id === 'body' ? '/#zemdabody' : `/${area.seoSlug}`;
               return (
-                <div
+                <a
                   key={area.id}
-                  onClick={() => {
+                  href={cardHref}
+                  onClick={(e) => {
                     if (area.id === 'body') {
+                      e.preventDefault();
                       scrollToSection('zemdabody');
                     } else if (onNavigateSeoPage) {
+                      e.preventDefault();
                       onNavigateSeoPage(area.seoSlug);
-                    } else {
-                      onRegisterClinic();
                     }
                   }}
                   className="group relative bg-white border border-slate-200/80 hover:border-teal-400/80 rounded-3xl p-6 shadow-xs hover:shadow-xl hover:shadow-teal-600/5 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between"
@@ -406,7 +408,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                       <ChevronRight className="w-4 h-4" />
                     </div>
                   </div>
-                </div>
+                </a>
               );
             })}
           </div>

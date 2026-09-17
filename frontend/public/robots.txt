@@ -13,25 +13,9 @@ Allow: /gestao-financeira
 Allow: /blog
 Allow: /termos-de-uso
 Allow: /privacidade
-Allow: /cookies
 
-# Áreas Privadas e Técnicas (Não Indexar)
+# APIs
 Disallow: /api/
 Disallow: /v1/
-Disallow: /dashboard
-Disallow: /patients
-Disallow: /calendar
-Disallow: /clinical
-Disallow: /professionals
-Disallow: /services
-Disallow: /financial
-Disallow: /receipts
-Disallow: /staff
-Disallow: /settings
-Disallow: /superadmin
-Disallow: /audit
-Disallow: /assinatura/
-Disallow: /convite/
-Disallow: /teste-gratis/
 
 Sitemap: https://zemda.com.br/sitemap.xml
