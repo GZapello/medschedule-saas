@@ -258,6 +258,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     profId === 'prof-educacao-fisica' ||
     profId === 'prof-educador-fisico' ||
     profId === 'personal_trainer' ||
+    profId.includes('personal') ||
     (currentUser as any)?.registrationType === 'CREF';
 
   const hasPersonalArea =
@@ -266,7 +267,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     profName.includes('personal') ||
     practiceAreas.includes('personal trainer') ||
     practiceAreas.includes('educação física') ||
-    practiceAreas.includes('educacao fisica');
+    practiceAreas.includes('educacao fisica') ||
+    practiceAreas.includes('cref');
 
   const hasConflictingProfession =
     hasPhysioArea || hasOdontoArea || hasNutriArea || hasTOArea || hasFonoArea ||
@@ -282,8 +284,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isPersonalTrainer = !isSuperAdmin && isStrictPersonalTrainer;
 
-  // ZemdaBody: controlado exclusivamente por permissão manual do gestor ou administrador
-  const isZemdaBody = isClinicAdmin || userPermissions.includes('access_zemda_body');
+  // ZemdaBody: disponível para todas as áreas profissionais da saúde e administradores
+  const isZemdaBody = !isPatient && (isClinicAdmin || isProfessional || userPermissions.includes('access_zemda_body') || currentUser?.role !== 'receptionist');
 
   // ZemdaPersonal: Profissão = Personal Trainer + permissão ativa → liberar ZemdaPersonal. Outra profissão → não exibir e não permitir acesso
   const isZemdaPersonal = !isSuperAdmin && (

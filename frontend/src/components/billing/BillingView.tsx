@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { CreditCard, Users, CheckCircle2, AlertCircle, ArrowUpRight, ArrowLeft } from 'lucide-react';
+import { CreditCard, Users, CheckCircle2, AlertCircle, ArrowUpRight, ArrowLeft, Sparkles } from 'lucide-react';
 
 const money=(v:number)=>Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const date=(v:string)=>v?new Date(v.slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—';
@@ -114,35 +114,107 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
     </div>}
     {currentUser && canManage && profileOpen && <form onSubmit={saveProfile} className="bg-white border border-slate-200/80 shadow-xs rounded-3xl p-6 sm:p-8 space-y-4"><h2 className="font-bold text-slate-900">Dados de cobrança</h2><p className="text-sm text-slate-600">Esses dados identificam o pagador no Asaas. Os dados do cartão são informados somente no checkout hospedado.</p><div className="grid sm:grid-cols-2 gap-4">
       {([['name','Nome do pagador'],['cpfCnpj','CPF/CNPJ'],['email','E-mail'],['phone','Telefone'],['postalCode','CEP'],['address','Logradouro'],['addressNumber','Número'],['province','Bairro'],['complement','Complemento (opcional)']] as const).map(([key,label])=><label key={key} className="text-xs font-semibold text-slate-700">{label}<input required={key!=='phone' && key!=='complement'} type={key==='email'?'email':'text'} maxLength={key==='email'?200:key==='postalCode'?9:['phone','cpfCnpj','addressNumber'].includes(key)?30:160} value={profile[key]} onChange={e=>setProfile({...profile,[key]:e.target.value})} className="w-full block border border-slate-200 rounded-xl p-2.5 mt-1 bg-slate-50 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden" /></label>)}</div><p className="text-xs text-slate-500">Informe o endereço do pagador. A cidade é identificada pelo Asaas a partir do CEP.</p><button disabled={busy} className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all disabled:opacity-50">Salvar dados de cobrança</button></form>}
-    {canManage && (showPlans || !summary?.managed || summary?.status==='PENDING_PAYMENT') && <div className="grid md:grid-cols-3 gap-6 pt-2">
-      {plans.map(plan=>{
-        const isFeatured = (plan.code || '').toLowerCase().includes('equipe') || (plan.name || '').toLowerCase().includes('equipe');
-        return <article key={plan.code} className={`bg-white rounded-3xl p-6 sm:p-8 flex flex-col gap-5 transition-all relative ${
-          isFeatured
-            ? 'border-2 border-teal-500 shadow-xl shadow-teal-900/10 scale-[1.02] z-10'
-            : 'border border-slate-200 shadow-xs hover:border-slate-300'
-        }`}>
-          {isFeatured && (
-            <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[11px] font-extrabold uppercase tracking-wider px-3.5 py-1 rounded-full shadow-xs">
-              Mais Escolhido
+    {canManage && (showPlans || !summary?.managed || summary?.status==='PENDING_PAYMENT') && (
+      <div className="space-y-6 pt-2">
+        {/* Banner de recursos inclusos em todos os planos */}
+        <div className="bg-white border border-teal-200/80 rounded-3xl p-6 sm:p-7 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <span className="text-[11px] font-black uppercase tracking-wider text-teal-700 block mb-0.5">
+                Plataforma Completa
+              </span>
+              <h3 className="text-base sm:text-lg font-black text-slate-900">
+                Todos os planos do Zemda incluem:
+              </h3>
+            </div>
+            <span className="px-3 py-1 bg-teal-50 text-teal-800 text-xs font-bold rounded-xl border border-teal-200/60">
+              9 recursos essenciais inclusos
             </span>
-          )}
-          <div>
-            <h2 className="text-xl font-black text-slate-900">{plan.name}</h2>
-            <p className="flex gap-2 items-center text-slate-500 text-xs font-semibold mt-1"><Users className="w-4 h-4 text-teal-600"/>{plan.max_users===1?'1 usuário':`Até ${plan.max_users} usuários`}</p>
           </div>
-          <div>
-            <p className="text-3xl font-black text-slate-900 tracking-tight">{money(plan.monthly_price)}<span className="text-xs text-slate-500 font-normal"> /mês</span></p>
-            <p className="text-xs text-slate-600 mt-2">Módulos profissionais conforme sua área de atuação.</p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-slate-700 font-medium pt-1">
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agenda Interativa</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Prontuário eletrônico</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Financeiro</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Documentos</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Estoque</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Equipe e permissões</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agendamento online</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Inteligência Artificial</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>ZemdaBody</span></div>
           </div>
-          <button disabled={busy || summary?.plan?.code===plan.code && summary?.status==='ACTIVE'} onClick={()=>void choose(plan.code)} className={`mt-auto font-bold text-xs py-3 px-4 rounded-xl cursor-pointer transition-all disabled:opacity-50 ${
-            isFeatured
-              ? 'bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-700/20'
-              : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
-          }`}>{busy?'Aguarde…':summary?.managed && summary.status==='ACTIVE'?'Programar mudança':'Assinar agora'}</button>
-        </article>;
-      })}
-    </div>}
+
+          <div className="p-3.5 bg-gradient-to-r from-teal-50 via-emerald-50/60 to-teal-50 rounded-2xl border border-teal-200/70 text-xs text-teal-950 flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+            <span className="leading-relaxed">
+              <strong>Módulo Especializado Automático:</strong> Cada profissional recebe automaticamente seu módulo específico (<strong>ZemdaFono</strong>, <strong>ZemdaPsico</strong>, <strong>ZemdaTO</strong>, <strong>ZemdaNutri</strong>, <strong>ZemdaFisio</strong>, <strong>ZemdaPersonal</strong> ou <strong>ZemdaOdonto</strong>) de acordo com sua profissão cadastrada.
+            </span>
+          </div>
+        </div>
+
+        {/* Cards dos Planos */}
+        <div className="grid md:grid-cols-3 gap-6">
+          {plans.map(plan=>{
+            const isFeatured = (plan.code || '').toLowerCase().includes('equipe') || (plan.name || '').toLowerCase().includes('equipe');
+            const userLimitLabel = plan.max_users === 1 ? '1 acesso' : `${plan.max_users} acessos`;
+            return <article key={plan.code} className={`bg-white rounded-3xl p-6 sm:p-8 flex flex-col justify-between gap-6 transition-all relative ${
+              isFeatured
+                ? 'border-2 border-teal-500 shadow-xl shadow-teal-900/10 scale-[1.02] z-10'
+                : 'border border-slate-200 shadow-xs hover:border-slate-300'
+            }`}>
+              {isFeatured && (
+                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[11px] font-extrabold uppercase tracking-wider px-3.5 py-1 rounded-full shadow-xs">
+                  Mais Escolhido
+                </span>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">{plan.name}</h2>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 text-xs font-bold mt-2">
+                    <Users className="w-3.5 h-3.5 text-teal-600"/>
+                    <span>{userLimitLabel}</span>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-3xl font-black text-slate-900 tracking-tight">
+                    {money(plan.monthly_price)}
+                    <span className="text-xs text-slate-500 font-normal"> /mês</span>
+                  </p>
+                  <p className="text-xs text-slate-600 mt-2">
+                    {plan.max_users === 1 ? 'Para atendimento autônomo individual.' : plan.max_users <= 5 ? 'Para clínicas e consultórios com até 5 acessos.' : 'Para clínicas consolidadas com até 20 acessos.'}
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                    <span>{userLimitLabel} no sistema</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                    <span>Módulos clínicos especializados inclusos</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                    <span>ZemdaBody liberado</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                    <span>Agenda, Prontuário, Financeiro e IA</span>
+                  </div>
+                </div>
+              </div>
+
+              <button disabled={busy || summary?.plan?.code===plan.code && summary?.status==='ACTIVE'} onClick={()=>void choose(plan.code)} className={`w-full font-bold text-xs py-3 px-4 rounded-xl cursor-pointer transition-all disabled:opacity-50 ${
+                isFeatured
+                  ? 'bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-700/20'
+                  : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
+              }`}>{busy?'Aguarde…':summary?.managed && summary.status==='ACTIVE'?'Programar mudança':'Assinar agora'}</button>
+            </article>;
+          })}
+        </div>
+      </div>
+    )}
     {historyOpen && summary && <div className="bg-white border border-slate-200/80 shadow-xs rounded-3xl p-6 overflow-x-auto"><h2 className="font-bold text-slate-900 mb-4">Histórico de cobranças</h2><table className="w-full text-xs text-left"><thead><tr className="border-b border-slate-100 text-slate-500"><th className="p-3">Data</th><th>Valor</th><th>Forma</th><th>Status</th><th>Pagamento</th></tr></thead><tbody>
       {summary.payments.map((p:any)=><tr key={p.id} className="border-b border-slate-100"><td className="p-3 text-slate-700 font-medium">{date(p.due_date)}</td><td className="font-semibold text-slate-900">{money(p.amount)}</td><td>{p.billing_type==='CREDIT_CARD'?'Cartão':p.billing_type}</td><td><span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">{statuses[p.status] || p.status}</span></td><td>{p.invoice_url && <a href={p.invoice_url} target="_blank" rel="noopener noreferrer" className="text-teal-700 hover:text-teal-800 font-bold inline-flex items-center gap-1">Abrir cobrança<ArrowUpRight className="w-3.5 h-3.5"/></a>}</td></tr>)}
     </tbody></table>{!summary.payments.length && <p className="text-slate-500 p-4 text-xs">Nenhuma cobrança registrada.</p>}</div>}

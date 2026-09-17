@@ -744,6 +744,42 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
             </p>
           </div>
 
+          {/* Banner: Todos os planos incluem */}
+          <div className="max-w-5xl mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-teal-200/80 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-black uppercase tracking-wider text-teal-700 block mb-0.5">
+                  Recursos Globais da Plataforma
+                </span>
+                <h3 className="text-base sm:text-xl font-black text-slate-900">
+                  Todos os planos do Zemda incluem:
+                </h3>
+              </div>
+              <span className="px-3.5 py-1 rounded-xl bg-teal-50 text-teal-800 text-xs font-bold border border-teal-200/60">
+                9 ferramentas essenciais inclusas
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-700 font-semibold pt-1">
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agenda Interativa</span></div>
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Prontuário eletrônico</span></div>
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Financeiro</span></div>
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Documentos</span></div>
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Estoque</span></div>
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Equipe e permissões</span></div>
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agendamento online</span></div>
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Inteligência Artificial</span></div>
+              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>ZemdaBody (Mapa Corporal)</span></div>
+            </div>
+
+            <div className="p-4 bg-gradient-to-r from-teal-50 via-emerald-50/60 to-teal-50 rounded-2xl border border-teal-200/70 text-xs text-teal-950 flex items-start gap-2.5">
+              <Sparkles className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">
+                <strong>Módulo Especializado Automático:</strong> Cada profissional recebe automaticamente seu módulo específico (<strong>ZemdaFono</strong>, <strong>ZemdaPsico</strong>, <strong>ZemdaTO</strong>, <strong>ZemdaNutri</strong>, <strong>ZemdaFisio</strong>, <strong>ZemdaPersonal</strong> ou <strong>ZemdaOdonto</strong>) de acordo com sua profissão cadastrada.
+              </span>
+            </div>
+          </div>
+
           {/* Cards dos 3 Planos */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto items-stretch">
             {/* PLANO 1: Zemda Solo */}
@@ -772,23 +808,23 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 <div className="pt-2 border-t border-slate-100 space-y-3 text-xs text-slate-600">
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Módulo profissional completo liberado</span>
+                    <span>1 acesso completo ao sistema</span>
                   </div>
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Prontuário eletrônico ilimitado</span>
+                    <span>Módulo clínico específico incluso</span>
                   </div>
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Agenda médica e agendamento online</span>
+                    <span>ZemdaBody (Mapa Corporal) liberado</span>
                   </div>
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Gestão financeira, recibos e relatórios</span>
+                    <span>Agenda Interativa e agendamento online</span>
                   </div>
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Acesso ao ZemdaBody</span>
+                    <span>Prontuário, Financeiro, Documentos e IA</span>
                   </div>
                 </div>
               </div>
@@ -833,7 +869,15 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 <div className="pt-2 border-t border-slate-100 space-y-3 text-xs text-slate-600">
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                    <span>Até 5 acessos profissionais e colaboradores</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
                     <span>Módulos liberados pela profissão de cada usuário</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                    <span>ZemdaBody (Mapa Corporal) para toda a equipe</span>
                   </div>
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
@@ -841,15 +885,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   </div>
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Agendas independentes compartilhadas</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Inteligência artificial para resumos clínicos</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Suporte prioritário e onboarding de equipe</span>
+                    <span>Inteligência artificial para resumos e evoluções</span>
                   </div>
                 </div>
               </div>
@@ -898,15 +934,15 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   </div>
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                    <span>ZemdaBody (Mapa Corporal) para todos os profissionais</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
                     <span>Relatórios avançados e controle de estoque</span>
                   </div>
                   <div className="flex items-center gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
                     <span>Treinamento e gerente de conta dedicado</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Conformidade total e auditoria avançada</span>
                   </div>
                 </div>
               </div>
@@ -924,10 +960,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           {/* Destaque Obrigatório de Planos */}
           <div className="max-w-3xl mx-auto rounded-2xl bg-white border border-teal-200/70 p-5 text-center shadow-xs">
             <p className="text-sm sm:text-base font-bold text-teal-950">
-              O plano define a quantidade de acessos. A profissão de cada usuário define o módulo liberado.
+              O plano define a quantidade de acessos. A profissão de cada usuário define o módulo especializado liberado automaticamente.
             </p>
             <p className="text-xs text-slate-500 mt-1">
-              Flexibilidade completa para sua equipe crescer com tranquilidade.
+              Todos os planos contam com ZemdaBody, Agenda Interativa, Prontuário, Financeiro, Documentos, Estoque, Equipe, Agendamento online e IA.
             </p>
           </div>
         </div>

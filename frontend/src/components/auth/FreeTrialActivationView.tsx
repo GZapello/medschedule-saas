@@ -51,18 +51,17 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
   } | null>(null);
   const [trialData, setTrialData] = useState<ValidTrialData | null>(null);
 
-  // Lista de Profissões e Área de Atuação
+  // Lista de Profissões e Área de Atuação com respectivos módulos
   const DEFAULT_PROFESSIONS = [
-    { id: 'prof-fonoaudiologia', name: 'Fonoaudiologia' },
-    { id: 'prof-fisioterapia', name: 'Fisioterapia' },
-    { id: 'prof-terapia-ocupacional', name: 'Terapia Ocupacional' },
-    { id: 'prof-nutricao', name: 'Nutrição' },
-    { id: 'prof-odontologia', name: 'Odontologia' },
-    { id: 'prof-psicologia', name: 'Psicologia' },
-    { id: 'prof-medicina', name: 'Medicina' },
-    { id: 'prof-psicopedagogia', name: 'Psicopedagogia' },
-    { id: 'prof-enfermagem', name: 'Enfermagem' },
-    { id: 'prof-educacao-fisica', name: 'Educação Física' },
+    { id: 'prof-fonoaudiologia', name: 'Fonoaudiologia → ZemdaFono' },
+    { id: 'prof-psicologia', name: 'Psicologia → ZemdaPsico' },
+    { id: 'prof-terapia-ocupacional', name: 'Terapia Ocupacional → ZemdaTO' },
+    { id: 'prof-nutricao', name: 'Nutrição → ZemdaNutri' },
+    { id: 'prof-fisioterapia', name: 'Fisioterapia → ZemdaFisio' },
+    { id: 'prof-personal-trainer', name: 'Personal Trainer → ZemdaPersonal' },
+    { id: 'prof-odontologia', name: 'Odontologia/Dentista → ZemdaOdonto' },
+    { id: 'prof-medicina', name: 'Medicina / Médico' },
+    { id: 'prof-gestao', name: 'Gestão Administrativa' },
     { id: 'prof-outro-saude', name: 'Outro profissional da saúde' }
   ];
 
@@ -388,7 +387,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                 </select>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                O Zemda criará seu teste no Plano Solo e ativará automaticamente o módulo clínico correspondente à sua área.
+                O Zemda ativará seu módulo específico e o <strong>ZemdaBody (Mapa Corporal)</strong>, liberado para todas as áreas profissionais.
               </p>
             </div>
 

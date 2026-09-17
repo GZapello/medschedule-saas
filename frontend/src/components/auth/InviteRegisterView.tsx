@@ -46,14 +46,17 @@ const PROFESSIONS_LIST = [
   'Nutricionista',
   'Terapeuta Ocupacional',
   'Terapeuta Ocupacional Infantil',
+  'Personal Trainer',
+  'Cirurgião-Dentista / Odontologista',
+  'Médico Clínico Geral',
+  'Pediatra',
   'Neuropsicólogo',
   'Psicopedagogo',
   'Psicanalista',
-  'Pediatra',
-  'Médico Clínico Geral',
   'Recepcionista / Atendimento',
   'Secretária(o)',
   'Financeiro / Administrativo',
+  'Outro profissional da saúde',
   'Outro'
 ];
 
@@ -108,6 +111,25 @@ const PRACTICE_AREAS_SUGGESTIONS: Record<string, string[]> = {
     'Desenvolvimento Infantil',
     'Reabilitação Física e Neurológica',
     'Saúde Mental'
+  ],
+  'Personal Trainer': [
+    'Musculação e Hipertrofia',
+    'Emagrecimento e Queima Calórica',
+    'Treinamento Funcional',
+    'Condicionamento Físico',
+    'Reabilitação e Prevenção de Lesões',
+    'Treinamento para Idosos',
+    'Preparação Esportiva'
+  ],
+  Odontologia: [
+    'Clínica Geral Odontológica',
+    'Ortodontia',
+    'Implantodontia',
+    'Endodontia (Canal)',
+    'Periodontia',
+    'Prótese Dentária',
+    'Harmonização Orofacial',
+    'Odontopediatria'
   ]
 };
 
@@ -175,7 +197,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
     if (low.includes('fisio')) {
       setRegistrationType('CREFITO');
       if (!prefix) setPrefix('Dr.');
-    } else if (low.includes('psic')) {
+    } else if (low.includes('psic') || low.includes('psicanal')) {
       setRegistrationType('CRP');
       if (!prefix) setPrefix('Dr.');
     } else if (low.includes('médic') || low.includes('medic') || low.includes('psiquiat') || low.includes('pediat')) {
@@ -189,6 +211,12 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
       if (!prefix) setPrefix('Dr.');
     } else if (low.includes('terapeuta ocupacional')) {
       setRegistrationType('CREFITO');
+      if (!prefix) setPrefix('Dr.');
+    } else if (low.includes('personal') || low.includes('educad')) {
+      setRegistrationType('CREF');
+      setPrefix('');
+    } else if (low.includes('odonto') || low.includes('dentis')) {
+      setRegistrationType('CRO');
       if (!prefix) setPrefix('Dr.');
     } else {
       setRegistrationType('Registro');
@@ -212,6 +240,8 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
     if (low.includes('fono')) return PRACTICE_AREAS_SUGGESTIONS['Fonoaudiologia'];
     if (low.includes('nutri')) return PRACTICE_AREAS_SUGGESTIONS['Nutrição'];
     if (low.includes('terapeuta ocupacional')) return PRACTICE_AREAS_SUGGESTIONS['Terapia Ocupacional'];
+    if (low.includes('personal') || low.includes('educad')) return PRACTICE_AREAS_SUGGESTIONS['Personal Trainer'];
+    if (low.includes('odonto') || low.includes('dentis')) return PRACTICE_AREAS_SUGGESTIONS['Odontologia'];
     return [];
   };
 
