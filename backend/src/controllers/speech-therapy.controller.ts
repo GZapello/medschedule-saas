@@ -1042,12 +1042,23 @@ export class SpeechTherapyController {
     try {
       const patientId = String(req.params.patientId);
       const tenantId = req.tenantId;
-      if (!isSpeechTherapistOrClinicManager(req)) {
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
         res.status(403).json({ error: 'Acesso restrito' });
         return;
       }
 
-      const rows = db.prepare('SELECT * FROM fono_audiology_records WHERE patient_id = ? AND tenant_id = ? ORDER BY exam_date DESC').all(patientId, tenantId) as any[];
+      const rows = db.prepare(`
+        SELECT 
+          r.*,
+          p.name as professional_name,
+          p.registration_type as professional_reg_type,
+          p.registration_number as professional_reg_number
+        FROM fono_audiology_records r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ?
+        ORDER BY r.exam_date DESC, r.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
       res.json(rows.map(r => ({
         ...r,
         results: r.results_json ? JSON.parse(r.results_json) : null
@@ -1060,14 +1071,14 @@ export class SpeechTherapyController {
   static saveAudiology(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      if (!isSpeechTherapistOrClinicManager(req)) {
-        res.status(403).json({ error: 'Acesso restrito' });
+      const { id: providedId, patientId, examType, examDate, results, attachmentUrl, notes } = req.body;
+      if (!patientId || !examType) {
+        res.status(400).json({ error: 'patientId e examType são obrigatórios' });
         return;
       }
 
-      const { patientId, examType, examDate, results, attachmentUrl, notes } = req.body;
-      if (!patientId || !examType) {
-        res.status(400).json({ error: 'patientId e examType são obrigatórios' });
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, String(patientId))) {
+        res.status(403).json({ error: 'Acesso restrito' });
         return;
       }
 
@@ -1077,20 +1088,50 @@ export class SpeechTherapyController {
         if (prof) profId = prof.id;
       }
 
-      const id = 'f-aud-' + uuidv4().slice(0, 8);
       const dateStr = examDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 
+      // Atualiza exame existente caso ID tenha sido fornecido e pertença ao mesmo tenant/paciente
+      let recordId = providedId;
+      if (recordId) {
+        const existing = db.prepare('SELECT id FROM fono_audiology_records WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(recordId, tenantId, patientId) as any;
+        if (existing) {
+          db.prepare(`
+            UPDATE fono_audiology_records SET
+              exam_type = ?,
+              exam_date = ?,
+              results_json = ?,
+              attachment_url = COALESCE(?, attachment_url),
+              notes = ?,
+              professional_id = COALESCE(?, professional_id)
+            WHERE id = ? AND tenant_id = ?
+          `).run(
+            examType,
+            dateStr,
+            results ? JSON.stringify(results) : null,
+            attachmentUrl || null,
+            notes || null,
+            profId,
+            recordId,
+            tenantId
+          );
+          res.status(200).json({ id: recordId, message: 'Registro de audiologia atualizado com sucesso' });
+          return;
+        }
+      }
+
+      // Caso contrário, cria novo exame independente (não sobrescreve histórico)
+      recordId = 'f-aud-' + uuidv4().slice(0, 8);
       db.prepare(`
         INSERT INTO fono_audiology_records (
           id, tenant_id, patient_id, professional_id, exam_type, exam_date,
           results_json, attachment_url, notes
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        id, tenantId, patientId, profId, examType, dateStr,
+        recordId, tenantId, patientId, profId, examType, dateStr,
         results ? JSON.stringify(results) : null, attachmentUrl || null, notes || null
       );
 
-      res.status(201).json({ id, message: 'Registro de audiologia cadastrado' });
+      res.status(201).json({ id: recordId, message: 'Registro de audiologia cadastrado com sucesso' });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao salvar exame audiológico' });
     }

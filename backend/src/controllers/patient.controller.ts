@@ -15,7 +15,7 @@ export class PatientController {
       const { search } = req.query;
       let query = `
         SELECT 
-          p.id, p.tenant_id, p.full_name, p.social_name, p.birth_date, p.cpf,
+          p.id, p.tenant_id, p.full_name, p.social_name, p.birth_date, p.cpf, p.gender,
           p.email, p.phone, p.whatsapp, p.city, p.state, p.is_child, p.active, p.created_at,
           (SELECT COUNT(*) FROM appointments WHERE patient_id = p.id) as total_appointments,
           (SELECT COUNT(*) FROM records WHERE patient_id = p.id) as total_records
@@ -48,7 +48,7 @@ export class PatientController {
 
       const stmt = db.prepare(`
         SELECT 
-          id, tenant_id, full_name, social_name, birth_date, cpf, email, phone, whatsapp,
+          id, tenant_id, full_name, social_name, birth_date, cpf, gender, email, phone, whatsapp,
           address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
           notes_admin, is_child, pet_metadata_json, active, allergies_status,
           health_insurance_provider, health_insurance_card, health_insurance_plan,
@@ -114,7 +114,7 @@ export class PatientController {
       }
 
       const {
-        fullName, socialName, birthDate, cpf, email, phone, whatsapp,
+        fullName, socialName, birthDate, cpf, gender, email, phone, whatsapp,
         address, city, state, zipCode, photoUrl, emergencyContact, emergencyPhone,
         notesAdmin, isChild, petMetadata, guardians
       } = req.body;
@@ -130,11 +130,11 @@ export class PatientController {
       const patientId = 'pat-' + uuidv4().slice(0, 8);
       const insertStmt = db.prepare(`
         INSERT INTO patients (
-          id, tenant_id, full_name, social_name, birth_date, cpf, email, phone, whatsapp,
+          id, tenant_id, full_name, social_name, birth_date, cpf, gender, email, phone, whatsapp,
           address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
           notes_admin, is_child, pet_metadata_json, active
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `);
 
       insertStmt.run(
@@ -144,6 +144,7 @@ export class PatientController {
         socialName || null,
         birthDate || null,
         cpf || null,
+        gender || req.body.sex || null,
         email || null,
         effectivePhone,
         whatsapp || phone,
@@ -197,7 +198,7 @@ export class PatientController {
       const { id } = req.params;
       const tenantId = req.tenantId;
       const {
-        fullName, socialName, birthDate, cpf, email, phone, whatsapp,
+        fullName, socialName, birthDate, cpf, gender, email, phone, whatsapp,
         address, city, state, zipCode, photoUrl, emergencyContact, emergencyPhone,
         notesAdmin, isChild, active,
         healthInsuranceProvider, healthInsuranceCard, healthInsurancePlan,
@@ -206,6 +207,7 @@ export class PatientController {
 
       const effectiveFullName = fullName !== undefined ? (fullName ? String(fullName).trim() : null) : (req.body.name !== undefined ? (req.body.name ? String(req.body.name).trim() : null) : null);
       const effectivePhoto = photoUrl !== undefined ? photoUrl : (req.body.avatar_url !== undefined ? req.body.avatar_url : null);
+      const effectiveGender = gender !== undefined ? gender : (req.body.sex !== undefined ? req.body.sex : null);
 
       const updateStmt = db.prepare(`
         UPDATE patients SET
@@ -213,6 +215,7 @@ export class PatientController {
           social_name = COALESCE(?, social_name),
           birth_date = COALESCE(?, birth_date),
           cpf = COALESCE(?, cpf),
+          gender = COALESCE(?, gender),
           email = COALESCE(?, email),
           phone = COALESCE(?, phone),
           whatsapp = COALESCE(?, whatsapp),
@@ -238,6 +241,7 @@ export class PatientController {
         socialName || null,
         birthDate || null,
         cpf || null,
+        effectiveGender || null,
         email || null,
         phone || null,
         whatsapp || null,

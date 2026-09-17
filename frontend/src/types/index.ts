@@ -193,6 +193,7 @@ export interface Patient {
   social_name?: string;
   birth_date?: string;
   cpf?: string;
+  gender?: string;
   email?: string;
   phone: string;
   whatsapp?: string;

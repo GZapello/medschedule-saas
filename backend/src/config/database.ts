@@ -209,8 +209,9 @@ export function initializeDatabase(): void {
     // Colunas em pagamentos para vínculo com caixa
     addColIfMissing('payments', 'cash_register_id', 'TEXT');
 
-    // Colunas em pacientes para status explícito de alergias
+    // Colunas em pacientes para status explícito de alergias e sexo canônico
     addColIfMissing('patients', 'allergies_status', "TEXT DEFAULT 'not_informed'");
+    addColIfMissing('patients', 'gender', 'TEXT');
 
     // Coluna opcional de CID em exames a receber
     addColIfMissing('pending_exams', 'cid_code', 'TEXT');

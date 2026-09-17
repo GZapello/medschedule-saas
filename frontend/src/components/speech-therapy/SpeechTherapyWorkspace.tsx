@@ -34,6 +34,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 
 import { InteractiveAudiogram, AudiogramData } from './InteractiveAudiogram';
+import { AudiologyWorkspaceSection } from './audiology/AudiologyWorkspaceSection';
 import { FluencyCounterModal } from './FluencyCounterModal';
 import { LanguageSampleModal } from './LanguageSampleModal';
 import { DysphagiaMatrixModal } from './DysphagiaMatrixModal';
@@ -78,10 +79,10 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   const [comparisonItems, setComparisonItems] = useState<any[]>([]);
   const [comparisonTitle, setComparisonTitle] = useState('Comparativo de Reavaliação Fonoaudiológica');
 
-  // Dados do Audiograma Interativo
+  // Dados do Audiograma Interativo (inicializado totalmente vazio conforme Guia CFFa 2023)
   const [audiogramData, setAudiogramData] = useState<AudiogramData>({
-    rightAir: { 250: 15, 500: 15, 1000: 10, 2000: 15, 4000: 20, 8000: 15 },
-    leftAir: { 250: 15, 500: 10, 1000: 15, 2000: 15, 4000: 15, 8000: 20 },
+    rightAir: {},
+    leftAir: {},
     rightBone: {},
     leftBone: {}
   });
@@ -219,16 +220,17 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
     notes: ''
   });
 
-  // 8. Audiologia
+  // 8. Audiologia (campos clínicos iniciados vazios conforme Guia CFFa 2023)
   const [audiologyData, setAudiologyData] = useState<any>({
-    pureToneAudiometryRight: 'Limiares dentro dos padrões de normalidade (<= 20 dB)',
-    pureToneAudiometryLeft: 'Limiares dentro dos padrões de normalidade (<= 20 dB)',
-    speechAudiometry: 'LRF e IPRF 100% bilateral',
-    tympanometry: 'Curva tipo A bilateral (complacência e pressão normais)',
-    acousticReflexes: 'Presentes bilateralmente',
-    otoacousticEmissions: 'Presentes bilateralmente',
-    auditoryProcessingNotes: 'Triagem de PAC sem queixas ou déficits evidentes'
+    pureToneAudiometryRight: '',
+    pureToneAudiometryLeft: '',
+    speechAudiometry: '',
+    tympanometry: '',
+    acousticReflexes: '',
+    otoacousticEmissions: '',
+    auditoryProcessingNotes: ''
   });
+  const [currentAudiologyRecordId, setCurrentAudiologyRecordId] = useState<string | null>(null);
   const [audiologyList, setAudiologyList] = useState<any[]>([]);
 
   // 9. Plano Terapêutico Fonoaudiológico
@@ -442,7 +444,11 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
         orofacialData,
         voiceData,
         fluencyData,
-        treatmentPlanData: planForm, dysphagiaData, audiologyData, audioData: audioBlobUrl
+        treatmentPlanData: planForm,
+        dysphagiaData,
+        audiologyData,
+        audiologyRecordId: currentAudiologyRecordId || undefined,
+        audioData: audioBlobUrl
       });
 
 
@@ -1151,40 +1157,15 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 7: AUDIOLOGIA COM AUDIOGRAMA INTERATIVO SVG */}
+            {/* ABA 7: AUDIOLOGIA COM AUDIOGRAMA INTERATIVO SVG E GUIA CFFA 2023 */}
             {activeTab === 'audiology' && (
-              <div className="space-y-6">
-                <InteractiveAudiogram
-                  data={audiogramData}
-                  onChange={setAudiogramData}
-                />
-
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Exames Complementares de Audiologia e PAC
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Logoaudiometria (LRF e IPRF)</label>
-                      <input
-                        type="text"
-                        value={audiologyData.speechAudiometry}
-                        onChange={e => setAudiologyData({ ...audiologyData, speechAudiometry: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Imitanciometria / Timpanometria</label>
-                      <input
-                        type="text"
-                        value={audiologyData.tympanometry}
-                        onChange={e => setAudiologyData({ ...audiologyData, tympanometry: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AudiologyWorkspaceSection
+                patientId={selectedPatientId}
+                patient={selectedPatient}
+                onRecordSaved={(savedId) => {
+                  setCurrentAudiologyRecordId(savedId);
+                }}
+              />
             )}
 
             {/* ABA: COMUNICAÇÃO AUMENTATIVA E ALTERNATIVA (CAA / AAC) */}
