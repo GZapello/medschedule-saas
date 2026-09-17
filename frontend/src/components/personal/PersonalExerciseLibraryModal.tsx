@@ -427,6 +427,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   buttonText="+ Adicionar foto"
                   category="exercises"
                   patientId="exercises"
+                  exerciseId={editingExerciseId || undefined}
                   initialUrl={formPhotoUrl}
                   initialFileId={formFileId}
                   onUploaded={(info) => {

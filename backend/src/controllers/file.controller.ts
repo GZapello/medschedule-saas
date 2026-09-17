@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
+import path from 'path';
 import { db } from '../config/database';
 import { r2StorageService } from '../services/r2-storage.service';
 
@@ -7,6 +9,170 @@ const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export class FileController {
+  /**
+   * POST /api/files/upload-ticket ou /api/v1/files/upload-ticket
+   * Valida autorização, clínica, paciente, tamanho e tipo.
+   * Gera objectKey seguro no padrão Cloudflare R2 e token assinado HMAC-SHA256 para o Cloudflare Worker.
+   */
+  static async createUploadTicket(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(403).json({ error: 'Clínica não identificada no contexto' });
+        return;
+      }
+
+      const {
+        patientId,
+        appointmentId,
+        assessmentId,
+        exerciseId,
+        position,
+        category,
+        filename,
+        mimeType,
+        fileSize
+      } = req.body;
+
+      const safeCategory = String(category || 'general').trim();
+      const isExercise = safeCategory === 'exercises' || safeCategory.includes('exercise') || patientId === 'exercises';
+      const isAssessment = safeCategory.startsWith('personal_assessment') || safeCategory === 'personal-assessments';
+      const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || isExercise;
+
+      if ((!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || fileSize === undefined || fileSize === null) {
+        res.status(400).json({
+          error: 'filename, mimeType e fileSize são obrigatórios' + (!isClinicOrExerciseAsset ? ' (e patientId/aluno para arquivos de pacientes)' : '')
+        });
+        return;
+      }
+
+      // Validação estrita de tipo de arquivo
+      const normalizedMime = String(mimeType).toLowerCase().trim();
+      if (!ALLOWED_MIME_TYPES.includes(normalizedMime)) {
+        res.status(400).json({
+          error: 'Tipo de arquivo não permitido. Apenas imagens JPEG, PNG ou WebP são aceitas.',
+          allowedTypes: ALLOWED_MIME_TYPES
+        });
+        return;
+      }
+
+      // Validação de tamanho máximo (10 MB)
+      const numericSize = Number(fileSize);
+      if (isNaN(numericSize) || numericSize <= 0 || numericSize > MAX_FILE_SIZE_BYTES) {
+        res.status(400).json({
+          error: 'Tamanho de arquivo inválido ou excede o limite máximo permitido de 10 MB.',
+          maxSize: MAX_FILE_SIZE_BYTES
+        });
+        return;
+      }
+
+      // Validação de acesso ao paciente pela clínica autenticada (se for anexo de paciente/aluno)
+      if (!isClinicOrExerciseAsset && patientId) {
+        const patient = db
+          .prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?')
+          .get(patientId, tenantId) as any;
+
+        if (!patient) {
+          res.status(404).json({
+            error: 'Paciente não encontrado ou não pertence a esta clínica'
+          });
+          return;
+        }
+      }
+
+      // Se fornecido appointmentId, valida também vínculo com a clínica
+      if (appointmentId) {
+        const appointment = db
+          .prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ?')
+          .get(appointmentId, tenantId) as any;
+        if (!appointment) {
+          res.status(404).json({
+            error: 'Agendamento não encontrado ou não pertence a esta clínica'
+          });
+          return;
+        }
+      }
+
+      // Geração de chave de objeto anônima e segura
+      const sanitizedClinicId = tenantId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+      let ext = path.extname(String(filename)).toLowerCase();
+      if (!ext || ext === '.') ext = '.webp';
+      if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) ext = '.webp';
+      const uniqueId = uuidv4();
+
+      let objectKey = '';
+
+      if (isAssessment) {
+        // Para fotos de avaliação física:
+        // clinics/{clinicId}/patients/{patientId}/personal-assessments/{assessmentId}/{position}/{uuid}.{ext}
+        const effectivePatientId = (patientId ? String(patientId).trim() : 'student').replace(/[^a-zA-Z0-9_-]/g, '');
+        const effectiveAssessmentId = (assessmentId ? String(assessmentId).trim() : ('assessment-' + uuidv4().substring(0, 8))).replace(/[^a-zA-Z0-9_-]/g, '');
+
+        let effectivePosition = position ? String(position).trim().toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '') : '';
+        if (!effectivePosition) {
+          if (safeCategory.includes('front')) effectivePosition = 'front';
+          else if (safeCategory.includes('back')) effectivePosition = 'back';
+          else if (safeCategory.includes('right')) effectivePosition = 'right';
+          else if (safeCategory.includes('left')) effectivePosition = 'left';
+          else effectivePosition = 'general';
+        }
+
+        objectKey = `clinics/${sanitizedClinicId}/patients/${effectivePatientId}/personal-assessments/${effectiveAssessmentId}/${effectivePosition}/${uniqueId}${ext}`;
+      } else if (isExercise) {
+        // Para exercício:
+        // clinics/{clinicId}/personal/exercises/{exerciseId-ou-tempId}/{uuid}.{ext}
+        const effectiveExerciseId = (exerciseId ? String(exerciseId).trim() : ('temp-' + uuidv4().substring(0, 8))).replace(/[^a-zA-Z0-9_-]/g, '');
+        objectKey = `clinics/${sanitizedClinicId}/personal/exercises/${effectiveExerciseId}/${uniqueId}${ext}`;
+      } else if (patientId && !isClinicOrExerciseAsset) {
+        const sanitizedPatientId = String(patientId).trim().replace(/[^a-zA-Z0-9_-]/g, '');
+        const sanitizedCategory = safeCategory.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '') || 'general';
+        objectKey = `clinics/${sanitizedClinicId}/patients/${sanitizedPatientId}/${sanitizedCategory}/${uniqueId}${ext}`;
+      } else {
+        const sanitizedCategory = safeCategory.toLowerCase().replace(/[^a-zA-Z0-9_-]/g, '') || 'general';
+        objectKey = `clinics/${sanitizedClinicId}/clinic/${sanitizedCategory}/${uniqueId}${ext}`;
+      }
+
+      // Token compatível com o Worker já publicado:
+      // base64url(payload).base64url(HMAC_SHA256(payloadBase64, ZEMDA_FILES_SIGNING_SECRET))
+      const signingSecret = process.env.ZEMDA_FILES_SIGNING_SECRET || 'zemda-files-signing-secret';
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const exp = nowInSeconds + 300; // max 300 segundos
+
+      const payload: Record<string, any> = {
+        action: 'upload',
+        clinicId: sanitizedClinicId,
+        objectKey,
+        mimeType: normalizedMime,
+        fileSize: numericSize,
+        exp
+      };
+      if (patientId) {
+        payload.patientId = String(patientId).trim();
+      } else if (isExercise) {
+        payload.patientId = 'exercises';
+      }
+
+      const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+      const signature = crypto.createHmac('sha256', signingSecret).update(payloadBase64).digest('base64url');
+      const uploadToken = `${payloadBase64}.${signature}`;
+
+      const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
+      const uploadUrl = `${workerBaseUrl}/upload`;
+
+      // Helper para simular disponibilidade imediata no mock de testes locais
+      r2StorageService.simulateMockUpload(objectKey);
+
+      res.status(200).json({
+        uploadUrl,
+        uploadToken,
+        objectKey
+      });
+    } catch (err: any) {
+      console.error('[FileController.createUploadTicket] Erro:', err);
+      res.status(500).json({ error: 'Erro ao gerar ticket de upload para o Cloudflare Worker' });
+    }
+  }
+
   /**
    * POST /api/files/upload-url ou /api/v1/files/upload-url
    * Valida autorização, clínica, paciente, tamanho e tipo.
@@ -126,7 +292,7 @@ export class FileController {
       } = req.body;
 
       const safeCategory = String(category || 'general').trim();
-      const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || safeCategory === 'exercises';
+      const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || safeCategory === 'exercises' || safeCategory.includes('exercise') || String(objectKey).includes('/exercises/');
 
       if (!objectKey || (!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || !fileSize) {
         res.status(400).json({
@@ -166,8 +332,12 @@ export class FileController {
         }
       }
 
-      // Verificação de existência real no Cloudflare R2 via HeadObject
-      const exists = await r2StorageService.fileExists(objectKey);
+      // Verificação de existência real no Cloudflare R2 via HeadObject com tolerância para consistência eventual
+      let exists = await r2StorageService.fileExists(objectKey);
+      if (!exists) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        exists = await r2StorageService.fileExists(objectKey);
+      }
       if (!exists) {
         res.status(400).json({
           error: 'O arquivo não foi localizado no Cloudflare R2. Conclua o upload direto antes de confirmar.'

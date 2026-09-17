@@ -1596,6 +1596,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       label="Foto Frontal"
                       buttonText="+ Adicionar foto"
                       patientId={selectedStudentId || undefined}
+                      assessmentId={assessmentToEdit?.id || undefined}
+                      position="front"
                       category="personal_assessment_front"
                       initialUrl={photoFront}
                       onUploaded={(info) => setPhotoFront(info.url || '')}
@@ -1608,6 +1610,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       label="Foto Posterior"
                       buttonText="+ Adicionar foto"
                       patientId={selectedStudentId || undefined}
+                      assessmentId={assessmentToEdit?.id || undefined}
+                      position="back"
                       category="personal_assessment_back"
                       initialUrl={photoBack}
                       onUploaded={(info) => setPhotoBack(info.url || '')}
@@ -1620,6 +1624,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       label="Lateral Direita"
                       buttonText="+ Adicionar foto"
                       patientId={selectedStudentId || undefined}
+                      assessmentId={assessmentToEdit?.id || undefined}
+                      position="right"
                       category="personal_assessment_right"
                       initialUrl={photoRight}
                       onUploaded={(info) => setPhotoRight(info.url || '')}
@@ -1632,6 +1638,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       label="Lateral Esquerda"
                       buttonText="+ Adicionar foto"
                       patientId={selectedStudentId || undefined}
+                      assessmentId={assessmentToEdit?.id || undefined}
+                      position="left"
                       category="personal_assessment_left"
                       initialUrl={photoLeft}
                       onUploaded={(info) => setPhotoLeft(info.url || '')}

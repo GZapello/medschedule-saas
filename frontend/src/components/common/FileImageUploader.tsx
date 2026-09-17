@@ -25,6 +25,9 @@ export interface FileUploadedInfo {
 export interface FileImageUploaderProps {
   patientId?: string;
   appointmentId?: string;
+  assessmentId?: string;
+  exerciseId?: string;
+  position?: string;
   category?: string;
   initialUrl?: string;
   initialFileId?: string;
@@ -45,6 +48,9 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
   patientId,
   appointmentId,
+  assessmentId,
+  exerciseId,
+  position,
   category = 'attachments',
   initialUrl,
   initialFileId,
@@ -156,7 +162,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     }
   };
 
-  // Upload directo para Cloudflare R2
+  // Upload via Cloudflare Worker
   const uploadDirectly = async (fileToUpload: File) => {
     const effectivePatientId = patientId || 'clinic';
 
@@ -165,38 +171,56 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     setUploadSuccess(false);
 
     try {
-      // 1. Solicita URL assinada do Cloudflare R2 ao backend
-      const uploadUrlResponse = await ApiClient.post<{
+      // 1. Solicita ticket de upload assinado ao backend
+      const ticketResponse = await ApiClient.post<{
         uploadUrl: string;
+        uploadToken: string;
         objectKey: string;
-        expiresIn: number;
-      }>('/files/upload-url', {
+      }>('/files/upload-ticket', {
         patientId: effectivePatientId,
+        appointmentId,
+        assessmentId,
+        exerciseId,
+        position,
         category,
         filename: fileToUpload.name,
         mimeType: fileToUpload.type || 'image/jpeg',
         fileSize: fileToUpload.size
       });
 
-      const { uploadUrl, objectKey } = uploadUrlResponse;
-      if (!uploadUrl || !objectKey) {
-        throw new Error('Falha ao obter URL de envio pré-assinada.');
+      const { uploadUrl, uploadToken, objectKey } = ticketResponse;
+      if (!uploadUrl || !uploadToken || !objectKey) {
+        throw new Error('Falha ao obter ticket de envio para o Cloudflare Worker.');
       }
 
-      // 2. Upload direto do navegador para o Cloudflare R2
+      // 2. Upload direto do navegador para o Cloudflare Worker
       const putResponse = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
+          'Authorization': `Bearer ${uploadToken}`,
           'Content-Type': fileToUpload.type || 'image/jpeg'
         },
         body: fileToUpload
       });
 
       if (!putResponse.ok) {
-        throw new Error(`Falha no upload direto para o armazenamento R2 (HTTP ${putResponse.status}).`);
+        let errorDetail = '';
+        try {
+          const errJson = await putResponse.json();
+          errorDetail = errJson.detail || errJson.error || '';
+        } catch (_) {}
+        throw new Error(
+          errorDetail
+            ? `Falha no upload para o Worker: ${errorDetail}`
+            : `Falha no upload para o Cloudflare Worker (HTTP ${putResponse.status}).`
+        );
       }
 
-      // 3. Completa e persiste metadados no backend
+      // 3. Lê resposta JSON retornada pelo Worker
+      const workerResult = await putResponse.json();
+      const finalObjectKey = workerResult.objectKey || objectKey;
+
+      // 4. Completa e persiste metadados no backend
       const completeResponse = await ApiClient.post<{
         success: boolean;
         file: FileUploadedInfo;
@@ -204,7 +228,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         patientId: effectivePatientId,
         appointmentId,
         category,
-        objectKey,
+        objectKey: finalObjectKey,
         originalFilename: fileToUpload.name,
         mimeType: fileToUpload.type || 'image/jpeg',
         fileSize: fileToUpload.size
@@ -230,7 +254,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
       onUploaded?.(savedFile);
     } catch (err: any) {
       console.error('[FileImageUploader] Erro no upload:', err);
-      const msg = err.message || 'Erro ao enviar o arquivo para o Cloudflare R2.';
+      const msg = err.message || 'Erro ao enviar o arquivo via Cloudflare Worker.';
       setErrorMessage(msg);
       onError?.(msg);
     } finally {
@@ -355,7 +379,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         <div className="flex items-center gap-3 p-4 bg-teal-50/80 rounded-xl border border-teal-200 animate-pulse">
           <Loader2 className="w-5 h-5 animate-spin text-teal-600 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-teal-900">Enviando para o Cloudflare R2...</p>
+            <p className="text-xs font-semibold text-teal-900">Enviando imagem...</p>
             <p className="text-[11px] text-teal-700">Aguarde a conclusão do upload seguro.</p>
           </div>
         </div>
