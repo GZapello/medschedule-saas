@@ -378,57 +378,9 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
           <button
             type="button"
             onClick={() => setViewMode('all')}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              viewMode === 'all'
-                ? 'bg-white text-teal-700 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className="px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-default bg-white text-teal-700 shadow-xs"
           >
             Todas as Vistas
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('front')}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              viewMode === 'front'
-                ? 'bg-white text-teal-700 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Frontal
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('back')}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              viewMode === 'back'
-                ? 'bg-white text-teal-700 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Posterior
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('left')}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              viewMode === 'left'
-                ? 'bg-white text-teal-700 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Lateral Esquerda
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('right')}
-            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              viewMode === 'right'
-                ? 'bg-white text-teal-700 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Lateral Direita
           </button>
         </div>
 

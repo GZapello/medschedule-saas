@@ -73,11 +73,119 @@ export const MANDATORY_ANATOMICAL_REGIONS: CanonicalAnatomicalRegion[] = [
   { id: 'panturrilha_esquerda', label: 'Panturrilha Esquerda', category: 'muscle', side: 'left', muscleGroup: 'panturrilhas' }
 ];
 
+// Coordenadas calibradas especificamente para a anatomia feminina do Corpo_Feminino.jpg (1024x768)
+const FEMALE_CALIBRATED_COORDINATES: Record<
+  string,
+  {
+    ellipseCoords?: { cx: number; cy: number; rx: number; ry: number };
+    points?: string;
+    center: { x: number; y: number };
+  }
+> = {
+  // 1. VISTA FRONTAL
+  frente_cabeca: { ellipseCoords: { cx: 160, cy: 68, rx: 30, ry: 40 }, center: { x: 160, y: 68 } },
+  frente_pescoco: { ellipseCoords: { cx: 160, cy: 112, rx: 18, ry: 12 }, center: { x: 160, y: 112 } },
+  frente_ombro_direito: { ellipseCoords: { cx: 98, cy: 146, rx: 16, ry: 16 }, center: { x: 98, y: 146 } },
+  frente_ombro_esquerdo: { ellipseCoords: { cx: 222, cy: 146, rx: 16, ry: 16 }, center: { x: 222, y: 146 } },
+  frente_peitoral: { points: '126,135 194,135 212,185 208,228 112,228 108,185', center: { x: 160, y: 182 } },
+  frente_biceps_direito: { points: '76,168 106,168 98,235 66,235', center: { x: 86, y: 202 } },
+  frente_biceps_esquerdo: { points: '214,168 244,168 254,235 222,235', center: { x: 234, y: 202 } },
+  frente_cotovelo_direito: { ellipseCoords: { cx: 76, cy: 252, rx: 14, ry: 14 }, center: { x: 76, y: 252 } },
+  frente_cotovelo_esquerdo: { ellipseCoords: { cx: 244, cy: 252, rx: 14, ry: 14 }, center: { x: 244, y: 252 } },
+  frente_antebraco_direito: { points: '64,255 94,255 80,325 48,325', center: { x: 70, y: 290 } },
+  frente_antebraco_esquerdo: { points: '226,255 256,255 272,325 240,325', center: { x: 250, y: 290 } },
+  frente_punho_direito: { ellipseCoords: { cx: 54, cy: 335, rx: 13, ry: 13 }, center: { x: 54, y: 335 } },
+  frente_punho_esquerdo: { ellipseCoords: { cx: 264, cy: 335, rx: 13, ry: 13 }, center: { x: 264, y: 335 } },
+  frente_dedos_mao_direita: { ellipseCoords: { cx: 48, cy: 385, rx: 15, ry: 18 }, center: { x: 48, y: 385 } },
+  frente_dedos_mao_esquerda: { ellipseCoords: { cx: 268, cy: 385, rx: 15, ry: 18 }, center: { x: 268, y: 385 } },
+  frente_abdomen: { points: '112,228 208,228 206,275 218,325 102,325 114,275', center: { x: 160, y: 275 } },
+  frente_pelve: { ellipseCoords: { cx: 160, cy: 335, rx: 34, ry: 18 }, center: { x: 160, y: 335 } },
+  frente_quadril_direito: { ellipseCoords: { cx: 114, cy: 345, rx: 17, ry: 17 }, center: { x: 114, y: 345 } },
+  frente_quadril_esquerdo: { ellipseCoords: { cx: 206, cy: 345, rx: 17, ry: 17 }, center: { x: 206, y: 345 } },
+  frente_quadriceps_direito: { points: '98,345 152,345 148,470 98,470', center: { x: 124, y: 408 } },
+  frente_quadriceps_esquerdo: { points: '168,345 222,345 222,470 172,470', center: { x: 196, y: 408 } },
+  frente_joelho_direito: { ellipseCoords: { cx: 124, cy: 490, rx: 16, ry: 16 }, center: { x: 124, y: 490 } },
+  frente_joelho_esquerdo: { ellipseCoords: { cx: 193, cy: 490, rx: 16, ry: 16 }, center: { x: 193, y: 490 } },
+  frente_panturrilha_direita: { points: '98,505 144,505 138,615 94,615', center: { x: 118, y: 560 } },
+  frente_panturrilha_esquerda: { points: '176,505 222,505 226,615 182,615', center: { x: 202, y: 560 } },
+  frente_tornozelo_direito: { ellipseCoords: { cx: 116, cy: 628, rx: 14, ry: 14 }, center: { x: 116, y: 628 } },
+  frente_tornozelo_esquerdo: { ellipseCoords: { cx: 198, cy: 628, rx: 14, ry: 14 }, center: { x: 198, y: 628 } },
+  frente_pe_direito: { points: '88,635 140,635 138,670 76,670', center: { x: 108, y: 652 } },
+  frente_pe_esquerdo: { points: '180,635 232,635 244,670 182,670', center: { x: 212, y: 652 } },
+  frente_dedos_pe_direito: { ellipseCoords: { cx: 104, cy: 676, rx: 14, ry: 10 }, center: { x: 104, y: 676 } },
+  frente_dedos_pe_esquerdo: { ellipseCoords: { cx: 214, cy: 676, rx: 14, ry: 10 }, center: { x: 214, y: 676 } },
+
+  // 2. VISTA POSTERIOR / VERSO (Centro calibrado em X ≈ 406)
+  verso_cabeca: { ellipseCoords: { cx: 406, cy: 65, rx: 30, ry: 40 }, center: { x: 406, y: 65 } },
+  verso_pescoco: { ellipseCoords: { cx: 406, cy: 105, rx: 18, ry: 12 }, center: { x: 406, y: 105 } },
+  verso_coluna_cervical: { ellipseCoords: { cx: 406, cy: 118, rx: 15, ry: 15 }, center: { x: 406, y: 118 } },
+  verso_ombro_esquerdo: { ellipseCoords: { cx: 346, cy: 146, rx: 16, ry: 16 }, center: { x: 346, y: 146 } },
+  verso_ombro_direito: { ellipseCoords: { cx: 466, cy: 146, rx: 16, ry: 16 }, center: { x: 466, y: 146 } },
+  verso_costas: { points: '372,125 440,125 454,172 448,235 364,235 358,172', center: { x: 406, y: 177 } },
+  verso_coluna_toracica: { ellipseCoords: { cx: 406, cy: 185, rx: 15, ry: 24 }, center: { x: 406, y: 185 } },
+  verso_triceps_esquerdo: { points: '324,168 354,168 346,235 316,235', center: { x: 335, y: 202 } },
+  verso_triceps_direito: { points: '458,168 488,168 496,235 466,235', center: { x: 477, y: 202 } },
+  verso_cotovelo_esquerdo: { ellipseCoords: { cx: 326, cy: 252, rx: 14, ry: 14 }, center: { x: 326, y: 252 } },
+  verso_cotovelo_direito: { ellipseCoords: { cx: 486, cy: 252, rx: 14, ry: 14 }, center: { x: 486, y: 252 } },
+  verso_antebraco_esquerdo: { points: '314,255 344,255 336,325 304,325', center: { x: 320, y: 290 } },
+  verso_antebraco_direito: { points: '468,255 498,255 510,325 476,325', center: { x: 492, y: 290 } },
+  verso_punho_esquerdo: { ellipseCoords: { cx: 304, cy: 335, rx: 13, ry: 13 }, center: { x: 304, y: 335 } },
+  verso_punho_direito: { ellipseCoords: { cx: 508, cy: 335, rx: 13, ry: 13 }, center: { x: 508, y: 335 } },
+  verso_dedos_mao_esquerda: { ellipseCoords: { cx: 300, cy: 385, rx: 15, ry: 18 }, center: { x: 300, y: 385 } },
+  verso_dedos_mao_direita: { ellipseCoords: { cx: 512, cy: 385, rx: 15, ry: 18 }, center: { x: 512, y: 385 } },
+  verso_coluna_lombar: { ellipseCoords: { cx: 406, cy: 265, rx: 15, ry: 20 }, center: { x: 406, y: 265 } },
+  verso_gluteos: { points: '364,270 448,270 472,320 464,360 348,360 340,320', center: { x: 406, y: 320 } },
+  verso_quadril_esquerdo: { ellipseCoords: { cx: 360, cy: 345, rx: 17, ry: 17 }, center: { x: 360, y: 345 } },
+  verso_quadril_direito: { ellipseCoords: { cx: 452, cy: 345, rx: 17, ry: 17 }, center: { x: 452, y: 345 } },
+  verso_posteriores_esquerdo: { points: '345,360 398,360 396,470 348,470', center: { x: 372, y: 415 } },
+  verso_posteriores_direito: { points: '414,360 467,360 464,470 416,470', center: { x: 440, y: 415 } },
+  verso_joelho_esquerdo: { ellipseCoords: { cx: 375, cy: 490, rx: 16, ry: 16 }, center: { x: 375, y: 490 } },
+  verso_joelho_direito: { ellipseCoords: { cx: 438, cy: 490, rx: 16, ry: 16 }, center: { x: 438, y: 490 } },
+  verso_panturrilha_esquerda: { points: '352,505 394,505 390,615 350,615', center: { x: 372, y: 560 } },
+  verso_panturrilha_direita: { points: '418,505 460,505 462,615 422,615', center: { x: 440, y: 560 } },
+  verso_tornozelo_esquerdo: { ellipseCoords: { cx: 370, cy: 628, rx: 14, ry: 14 }, center: { x: 370, y: 628 } },
+  verso_tornozelo_direito: { ellipseCoords: { cx: 442, cy: 628, rx: 14, ry: 14 }, center: { x: 442, y: 628 } },
+  verso_pe_esquerdo: { points: '350,635 394,635 392,675 342,675', center: { x: 368, y: 655 } },
+  verso_pe_direito: { points: '418,635 462,635 470,675 420,675', center: { x: 444, y: 655 } },
+
+  // 3. VISTA LATERAL ESQUERDA (Centro calibrado em X ≈ 640 - 645)
+  perfil_esq_cabeca: { ellipseCoords: { cx: 645, cy: 65, rx: 32, ry: 40 }, center: { x: 645, y: 65 } },
+  perfil_esq_pescoco: { ellipseCoords: { cx: 645, cy: 105, rx: 18, ry: 12 }, center: { x: 645, y: 105 } },
+  perfil_esq_coluna_cervical: { ellipseCoords: { cx: 628, cy: 112, rx: 14, ry: 14 }, center: { x: 628, y: 112 } },
+  perfil_esq_ombro_esquerdo: { ellipseCoords: { cx: 636, cy: 144, rx: 16, ry: 16 }, center: { x: 636, y: 144 } },
+  perfil_esq_coluna_toracica: { ellipseCoords: { cx: 622, cy: 185, rx: 14, ry: 22 }, center: { x: 622, y: 185 } },
+  perfil_esq_cotovelo_esquerdo: { ellipseCoords: { cx: 634, cy: 252, rx: 14, ry: 14 }, center: { x: 634, y: 252 } },
+  perfil_esq_coluna_lombar: { ellipseCoords: { cx: 625, cy: 265, rx: 14, ry: 18 }, center: { x: 625, y: 265 } },
+  perfil_esq_punho_esquerdo: { ellipseCoords: { cx: 634, cy: 335, rx: 13, ry: 13 }, center: { x: 634, y: 335 } },
+  perfil_esq_dedos_mao_esquerda: { ellipseCoords: { cx: 636, cy: 385, rx: 15, ry: 18 }, center: { x: 636, y: 385 } },
+  perfil_esq_pelve: { ellipseCoords: { cx: 645, cy: 330, rx: 26, ry: 18 }, center: { x: 645, y: 330 } },
+  perfil_esq_quadril_esquerdo: { ellipseCoords: { cx: 640, cy: 345, rx: 16, ry: 16 }, center: { x: 640, y: 345 } },
+  perfil_esq_joelho_esquerdo: { ellipseCoords: { cx: 638, cy: 490, rx: 16, ry: 16 }, center: { x: 638, y: 490 } },
+  perfil_esq_tornozelo_esquerdo: { ellipseCoords: { cx: 630, cy: 625, rx: 14, ry: 14 }, center: { x: 630, y: 625 } },
+  perfil_esq_pe_esquerdo: { points: '605,635 665,635 685,680 595,680', center: { x: 648, y: 658 } },
+  perfil_esq_dedos_pe_esquerdo: { ellipseCoords: { cx: 680, cy: 672, rx: 14, ry: 10 }, center: { x: 680, y: 672 } },
+
+  // 4. VISTA LATERAL DIREITA (Centro calibrado em X ≈ 865 - 870)
+  perfil_dir_cabeca: { ellipseCoords: { cx: 868, cy: 65, rx: 32, ry: 40 }, center: { x: 868, y: 65 } },
+  perfil_dir_pescoco: { ellipseCoords: { cx: 866, cy: 105, rx: 18, ry: 12 }, center: { x: 866, y: 105 } },
+  perfil_dir_coluna_cervical: { ellipseCoords: { cx: 878, cy: 112, rx: 14, ry: 14 }, center: { x: 878, y: 112 } },
+  perfil_dir_ombro_direito: { ellipseCoords: { cx: 866, cy: 144, rx: 16, ry: 16 }, center: { x: 866, y: 144 } },
+  perfil_dir_coluna_toracica: { ellipseCoords: { cx: 888, cy: 185, rx: 14, ry: 22 }, center: { x: 888, y: 185 } },
+  perfil_dir_cotovelo_direito: { ellipseCoords: { cx: 868, cy: 252, rx: 14, ry: 14 }, center: { x: 868, y: 252 } },
+  perfil_dir_coluna_lombar: { ellipseCoords: { cx: 885, cy: 265, rx: 14, ry: 18 }, center: { x: 885, y: 265 } },
+  perfil_dir_punho_direito: { ellipseCoords: { cx: 868, cy: 335, rx: 13, ry: 13 }, center: { x: 868, y: 335 } },
+  perfil_dir_dedos_mao_direito: { ellipseCoords: { cx: 868, cy: 385, rx: 15, ry: 18 }, center: { x: 868, y: 385 } },
+  perfil_dir_pelve: { ellipseCoords: { cx: 865, cy: 330, rx: 26, ry: 18 }, center: { x: 865, y: 330 } },
+  perfil_dir_quadril_direito: { ellipseCoords: { cx: 868, cy: 345, rx: 16, ry: 16 }, center: { x: 868, y: 345 } },
+  perfil_dir_joelho_direito: { ellipseCoords: { cx: 874, cy: 490, rx: 16, ry: 16 }, center: { x: 874, y: 490 } },
+  perfil_dir_tornozelo_direito: { ellipseCoords: { cx: 874, cy: 625, rx: 14, ry: 14 }, center: { x: 874, y: 625 } },
+  perfil_dir_pe_direito: { points: '840,635 900,635 915,680 820,680', center: { x: 860, y: 658 } },
+  perfil_dir_dedos_pe_direito: { ellipseCoords: { cx: 815, cy: 672, rx: 14, ry: 10 }, center: { x: 815, y: 672 } }
+};
+
 // Gerador padronizado de regiões com base em coordenadas anatômicas
 function buildRegionsCatalog(isFemale: boolean): BodyPanoramaRegion[] {
-  const shoulderOffset = isFemale ? 3 : 0;
-
-  return [
+  const maleCatalog: BodyPanoramaRegion[] = [
     // =========================================================================
     // 1. VISTA FRONTAL (X: ~0 a 280, Centro: 158)
     // =========================================================================
@@ -111,8 +219,8 @@ function buildRegionsCatalog(isFemale: boolean): BodyPanoramaRegion[] {
       view: 'front',
       side: 'right',
       shapeType: 'ellipse',
-      ellipseCoords: { cx: 95 + shoulderOffset, cy: 140, rx: 18, ry: 18 },
-      center: { x: 95 + shoulderOffset, y: 140 },
+      ellipseCoords: { cx: 95, cy: 140, rx: 18, ry: 18 },
+      center: { x: 95, y: 140 },
       isJoint: true,
       muscleGroup: 'ombros'
     },
@@ -124,8 +232,8 @@ function buildRegionsCatalog(isFemale: boolean): BodyPanoramaRegion[] {
       view: 'front',
       side: 'left',
       shapeType: 'ellipse',
-      ellipseCoords: { cx: 221 - shoulderOffset, cy: 140, rx: 18, ry: 18 },
-      center: { x: 221 - shoulderOffset, y: 140 },
+      ellipseCoords: { cx: 221, cy: 140, rx: 18, ry: 18 },
+      center: { x: 221, y: 140 },
       isJoint: true,
       muscleGroup: 'ombros'
     },
@@ -1235,6 +1343,21 @@ function buildRegionsCatalog(isFemale: boolean): BodyPanoramaRegion[] {
       isJoint: true
     }
   ];
+
+  if (!isFemale) {
+    return maleCatalog;
+  }
+
+  return maleCatalog.map(region => {
+    const custom = FEMALE_CALIBRATED_COORDINATES[region.id];
+    if (!custom) return region;
+    return {
+      ...region,
+      ...(custom.ellipseCoords ? { ellipseCoords: custom.ellipseCoords } : {}),
+      ...(custom.points ? { points: custom.points } : {}),
+      center: custom.center
+    };
+  });
 }
 
 export const PANORAMA_REGIONS_MALE: BodyPanoramaRegion[] = buildRegionsCatalog(false);

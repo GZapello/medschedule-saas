@@ -123,25 +123,13 @@ export const PersonalBodyMapIntegration: React.FC<PersonalBodyMapIntegrationProp
 
         {/* Seletor de Vistas */}
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
-          {(['all', 'front', 'back', 'left', 'right'] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setActiveViewMode(v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-all ${
-                activeViewMode === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              {v === 'all'
-                ? '4 Vistas'
-                : v === 'front'
-                ? 'Frontal'
-                : v === 'back'
-                ? 'Posterior'
-                : v === 'left'
-                ? 'Lat. Esq.'
-                : 'Lat. Dir.'}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => setActiveViewMode('all')}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-slate-900 shadow-sm cursor-default"
+          >
+            Todas as Vistas
+          </button>
         </div>
       </div>
 
