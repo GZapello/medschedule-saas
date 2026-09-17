@@ -2343,6 +2343,26 @@ export function initializeDatabase(): void {
       clinic_id TEXT PRIMARY KEY, files_json TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS file_attachments (
+      id TEXT PRIMARY KEY,
+      clinic_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      appointment_id TEXT,
+      uploaded_by TEXT NOT NULL,
+      storage_provider TEXT NOT NULL DEFAULT 'cloudflare_r2',
+      object_key TEXT NOT NULL,
+      original_filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_size INTEGER NOT NULL,
+      category TEXT NOT NULL DEFAULT 'general',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (clinic_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_attachments_clinic_patient ON file_attachments(clinic_id, patient_id);
+    CREATE INDEX IF NOT EXISTS idx_file_attachments_clinic_id ON file_attachments(clinic_id, id);
+    CREATE INDEX IF NOT EXISTS idx_file_attachments_category ON file_attachments(category);
   `);
 
   // Executa seed caso não existam categorias cadastradas

@@ -41,6 +41,7 @@ import { PersonalController } from '../controllers/personal.controller';
 import { PersonalAIController } from '../controllers/personal-ai.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
 import { FreeTrialController } from '../controllers/free-trial.controller';
+import { FileController } from '../controllers/file.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -681,5 +682,19 @@ api.delete('/v1/payrolls/:id', requireTenant, requireRole('clinic_admin'), Payro
 
 // Trilha de Auditoria (LGPD Compliance) — Exclusivo SuperAdmin do SaaS (Item 20)
 api.get('/v1/audit', requireRole('superadmin'), AuditController.list);
+
+// ==========================================
+// ARMAZENAMENTO CLOUDFLARE R2 & ANEXOS
+// ==========================================
+api.post('/v1/files/upload-url', requireTenant, FileController.getUploadUrl);
+api.post('/files/upload-url', requireTenant, FileController.getUploadUrl);
+api.post('/v1/files/complete', requireTenant, FileController.completeUpload);
+api.post('/files/complete', requireTenant, FileController.completeUpload);
+api.get('/v1/files/:id/url', requireTenant, FileController.getFileUrl);
+api.get('/files/:id/url', requireTenant, FileController.getFileUrl);
+api.delete('/v1/files/:id', requireTenant, FileController.deleteFile);
+api.delete('/files/:id', requireTenant, FileController.deleteFile);
+api.get('/v1/files/patient/:patientId', requireTenant, FileController.listPatientFiles);
+api.get('/files/patient/:patientId', requireTenant, FileController.listPatientFiles);
 
 export default api;
