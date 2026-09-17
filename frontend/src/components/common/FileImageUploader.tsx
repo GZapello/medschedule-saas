@@ -17,7 +17,8 @@ export interface FileUploadedInfo {
   id: string;
   objectKey: string;
   url?: string;
-  originalFilename: string;
+  originalFilename?: string;
+  filename?: string;
   mimeType: string;
   fileSize: number;
 }
@@ -240,12 +241,22 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         exerciseId: exerciseId || undefined
       });
 
+      // Se estava substituindo um arquivo pré-existente diferente, armazena para excluir o anterior
+      const previousTarget = currentFileId || (currentUrl && currentUrl.includes('clinics/') ? (currentUrl.match(/clinics\/[^?]+/)?.[0] || null) : null);
+
       const savedFile = completeResponse.file;
+
+      // Exclui anexo anterior substituído para não duplicar no storage
+      if (previousTarget && previousTarget !== finalObjectKey && previousTarget !== savedFile.id) {
+        try {
+          await ApiClient.delete(`/files/${encodeURIComponent(previousTarget)}`);
+        } catch (_) {}
+      }
 
       // Atualiza estados
       setCurrentFileId(savedFile.id);
-      setCurrentFilename(savedFile.originalFilename);
-      setCurrentFileSize(savedFile.fileSize);
+      setCurrentFilename(savedFile.originalFilename || savedFile.filename || fileToUpload.name);
+      setCurrentFileSize(savedFile.fileSize || fileToUpload.size);
       setCurrentUrl(savedFile.url || null);
       setUploadSuccess(true);
 
@@ -311,12 +322,19 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
 
   // Remove file
   const handleRemoveFile = async () => {
-    if (!window.confirm('Tem certeza que deseja remover esta imagem?')) return;
+    if (!window.confirm('Tem certeza que deseja remover esta foto?')) return;
 
     try {
-      if (currentFileId) {
-        await ApiClient.delete(`/files/${currentFileId}`);
+      let targetIdOrKey = currentFileId;
+      if (!targetIdOrKey && currentUrl) {
+        const match = currentUrl.match(/clinics\/[^?]+/);
+        targetIdOrKey = match ? match[0] : currentUrl;
       }
+
+      if (targetIdOrKey) {
+        await ApiClient.delete(`/files/${encodeURIComponent(targetIdOrKey)}`);
+      }
+
       setCurrentFileId(null);
       setCurrentUrl(null);
       setCurrentFilename(null);
@@ -332,8 +350,10 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
 
       onRemoved?.();
     } catch (err: any) {
-      const msg = err.message || 'Erro ao excluir o anexo.';
+      console.error('[FileImageUploader] Erro ao excluir foto:', err);
+      const msg = err.message || 'Erro ao excluir a foto.';
       setErrorMessage(msg);
+      onError?.(msg);
     }
   };
 

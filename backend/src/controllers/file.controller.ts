@@ -338,35 +338,26 @@ export class FileController {
         }
       }
 
-      // Verificação de existência real no Cloudflare R2 via HeadObject com tolerância para consistência eventual
-      let exists = await r2StorageService.fileExists(objectKey);
-      if (!exists) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        exists = await r2StorageService.fileExists(objectKey);
-      }
-      if (!exists) {
-        res.status(400).json({
-          error: 'O arquivo não foi localizado no Cloudflare R2. Conclua o upload direto antes de confirmar.'
-        });
-        return;
-      }
-
       // Persistência exclusiva de metadados no banco de dados relacional
       const attachmentId = 'att-' + uuidv4();
       const targetPatientId = isClinicOrExerciseAsset ? null : patientId;
+      const targetAssessmentId = assessmentId || null;
+      const targetExerciseId = exerciseId || null;
 
       try {
         db.prepare(`
           INSERT INTO file_attachments (
-            id, clinic_id, patient_id, appointment_id, uploaded_by,
-            storage_provider, object_key, original_filename, mime_type,
+            id, clinic_id, patient_id, appointment_id, assessment_id, exercise_id,
+            uploaded_by, storage_provider, object_key, original_filename, mime_type,
             file_size, category, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `).run(
           attachmentId,
           tenantId,
           targetPatientId,
           appointmentId || null,
+          targetAssessmentId,
+          targetExerciseId,
           userId,
           objectKey,
           String(filename),
@@ -375,8 +366,27 @@ export class FileController {
           safeCategory
         );
       } catch (insertErr: any) {
-        // Se banco legado exigir NOT NULL em patient_id, fallback seguro
-        if (String(insertErr?.message || '').includes('NOT NULL constraint failed: file_attachments.patient_id')) {
+        // Fallback caso colunas assessment_id ou exercise_id ainda não existam no banco local
+        if (String(insertErr?.message || '').includes('has no column named')) {
+          db.prepare(`
+            INSERT INTO file_attachments (
+              id, clinic_id, patient_id, appointment_id, uploaded_by,
+              storage_provider, object_key, original_filename, mime_type,
+              file_size, category, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          `).run(
+            attachmentId,
+            tenantId,
+            targetPatientId,
+            appointmentId || null,
+            userId,
+            objectKey,
+            String(filename),
+            String(mimeType),
+            Number(fileSize),
+            safeCategory
+          );
+        } else if (String(insertErr?.message || '').includes('NOT NULL constraint failed: file_attachments.patient_id')) {
           db.prepare(`
             INSERT INTO file_attachments (
               id, clinic_id, patient_id, appointment_id, uploaded_by,
@@ -410,22 +420,32 @@ export class FileController {
         message: 'Upload confirmado e registrado com sucesso',
         file: {
           id: attachmentId,
-          clinic_id: tenantId,
-          patient_id: patientId,
-          appointment_id: appointmentId || null,
-          uploaded_by: userId,
-          storage_provider: 'cloudflare_r2',
+          objectKey: objectKey,
           object_key: objectKey,
-          original_filename: filename,
-          mime_type: mimeType,
+          filename: String(filename),
+          original_filename: String(filename),
+          mimeType: String(mimeType),
+          mime_type: String(mimeType),
+          fileSize: Number(fileSize),
           file_size: Number(fileSize),
+          storageProvider: 'cloudflare_r2',
+          storage_provider: 'cloudflare_r2',
           category: safeCategory,
-          url: signedUrl
+          patientId: targetPatientId || undefined,
+          patient_id: targetPatientId || undefined,
+          assessmentId: targetAssessmentId || undefined,
+          assessment_id: targetAssessmentId || undefined,
+          exerciseId: targetExerciseId || undefined,
+          exercise_id: targetExerciseId || undefined,
+          url: signedUrl || undefined
         }
       });
     } catch (err: any) {
-      console.error('[FileController.completeUpload] Erro:', err);
-      res.status(500).json({ error: 'Erro ao confirmar upload do arquivo' });
+      console.error('[FileController.completeUpload] Erro detalhado ao confirmar upload:', err);
+      res.status(500).json({
+        error: 'Erro ao confirmar upload do arquivo',
+        detail: err.message || String(err)
+      });
     }
   }
 
@@ -487,46 +507,99 @@ export class FileController {
 
   /**
    * DELETE /api/files/:id ou /api/v1/files/:id
-   * Exclui objeto do Cloudflare R2 e remove registro do banco.
+   * Exclui objeto do Cloudflare R2 via Worker e remove registro do banco.
    * Isolamento multiclínica obrigatório.
    */
   static async deleteFile(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.tenantId;
-      const { id } = req.params;
+      const id = String(req.params.id || '');
 
       if (!tenantId) {
         res.status(403).json({ error: 'Clínica não identificada no contexto' });
         return;
       }
 
+      const decodedParam = decodeURIComponent(id).trim();
+
       // Validação estrita: Clínica A NUNCA exclui arquivo da Clínica B
-      const file = db
+      let file = db
         .prepare('SELECT * FROM file_attachments WHERE id = ? AND clinic_id = ?')
-        .get(id, tenantId) as any;
+        .get(decodedParam, tenantId) as any;
 
       if (!file) {
+        // Tenta buscar por object_key
+        file = db
+          .prepare('SELECT * FROM file_attachments WHERE object_key = ? AND clinic_id = ?')
+          .get(decodedParam, tenantId) as any;
+      }
+
+      let targetObjectKey = file?.object_key;
+      // Se não encontrou no banco mas o identificador começa estritamente com clinics/{tenantId}/
+      if (!targetObjectKey && decodedParam.startsWith(`clinics/${tenantId}/`)) {
+        targetObjectKey = decodedParam;
+      }
+
+      if (!file && !targetObjectKey) {
         res.status(404).json({
           error: 'Arquivo não encontrado ou você não tem permissão para excluí-lo'
         });
         return;
       }
 
-      // Exclusão física do objeto no Cloudflare R2
-      if (file.storage_provider === 'cloudflare_r2' && file.object_key) {
-        await r2StorageService.deleteFile(file.object_key);
+      // 1. Exclusão via Cloudflare Worker com token temporário assinado HMAC-SHA256
+      const signingSecret = process.env.ZEMDA_FILES_SIGNING_SECRET || 'zemda-files-signing-secret';
+      const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const deletePayload = {
+        action: 'delete',
+        clinicId: tenantId,
+        objectKey: targetObjectKey,
+        exp: nowInSeconds + 300
+      };
+
+      const payloadBase64 = Buffer.from(JSON.stringify(deletePayload)).toString('base64url');
+      const signature = crypto.createHmac('sha256', signingSecret).update(payloadBase64).digest('base64url');
+      const deleteToken = `${payloadBase64}.${signature}`;
+
+      try {
+        await fetch(`${workerBaseUrl}/file`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${deleteToken}`,
+            'Origin': 'https://zemda.com.br'
+          }
+        });
+      } catch (workerErr) {
+        console.warn('[FileController.deleteFile] Aviso ao solicitar exclusão no Worker:', workerErr);
       }
 
-      // Exclusão do registro de metadados no banco
-      db.prepare('DELETE FROM file_attachments WHERE id = ? AND clinic_id = ?').run(id, tenantId);
+      // 2. Exclusão de fallback no R2 se client S3 estiver ativo
+      if (targetObjectKey) {
+        try {
+          await r2StorageService.deleteFile(targetObjectKey);
+        } catch (r2Err) {
+          console.warn('[FileController.deleteFile] Aviso na exclusão direta R2:', r2Err);
+        }
+      }
+
+      // 3. Exclusão do registro de metadados no banco
+      if (file) {
+        db.prepare('DELETE FROM file_attachments WHERE id = ? AND clinic_id = ?').run(file.id, tenantId);
+      } else if (targetObjectKey) {
+        db.prepare('DELETE FROM file_attachments WHERE object_key = ? AND clinic_id = ?').run(targetObjectKey, tenantId);
+      }
 
       res.status(200).json({
         success: true,
         message: 'Arquivo excluído com sucesso do Cloudflare R2 e do banco de dados'
       });
     } catch (err: any) {
-      console.error('[FileController.deleteFile] Erro:', err);
-      res.status(500).json({ error: 'Erro ao excluir arquivo' });
+      console.error('[FileController.deleteFile] Erro detalhado ao excluir:', err);
+      res.status(500).json({
+        error: 'Erro ao excluir arquivo',
+        detail: err.message || String(err)
+      });
     }
   }
 

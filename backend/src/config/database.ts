@@ -252,6 +252,10 @@ export function initializeDatabase(): void {
     addColIfMissing('professionals', 'profession_change_used', 'INTEGER DEFAULT 0');
     addColIfMissing('professionals', 'profession_changed_at', 'TEXT');
 
+    // Vínculos específicos de anexos para avaliações e exercícios
+    addColIfMissing('file_attachments', 'assessment_id', 'TEXT');
+    addColIfMissing('file_attachments', 'exercise_id', 'TEXT');
+
     // Suporte a snapshots de odontograma vinculados a prontuários
     addColIfMissing('odontograms', 'record_id', 'TEXT');
 
@@ -2321,6 +2325,8 @@ export function initializeDatabase(): void {
       clinic_id TEXT NOT NULL,
       patient_id TEXT,
       appointment_id TEXT,
+      assessment_id TEXT,
+      exercise_id TEXT,
       uploaded_by TEXT NOT NULL,
       storage_provider TEXT NOT NULL DEFAULT 'cloudflare_r2',
       object_key TEXT NOT NULL,
