@@ -252,32 +252,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     Boolean(currentUser?.zemdaFonoEnabled || hasFonoArea);
   const isZemdaFono = isSpeechTherapist;
 
-  // Regra de Acesso ao ZemdaPersonal (Educação Física & Personal Trainer):
-  const hasPersonalArea =
-    profId === 'prof-educador-fisico' ||
+  // Regra Estrita de Acesso ao ZemdaPersonal (Exclusivo para Personal Trainer):
+  const isPersonalTrainerId =
     profId === 'prof-personal-trainer' ||
-    profId.includes('personal') ||
-    profId.includes('educa') ||
-    profSlug.includes('personal') ||
-    profSlug.includes('educa') ||
-    profName.includes('personal') ||
-    profName.includes('educa') ||
-    profName.includes('físic') ||
-    practiceAreas.includes('personal') ||
-    practiceAreas.includes('muscula') ||
-    practiceAreas.includes('treina') ||
-    practiceAreas.includes('cref');
+    profId === 'prof-educacao-fisica' ||
+    profId === 'prof-educador-fisico' ||
+    profId === 'personal_trainer' ||
+    (currentUser as any)?.registrationType === 'CREF';
 
-  const isPersonalTrainer = !isSuperAdmin && (
-    (isProfessional && hasPersonalArea) ||
-    (currentUser?.role === 'clinic_admin' && hasPersonalArea)
-  );
+  const hasPersonalArea =
+    isPersonalTrainerId ||
+    profSlug.includes('personal') ||
+    profName.includes('personal') ||
+    practiceAreas.includes('personal trainer') ||
+    practiceAreas.includes('educação física') ||
+    practiceAreas.includes('educacao fisica');
+
+  const hasConflictingProfession =
+    hasPhysioArea || hasOdontoArea || hasNutriArea || hasTOArea || hasFonoArea ||
+    profId === 'prof-medico' || profId === 'prof-psicologo' || profId === 'prof-psiquiatra' ||
+    profName.includes('médic') || profName.includes('psicól') ||
+    (profId && !isPersonalTrainerId && !profId.includes('personal') && !profId.includes('educa'));
+
+  const isStrictPersonalTrainer = hasPersonalArea && !hasConflictingProfession;
+
+  const hasPersonalPermission =
+    userPermissions.includes('access_zemda_personal') ||
+    Boolean((currentUser as any)?.zemdaPersonalEnabled);
+
+  const isPersonalTrainer = !isSuperAdmin && isStrictPersonalTrainer;
 
   // ZemdaBody: controlado exclusivamente por permissão manual do gestor ou administrador
   const isZemdaBody = isClinicAdmin || userPermissions.includes('access_zemda_body');
 
-  // ZemdaPersonal: liberado para gestores, profissionais de educação física/personal ou com permissão explícita
-  const isZemdaPersonal = isClinicAdmin || isPersonalTrainer || userPermissions.includes('access_zemda_personal');
+  // ZemdaPersonal: Profissão = Personal Trainer + permissão ativa → liberar ZemdaPersonal. Outra profissão → não exibir e não permitir acesso
+  const isZemdaPersonal = !isSuperAdmin && (
+    (isStrictPersonalTrainer && (currentUser?.role === 'clinic_admin' || hasPersonalPermission)) ||
+    (currentUser?.role === 'clinic_admin' && !hasConflictingProfession && Boolean((currentUser as any)?.zemdaPersonalEnabled || hasPersonalPermission))
+  );
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
 

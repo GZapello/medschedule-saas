@@ -2118,10 +2118,67 @@ export function initializeDatabase(): void {
         FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_personal_period_patient ON personal_periodizations (tenant_id, patient_id, status);
+
+      CREATE TABLE IF NOT EXISTS personal_tav_protocols (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        method TEXT NOT NULL,
+        equipment TEXT NOT NULL,
+        protocol_name TEXT NOT NULL,
+        unit TEXT NOT NULL DEFAULT 'nível',
+        source_reference TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_tav_tenant ON personal_tav_protocols (tenant_id, is_active);
+
+      CREATE TABLE IF NOT EXISTS personal_tav_ranges (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        protocol_id TEXT NOT NULL,
+        gender TEXT DEFAULT 'all',
+        min_age INTEGER,
+        max_age INTEGER,
+        min_value REAL NOT NULL,
+        max_value REAL NOT NULL,
+        classification TEXT NOT NULL,
+        color_code TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (protocol_id) REFERENCES personal_tav_protocols(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_personal_tav_ranges_proto ON personal_tav_ranges (protocol_id);
     `);
     addColIfMissing('odontograms', 'record_id', 'TEXT');
     addColIfMissing('clinic_users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('patients', 'gender', "TEXT DEFAULT 'm'");
+
+    // Expansão da Avaliação Física Completa do ZemdaPersonal
+    addColIfMissing('personal_assessments', 'thigh_right_dist', 'REAL');
+    addColIfMissing('personal_assessments', 'thigh_left_dist', 'REAL');
+    addColIfMissing('personal_assessments', 'fold_biceps', 'REAL');
+    addColIfMissing('personal_assessments', 'skinfolds_protocol', 'TEXT');
+    addColIfMissing('personal_assessments', 'composition_method', 'TEXT');
+    addColIfMissing('personal_assessments', 'body_water_liters', 'REAL');
+    addColIfMissing('personal_assessments', 'bmr_kcal', 'REAL');
+    addColIfMissing('personal_assessments', 'raw_composition_data_json', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_value', 'REAL');
+    addColIfMissing('personal_assessments', 'tav_unit', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_method', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_equipment', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_protocol_id', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_classification', 'TEXT');
+    addColIfMissing('personal_assessments', 'tav_notes', 'TEXT');
+    addColIfMissing('personal_assessments', 'resting_heart_rate_bpm', 'INTEGER');
+    addColIfMissing('personal_assessments', 'blood_pressure_systolic', 'INTEGER');
+    addColIfMissing('personal_assessments', 'blood_pressure_diastolic', 'INTEGER');
+    addColIfMissing('personal_assessments', 'vo2_max', 'REAL');
+    addColIfMissing('personal_assessments', 'vo2_method_type', 'TEXT');
+    addColIfMissing('personal_assessments', 'vo2_protocol', 'TEXT');
+    addColIfMissing('personal_assessments', 'strength_tests_json', 'TEXT');
+    addColIfMissing('personal_assessments', 'muscular_endurance_tests_json', 'TEXT');
+    addColIfMissing('personal_assessments', 'flexibility_wells_cm', 'REAL');
+    addColIfMissing('personal_assessments', 'flexibility_tests_json', 'TEXT');
   } catch (migErr) {
     console.warn('[Database] Aviso nas migrações dinâmicas:', migErr);
   }
@@ -2167,6 +2224,85 @@ export function initializeDatabase(): void {
     }
   } catch (seedExErr) {
     console.warn('[Database] Aviso ao semear exercícios:', seedExErr);
+  }
+
+  // Pre-seed protocolos e faixas de TAV (Tecido Adiposo Visceral) padrão
+  try {
+    const totalTav = rawDb.prepare("SELECT COUNT(*) as count FROM personal_tav_protocols WHERE tenant_id = 'global'").get() as any;
+    if (!totalTav || totalTav.count === 0) {
+      const defaultTavProtocols = [
+        {
+          id: 'tav-proto-inbody',
+          method: 'Bioimpedância',
+          equipment: 'InBody',
+          protocol_name: 'InBody Standard (Nível 1 a 20)',
+          unit: 'nível',
+          source: 'InBody Manual / WHO',
+          ranges: [
+            { min_val: 1, max_val: 9, classif: 'Dentro da referência', color: 'green' },
+            { min_val: 9.01, max_val: 14, classif: 'Elevado', color: 'amber' },
+            { min_val: 14.01, max_val: 30, classif: 'Muito elevado', color: 'red' }
+          ]
+        },
+        {
+          id: 'tav-proto-tanita',
+          method: 'Bioimpedância',
+          equipment: 'Tanita',
+          protocol_name: 'Tanita Standard (Nível 1 a 59)',
+          unit: 'nível',
+          source: 'Tanita Corporation Standards',
+          ranges: [
+            { min_val: 1, max_val: 12, classif: 'Dentro da referência', color: 'green' },
+            { min_val: 12.01, max_val: 59, classif: 'Elevado', color: 'red' }
+          ]
+        },
+        {
+          id: 'tav-proto-omron',
+          method: 'Bioimpedância',
+          equipment: 'Omron',
+          protocol_name: 'Omron Healthcare (Nível 1 a 30)',
+          unit: 'nível',
+          source: 'Omron Healthcare Guidelines',
+          ranges: [
+            { min_val: 1, max_val: 9, classif: 'Dentro da referência', color: 'green' },
+            { min_val: 9.01, max_val: 14, classif: 'Elevado', color: 'amber' },
+            { min_val: 14.01, max_val: 30, classif: 'Muito elevado', color: 'red' }
+          ]
+        },
+        {
+          id: 'tav-proto-dxa',
+          method: 'DXA',
+          equipment: 'DXA (Hologic / GE)',
+          protocol_name: 'Área de Gordura Visceral (VAT cm²)',
+          unit: 'cm²',
+          source: 'International Society for Clinical Densitometry (ISCD)',
+          ranges: [
+            { min_val: 0, max_val: 100, classif: 'Dentro da referência', color: 'green' },
+            { min_val: 100.01, max_val: 160, classif: 'Elevado', color: 'amber' },
+            { min_val: 160.01, max_val: 500, classif: 'Muito elevado', color: 'red' }
+          ]
+        }
+      ];
+
+      const insertProto = rawDb.prepare(`
+        INSERT INTO personal_tav_protocols (id, tenant_id, method, equipment, protocol_name, unit, source_reference, is_active, created_at, updated_at)
+        VALUES (?, 'global', ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+      `);
+      const insertRange = rawDb.prepare(`
+        INSERT INTO personal_tav_ranges (id, tenant_id, protocol_id, gender, min_age, max_age, min_value, max_value, classification, color_code, created_at)
+        VALUES (?, 'global', ?, 'all', null, null, ?, ?, ?, ?, datetime('now'))
+      `);
+
+      for (const p of defaultTavProtocols) {
+        insertProto.run(p.id, p.method, p.equipment, p.protocol_name, p.unit, p.source);
+        for (let i = 0; i < p.ranges.length; i++) {
+          const r = p.ranges[i];
+          insertRange.run(`${p.id}-r${i + 1}`, p.id, r.min_val, r.max_val, r.classif, r.color);
+        }
+      }
+    }
+  } catch (seedTavErr) {
+    console.warn('[Database] Aviso ao semear protocolos de TAV:', seedTavErr);
   }
 
   migrateConsultations(rawDb);

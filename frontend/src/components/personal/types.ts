@@ -96,6 +96,90 @@ export interface AssessmentPhoto {
   body_fat_percentage?: number;
 }
 
+export interface StrengthTestItem {
+  id?: string;
+  exercise_name: string;
+  load_kg: number;
+  reps: number;
+  one_rm_kg?: number;
+  test_date?: string;
+  notes?: string;
+}
+
+export interface EnduranceTestItem {
+  id?: string;
+  test_name: string;
+  result_value: number;
+  unit: string; // 'reps' | 'segundos'
+  classification?: string;
+  notes?: string;
+}
+
+export interface FlexibilityTestItem {
+  id?: string;
+  test_name: string;
+  result_cm?: number;
+  notes?: string;
+}
+
+export interface TavRange {
+  id: string;
+  protocol_id: string;
+  gender?: string;
+  min_age?: number | null;
+  max_age?: number | null;
+  min_value: number;
+  max_value: number;
+  classification: string;
+  color_code?: string;
+}
+
+export interface TavProtocol {
+  id: string;
+  tenant_id: string;
+  method: string;
+  equipment: string;
+  protocol_name: string;
+  unit: string;
+  source_reference?: string;
+  is_active: number;
+  ranges?: TavRange[];
+}
+
+export interface ComparisonMetricItem {
+  field: string;
+  label: string;
+  unit: string;
+  previous: number | null;
+  current: number | null;
+  diff: number | null;
+  pct_variation: number | null;
+}
+
+export interface AssessmentComparison {
+  previous_assessment: Assessment;
+  current_assessment: Assessment;
+  previous_photos: AssessmentPhoto[];
+  current_photos: AssessmentPhoto[];
+  metrics: ComparisonMetricItem[];
+  tav_comparison: {
+    previous: {
+      value?: number;
+      unit?: string;
+      method?: string;
+      equipment?: string;
+      classification?: string;
+    };
+    current: {
+      value?: number;
+      unit?: string;
+      method?: string;
+      equipment?: string;
+      classification?: string;
+    };
+  };
+}
+
 export interface Assessment {
   id: string;
   patient_id: string;
@@ -125,20 +209,45 @@ export interface Assessment {
   thigh_left_prox?: number;
   thigh_right_med?: number;
   thigh_left_med?: number;
+  thigh_right_dist?: number;
+  thigh_left_dist?: number;
   calf_right?: number;
   calf_left?: number;
   fold_subscapular?: number;
   fold_triceps?: number;
+  fold_biceps?: number;
   fold_chest?: number;
   fold_axillary?: number;
   fold_suprailiac?: number;
   fold_abdominal?: number;
   fold_thigh?: number;
   fold_calf?: number;
+  skinfolds_protocol?: string;
   body_fat_percentage?: number;
   fat_mass_kg?: number;
   lean_mass_kg?: number;
   muscle_mass_kg?: number;
+  composition_method?: string;
+  body_water_liters?: number;
+  bmr_kcal?: number;
+  raw_composition_data_json?: string;
+  tav_value?: number;
+  tav_unit?: string;
+  tav_method?: string;
+  tav_equipment?: string;
+  tav_protocol_id?: string;
+  tav_classification?: string;
+  tav_notes?: string;
+  resting_heart_rate_bpm?: number;
+  blood_pressure_systolic?: number;
+  blood_pressure_diastolic?: number;
+  vo2_max?: number;
+  vo2_method_type?: string;
+  vo2_protocol?: string;
+  strength_tests_json?: string;
+  muscular_endurance_tests_json?: string;
+  flexibility_wells_cm?: number;
+  flexibility_tests_json?: string;
   protocol?: string;
   notes?: string;
   photos_count?: number;

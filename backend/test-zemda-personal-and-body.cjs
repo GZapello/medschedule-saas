@@ -109,6 +109,11 @@ async function runTests() {
       VALUES (?, ?, ?, 'professional', 'active', 0, '[]', 0, 0)
     `).run('cu-' + uuidv4().slice(0, 8), tenantAId, staffAId);
 
+    db.prepare(`
+      INSERT INTO professionals (id, tenant_id, user_id, name, profession_id, registration_type, registration_number, active, created_at, updated_at)
+      VALUES (?, ?, ?, 'Profissional Beto', 'prof-personal-trainer', 'CREF', '123456-G/SP', 1, datetime('now'), datetime('now'))
+    `).run('pro-' + uuidv4().slice(0, 8), tenantAId, staffAId);
+
     const staffTokenA = generateToken({
       userId: staffAId,
       tenantId: tenantAId,
@@ -195,10 +200,71 @@ async function runTests() {
     });
     assert(staffWithPersonalRes.status === 200, 'Após autorização, profissional acessa ZemdaPersonal Dashboard (HTTP 200)');
 
+    // 2.5 Profissional de outra área (Médico) com permissão explícita -> Acesso NEGADO (HTTP 403)
+    const doctorId = 'user-' + uuidv4().slice(0, 8);
+    db.prepare(`
+      INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, created_at, updated_at)
+      VALUES (?, ?, 'Dr. Carlos Médico', 'medico@alpha.com', 'hash', 'professional', 'active', datetime('now'), datetime('now'))
+    `).run(doctorId, tenantAId);
+
+    db.prepare(`
+      INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_body_enabled, zemda_personal_enabled)
+      VALUES (?, ?, ?, 'professional', 'active', 0, '["access_zemda_personal"]', 1, 1)
+    `).run('cu-' + uuidv4().slice(0, 8), tenantAId, doctorId);
+
+    db.prepare(`
+      INSERT INTO professionals (id, tenant_id, user_id, name, profession_id, registration_type, registration_number, active, created_at, updated_at)
+      VALUES (?, ?, ?, 'Dr. Carlos Médico', 'prof-medico', 'CRM', '123456/SP', 1, datetime('now'), datetime('now'))
+    `).run('pro-' + uuidv4().slice(0, 8), tenantAId, doctorId);
+
+    const doctorToken = generateToken({
+      userId: doctorId,
+      tenantId: tenantAId,
+      email: 'medico@alpha.com',
+      role: 'professional'
+    });
+
+    const docPersonalRes = await makeRequest('GET', '/api/v1/personal/dashboard', {
+      Authorization: `Bearer ${doctorToken}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(docPersonalRes.status === 403, 'Outra profissão (Médico) com permissão ativa é estritamente bloqueada no ZemdaPersonal (HTTP 403)');
+
     // ====================================================
     // 3. ZEMDAPERSONAL — CADASTRO DE ALUNO & AVALIAÇÃO FÍSICA (POLLOCK)
     // ====================================================
     console.log('\n--- 3. ZEMDAPERSONAL: PERFIL DO ALUNO & AVALIAÇÃO FÍSICA ---');
+
+    // 3.0 Protocolos de TAV & Classificação
+    const tavProtoRes = await makeRequest('GET', '/api/v1/personal/tav/protocols', {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(tavProtoRes.status === 200, 'Listagem de protocolos de TAV retorna HTTP 200');
+    assert(tavProtoRes.data.protocols.length >= 4, 'Protocolos padrão de fábrica carregados (InBody, Tanita, Omron, DXA)');
+
+    // Classificação InBody nível 4 -> Saudável
+    const classifyInBodyRes = await makeRequest('POST', '/api/v1/personal/tav/classify', {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    }, {
+      equipment: 'InBody (Todos os modelos)',
+      value: 4,
+      gender: 'm'
+    });
+    assert(classifyInBodyRes.status === 200, 'Classificação de TAV retorna HTTP 200');
+    assert(classifyInBodyRes.data.classification.includes('Dentro da referência') || classifyInBodyRes.data.classification.includes('Normal') || classifyInBodyRes.data.classification.includes('Excelente'), `Classificação InBody nível 4: ${classifyInBodyRes.data.classification}`);
+
+    // Classificação de equipamento sem protocolo cadastrado -> "Classificação não disponível para este método."
+    const classifyUnknownRes = await makeRequest('POST', '/api/v1/personal/tav/classify', {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    }, {
+      equipment: 'Aparelho Desconhecido XYZ',
+      value: 15
+    });
+    assert(classifyUnknownRes.status === 200, 'Classificação de método não cadastrado retorna HTTP 200');
+    assert(classifyUnknownRes.data.classification === 'Classificação não disponível para este método.', 'Equipamento sem protocolo registrado retorna mensagem mandatória exata');
 
     // 3.1 Salva perfil de treinamento do aluno
     const profileRes = await makeRequest('POST', `/api/v1/personal/students/${studentAId}/profile`, {
@@ -214,9 +280,7 @@ async function runTests() {
     });
     assert(profileRes.status === 200, 'Perfil de treinamento do aluno salvo com sucesso (HTTP 200)');
 
-    // 3.2 Cria avaliação física com Pollock 7 Dobras
-    // Homem, 30 anos, 82.5 kg, 180 cm.
-    // Dobras: sub=12, tri=10, che=8, axi=10, sup=12, abd=16, thi=14 (soma = 82)
+    // 3.2 Cria avaliação física 1 com Pollock 7 Dobras + TAV + Cardio + Testes
     const assessRes = await makeRequest('POST', '/api/v1/personal/assessments', {
       Authorization: `Bearer ${managerTokenA}`,
       'x-tenant-id': tenantAId
@@ -228,6 +292,7 @@ async function runTests() {
       height: 180,
       fold_subscapular: 12,
       fold_triceps: 10,
+      fold_biceps: 6,
       fold_chest: 8,
       fold_axillary: 10,
       fold_suprailiac: 12,
@@ -236,17 +301,71 @@ async function runTests() {
       waist_cm: 82,
       hip_cm: 98,
       arm_right_flexed: 38.5,
+      thigh_right_prox: 58,
+      thigh_right_med: 55,
+      thigh_right_dist: 48,
+      tav_value: 5,
+      tav_unit: 'nível',
+      tav_equipment: 'InBody (Todos os modelos)',
+      resting_heart_rate_bpm: 62,
+      blood_pressure_systolic: 120,
+      blood_pressure_diastolic: 80,
+      vo2_max: 45.5,
+      flexibility_wells_cm: 32,
       notes: 'Excelente tônus muscular. Iniciar progressão de volume.'
     });
 
-    assert(assessRes.status === 201, 'Avaliação física com Pollock criada com sucesso (HTTP 201)');
+    assert(assessRes.status === 201, 'Avaliação física completa criada com sucesso (HTTP 201)');
     assert(assessRes.data.bmi > 25 && assessRes.data.bmi < 26, `IMC calculado corretamente: ${assessRes.data.bmi} kg/m²`);
     assert(assessRes.data.whr > 0.8 && assessRes.data.whr < 0.9, `RCQ (WHR) calculada corretamente: ${assessRes.data.whr}`);
     assert(assessRes.data.body_fat_percentage > 10 && assessRes.data.body_fat_percentage < 20, `% de Gordura calculado via equação Pollock 7: ${assessRes.data.body_fat_percentage}%`);
     assert(assessRes.data.lean_mass_kg > 65, `Massa magra computada: ${assessRes.data.lean_mass_kg} kg`);
     assert(assessRes.data.fat_mass_kg > 5, `Massa gorda computada: ${assessRes.data.fat_mass_kg} kg`);
+    assert(assessRes.data.tav_classification !== undefined, `TAV auto-classificado: ${assessRes.data.tav_classification}`);
 
     const assessmentId = assessRes.data.id;
+
+    // 3.2.1 Cria avaliação física 2 (evolução após 30 dias)
+    const assess2Res = await makeRequest('POST', '/api/v1/personal/assessments', {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    }, {
+      patient_id: studentAId,
+      assessment_date: '2026-10-10',
+      protocol: 'pollock_7',
+      weight: 80.0,
+      height: 180,
+      fold_subscapular: 10,
+      fold_triceps: 8,
+      fold_chest: 7,
+      fold_axillary: 9,
+      fold_suprailiac: 10,
+      fold_abdominal: 13,
+      fold_thigh: 12,
+      waist_cm: 79,
+      hip_cm: 97,
+      arm_right_flexed: 39.0,
+      tav_value: 4,
+      tav_unit: 'nível',
+      tav_equipment: 'InBody (Todos os modelos)',
+      vo2_max: 48.0,
+      flexibility_wells_cm: 35,
+      notes: 'Perda de gordura e ganho de massa magra visível.'
+    });
+    assert(assess2Res.status === 201, 'Segunda avaliação física registrada para comparativo (HTTP 201)');
+    const assessment2Id = assess2Res.data.id;
+
+    // 3.2.2 Testa comparação entre as duas avaliações
+    const compareRes = await makeRequest('GET', `/api/v1/personal/assessments/${assessment2Id}/compare/${assessmentId}`, {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(compareRes.status === 200, 'Comparação de avaliações físicas retorna HTTP 200');
+    assert(Array.isArray(compareRes.data.metrics), 'Lista de métricas comparadas retornada');
+    const weightMetric = compareRes.data.metrics.find(m => m.field === 'weight');
+    assert(weightMetric && weightMetric.diff === -2.5, `Diferença de peso computada: ${weightMetric?.diff} kg`);
+    assert(compareRes.data.tav_comparison && compareRes.data.tav_comparison.current.value === 4, 'Comparativo do TAV atual contém valor 4');
+    assert(compareRes.data.tav_comparison.previous.value === 5, 'Comparativo do TAV anterior contém valor 5');
 
     // 3.3 Consulta histórico de evolução para gráficos
     const evoRes = await makeRequest('GET', `/api/v1/personal/students/${studentAId}/evolution`, {
@@ -254,7 +373,7 @@ async function runTests() {
       'x-tenant-id': tenantAId
     });
     assert(evoRes.status === 200, 'Consulta de dados de evolução para gráficos retorna HTTP 200');
-    assert(evoRes.data.history.length === 1, 'Histórico contém a avaliação cadastrada');
+    assert(evoRes.data.history.length === 2, 'Histórico contém as avaliações cadastradas');
 
     // 3.4 Registra foto antes/depois
     const photoRes = await makeRequest('POST', '/api/v1/personal/photos', {

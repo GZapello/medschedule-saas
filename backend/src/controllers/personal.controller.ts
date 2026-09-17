@@ -4,18 +4,133 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 
 /**
- * Validação de acesso ao ZemdaPersonal:
- * - SuperAdmin SaaS: sem acesso a dados de clientes
- * - Gerenciador da Clínica (clinic_admin): acesso total liberado
- * - Profissional / Funcionário: acesso concedido se possuir zemda_personal_enabled === 1
- *   ou 'access_zemda_personal' em permissions_json, ou se for profissional da área
- *   de Educação Física / Personal Trainer / CREF.
+ * Validação estrita de profissão:
+ * O ZemdaPersonal e absolutamente todas as suas funções devem aparecer exclusivamente
+ * para profissionais cuja profissão cadastrada seja Personal Trainer / Educação Física.
+ * Regra: Profissão = Personal Trainer + permissão ativa → liberar ZemdaPersonal
+ *        Outra profissão → não exibir e não permitir acesso (HTTP 403)
  */
+export function isUserPersonalTrainer(userId: string, tenantId: string): boolean {
+  // 1. Busca no registro do profissional
+  const prof = db.prepare(`
+    SELECT p.id, p.profession_id, p.practice_areas, p.registration_type,
+           prof.name as prof_name, prof.slug as prof_slug
+    FROM professionals p
+    LEFT JOIN professions prof ON prof.id = p.profession_id
+    WHERE p.user_id = ? AND p.tenant_id = ?
+    ORDER BY p.active DESC, p.id
+    LIMIT 1
+  `).get(userId, tenantId) as any;
+
+  if (prof) {
+    const pId = prof.profession_id || '';
+    const pName = (prof.prof_name || '').toLowerCase();
+    const pSlug = (prof.prof_slug || '').toLowerCase();
+    const pAreas = (prof.practice_areas || '').toLowerCase();
+    const rType = (prof.registration_type || '').toUpperCase();
+
+    // Rejeição estrita de qualquer outra profissão cadastrada
+    const conflictingProfessions = [
+      'prof-fisioterapeuta', 'prof-fisioterapia', 'prof-dentista', 'prof-odontologia',
+      'prof-nutricionista', 'prof-nutricao', 'prof-terapeuta-ocupacional', 'prof-terapia-ocupacional',
+      'prof-fonoaudiologo', 'prof-fonoaudiologia', 'prof-medico', 'prof-medicina',
+      'prof-pediatra', 'prof-cardiologista', 'prof-dermatologista', 'prof-psicologo',
+      'prof-psicologia', 'prof-psiquiatra', 'prof-enfermeiro', 'prof-enfermagem',
+      'prof-advogado', 'prof-contador', 'prof-veterinario'
+    ];
+    if (conflictingProfessions.includes(pId)) {
+      return false;
+    }
+
+    if (
+      pId === 'prof-personal-trainer' ||
+      pId === 'prof-educacao-fisica' ||
+      pId === 'personal_trainer' ||
+      rType === 'CREF' ||
+      pName.includes('personal') ||
+      pName.includes('educação física') ||
+      pName.includes('educacao fisica') ||
+      pSlug.includes('personal') ||
+      pSlug.includes('educa') ||
+      pAreas.includes('personal') ||
+      pAreas.includes('musculação') ||
+      pAreas.includes('musculacao') ||
+      pAreas.includes('treinamento')
+    ) {
+      return true;
+    }
+
+    // Se possui profissão preenchida diferente de Personal Trainer
+    if (pId && !pId.includes('personal') && !pId.includes('educa')) {
+      return false;
+    }
+  }
+
+  // 2. Busca em clinic_users e dados de gestão da clínica
+  const cu = db.prepare(`
+    SELECT cu.profession_custom, cu.practice_areas, u.registration_type,
+           t.manager_profession, t.manager_practice_areas
+    FROM clinic_users cu
+    LEFT JOIN users u ON u.id = cu.user_id
+    LEFT JOIN tenants t ON t.id = cu.tenant_id
+    WHERE cu.user_id = ? AND cu.tenant_id = ?
+  `).get(userId, tenantId) as any;
+
+  if (cu) {
+    const text = [cu.profession_custom, cu.practice_areas, cu.manager_profession, cu.manager_practice_areas].filter(Boolean).join(' ').toLowerCase();
+    const rType = (cu.registration_type || '').toUpperCase();
+    if (rType === 'CREF') return true;
+
+    // Conflitos no texto livre
+    if (
+      text.includes('médic') || text.includes('medic') ||
+      text.includes('dentis') || text.includes('odonto') ||
+      text.includes('nutri') || text.includes('fisio') ||
+      text.includes('psicol') || text.includes('fono') ||
+      text.includes('ocupacional')
+    ) {
+      return false;
+    }
+
+    if (text.includes('personal') || text.includes('educação física') || text.includes('educacao fisica')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function hasPersonalAccess(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
   if (req.user.role === 'superadmin') return false;
-  if (req.user.role === 'clinic_admin') return true;
 
+  const isPT = isUserPersonalTrainer(req.user.userId, req.tenantId);
+
+  // Outra profissão -> não exibir e não permitir acesso
+  if (!isPT) {
+    if (req.user.role === 'clinic_admin') {
+      const cu = db.prepare(`
+        SELECT cu.profession_custom, cu.practice_areas, t.manager_profession
+        FROM clinic_users cu
+        LEFT JOIN tenants t ON t.id = cu.tenant_id
+        WHERE cu.user_id = ? AND cu.tenant_id = ?
+      `).get(req.user.userId, req.tenantId) as any;
+      const text = [cu?.profession_custom, cu?.practice_areas, cu?.manager_profession].filter(Boolean).join(' ').toLowerCase();
+      const hasConflict = text.includes('médic') || text.includes('dentis') || text.includes('nutri') || text.includes('fisio') || text.includes('psicol');
+      if (!hasConflict) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Profissão = Personal Trainer:
+  // Se for clinic_admin -> liberado
+  if (req.user.role === 'clinic_admin') {
+    return true;
+  }
+
+  // Se for profissional -> exige permissão ativa concedida pelo gerenciador da clínica
   try {
     const cu = db.prepare('SELECT permissions_json, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
     if (cu) {
@@ -27,30 +142,10 @@ export function hasPersonalAccess(req: Request): boolean {
         } catch {}
       }
     }
-
-    // Também verifica se o profissional atua na área de personal / educação física
-    const prof = db.prepare(`
-      SELECT p.id, p.practice_areas, p.registration_type, prof.name as prof_name
-      FROM professionals p
-      LEFT JOIN professions prof ON prof.id = p.profession_id
-      WHERE p.user_id = ? AND p.tenant_id = ?
-    `).get(req.user.userId, req.tenantId) as any;
-
-    if (prof) {
-      const pName = (prof.prof_name || '').toLowerCase();
-      const pAreas = (prof.practice_areas || '').toLowerCase();
-      const rType = (prof.registration_type || '').toLowerCase();
-      if (
-        pName.includes('personal') || pName.includes('educa') || pName.includes('físic') ||
-        pAreas.includes('personal') || pAreas.includes('muscula') || pAreas.includes('treina') ||
-        rType.includes('cref')
-      ) {
-        return true;
-      }
-    }
   } catch (err) {
     console.error('[hasPersonalAccess] Erro ao checar permissão:', err);
   }
+
   return false;
 }
 
@@ -74,6 +169,105 @@ function getProfessionalId(req: Request): string {
     VALUES (?, ?, ?, ?, 'CREF-TEMP', 1, datetime('now'), datetime('now'))
   `).run(newId, tenantId, userId, userName);
   return newId;
+}
+
+/**
+ * Classificação rigorosa de TAV (Tecido Adiposo Visceral):
+ * - Cada equipamento ou protocolo possui sua tabela e faixas específicas.
+ * - Se nenhum protocolo estiver cadastrado para o método/equipamento:
+ *   retorna obrigatoriamente 'Classificação não disponível para este método.'
+ * - Nunca classifica utilizando tabela de outro equipamento.
+ */
+export function resolveTavClassification(
+  tenantId: string,
+  protocolId?: string,
+  method?: string,
+  equipment?: string,
+  val?: number | null,
+  gender?: string,
+  age?: number
+): { classification: string; protocolId?: string; protocolName?: string; unit?: string; color?: string } {
+  if (val === undefined || val === null || isNaN(val)) {
+    return { classification: 'Sem valor informado' };
+  }
+
+  let proto: any = null;
+  if (protocolId) {
+    proto = db.prepare(`
+      SELECT * FROM personal_tav_protocols
+      WHERE id = ? AND (tenant_id = ? OR tenant_id = 'global') AND is_active = 1
+    `).get(protocolId, tenantId);
+  }
+
+  if (!proto && equipment) {
+    const eqTrim = equipment.trim();
+    proto = db.prepare(`
+      SELECT * FROM personal_tav_protocols
+      WHERE (tenant_id = ? OR tenant_id = 'global')
+        AND (LOWER(equipment) = LOWER(?) OR LOWER(?) LIKE '%' || LOWER(equipment) || '%')
+        AND is_active = 1
+      ORDER BY CASE WHEN tenant_id = ? THEN 0 ELSE 1 END, created_at ASC
+      LIMIT 1
+    `).get(tenantId, eqTrim, eqTrim, tenantId);
+  }
+
+  if (!proto && method) {
+    proto = db.prepare(`
+      SELECT * FROM personal_tav_protocols
+      WHERE (tenant_id = ? OR tenant_id = 'global')
+        AND LOWER(method) = LOWER(?)
+        AND is_active = 1
+      ORDER BY CASE WHEN tenant_id = ? THEN 0 ELSE 1 END, created_at ASC
+      LIMIT 1
+    `).get(tenantId, method.trim(), tenantId);
+  }
+
+  // Regra fundamental: Se não há protocolo registrado para o equipamento/método selecionado:
+  if (!proto) {
+    return {
+      classification: 'Classificação não disponível para este método.',
+      protocolId: undefined,
+      protocolName: equipment || method || 'Desconhecido',
+      unit: undefined,
+      color: '#6B7280'
+    };
+  }
+
+  const normGender = (gender || '').toLowerCase().startsWith('m') ? 'm' : ((gender || '').toLowerCase().startsWith('f') ? 'f' : 'all');
+  const ranges = db.prepare(`
+    SELECT * FROM personal_tav_ranges
+    WHERE protocol_id = ?
+    ORDER BY min_value ASC
+  `).all(proto.id) as any[];
+
+  let matchedRange: any = null;
+  for (const r of ranges) {
+    if (r.gender && r.gender !== 'all' && r.gender !== normGender) continue;
+    if (age !== undefined && r.min_age !== null && age < r.min_age) continue;
+    if (age !== undefined && r.max_age !== null && age > r.max_age) continue;
+    if (val >= r.min_value && val <= r.max_value) {
+      matchedRange = r;
+      break;
+    }
+  }
+
+  if (matchedRange) {
+    return {
+      classification: matchedRange.classification,
+      protocolId: proto.id,
+      protocolName: proto.protocol_name,
+      unit: proto.unit,
+      color: matchedRange.color_code || '#10B981'
+    };
+  }
+
+  return {
+    classification: 'Fora da faixa de referência cadastrada',
+    protocolId: proto.id,
+    protocolName: proto.protocol_name,
+    unit: proto.unit,
+    color: '#F59E0B'
+  };
 }
 
 export class PersonalController {
@@ -321,6 +515,197 @@ export class PersonalController {
   }
 
   // ==========================================
+  // PROTOCOLOS & CLASSIFICAÇÃO DE TAV
+  // ==========================================
+  static async listTavProtocols(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const protocols = db.prepare(`
+        SELECT * FROM personal_tav_protocols
+        WHERE (tenant_id = ? OR tenant_id = 'global') AND is_active = 1
+        ORDER BY CASE WHEN tenant_id = ? THEN 0 ELSE 1 END, equipment ASC, protocol_name ASC
+      `).all(tenantId, tenantId) as any[];
+
+      for (const proto of protocols) {
+        proto.ranges = db.prepare(`
+          SELECT * FROM personal_tav_ranges
+          WHERE protocol_id = ?
+          ORDER BY min_value ASC
+        `).all(proto.id);
+      }
+
+      res.json({ protocols });
+    } catch (err: any) {
+      console.error('[PersonalController.listTavProtocols] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar protocolos de TAV' });
+    }
+  }
+
+  static async createTavProtocol(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { method, equipment, protocol_name, unit, source_reference, ranges } = req.body;
+      if (!method || !equipment || !protocol_name) {
+        res.status(400).json({ error: 'Método, equipamento e nome do protocolo são obrigatórios' });
+        return;
+      }
+      const protoId = 'tav-proto-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO personal_tav_protocols (id, tenant_id, method, equipment, protocol_name, unit, source_reference, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+      `).run(protoId, tenantId, method, equipment, protocol_name, unit || 'nível', source_reference || null);
+
+      if (Array.isArray(ranges)) {
+        const insRange = db.prepare(`
+          INSERT INTO personal_tav_ranges (id, tenant_id, protocol_id, gender, min_age, max_age, min_value, max_value, classification, color_code, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `);
+        for (const r of ranges) {
+          insRange.run(
+            'tav-range-' + uuidv4().slice(0, 8),
+            tenantId,
+            protoId,
+            r.gender || 'all',
+            r.min_age !== undefined && r.min_age !== null ? Number(r.min_age) : null,
+            r.max_age !== undefined && r.max_age !== null ? Number(r.max_age) : null,
+            Number(r.min_value) || 0,
+            Number(r.max_value) || 0,
+            r.classification || 'Classificação',
+            r.color_code || '#10B981'
+          );
+        }
+      }
+
+      res.status(201).json({ id: protoId, message: 'Protocolo de TAV criado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.createTavProtocol] Erro:', err);
+      res.status(500).json({ error: 'Erro ao criar protocolo de TAV' });
+    }
+  }
+
+  static async updateTavProtocol(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+      const { method, equipment, protocol_name, unit, source_reference, is_active, ranges } = req.body;
+
+      const existing = db.prepare('SELECT id, tenant_id FROM personal_tav_protocols WHERE id = ?').get(id) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Protocolo TAV não encontrado' });
+        return;
+      }
+      if (existing.tenant_id === 'global' && req.user!.role !== 'superadmin') {
+        res.status(403).json({ error: 'Protocolos de fábrica do sistema não podem ser modificados diretamente' });
+        return;
+      }
+
+      db.prepare(`
+        UPDATE personal_tav_protocols
+        SET method = COALESCE(?, method),
+            equipment = COALESCE(?, equipment),
+            protocol_name = COALESCE(?, protocol_name),
+            unit = COALESCE(?, unit),
+            source_reference = COALESCE(?, source_reference),
+            is_active = COALESCE(?, is_active),
+            updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(method, equipment, protocol_name, unit, source_reference, is_active !== undefined ? (is_active ? 1 : 0) : null, id, tenantId);
+
+      if (Array.isArray(ranges)) {
+        db.prepare('DELETE FROM personal_tav_ranges WHERE protocol_id = ?').run(id);
+        const insRange = db.prepare(`
+          INSERT INTO personal_tav_ranges (id, tenant_id, protocol_id, gender, min_age, max_age, min_value, max_value, classification, color_code, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `);
+        for (const r of ranges) {
+          insRange.run(
+            'tav-range-' + uuidv4().slice(0, 8),
+            tenantId,
+            id,
+            r.gender || 'all',
+            r.min_age !== undefined && r.min_age !== null ? Number(r.min_age) : null,
+            r.max_age !== undefined && r.max_age !== null ? Number(r.max_age) : null,
+            Number(r.min_value) || 0,
+            Number(r.max_value) || 0,
+            r.classification || 'Classificação',
+            r.color_code || '#10B981'
+          );
+        }
+      }
+
+      res.json({ message: 'Protocolo de TAV atualizado com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.updateTavProtocol] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar protocolo de TAV' });
+    }
+  }
+
+  static async deleteTavProtocol(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id } = req.params;
+
+      const existing = db.prepare('SELECT id, tenant_id FROM personal_tav_protocols WHERE id = ?').get(id) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Protocolo TAV não encontrado' });
+        return;
+      }
+      if (existing.tenant_id === 'global') {
+        res.status(403).json({ error: 'Protocolos de fábrica não podem ser excluídos' });
+        return;
+      }
+
+      db.prepare('DELETE FROM personal_tav_ranges WHERE protocol_id = ?').run(id);
+      db.prepare('DELETE FROM personal_tav_protocols WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+
+      res.json({ message: 'Protocolo TAV excluído com sucesso' });
+    } catch (err: any) {
+      console.error('[PersonalController.deleteTavProtocol] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir protocolo TAV' });
+    }
+  }
+
+  static async classifyTav(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { protocol_id, method, equipment, value, gender, age } = req.body;
+      const result = resolveTavClassification(
+        tenantId,
+        protocol_id,
+        method,
+        equipment,
+        value !== undefined && value !== null && value !== '' ? Number(value) : null,
+        gender,
+        age !== undefined && age !== null ? Number(age) : undefined
+      );
+      res.json(result);
+    } catch (err: any) {
+      console.error('[PersonalController.classifyTav] Erro:', err);
+      res.status(500).json({ error: 'Erro ao classificar TAV' });
+    }
+  }
+
+  // ==========================================
   // AVALIAÇÕES FÍSICAS & COMPOSIÇÃO CORPORAL
   // ==========================================
   static async listAssessments(req: Request, res: Response): Promise<void> {
@@ -480,6 +865,39 @@ export class PersonalController {
       const leanMassKg = parseFloat((weight - fatMassKg).toFixed(2));
       const muscleMassKg = b.muscle_mass_kg ? Number(b.muscle_mass_kg) : parseFloat((leanMassKg * 0.52).toFixed(2)); // Estimativa aproximada de massa muscular esquelética
 
+      // TAV: resolução de classificação rigorosa por equipamento/protocolo
+      const tavVal = b.tav_value !== undefined && b.tav_value !== null && b.tav_value !== '' ? Number(b.tav_value) : null;
+      let tavClassification = b.tav_classification || null;
+      let tavProtocolId = b.tav_protocol_id || null;
+      let tavUnit = b.tav_unit || 'nível';
+
+      if (tavVal !== null) {
+        const tavRes = resolveTavClassification(
+          tenantId,
+          b.tav_protocol_id,
+          b.tav_method || b.composition_method,
+          b.tav_equipment,
+          tavVal,
+          patient.gender,
+          age
+        );
+        if (!tavClassification) {
+          tavClassification = tavRes.classification;
+        }
+        if (!tavProtocolId && tavRes.protocolId) {
+          tavProtocolId = tavRes.protocolId;
+        }
+        if (tavRes.unit) {
+          tavUnit = tavRes.unit;
+        }
+      }
+
+      // JSON stringified fields
+      const strengthTestsJson = Array.isArray(b.strength_tests) ? JSON.stringify(b.strength_tests) : (b.strength_tests_json || null);
+      const muscularEnduranceTestsJson = Array.isArray(b.muscular_endurance_tests) ? JSON.stringify(b.muscular_endurance_tests) : (b.muscular_endurance_tests_json || null);
+      const flexibilityTestsJson = Array.isArray(b.flexibility_tests) ? JSON.stringify(b.flexibility_tests) : (b.flexibility_tests_json || null);
+      const rawCompositionJson = typeof b.raw_composition_data === 'object' ? JSON.stringify(b.raw_composition_data) : (b.raw_composition_data_json || null);
+
       const assessmentId = 'pass-' + uuidv4().slice(0, 8);
       const assessmentDate = b.assessment_date || new Date().toISOString().split('T')[0];
 
@@ -492,10 +910,18 @@ export class PersonalController {
           forearm_right, forearm_left, wrist_right, wrist_left,
           waist_cm, abdomen_cm, hip_cm,
           thigh_right_prox, thigh_left_prox, thigh_right_med, thigh_left_med,
+          thigh_right_dist, thigh_left_dist,
           calf_right, calf_left,
-          fold_subscapular, fold_triceps, fold_chest, fold_axillary,
+          fold_subscapular, fold_triceps, fold_biceps, fold_chest, fold_axillary,
           fold_suprailiac, fold_abdominal, fold_thigh, fold_calf,
+          skinfolds_protocol,
           body_fat_percentage, fat_mass_kg, lean_mass_kg, muscle_mass_kg,
+          composition_method, body_water_liters, bmr_kcal, raw_composition_data_json,
+          tav_value, tav_unit, tav_method, tav_equipment, tav_protocol_id, tav_classification, tav_notes,
+          resting_heart_rate_bpm, blood_pressure_systolic, blood_pressure_diastolic,
+          vo2_max, vo2_method_type, vo2_protocol,
+          strength_tests_json, muscular_endurance_tests_json,
+          flexibility_wells_cm, flexibility_tests_json,
           protocol, notes
         ) VALUES (
           ?, ?, ?, ?, ?,
@@ -506,9 +932,17 @@ export class PersonalController {
           ?, ?, ?,
           ?, ?, ?, ?,
           ?, ?,
+          ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?,
           ?, ?, ?, ?,
           ?, ?, ?, ?,
-          ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?,
+          ?, ?,
+          ?, ?,
           ?, ?
         )
       `).run(
@@ -519,10 +953,18 @@ export class PersonalController {
         b.forearm_right || null, b.forearm_left || null, b.wrist_right || null, b.wrist_left || null,
         b.waist_cm || null, b.abdomen_cm || null, b.hip_cm || null,
         b.thigh_right_prox || null, b.thigh_left_prox || null, b.thigh_right_med || null, b.thigh_left_med || null,
+        b.thigh_right_dist || null, b.thigh_left_dist || null,
         b.calf_right || null, b.calf_left || null,
-        sSub || null, sTri || null, sChe || null, sAxi || null,
+        sSub || null, sTri || null, Number(b.fold_biceps) || null, sChe || null, sAxi || null,
         sSup || null, sAbd || null, sThi || null, sCal || null,
+        b.skinfolds_protocol || null,
         bodyFatPct, fatMassKg, leanMassKg, muscleMassKg,
+        b.composition_method || 'dobras_cutaneas', b.body_water_liters ? Number(b.body_water_liters) : null, b.bmr_kcal ? Number(b.bmr_kcal) : null, rawCompositionJson,
+        tavVal, tavUnit, b.tav_method || null, b.tav_equipment || null, tavProtocolId, tavClassification, b.tav_notes || null,
+        b.resting_heart_rate_bpm ? Number(b.resting_heart_rate_bpm) : null, b.blood_pressure_systolic ? Number(b.blood_pressure_systolic) : null, b.blood_pressure_diastolic ? Number(b.blood_pressure_diastolic) : null,
+        b.vo2_max ? Number(b.vo2_max) : null, b.vo2_method_type || null, b.vo2_protocol || null,
+        strengthTestsJson, muscularEnduranceTestsJson,
+        b.flexibility_wells_cm ? Number(b.flexibility_wells_cm) : null, flexibilityTestsJson,
         protocol, b.notes || null
       );
 
@@ -548,7 +990,7 @@ export class PersonalController {
         }
       }
 
-      logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight });
+      logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
       res.status(201).json({
         id: assessmentId,
         bmi,
@@ -558,6 +1000,9 @@ export class PersonalController {
         fat_mass_kg: fatMassKg,
         lean_mass_kg: leanMassKg,
         muscle_mass_kg: muscleMassKg,
+        tav_value: tavVal,
+        tav_classification: tavClassification,
+        tav_unit: tavUnit,
         message: 'Avaliação física salva com sucesso'
       });
     } catch (err: any) {
@@ -591,6 +1036,133 @@ export class PersonalController {
     }
   }
 
+  static async compareAssessments(req: Request, res: Response): Promise<void> {
+    try {
+      if (!hasPersonalAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+        return;
+      }
+      const tenantId = req.tenantId!;
+      const { id, compareId } = req.params;
+
+      const current = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const previous = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(compareId, tenantId) as any;
+
+      if (!current || !previous) {
+        res.status(404).json({ error: 'Uma ou ambas as avaliações não foram encontradas' });
+        return;
+      }
+
+      const currentPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(id, tenantId);
+      const previousPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(compareId, tenantId);
+
+      const buildItem = (label: string, field: string, unit: string = 'cm') => {
+        const curVal = current[field] !== null && current[field] !== undefined ? Number(current[field]) : null;
+        const prevVal = previous[field] !== null && previous[field] !== undefined ? Number(previous[field]) : null;
+        let diff: number | null = null;
+        let pctVariation: number | null = null;
+
+        if (curVal !== null && prevVal !== null) {
+          diff = parseFloat((curVal - prevVal).toFixed(2));
+          if (prevVal !== 0) {
+            pctVariation = parseFloat(((diff / Math.abs(prevVal)) * 100).toFixed(2));
+          }
+        }
+
+        return {
+          field,
+          label,
+          unit,
+          previous: prevVal,
+          current: curVal,
+          diff,
+          pct_variation: pctVariation
+        };
+      };
+
+      const metrics = [
+        buildItem('Peso Corporal', 'weight', 'kg'),
+        buildItem('Estatura', 'height', 'cm'),
+        buildItem('IMC', 'bmi', 'kg/m²'),
+        buildItem('RCQ (Cintura / Quadril)', 'whr', ''),
+        buildItem('RCE (Cintura / Estatura)', 'whtr', ''),
+        buildItem('% Gordura Corporal', 'body_fat_percentage', '%'),
+        buildItem('Massa Gorda', 'fat_mass_kg', 'kg'),
+        buildItem('Massa Magra', 'lean_mass_kg', 'kg'),
+        buildItem('Massa Muscular', 'muscle_mass_kg', 'kg'),
+        buildItem('Água Corporal Total', 'body_water_liters', 'L'),
+        buildItem('Taxa Metabólica Basal (TMB)', 'bmr_kcal', 'kcal'),
+        buildItem('TAV (Tecido Adiposo Visceral)', 'tav_value', current.tav_unit || previous.tav_unit || 'nível'),
+        // Circunferências
+        buildItem('Pescoço', 'neck_cm', 'cm'),
+        buildItem('Ombro', 'shoulder_cm', 'cm'),
+        buildItem('Tórax', 'chest_cm', 'cm'),
+        buildItem('Cintura', 'waist_cm', 'cm'),
+        buildItem('Abdômen', 'abdomen_cm', 'cm'),
+        buildItem('Quadril', 'hip_cm', 'cm'),
+        buildItem('Braço Relaxado Dir.', 'arm_right_relaxed', 'cm'),
+        buildItem('Braço Relaxado Esq.', 'arm_left_relaxed', 'cm'),
+        buildItem('Braço Contraído Dir.', 'arm_right_flexed', 'cm'),
+        buildItem('Braço Contraído Esq.', 'arm_left_flexed', 'cm'),
+        buildItem('Antebraço Dir.', 'forearm_right', 'cm'),
+        buildItem('Antebraço Esq.', 'forearm_left', 'cm'),
+        buildItem('Punho Dir.', 'wrist_right', 'cm'),
+        buildItem('Punho Esq.', 'wrist_left', 'cm'),
+        buildItem('Coxa Proximal Dir.', 'thigh_right_prox', 'cm'),
+        buildItem('Coxa Proximal Esq.', 'thigh_left_prox', 'cm'),
+        buildItem('Coxa Medial Dir.', 'thigh_right_med', 'cm'),
+        buildItem('Coxa Medial Esq.', 'thigh_left_med', 'cm'),
+        buildItem('Coxa Distal Dir.', 'thigh_right_dist', 'cm'),
+        buildItem('Coxa Distal Esq.', 'thigh_left_dist', 'cm'),
+        buildItem('Panturrilha Dir.', 'calf_right', 'cm'),
+        buildItem('Panturrilha Esq.', 'calf_left', 'cm'),
+        // Dobras Cutâneas
+        buildItem('Dobra Subescapular', 'fold_subscapular', 'mm'),
+        buildItem('Dobra Tricipital', 'fold_triceps', 'mm'),
+        buildItem('Dobra Bicipital', 'fold_biceps', 'mm'),
+        buildItem('Dobra Peitoral', 'fold_chest', 'mm'),
+        buildItem('Dobra Axilar Média', 'fold_axillary', 'mm'),
+        buildItem('Dobra Suprailíaca', 'fold_suprailiac', 'mm'),
+        buildItem('Dobra Abdominal', 'fold_abdominal', 'mm'),
+        buildItem('Dobra da Coxa', 'fold_thigh', 'mm'),
+        buildItem('Dobra da Panturrilha', 'fold_calf', 'mm'),
+        // Cardiovascular & Testes
+        buildItem('FC Repouso', 'resting_heart_rate_bpm', 'bpm'),
+        buildItem('PA Sistólica', 'blood_pressure_systolic', 'mmHg'),
+        buildItem('PA Diastólica', 'blood_pressure_diastolic', 'mmHg'),
+        buildItem('VO₂ Máx', 'vo2_max', 'ml/kg/min'),
+        buildItem('Flexibilidade (Banco de Wells)', 'flexibility_wells_cm', 'cm')
+      ];
+
+      res.json({
+        previous_assessment: previous,
+        current_assessment: current,
+        previous_photos: previousPhotos,
+        current_photos: currentPhotos,
+        metrics,
+        tav_comparison: {
+          previous: {
+            value: previous.tav_value,
+            unit: previous.tav_unit,
+            method: previous.tav_method,
+            equipment: previous.tav_equipment,
+            classification: previous.tav_classification
+          },
+          current: {
+            value: current.tav_value,
+            unit: current.tav_unit,
+            method: current.tav_method,
+            equipment: current.tav_equipment,
+            classification: current.tav_classification
+          }
+        }
+      });
+    } catch (err: any) {
+      console.error('[PersonalController.compareAssessments] Erro:', err);
+      res.status(500).json({ error: 'Erro ao comparar avaliações físicas' });
+    }
+  }
+
   static async getEvolutionData(req: Request, res: Response): Promise<void> {
     try {
       if (!hasPersonalAccess(req)) {
@@ -601,8 +1173,20 @@ export class PersonalController {
       const { studentId } = req.params;
 
       const history = db.prepare(`
-        SELECT id, assessment_date, weight, bmi, body_fat_percentage, fat_mass_kg, lean_mass_kg, muscle_mass_kg,
-               waist_cm, abdomen_cm, hip_cm, chest_cm, arm_right_flexed, thigh_right_med
+        SELECT id, assessment_date, weight, height, bmi, whr, whtr,
+               body_fat_percentage, fat_mass_kg, lean_mass_kg, muscle_mass_kg,
+               composition_method, body_water_liters, bmr_kcal,
+               waist_cm, abdomen_cm, hip_cm, chest_cm,
+               arm_right_relaxed, arm_left_relaxed, arm_right_flexed, arm_left_flexed,
+               forearm_right, forearm_left,
+               thigh_right_prox, thigh_left_prox, thigh_right_med, thigh_left_med, thigh_right_dist, thigh_left_dist,
+               calf_right, calf_left,
+               fold_subscapular, fold_triceps, fold_biceps, fold_chest, fold_axillary,
+               fold_suprailiac, fold_abdominal, fold_thigh, fold_calf,
+               tav_value, tav_unit, tav_method, tav_equipment, tav_classification, tav_notes,
+               resting_heart_rate_bpm, blood_pressure_systolic, blood_pressure_diastolic,
+               vo2_max, vo2_method_type, vo2_protocol,
+               flexibility_wells_cm
         FROM personal_assessments
         WHERE patient_id = ? AND tenant_id = ?
         ORDER BY assessment_date ASC

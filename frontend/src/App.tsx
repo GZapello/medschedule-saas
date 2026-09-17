@@ -70,7 +70,8 @@ const AppContent: React.FC = () => {
     isOccupationalTherapist,
     isZemdaTO,
     isSpeechTherapist,
-    isZemdaFono
+    isZemdaFono,
+    isZemdaPersonal
   } = useAuth();
 
   const { summary: billingSummary } = useBillingSummary();
@@ -664,7 +665,27 @@ const AppContent: React.FC = () => {
 
           {currentView === 'zemda-body' && <ZemdaBodyRecordsView />}
 
-          {currentView === 'zemda-personal' && <ZemdaPersonalView />}
+          {currentView === 'zemda-personal' && (
+            isZemdaPersonal ? (
+              <ZemdaPersonalView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Exclusivo: ZemdaPersonal</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  O módulo ZemdaPersonal é de uso exclusivo para profissionais cuja profissão cadastrada seja <strong>Personal Trainer / Educação Física</strong> (CREF) e com permissão ativa concedida pelo gerenciador da clínica.
+                </p>
+                <button
+                  onClick={() => setCurrentView('dashboard')}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
+          )}
 
           {currentView === 'zemda-fisio' && (
             isPhysiotherapist ? (

@@ -132,7 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-personal',
           label: 'ZemdaPersonal (Treinamento)',
           icon: Dumbbell,
-          visible: isClinicAdmin || isZemdaPersonal
+          visible: isZemdaPersonal
         },
         { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
       ]

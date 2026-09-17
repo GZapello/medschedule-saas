@@ -19,7 +19,8 @@ import {
   CheckCircle2,
   Flame,
   ArrowLeft,
-  Copy
+  Copy,
+  GitCompare
 } from 'lucide-react';
 import { Student, Workout, Assessment, WorkoutLog, PersonalRecord, AttendanceStats } from './types';
 import { ApiClient } from '../../api/client';
@@ -29,6 +30,7 @@ import { PersonalBeforeAfterModal } from './PersonalBeforeAfterModal';
 import { PersonalBodyMapIntegration } from './PersonalBodyMapIntegration';
 import { PersonalWorkoutExecutionModal } from './PersonalWorkoutExecutionModal';
 import { PersonalPdfExportModal } from './PersonalPdfExportModal';
+import { PersonalAssessmentComparisonModal } from './PersonalAssessmentComparisonModal';
 
 interface PersonalStudentProfileProps {
   studentId: string;
@@ -68,6 +70,9 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   const [selectedWorkoutForExecution, setSelectedWorkoutForExecution] = useState<Workout | null>(null);
   const [isBeforeAfterOpen, setIsBeforeAfterOpen] = useState(false);
   const [isPdfExportOpen, setIsPdfExportOpen] = useState(false);
+  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const [compareCurrentId, setCompareCurrentId] = useState<string | undefined>(undefined);
+  const [comparePreviousId, setComparePreviousId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     loadAllStudentData();
@@ -447,18 +452,33 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
         {/* ABA: AVALIAÇÃO FÍSICA & DOBRAS */}
         {activeTab === 'assessments' && (
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                 <ClipboardCheck className="w-4 h-4 text-purple-600" />
                 <span>Histórico de Avaliações Físicas & Protocolo Pollock</span>
               </h4>
-              <button
-                onClick={onOpenNewAssessment}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Nova Avaliação
-              </button>
+              <div className="flex items-center gap-2">
+                {assessments.length >= 2 && (
+                  <button
+                    onClick={() => {
+                      setCompareCurrentId(assessments[0].id);
+                      setComparePreviousId(assessments[1].id);
+                      setIsComparisonOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm transition-colors"
+                  >
+                    <GitCompare className="w-3.5 h-3.5" />
+                    Comparar Avaliações
+                  </button>
+                )}
+                <button
+                  onClick={onOpenNewAssessment}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Nova Avaliação
+                </button>
+              </div>
             </div>
 
             {assessments.length === 0 ? (
@@ -467,16 +487,33 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {assessments.map((a) => (
+                {assessments.map((a, idx) => (
                   <div key={a.id} className="py-4 flex items-center justify-between hover:bg-slate-50 px-3 rounded-2xl transition-colors">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-xs text-slate-800">
                           {new Date(a.assessment_date).toLocaleDateString('pt-BR')}
                         </span>
                         <span className="text-[10px] uppercase font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
                           {a.protocol || 'Pollock 7'}
                         </span>
+                        {a.tav_value !== null && a.tav_value !== undefined && (
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <Flame className="w-3 h-3 text-indigo-600" />
+                            TAV: {a.tav_value} {a.tav_unit || 'nível'}
+                            {a.tav_classification && ` (${a.tav_classification})`}
+                          </span>
+                        )}
+                        {a.vo2_max && (
+                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                            VO₂: {a.vo2_max} ml/kg/min
+                          </span>
+                        )}
+                        {a.resting_heart_rate_bpm && (
+                          <span className="text-[10px] font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">
+                            FC: {a.resting_heart_rate_bpm} bpm
+                          </span>
+                        )}
                         {a.photos_count && a.photos_count > 0 ? (
                           <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                             📷 {a.photos_count} fotos
@@ -490,13 +527,31 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                         <span>% Gordura: <strong className="text-amber-600 font-bold">{a.body_fat_percentage}%</strong></span>
                         <span>Massa Magra: <strong className="text-emerald-600">{a.lean_mass_kg} kg</strong></span>
                         <span>Massa Muscular: <strong className="text-cyan-700">{a.muscle_mass_kg} kg</strong></span>
+                        {a.waist_cm && <span>Cintura: <strong className="text-slate-700">{a.waist_cm} cm</strong></span>}
+                        {a.hip_cm && <span>Quadril: <strong className="text-slate-700">{a.hip_cm} cm</strong></span>}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {assessments.length >= 2 && (
+                        <button
+                          onClick={() => {
+                            const prev = assessments[idx + 1] || assessments[idx - 1] || assessments[0];
+                            setCompareCurrentId(a.id);
+                            setComparePreviousId(prev.id);
+                            setIsComparisonOpen(true);
+                          }}
+                          className="px-2.5 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-lg flex items-center gap-1 transition-colors"
+                          title="Comparar com outra avaliação"
+                        >
+                          <GitCompare className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Comparar</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDeleteAssessment(a.id)}
                         className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                        title="Excluir avaliação"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -705,6 +760,18 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
         workouts={workouts}
         latestAssessment={assessments[0] || null}
       />
+
+      {/* MODAL DE COMPARAÇÃO DE AVALIAÇÕES */}
+      {isComparisonOpen && (
+        <PersonalAssessmentComparisonModal
+          isOpen={isComparisonOpen}
+          onClose={() => setIsComparisonOpen(false)}
+          student={student}
+          assessmentsList={assessments}
+          initialCurrentId={compareCurrentId}
+          initialPreviousId={comparePreviousId}
+        />
+      )}
     </div>
   );
 };
