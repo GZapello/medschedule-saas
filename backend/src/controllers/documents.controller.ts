@@ -2,6 +2,7 @@ import { resolveClinicalModule } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 import { isNutritionistOrClinicManager } from './nutrition.controller';
@@ -78,25 +79,59 @@ export class DocumentsController {
       const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_certificates WHERE tenant_id = ?').get(tenantId) as any;
       const certNumber = `AT-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
       const id = 'crt-' + uuidv4().slice(0, 8);
-      const textSummary = notes || `Atestado médico de ${certificateType === 'rest' ? 'repouso' : 'comparecimento'} (${daysOff || 1} dias).`;
+      const textSummary = notes || `Atestado de ${certificateType === 'rest' ? 'repouso' : 'comparecimento'} (${daysOff || 1} dias).`;
+
+      const profRow = db.prepare('SELECT name, registration_type, registration_number FROM professionals WHERE id = ?').get(resolvedProfId) as any;
+      const signedByName = profRow?.name || req.user?.name || req.user?.email || 'Profissional';
+      const signedByRegistration = profRow?.registration_type && profRow?.registration_number
+        ? `${profRow.registration_type} ${profRow.registration_number}`
+        : (profRow?.registration_number || null);
+      const signedAt = new Date().toISOString();
+
+      const hashPayload = [
+        id,
+        tenantId,
+        patientId,
+        certNumber,
+        certificateType,
+        daysOff || 1,
+        startDate || '',
+        cidCode || '',
+        textSummary,
+        signedByName,
+        signedByRegistration || '',
+        signedAt
+      ].join('|');
+      const signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
 
       db.prepare(`
         INSERT INTO clinical_certificates (
           id, tenant_id, patient_id, appointment_id, professional_id,
           certificate_number, days_rest, cid, content_text,
           certificate_type, days_off, start_date, cid_code, notes,
+          signature_hash, signed_at, signed_by_name, signed_by_registration, is_sealed,
           created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       `).run(
         id, tenantId, patientId, appointmentId || null, resolvedProfId,
         certNumber, daysOff || 1, cidCode || null, textSummary,
         certificateType, daysOff || 1, startDate || null, cidCode || null, notes || null,
+        signatureHash, signedAt, signedByName, signedByRegistration,
         req.user?.name || req.user?.email || 'Profissional'
       );
 
-      logAudit(req, 'CREATE_CERTIFICATE', 'clinical_certificates', id, { patientId, certificateType });
-      res.status(201).json({ id, message: 'Atestado emitido com sucesso' });
+      logAudit(req, 'CREATE_CERTIFICATE', 'clinical_certificates', id, { patientId, certificateType, signatureHash });
+      res.status(201).json({
+        id,
+        certNumber,
+        signatureHash,
+        signedAt,
+        signedByName,
+        signedByRegistration,
+        isSealed: true,
+        message: 'Atestado emitido com sucesso'
+      });
     } catch (err: any) {
       console.error('[DocumentsController.createCertificate] Erro:', err);
       res.status(500).json({ error: 'Erro ao emitir atestado' });
@@ -172,23 +207,54 @@ export class DocumentsController {
       const prescNumber = `RC-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
       const id = 'prc-' + uuidv4().slice(0, 8);
 
+      const profRow = db.prepare('SELECT name, registration_type, registration_number FROM professionals WHERE id = ?').get(resolvedProfId) as any;
+      const signedByName = profRow?.name || req.user?.name || req.user?.email || 'Profissional';
+      const signedByRegistration = profRow?.registration_type && profRow?.registration_number
+        ? `${profRow.registration_type} ${profRow.registration_number}`
+        : (profRow?.registration_number || null);
+      const signedAt = new Date().toISOString();
+
+      const hashPayload = [
+        id,
+        tenantId,
+        patientId,
+        prescNumber,
+        prescriptionType || 'simple',
+        content,
+        signedByName,
+        signedByRegistration || '',
+        signedAt
+      ].join('|');
+      const signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
+
       db.prepare(`
         INSERT INTO clinical_prescriptions (
           id, tenant_id, patient_id, appointment_id, professional_id,
           prescription_number, items_json, instructions,
           prescription_type, content,
+          signature_hash, signed_at, signed_by_name, signed_by_registration, is_sealed,
           created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       `).run(
         id, tenantId, patientId, appointmentId || null, resolvedProfId,
         prescNumber, JSON.stringify([{ text: content }]), content,
         prescriptionType || 'simple', content,
+        signatureHash, signedAt, signedByName, signedByRegistration,
         req.user?.name || req.user?.email || 'Profissional'
       );
 
-      logAudit(req, 'CREATE_PRESCRIPTION', 'clinical_prescriptions', id, { patientId, prescriptionType });
-      res.status(201).json({ id, message: 'Receituário gerado com sucesso' });
+      logAudit(req, 'CREATE_PRESCRIPTION', 'clinical_prescriptions', id, { patientId, prescriptionType, signatureHash });
+      res.status(201).json({
+        id,
+        prescNumber,
+        signatureHash,
+        signedAt,
+        signedByName,
+        signedByRegistration,
+        isSealed: true,
+        message: 'Receituário gerado com sucesso'
+      });
     } catch (err: any) {
       console.error('[DocumentsController.createPrescription] Erro:', err);
       res.status(500).json({ error: 'Erro ao emitir receituário' });
@@ -263,23 +329,55 @@ export class DocumentsController {
       const reqNumber = `EX-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
       const id = 'erq-' + uuidv4().slice(0, 8);
 
+      const profRow = db.prepare('SELECT name, registration_type, registration_number FROM professionals WHERE id = ?').get(resolvedProfId) as any;
+      const signedByName = profRow?.name || req.user?.name || req.user?.email || 'Profissional';
+      const signedByRegistration = profRow?.registration_type && profRow?.registration_number
+        ? `${profRow.registration_type} ${profRow.registration_number}`
+        : (profRow?.registration_number || null);
+      const signedAt = new Date().toISOString();
+
+      const hashPayload = [
+        id,
+        tenantId,
+        patientId,
+        reqNumber,
+        examsList,
+        clinicalIndication || '',
+        cidCode || '',
+        signedByName,
+        signedByRegistration || '',
+        signedAt
+      ].join('|');
+      const signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
+
       db.prepare(`
         INSERT INTO clinical_exam_requests (
           id, tenant_id, patient_id, appointment_id, professional_id,
           request_number, exams_list_json, clinical_justification, notes,
           exams_list, clinical_indication, cid_code,
+          signature_hash, signed_at, signed_by_name, signed_by_registration, is_sealed,
           created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
       `).run(
         id, tenantId, patientId, appointmentId || null, resolvedProfId,
         reqNumber, JSON.stringify([{ exam: examsList }]), clinicalIndication || null, clinicalIndication || null,
         examsList, clinicalIndication || null, cidCode || null,
+        signatureHash, signedAt, signedByName, signedByRegistration,
         req.user?.name || req.user?.email || 'Profissional'
       );
 
-      logAudit(req, 'CREATE_EXAM_REQUEST', 'clinical_exam_requests', id, { patientId, cidCode });
-      res.status(201).json({ id, message: 'Pedido de exame emitido com sucesso' });
+      logAudit(req, 'CREATE_EXAM_REQUEST', 'clinical_exam_requests', id, { patientId, cidCode, signatureHash });
+      res.status(201).json({
+        id,
+        reqNumber,
+        signatureHash,
+        signedAt,
+        signedByName,
+        signedByRegistration,
+        isSealed: true,
+        message: 'Pedido de exame emitido com sucesso'
+      });
     } catch (err: any) {
       console.error('[DocumentsController.createExamRequest] Erro:', err);
       res.status(500).json({ error: 'Erro ao emitir pedido de exame' });
@@ -518,14 +616,52 @@ export class DocumentsController {
         }
         const moduleDataJson = JSON.stringify(snapshot);
 
+        const shouldSeal = evolution.isSealed !== false;
+        let signatureHash: string | null = null;
+        let signedAt: string | null = null;
+        let signedByUserId: string | null = null;
+        let signerName: string | null = null;
+        let signerRegistration: string | null = null;
+        let sealedAt: string | null = null;
+
+        const profRow = db.prepare('SELECT name, registration_type, registration_number FROM professionals WHERE id = ?').get(resolvedProfId) as any;
+
+        if (shouldSeal) {
+          signedAt = new Date().toISOString();
+          sealedAt = signedAt;
+          signedByUserId = req.user?.userId || null;
+          signerName = profRow?.name || req.user?.name || req.user?.email || 'Profissional';
+          signerRegistration = profRow?.registration_type && profRow?.registration_number
+            ? `${profRow.registration_type} ${profRow.registration_number}`
+            : (profRow?.registration_number || null);
+
+          const hashPayload = [
+            recId,
+            tenantId,
+            appt.patient_id,
+            appointmentId,
+            sessionDate,
+            sessionTime || '',
+            evolution.title || `Consulta de ${srvName}`,
+            evolution.clinicalEvolution,
+            evolution.conducts || '',
+            signerName,
+            signerRegistration || '',
+            signedAt
+          ].join('|');
+          signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
+        }
+
         db.prepare(`
           INSERT INTO records (
             id, tenant_id, patient_id, appointment_id, professional_id,
             session_date, session_time, procedure_name, title, clinical_evolution,
             technical_notes, conducts, clinical_data_json, module_type, module_data_json,
-            is_sealed, created_by, updated_by, created_at, updated_at
+            is_sealed, signature_hash, signed_at, signed_by_user_id, signer_name,
+            signer_registration, sealed_at, amendments_json,
+            created_by, updated_by, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, datetime('now'), datetime('now'))
         `).run(
           recId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
           sessionDate, sessionTime, evolution.procedureName || srvName,
@@ -536,11 +672,13 @@ export class DocumentsController {
           clinicalDataJson,
           evolution.moduleType || null,
           moduleDataJson,
-          evolution.isSealed ? 1 : 0,
+          shouldSeal ? 1 : 0,
+          signatureHash, signedAt, signedByUserId, signerName, signerRegistration, sealedAt,
           req.user?.name || 'Profissional',
           req.user?.name || 'Profissional'
         );
         generatedDocs.recordId = recId;
+        if (signatureHash) generatedDocs.signatureHash = signatureHash;
 
         for (const attachmentId of (Array.isArray(evolution.attachmentIds) ? evolution.attachmentIds : [])) {
           const attachment = db.prepare('SELECT id, record_id FROM documents WHERE id=? AND patient_id=? AND tenant_id=?').get(attachmentId, appt.patient_id, tenantId) as any;
@@ -699,6 +837,13 @@ export class DocumentsController {
         }
       }
 
+      const docProf = db.prepare('SELECT name, registration_type, registration_number FROM professionals WHERE id = ?').get(resolvedProfId) as any;
+      const docSignerName = docProf?.name || req.user?.name || req.user?.email || 'Profissional';
+      const docSignerReg = docProf?.registration_type && docProf?.registration_number
+        ? `${docProf.registration_type} ${docProf.registration_number}`
+        : (docProf?.registration_number || null);
+      const docSignedAt = new Date().toISOString();
+
       // 2. Emite Atestado, se preenchido
       if (certificate && certificate.certificateType) {
         currentStage = 'CREATE_CERTIFICATE';
@@ -707,19 +852,27 @@ export class DocumentsController {
         const certNum = `AT-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
         const certSummary = certificate.notes || `Atestado de ${certificate.certificateType === 'rest' ? 'repouso' : 'comparecimento'} (${certificate.daysOff || 1} dias).`;
 
+        const certHash = crypto.createHash('sha256').update([
+          certId, tenantId, appt.patient_id, certNum, certificate.certificateType,
+          certificate.daysOff || 1, certificate.startDate || '', certificate.cidCode || '',
+          certSummary, docSignerName, docSignerReg || '', docSignedAt
+        ].join('|')).digest('hex');
+
         db.prepare(`
           INSERT INTO clinical_certificates (
             id, tenant_id, patient_id, appointment_id, professional_id,
             certificate_number, days_rest, cid, content_text,
             certificate_type, days_off, start_date, cid_code, notes,
+            signature_hash, signed_at, signed_by_name, signed_by_registration, is_sealed,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         `).run(
           certId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
           certNum, certificate.daysOff || 1, certificate.cidCode || null, certSummary,
           certificate.certificateType, certificate.daysOff || 1, certificate.startDate || null,
           certificate.cidCode || null, certificate.notes || null,
+          certHash, docSignedAt, docSignerName, docSignerReg,
           req.user?.name || 'Profissional'
         );
         generatedDocs.certificateId = certId;
@@ -732,18 +885,25 @@ export class DocumentsController {
         const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_prescriptions WHERE tenant_id = ?').get(tenantId) as any;
         const prescNum = `RC-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
 
+        const prescHash = crypto.createHash('sha256').update([
+          prescId, tenantId, appt.patient_id, prescNum, prescription.prescriptionType || 'simple',
+          prescription.content, docSignerName, docSignerReg || '', docSignedAt
+        ].join('|')).digest('hex');
+
         db.prepare(`
           INSERT INTO clinical_prescriptions (
             id, tenant_id, patient_id, appointment_id, professional_id,
             prescription_number, items_json, instructions,
             prescription_type, content,
+            signature_hash, signed_at, signed_by_name, signed_by_registration, is_sealed,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         `).run(
           prescId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
           prescNum, JSON.stringify([{ text: prescription.content }]), prescription.content,
           prescription.prescriptionType || 'simple', prescription.content,
+          prescHash, docSignedAt, docSignerName, docSignerReg,
           req.user?.name || 'Profissional'
         );
         generatedDocs.prescriptionId = prescId;
@@ -756,18 +916,25 @@ export class DocumentsController {
         const countRow = db.prepare('SELECT COUNT(*) as c FROM clinical_exam_requests WHERE tenant_id = ?').get(tenantId) as any;
         const reqNum = `EX-${year}-${String((countRow?.c || 0) + 1).padStart(4, '0')}`;
 
+        const examHash = crypto.createHash('sha256').update([
+          reqId, tenantId, appt.patient_id, reqNum, examRequest.examsList,
+          examRequest.clinicalIndication || '', docSignerName, docSignerReg || '', docSignedAt
+        ].join('|')).digest('hex');
+
         db.prepare(`
           INSERT INTO clinical_exam_requests (
             id, tenant_id, patient_id, appointment_id, professional_id,
             request_number, exams_list_json, clinical_justification, notes,
             exams_list, clinical_indication,
+            signature_hash, signed_at, signed_by_name, signed_by_registration, is_sealed,
             created_by
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         `).run(
           reqId, tenantId, appt.patient_id, appointmentId, resolvedProfId,
           reqNum, JSON.stringify([{ exam: examRequest.examsList }]), examRequest.clinicalIndication || null, examRequest.clinicalIndication || null,
           examRequest.examsList, examRequest.clinicalIndication || null,
+          examHash, docSignedAt, docSignerName, docSignerReg,
           req.user?.name || 'Profissional'
         );
         generatedDocs.examRequestId = reqId;

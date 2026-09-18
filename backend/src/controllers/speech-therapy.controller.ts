@@ -1218,10 +1218,18 @@ export class SpeechTherapyController {
       if (!isSpeechTherapistOrClinicManager(req)) { res.status(403).json({ error: 'Sem acesso ao módulo clínico.' }); return; }
       const body = req.body;
       req.params.id = body.appointmentId;
-      req.body = { ...body, evolution: {
-        ...body, moduleType: 'ZemdaFono', moduleData: { ...body },
-        clinicalEvolution: body.clinicalEvolution || 'Atendimento clínico registrado.'
-      }};
+      const isSealed = body.isSealed !== false;
+      req.body = {
+        ...body,
+        isSealed,
+        evolution: {
+          ...body,
+          moduleType: 'ZemdaFono',
+          moduleData: { ...body },
+          clinicalEvolution: body.clinicalEvolution || 'Atendimento clínico registrado.',
+          isSealed
+        }
+      };
       DocumentsController.finishConsultation(req, res);
       return;
     }
@@ -1278,7 +1286,8 @@ export class SpeechTherapyController {
       let signerReg: string | null = null;
       let sealedAt: string | null = null;
 
-      if (isSealed) {
+      const shouldSeal = isSealed !== false;
+      if (shouldSeal) {
         signerName = professional?.name || req.user?.name || req.user?.email || 'Fonoaudiólogo';
         signerReg = professional ? [professional.registration_type, professional.registration_number].filter(Boolean).join(' ') : null;
         signedByUserId = req.user?.userId || null;
@@ -1317,7 +1326,7 @@ export class SpeechTherapyController {
           recordId, tenantId, patientId, appointmentId || null, profId,
           recDate, recTime, 'Sessão de Fonoaudiologia', recTitle, clinicalEvolution,
           technicalNotes || null, conducts || null, JSON.stringify(fonoModuleData),
-          JSON.stringify(fonoModuleData), isSealed ? 1 : 0,
+          JSON.stringify(fonoModuleData), shouldSeal ? 1 : 0,
           signatureHash, signedAt, signedByUserId, signerName, signerReg, sealedAt,
           creatorName, creatorName
         );

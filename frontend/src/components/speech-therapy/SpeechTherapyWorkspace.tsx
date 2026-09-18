@@ -594,6 +594,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
         title: consultationTitle,
         clinicalEvolution: consultationEvolution,
         conducts: consultationConducts || undefined,
+        isSealed: true,
         anamnesisData,
         languageData,
         phonemesData: {

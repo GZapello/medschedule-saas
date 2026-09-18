@@ -486,7 +486,18 @@ export function initializeDatabase(): void {
         days_rest INTEGER DEFAULT 0,
         cid TEXT,
         content_text TEXT NOT NULL,
+        certificate_type TEXT DEFAULT 'rest',
+        days_off INTEGER DEFAULT 1,
+        start_date TEXT,
+        cid_code TEXT,
+        notes TEXT,
+        signature_hash TEXT,
+        signed_at TEXT,
+        signed_by_name TEXT,
+        signed_by_registration TEXT,
+        is_sealed INTEGER DEFAULT 0,
         issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (datetime('now')),
         created_by TEXT,
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
         FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
@@ -503,7 +514,15 @@ export function initializeDatabase(): void {
         prescription_number TEXT NOT NULL,
         items_json TEXT NOT NULL,
         instructions TEXT,
+        prescription_type TEXT DEFAULT 'simple',
+        content TEXT,
+        signature_hash TEXT,
+        signed_at TEXT,
+        signed_by_name TEXT,
+        signed_by_registration TEXT,
+        is_sealed INTEGER DEFAULT 0,
         issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (datetime('now')),
         created_by TEXT,
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
         FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
@@ -521,7 +540,16 @@ export function initializeDatabase(): void {
         exams_list_json TEXT NOT NULL,
         clinical_justification TEXT,
         notes TEXT,
+        exams_list TEXT,
+        clinical_indication TEXT,
+        cid_code TEXT,
+        signature_hash TEXT,
+        signed_at TEXT,
+        signed_by_name TEXT,
+        signed_by_registration TEXT,
+        is_sealed INTEGER DEFAULT 0,
         issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        created_at TEXT DEFAULT (datetime('now')),
         created_by TEXT,
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
         FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
@@ -662,14 +690,29 @@ export function initializeDatabase(): void {
     addColIfMissing('clinical_certificates', 'start_date', "TEXT");
     addColIfMissing('clinical_certificates', 'cid_code', "TEXT");
     addColIfMissing('clinical_certificates', 'notes', "TEXT");
+    addColIfMissing('clinical_certificates', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_certificates', 'is_sealed', 'INTEGER DEFAULT 0');
     addColIfMissing('clinical_certificates', 'created_at', "TEXT DEFAULT (datetime('now'))");
 
     addColIfMissing('clinical_prescriptions', 'prescription_type', "TEXT DEFAULT 'simple'");
     addColIfMissing('clinical_prescriptions', 'content', "TEXT");
+    addColIfMissing('clinical_prescriptions', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'is_sealed', 'INTEGER DEFAULT 0');
     addColIfMissing('clinical_prescriptions', 'created_at', "TEXT DEFAULT (datetime('now'))");
 
     addColIfMissing('clinical_exam_requests', 'exams_list', "TEXT");
     addColIfMissing('clinical_exam_requests', 'clinical_indication', "TEXT");
+    addColIfMissing('clinical_exam_requests', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'is_sealed', 'INTEGER DEFAULT 0');
     addColIfMissing('clinical_exam_requests', 'created_at', "TEXT DEFAULT (datetime('now'))");
 
     addColIfMissing('patients', 'import_batch_id', 'TEXT');

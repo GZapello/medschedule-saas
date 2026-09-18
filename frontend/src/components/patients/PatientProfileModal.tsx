@@ -31,7 +31,8 @@ import {
   Hand,
   Mic,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Lock
 } from 'lucide-react';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
@@ -1339,6 +1340,28 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                             <div className="pt-2 border-t border-slate-100">
                               <ClinicalSnapshot record={r} />
                             </div>
+
+                            {(r.signature_hash || r.is_sealed === 1) && (
+                              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 space-y-1">
+                                <div className="font-semibold flex items-center gap-1.5">
+                                  <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>
+                                    Documento assinado eletronicamente por {r.signer_name || r.professional_name}
+                                    {(r.signer_registration || r.registration_number) && (
+                                      <span> — {r.signer_registration || `${r.registration_type || 'Conselho'} ${r.registration_number}`}</span>
+                                    )}
+                                    {r.signed_at && (
+                                      <span> em {new Date(r.signed_at).toLocaleString('pt-BR')}</span>
+                                    )}
+                                  </span>
+                                </div>
+                                {r.signature_hash && (
+                                  <div className="font-mono text-[10px] text-emerald-800 break-all">
+                                    Hash de integridade SHA-256: {r.signature_hash}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

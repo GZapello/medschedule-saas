@@ -272,6 +272,13 @@ export interface ClinicalRecord {
   module_type?: string;
   module_data_json?: string;
   is_sealed: number;
+  signature_hash?: string;
+  signed_at?: string;
+  signed_by_user_id?: string;
+  signer_name?: string;
+  signer_registration?: string;
+  sealed_at?: string;
+  amendments_json?: string;
   created_by?: string;
   updated_by?: string;
   edit_history_json?: string;

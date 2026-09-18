@@ -366,8 +366,28 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="border-t border-slate-200 pt-6 mt-16 text-center text-[10px] text-slate-400">
-            Documento emitido eletronicamente através da Plataforma Zemda • Válido com assinatura física ou certificado digital ICP-Brasil.
+          <div className="border-t border-slate-200 pt-4 mt-12 text-center text-[10px] text-slate-500 space-y-1 page-break-inside-avoid">
+            {doc.signature_hash ? (
+              <>
+                <div className="font-medium text-slate-700">
+                  Documento assinado eletronicamente por{' '}
+                  <span className="font-semibold">{doc.signed_by_name || doc.professional_name}</span>
+                  {(doc.signed_by_registration || doc.registration_number) && (
+                    <span> — {doc.signed_by_registration || `${doc.registration_type || 'Conselho'} ${doc.registration_number}`}</span>
+                  )}
+                  {doc.signed_at && (
+                    <span> em {new Date(doc.signed_at).toLocaleString('pt-BR')}</span>
+                  )}
+                </div>
+                <div className="font-mono text-[9px] text-slate-500 break-all">
+                  Hash de integridade SHA-256: {doc.signature_hash}
+                </div>
+              </>
+            ) : (
+              <div>
+                Documento emitido eletronicamente através da Plataforma Zemda • Válido com assinatura física ou assinatura eletrônica.
+              </div>
+            )}
           </div>
         </div>
       </div>

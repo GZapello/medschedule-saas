@@ -809,7 +809,16 @@ export class ClinicalController {
             </div>
 
             <div class="footer-box">
-              Documento emitido eletronicamente pela Plataforma Zemda • Válido como prontuário clínico oficial • Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}
+              ${record.signature_hash ? `
+                <div style="margin-bottom: 4px; font-weight: 600; color: #334155;">
+                  Documento assinado eletronicamente por ${record.signer_name || formattedProfName}${record.signer_registration || record.registration_number ? ` — ${record.signer_registration || `${record.registration_type || 'Conselho'} ${record.registration_number || ''}`.trim()}` : ''} em ${record.signed_at ? new Date(record.signed_at).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR')}
+                </div>
+                <div style="font-family: monospace; font-size: 7.5pt; color: #64748b; word-break: break-all;">
+                  Hash de integridade SHA-256: ${record.signature_hash}
+                </div>
+              ` : `
+                Documento emitido eletronicamente pela Plataforma Zemda • Válido como prontuário clínico oficial • Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}
+              `}
             </div>
           </div>
 

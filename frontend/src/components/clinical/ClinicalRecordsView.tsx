@@ -541,6 +541,28 @@ export const ClinicalRecordsView: React.FC = () => {
               </div>
             </div>
 
+            {(viewingRecord.signature_hash || viewingRecord.is_sealed === 1) && (
+              <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 space-y-1">
+                <div className="font-semibold flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    Documento assinado eletronicamente por {viewingRecord.signer_name || viewingRecord.professional_name}
+                    {(viewingRecord.signer_registration || viewingRecord.registration_number) && (
+                      <span> — {viewingRecord.signer_registration || `${viewingRecord.registration_type || 'Conselho'} ${viewingRecord.registration_number}`}</span>
+                    )}
+                    {viewingRecord.signed_at && (
+                      <span> em {new Date(viewingRecord.signed_at).toLocaleString('pt-BR')}</span>
+                    )}
+                  </span>
+                </div>
+                {viewingRecord.signature_hash && (
+                  <div className="font-mono text-[10px] text-emerald-800 break-all">
+                    Hash de integridade SHA-256: {viewingRecord.signature_hash}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Evolução Clínica & Conduta
