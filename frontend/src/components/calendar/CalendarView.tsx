@@ -24,7 +24,7 @@ import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 
 interface CalendarViewProps {
-  onOpenNewAppointment: () => void;
+  onOpenNewAppointment: (prefill?: { date?: string; time?: string }) => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment }) => {
@@ -228,6 +228,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     return days;
   };
 
+  const formatDateLocal = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const weekDays = getWeekDays(currentDate);
   const timeSlots = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
 
@@ -315,7 +322,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           </div>
 
           <button
-            onClick={onOpenNewAppointment}
+            onClick={() => onOpenNewAppointment()}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -358,7 +365,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
                   {/* Day Columns */}
                   {weekDays.map((dayDate, dayIdx) => {
-                    const dayStr = dayDate.toISOString().split('T')[0];
+                    const dayStr = formatDateLocal(dayDate);
                     const slotStartPrefix = `${dayStr}T${timeSlot}`;
 
                     // Filtra agendamentos nesta data e hora
@@ -369,12 +376,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     return (
                       <div
                         key={dayIdx}
-                        className="border-r border-slate-100 last:border-r-0 p-1 relative hover:bg-slate-50/50 transition-colors"
+                        onClick={(e) => {
+                          if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-empty-slot') === 'true') {
+                            onOpenNewAppointment({ date: dayStr, time: timeSlot });
+                          }
+                        }}
+                        className="border-r border-slate-100 last:border-r-0 p-1 relative hover:bg-indigo-50/40 transition-colors group/slot cursor-pointer min-h-[75px]"
+                        title={`Clique para agendar às ${timeSlot} (${dayDate.toLocaleDateString('pt-BR')})`}
                       >
                         {slotAppts.map(appt => (
                           <div
                             key={appt.id}
-                            onClick={() => setSelectedAppt(appt)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedAppt(appt);
+                            }}
                             className={`p-1.5 rounded-lg text-xs cursor-pointer shadow-xs border transition-transform hover:scale-[1.02] mb-1 ${getStatusColor(
                               appt.status
                             )}`}
@@ -389,6 +405,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             </div>
                           </div>
                         ))}
+                        {slotAppts.length === 0 && (
+                          <div
+                            data-empty-slot="true"
+                            className="h-full w-full min-h-[50px] flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
+                          >
+                            <span data-empty-slot="true" className="text-[10px] font-semibold text-indigo-600 bg-white border border-indigo-200 px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
+                              <Plus className="w-3 h-3" /> {timeSlot}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -402,32 +428,74 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       {/* Calendar Day View */}
       {viewMode === 'day' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6">
-          <h3 className="font-bold text-slate-900 text-lg mb-4">
-            Atendimentos para {currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </h3>
-          <div className="space-y-2">
-            {filteredAppointments
-              .filter(a => a.start_time.startsWith(currentDate.toISOString().split('T')[0]))
-              .map(appt => (
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-slate-900 text-lg">
+              Atendimentos para {currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </h3>
+            <button
+              onClick={() => onOpenNewAppointment({ date: formatDateLocal(currentDate), time: '09:00' })}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl"
+            >
+              <Plus className="w-4 h-4" /> Novo neste dia
+            </button>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {timeSlots.map(timeSlot => {
+              const currentDateStr = formatDateLocal(currentDate);
+              const slotAppts = filteredAppointments.filter(a =>
+                a.start_time.startsWith(`${currentDateStr}T${timeSlot.slice(0, 2)}`)
+              );
+              return (
                 <div
-                  key={appt.id}
-                  onClick={() => setSelectedAppt(appt)}
-                  className="p-4 rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex items-center justify-between"
+                  key={timeSlot}
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-empty-slot') === 'true') {
+                      onOpenNewAppointment({ date: currentDateStr, time: timeSlot });
+                    }
+                  }}
+                  className="py-2.5 px-3 flex items-start gap-4 hover:bg-indigo-50/30 rounded-xl cursor-pointer transition-colors group"
+                  title={`Clique para agendar às ${timeSlot}`}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="text-center font-bold text-indigo-700 bg-indigo-50 px-3 py-2 rounded-lg">
-                      {appt.start_time.split('T')[1].slice(0, 5)}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900">{appt.patient_name}</h4>
-                      <p className="text-xs text-slate-500">{appt.service_name} • Profissional: {appt.professional_name}</p>
-                    </div>
+                  <div className="w-16 text-xs font-bold text-slate-400 group-hover:text-indigo-600 pt-1">
+                    {timeSlot}
                   </div>
-                  <div className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor(appt.status)}`}>
-                    {appt.status}
+                  <div className="flex-1">
+                    {slotAppts.length > 0 ? (
+                      <div className="space-y-2">
+                        {slotAppts.map(appt => (
+                          <div
+                            key={appt.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedAppt(appt);
+                            }}
+                            className="p-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex items-center justify-between bg-white"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="text-center font-bold text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg text-xs">
+                                {appt.start_time.split('T')[1].slice(0, 5)}
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-slate-900 text-sm">{appt.patient_name}</h4>
+                                <p className="text-xs text-slate-500">{appt.service_name} • Profissional: {appt.professional_name}</p>
+                              </div>
+                            </div>
+                            <div className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor(appt.status)}`}>
+                              {appt.status}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div data-empty-slot="true" className="py-2 text-xs text-slate-400 group-hover:text-indigo-600 flex items-center gap-1.5">
+                        <Plus className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100" />
+                        <span>Horário livre — clique para agendar às {timeSlot}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ))}
+              );
+            })}
           </div>
         </div>
       )}

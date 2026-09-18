@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 
@@ -722,27 +723,98 @@ export class PatientClinicalController {
     try {
       const { id: patientId } = req.params;
       const tenantId = req.tenantId;
-      const { title, consentType, content, signatureDataUrl, signedByName, signedByCpf, professionalId } = req.body;
+      const {
+        title,
+        consentType,
+        content,
+        signatureDataUrl,
+        signedByName,
+        signedByCpf,
+        professionalId,
+        modality,
+        professionId,
+        professionName,
+        metadata
+      } = req.body;
 
       if (!title || !content) {
         res.status(400).json({ error: 'Título e conteúdo do termo são obrigatórios' });
         return;
       }
 
+      // Resolve profissional responsável se não fornecido
+      let resolvedProfId = professionalId || null;
+      let resolvedProfName = null;
+      let resolvedProfessionName = professionName || null;
+
+      if (!resolvedProfId && req.user?.role === 'professional') {
+        const prof = db.prepare(`
+          SELECT p.id, p.name, pr.name as profession_name
+          FROM professionals p
+          LEFT JOIN professions pr ON pr.id = p.profession_id
+          WHERE p.user_id = ? AND p.tenant_id = ?
+        `).get(req.user.userId, tenantId) as any;
+        if (prof) {
+          resolvedProfId = prof.id;
+          resolvedProfName = prof.name;
+          resolvedProfessionName = resolvedProfessionName || prof.profession_name;
+        }
+      }
+
+      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || null;
+      const userAgent = (req.headers['user-agent'] as string) || null;
+      const nowIso = new Date().toISOString();
       const id = 'cst-' + uuidv4().slice(0, 8);
+
+      const metadataObj = {
+        ...(typeof metadata === 'object' ? metadata : {}),
+        ip: clientIp,
+        userAgent,
+        signedAt: nowIso,
+        modality: modality || 'telehealth',
+        termsVersion: '2026.1'
+      };
+
+      const hashPayload = `${tenantId}|${patientId}|${resolvedProfId || ''}|${title}|${consentType || 'telehealth'}|${nowIso}|${clientIp || ''}`;
+      const signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
+
       db.prepare(`
         INSERT INTO patient_consents (
           id, tenant_id, patient_id, professional_id, title, consent_type, content,
-          signature_data_url, signed_by_name, signed_by_cpf, signed_at
+          signature_data_url, signed_by_name, signed_by_cpf, signed_at,
+          modality, profession_id, profession_name, ip_address, user_agent,
+          metadata_json, signature_hash
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        id, tenantId, patientId, professionalId || null, title, consentType || 'telemedicine',
-        content, signatureDataUrl || null, signedByName || 'Paciente', signedByCpf || null
+        id,
+        tenantId,
+        patientId,
+        resolvedProfId,
+        title,
+        consentType || 'telehealth',
+        content,
+        signatureDataUrl || null,
+        signedByName || 'Paciente / Responsável',
+        signedByCpf || null,
+        modality || 'telehealth',
+        professionId || null,
+        resolvedProfessionName,
+        clientIp,
+        userAgent,
+        JSON.stringify(metadataObj),
+        signatureHash
       );
 
-      logAudit(req, 'CREATE_PATIENT_CONSENT', 'patient_consents', id, { patientId, title, consentType });
-      res.status(201).json({ id, message: 'Termo de consentimento registrado com sucesso' });
+      logAudit(req, 'CREATE_PATIENT_CONSENT', 'patient_consents', id, { patientId, title, consentType, modality, signatureHash });
+      res.status(201).json({
+        id,
+        signatureHash,
+        signedAt: nowIso,
+        modality: modality || 'telehealth',
+        professionName: resolvedProfessionName,
+        message: 'Termo de consentimento registrado com sucesso'
+      });
     } catch (err: any) {
       console.error('[PatientClinicalController.createConsent] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar consentimento' });

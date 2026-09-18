@@ -3,6 +3,15 @@ import { db } from '../config/database';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { v4 as uuidv4 } from 'uuid';
 import { GeminiService } from '../services/gemini.service';
+import { hasClinicalAccess } from './clinical.controller';
+
+/**
+ * Validação de perfil administrativo para bloqueio de IA clínica
+ */
+export function isAdministrativeRole(req: Request): boolean {
+  const role = String(req.user?.role || '').toLowerCase();
+  return ['receptionist', 'secretary', 'financial', 'assistant'].includes(role);
+}
 
 // ============================================================================
 // ZEMDA AI CONTROLLER — Motor de IA Contextual Inteligente
@@ -54,25 +63,32 @@ export class AIController {
       }
 
       // ── 2. Resolver paciente do contexto ─────────────────────
+      // REGRA DE SEGURANÇA: Remoção da busca automática de paciente por nome no texto.
+      // IA com dados clínicos somente com patientId explicitamente fornecido e profissional autorizado.
       let patientContext: any = null;
-      let patientId = context?.patientId;
+      let patientId = (context?.patientId || req.body.patientId || null) as string | null;
 
-      // Busca automática: se nenhum paciente selecionado, tenta localizar pelo nome na mensagem
-      if (!patientId && context?.scope !== 'no_clinical' && tenantId) {
-        try {
-          const patients = db.prepare('SELECT id, full_name FROM patients WHERE tenant_id = ? AND active = 1').all(tenantId) as { id: string; full_name: string }[];
-          for (const p of patients) {
-            const first = p.full_name.split(' ')[0]?.toLowerCase() || '';
-            if (first.length >= 3 && (lower.includes(first) || lower.includes(p.full_name.toLowerCase()))) {
-              patientId = p.id;
-              break;
-            }
-          }
-        } catch (_) {}
+      const isAdministrative = isAdministrativeRole(req);
+
+      // Usuários de recepção, financeiro, secretaria e assistentes são bloqueados de acessar IA clínica
+      if (isAdministrative && (patientId || context?.scope !== 'no_clinical')) {
+        res.status(403).json({
+          error: 'Acesso bloqueado: IA com dados clínicos é restrita a profissionais de saúde autorizados.',
+          code: 'CLINICAL_AI_ACCESS_DENIED'
+        });
+        return;
       }
 
       // ── 3. Coletar dados clínicos do paciente ────────────────
       if (patientId && context?.scope !== 'no_clinical' && tenantId) {
+        if (!hasClinicalAccess(req, patientId)) {
+          res.status(403).json({
+            error: 'Acesso restrito: profissional não possui vínculo ou autorização de acesso ao prontuário deste paciente (Sigilo LGPD).',
+            code: 'CLINICAL_PRIVACY_RESTRICTION'
+          });
+          return;
+        }
+
         try {
           const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
           if (patient) {
@@ -142,7 +158,7 @@ export class AIController {
 
         if (geminiReply && geminiReply.trim()) {
           const detectedIntent = detectIntent(lower, geminiReply);
-          const actions = buildActions(detectedIntent, patientId, patientContext);
+          const actions = buildActions(detectedIntent, patientId || undefined, patientContext);
           const suggestions = generateProactiveSuggestions(patientContext, appointmentContext);
 
           if (convId && tenantId) {
@@ -594,6 +610,14 @@ export class AIController {
   // ================================================================
   static async improveText(req: Request, res: Response): Promise<void> {
     try {
+      if (isAdministrativeRole(req)) {
+        res.status(403).json({
+          error: 'Acesso bloqueado: recursos de IA clínica são restritos a profissionais de saúde autorizados.',
+          code: 'CLINICAL_AI_ACCESS_DENIED'
+        });
+        return;
+      }
+
       const { text, mode } = req.body;
       if (!text || typeof text !== 'string') {
         res.status(400).json({ error: 'Texto para melhoria é obrigatório' });
@@ -746,6 +770,14 @@ export class AIController {
   // ================================================================
   static async summarizeConsultation(req: Request, res: Response): Promise<void> {
     try {
+      if (isAdministrativeRole(req)) {
+        res.status(403).json({
+          error: 'Acesso bloqueado: síntese de consulta com IA é restrita a profissionais de saúde autorizados.',
+          code: 'CLINICAL_AI_ACCESS_DENIED'
+        });
+        return;
+      }
+
       const tenantId = req.tenantId;
       const { transcript, transcriptText, patientId, appointmentId } = req.body;
       const rawInput = transcript || transcriptText;
@@ -865,6 +897,14 @@ export class AIController {
   // ================================================================
   static async organizeEvolution(req: Request, res: Response): Promise<void> {
     try {
+      if (isAdministrativeRole(req)) {
+        res.status(403).json({
+          error: 'Acesso bloqueado: organização de evolução clínica com IA é restrita a profissionais de saúde autorizados.',
+          code: 'CLINICAL_AI_ACCESS_DENIED'
+        });
+        return;
+      }
+
       const tenantId = req.tenantId;
       const { transcript, text, mode, patientId } = req.body;
       const rawInput = transcript || text;

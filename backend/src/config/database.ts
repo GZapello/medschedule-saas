@@ -258,6 +258,76 @@ export function initializeDatabase(): void {
     addColIfMissing('file_attachments', 'assessment_id', 'TEXT');
     addColIfMissing('file_attachments', 'exercise_id', 'TEXT');
 
+    // Assinatura eletrônica e selamento imutável de prontuários e documentos
+    addColIfMissing('records', 'signature_hash', 'TEXT');
+    addColIfMissing('records', 'signed_at', 'TEXT');
+    addColIfMissing('records', 'signed_by_user_id', 'TEXT');
+    addColIfMissing('records', 'signer_name', 'TEXT');
+    addColIfMissing('records', 'signer_registration', 'TEXT');
+    addColIfMissing('records', 'sealed_at', 'TEXT');
+    addColIfMissing('records', 'amendments_json', 'TEXT');
+
+    addColIfMissing('clinical_certificates', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_certificates', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_certificates', 'is_sealed', 'INTEGER DEFAULT 0');
+
+    addColIfMissing('clinical_prescriptions', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_prescriptions', 'is_sealed', 'INTEGER DEFAULT 0');
+
+    addColIfMissing('clinical_exam_requests', 'signature_hash', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_at', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_by_name', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'signed_by_registration', 'TEXT');
+    addColIfMissing('clinical_exam_requests', 'is_sealed', 'INTEGER DEFAULT 0');
+
+    // Consentimento de telessaúde por profissão e metadados
+    addColIfMissing('patient_consents', 'modality', "TEXT DEFAULT 'telehealth'");
+    addColIfMissing('patient_consents', 'profession_id', 'TEXT');
+    addColIfMissing('patient_consents', 'profession_name', 'TEXT');
+    addColIfMissing('patient_consents', 'ip_address', 'TEXT');
+    addColIfMissing('patient_consents', 'user_agent', 'TEXT');
+    addColIfMissing('patient_consents', 'metadata_json', 'TEXT');
+    addColIfMissing('patient_consents', 'signature_hash', 'TEXT');
+
+    // ZemdaFono: encaminhado por, quebra de coarticulação e metas estruturadas
+    addColIfMissing('fono_speech_phonology', 'referred_by', 'TEXT');
+    addColIfMissing('fono_speech_phonology', 'coarticulation_breakdown', 'TEXT');
+    addColIfMissing('fono_treatment_plans', 'referred_by', 'TEXT');
+    addColIfMissing('fono_treatment_plans', 'goals_structured_json', 'TEXT');
+    addColIfMissing('fono_audiology_records', 'referred_by', 'TEXT');
+
+    // Tabela de Testes Complementares Personalizados ZemdaFono
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS fono_complementary_tests (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          professional_id TEXT,
+          appointment_id TEXT,
+          test_name TEXT NOT NULL,
+          test_date TEXT NOT NULL,
+          score_or_result TEXT,
+          referred_by TEXT,
+          findings_notes TEXT,
+          attachment_url TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_fono_comp_tests ON fono_complementary_tests (patient_id, tenant_id);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar fono_complementary_tests:', e);
+    }
+
+
     // Suporte a snapshots de odontograma vinculados a prontuários
     addColIfMissing('odontograms', 'record_id', 'TEXT');
 

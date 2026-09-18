@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 import { DocumentsController } from './documents.controller';
@@ -278,6 +279,8 @@ export class SpeechTherapyController {
 
       res.json({
         ...row,
+        referredBy: row.referred_by || '',
+        coarticulationBreakdown: row.coarticulation_breakdown || '',
         phonemes: phonemesArr
       });
     } catch (err: any) {
@@ -300,6 +303,8 @@ export class SpeechTherapyController {
       const articulationNotes = req.body.articulationNotes || null;
       const spontaneousSpeech = req.body.spontaneousSpeech || null;
       const repetition = req.body.repetition || null;
+      const referredBy = req.body.referredBy || req.body.referred_by || null;
+      const coarticulationBreakdown = req.body.coarticulationBreakdown || req.body.coarticulation_breakdown || null;
 
       if (!patientId || !phonemes) {
         res.status(400).json({ error: 'patientId e phonemes são obrigatórios' });
@@ -317,12 +322,12 @@ export class SpeechTherapyController {
         INSERT INTO fono_speech_phonology (
           id, tenant_id, patient_id, professional_id, appointment_id,
           phonemes_json, phonological_processes, intelligibility, articulation_notes,
-          spontaneous_speech, repetition
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          spontaneous_speech, repetition, referred_by, coarticulation_breakdown
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
         JSON.stringify(phonemes), phonologicalProcesses, intelligibility,
-        articulationNotes, spontaneousSpeech, repetition
+        articulationNotes, spontaneousSpeech, repetition, referredBy, coarticulationBreakdown
       );
 
       res.status(201).json({ id, message: 'Painel de fala e fonologia salvo com sucesso' });
@@ -1061,6 +1066,7 @@ export class SpeechTherapyController {
 
       res.json(rows.map(r => ({
         ...r,
+        referredBy: r.referred_by || '',
         results: r.results_json ? JSON.parse(r.results_json) : null
       })));
     } catch (err: any) {
@@ -1071,7 +1077,7 @@ export class SpeechTherapyController {
   static saveAudiology(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      const { id: providedId, patientId, examType, examDate, results, attachmentUrl, notes } = req.body;
+      const { id: providedId, patientId, examType, examDate, results, attachmentUrl, notes, referredBy } = req.body;
       if (!patientId || !examType) {
         res.status(400).json({ error: 'patientId e examType são obrigatórios' });
         return;
@@ -1102,6 +1108,7 @@ export class SpeechTherapyController {
               results_json = ?,
               attachment_url = COALESCE(?, attachment_url),
               notes = ?,
+              referred_by = ?,
               professional_id = COALESCE(?, professional_id)
             WHERE id = ? AND tenant_id = ?
           `).run(
@@ -1110,6 +1117,7 @@ export class SpeechTherapyController {
             results ? JSON.stringify(results) : null,
             attachmentUrl || null,
             notes || null,
+            referredBy || null,
             profId,
             recordId,
             tenantId
@@ -1124,11 +1132,11 @@ export class SpeechTherapyController {
       db.prepare(`
         INSERT INTO fono_audiology_records (
           id, tenant_id, patient_id, professional_id, exam_type, exam_date,
-          results_json, attachment_url, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          results_json, attachment_url, notes, referred_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         recordId, tenantId, patientId, profId, examType, dateStr,
-        results ? JSON.stringify(results) : null, attachmentUrl || null, notes || null
+        results ? JSON.stringify(results) : null, attachmentUrl || null, notes || null, referredBy || null
       );
 
       res.status(201).json({ id: recordId, message: 'Registro de audiologia cadastrado com sucesso' });
@@ -1150,6 +1158,8 @@ export class SpeechTherapyController {
       const rows = db.prepare('SELECT * FROM fono_treatment_plans WHERE patient_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(patientId, tenantId) as any[];
       res.json(rows.map(r => ({
         ...r,
+        referredBy: r.referred_by || '',
+        goalsStructured: (() => { try { return JSON.parse(r.goals_structured_json || '[]'); } catch { return []; } })(),
         shortTermGoals: JSON.parse(r.short_term_goals_json || '[]'),
         mediumTermGoals: JSON.parse(r.medium_term_goals_json || '[]'),
         longTermGoals: JSON.parse(r.long_term_goals_json || '[]')
@@ -1167,7 +1177,7 @@ export class SpeechTherapyController {
         return;
       }
 
-      const { patientId, shortTermGoals, mediumTermGoals, longTermGoals, status = 'planned' } = req.body;
+      const { patientId, shortTermGoals, mediumTermGoals, longTermGoals, goalsStructured, referredBy, status = 'planned' } = req.body;
       if (!patientId) {
         res.status(400).json({ error: 'patientId é obrigatório' });
         return;
@@ -1183,13 +1193,16 @@ export class SpeechTherapyController {
       db.prepare(`
         INSERT INTO fono_treatment_plans (
           id, tenant_id, patient_id, professional_id,
-          short_term_goals_json, medium_term_goals_json, long_term_goals_json, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          short_term_goals_json, medium_term_goals_json, long_term_goals_json,
+          referred_by, goals_structured_json, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId,
         JSON.stringify(shortTermGoals || []),
         JSON.stringify(mediumTermGoals || []),
         JSON.stringify(longTermGoals || []),
+        referredBy || null,
+        JSON.stringify(goalsStructured || []),
         status
       );
 
@@ -1231,11 +1244,13 @@ export class SpeechTherapyController {
       }
 
       let profId: string | null = null;
+      let professional: any = null;
       if (req.user?.role === 'professional') {
-        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
-        if (prof) profId = prof.id;
+        professional = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (professional) profId = professional.id;
       } else if (req.body.professionalId) {
         profId = req.body.professionalId;
+        professional = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE id = ? AND tenant_id = ?').get(profId, tenantId) as any;
       }
 
       const creatorName = req.user?.name || req.user?.email || 'Fonoaudiólogo';
@@ -1255,6 +1270,37 @@ export class SpeechTherapyController {
         dysphagia: dysphagiaData || null
       };
 
+      // Assinatura eletrônica e selamento íntegro
+      let signatureHash: string | null = null;
+      let signedAt: string | null = null;
+      let signedByUserId: string | null = null;
+      let signerName: string | null = null;
+      let signerReg: string | null = null;
+      let sealedAt: string | null = null;
+
+      if (isSealed) {
+        signerName = professional?.name || req.user?.name || req.user?.email || 'Fonoaudiólogo';
+        signerReg = professional ? [professional.registration_type, professional.registration_number].filter(Boolean).join(' ') : null;
+        signedByUserId = req.user?.userId || null;
+        signedAt = new Date().toISOString();
+        sealedAt = signedAt;
+
+        const hashPayload = [
+          recordId,
+          tenantId,
+          patientId,
+          recDate,
+          recTime || '',
+          recTitle,
+          clinicalEvolution,
+          conducts || '',
+          signerName,
+          signerReg || '',
+          signedAt
+        ].join('|');
+        signatureHash = crypto.createHash('sha256').update(hashPayload).digest('hex');
+      }
+
       db.exec('BEGIN TRANSACTION');
       let committed = false;
 
@@ -1264,13 +1310,16 @@ export class SpeechTherapyController {
             id, tenant_id, patient_id, appointment_id, professional_id,
             session_date, session_time, procedure_name, title, clinical_evolution,
             technical_notes, conducts, clinical_data_json, module_type, module_data_json,
-            is_sealed, created_by, updated_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ZemdaFono', ?, ?, ?, ?, datetime('now'), datetime('now'))
+            is_sealed, signature_hash, signed_at, signed_by_user_id, signer_name,
+            signer_registration, sealed_at, created_by, updated_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ZemdaFono', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `).run(
           recordId, tenantId, patientId, appointmentId || null, profId,
           recDate, recTime, 'Sessão de Fonoaudiologia', recTitle, clinicalEvolution,
           technicalNotes || null, conducts || null, JSON.stringify(fonoModuleData),
-          JSON.stringify(fonoModuleData), isSealed ? 1 : 0, creatorName, creatorName
+          JSON.stringify(fonoModuleData), isSealed ? 1 : 0,
+          signatureHash, signedAt, signedByUserId, signerName, signerReg, sealedAt,
+          creatorName, creatorName
         );
 
         if (appointmentId) {
@@ -1286,14 +1335,146 @@ export class SpeechTherapyController {
         throw err;
       }
 
-      logAudit(req, 'FINISH_FONO_CONSULTATION', 'records', recordId, { patientId, appointmentId });
+      logAudit(req, 'FINISH_FONO_CONSULTATION', 'records', recordId, { patientId, appointmentId, isSealed: !!isSealed });
       res.status(201).json({
         recordId,
+        signatureHash,
+        signedAt,
         message: 'Atendimento Fonoaudiológico finalizado e registrado com sucesso!'
       });
     } catch (err: any) {
       console.error('[SpeechTherapyController.finishConsultation]', err);
       res.status(500).json({ error: 'Erro ao finalizar atendimento fonoaudiológico' });
+    }
+  }
+
+  // 11. TESTES COMPLEMENTARES E ANEXOS (ZemdaFono)
+  static listComplementaryTests(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT 
+          c.*,
+          p.name as professional_name
+        FROM fono_complementary_tests c
+        LEFT JOIN professionals p ON p.id = c.professional_id
+        WHERE c.patient_id = ? AND c.tenant_id = ?
+        ORDER BY c.test_date DESC, c.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows.map(r => ({
+        id: r.id,
+        patientId: r.patient_id,
+        professionalId: r.professional_id,
+        professionalName: r.professional_name,
+        appointmentId: r.appointment_id,
+        testName: r.test_name,
+        testDate: r.test_date,
+        referredBy: r.referred_by || '',
+        resultScore: r.result_score || '',
+        notes: r.notes || '',
+        attachmentUrl: r.attachment_url || '',
+        attachmentName: r.attachment_name || '',
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao buscar testes complementares' });
+    }
+  }
+
+  static saveComplementaryTest(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const { id: providedId, patientId, appointmentId, testName, testDate, referredBy, resultScore, notes, attachmentUrl, attachmentName } = req.body;
+      if (!patientId || !testName) {
+        res.status(400).json({ error: 'patientId e testName são obrigatórios' });
+        return;
+      }
+
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, String(patientId))) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const dateStr = testDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+
+      if (providedId) {
+        const existing = db.prepare('SELECT id FROM fono_complementary_tests WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(providedId, tenantId, patientId) as any;
+        if (existing) {
+          db.prepare(`
+            UPDATE fono_complementary_tests SET
+              test_name = ?,
+              test_date = ?,
+              referred_by = ?,
+              result_score = ?,
+              notes = ?,
+              attachment_url = COALESCE(?, attachment_url),
+              attachment_name = COALESCE(?, attachment_name),
+              professional_id = COALESCE(?, professional_id),
+              updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ?
+          `).run(
+            testName,
+            dateStr,
+            referredBy || null,
+            resultScore || null,
+            notes || null,
+            attachmentUrl || null,
+            attachmentName || null,
+            profId,
+            providedId,
+            tenantId
+          );
+          res.status(200).json({ id: providedId, message: 'Teste complementar atualizado com sucesso' });
+          return;
+        }
+      }
+
+      const recordId = 'f-cmp-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO fono_complementary_tests (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          test_name, test_date, referred_by, result_score, notes,
+          attachment_url, attachment_name
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        recordId, tenantId, patientId, profId, appointmentId || null,
+        testName, dateStr, referredBy || null, resultScore || null, notes || null,
+        attachmentUrl || null, attachmentName || null
+      );
+
+      res.status(201).json({ id: recordId, message: 'Teste complementar salvo com sucesso' });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao salvar teste complementar' });
+    }
+  }
+
+  static deleteComplementaryTest(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const id = req.params.id;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      db.prepare('DELETE FROM fono_complementary_tests WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+      res.json({ message: 'Teste complementar removido com sucesso' });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Erro ao remover teste complementar' });
     }
   }
 }

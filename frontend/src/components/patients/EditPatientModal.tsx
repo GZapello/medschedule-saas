@@ -3,6 +3,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { X, Baby, User, Save, Shield, CreditCard, Phone, Mail, MapPin } from 'lucide-react';
+import { maskBrazilianPhone, validateBrazilianPhone } from '../../utils/phone-mask';
 
 interface EditPatientModalProps {
   isOpen: boolean;
@@ -125,9 +126,31 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
       return;
     }
 
+    const phoneVal = validateBrazilianPhone(phone);
+    if (!phoneVal.valid) {
+      showToast(phoneVal.error || 'Telefone inválido', 'error');
+      return;
+    }
+
     if (isChild && (!guardianName || !guardianPhone)) {
       showToast('Informe o nome e telefone do responsável legal para pacientes menores', 'error');
       return;
+    }
+
+    if (isChild && guardianPhone) {
+      const gVal = validateBrazilianPhone(guardianPhone);
+      if (!gVal.valid) {
+        showToast(`Responsável: ${gVal.error}`, 'error');
+        return;
+      }
+    }
+
+    if (emergencyPhone) {
+      const emVal = validateBrazilianPhone(emergencyPhone);
+      if (!emVal.valid) {
+        showToast(`Emergência: ${emVal.error}`, 'error');
+        return;
+      }
     }
 
     try {
@@ -262,7 +285,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
                       type="text"
                       required={isChild}
                       value={guardianPhone}
-                      onChange={e => setGuardianPhone(e.target.value)}
+                      onChange={e => setGuardianPhone(maskBrazilianPhone(e.target.value))}
                       placeholder="(11) 98888-7777"
                       className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                     />
@@ -333,7 +356,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
                   type="text"
                   required
                   value={phone}
-                  onChange={e => setPhone(e.target.value)}
+                  onChange={e => setPhone(maskBrazilianPhone(e.target.value))}
                   placeholder="(11) 99999-9999"
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                 />
@@ -447,6 +470,16 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
                     value={emergencyContact}
                     onChange={e => setEmergencyContact(e.target.value)}
                     placeholder="Nome e parentesco"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-medium mb-1">Telefone de Emergência</label>
+                  <input
+                    type="tel"
+                    value={emergencyPhone}
+                    onChange={e => setEmergencyPhone(maskBrazilianPhone(e.target.value))}
+                    placeholder="(11) 99999-9999"
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                   />
                 </div>

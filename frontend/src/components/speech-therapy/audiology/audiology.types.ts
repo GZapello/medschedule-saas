@@ -214,5 +214,6 @@ export interface AudiologyRecordPayload {
   pediatric?: PediatricCrossCheck;
   highFrequency?: HighFrequencyAudiometry;
   occupational?: OccupationalAudiometry;
+  referredBy?: string;
   notes?: string;
 }

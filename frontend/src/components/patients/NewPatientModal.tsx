@@ -3,6 +3,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { X, Plus, Baby, User } from 'lucide-react';
+import { maskBrazilianPhone, validateBrazilianPhone } from '../../utils/phone-mask';
 
 interface NewPatientModalProps {
   isOpen: boolean;
@@ -50,9 +51,31 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
       return;
     }
 
+    const phoneVal = validateBrazilianPhone(phone);
+    if (!phoneVal.valid) {
+      showToast(phoneVal.error || 'Telefone inválido', 'error');
+      return;
+    }
+
     if (isChild && (!guardianName || !guardianPhone)) {
       showToast('Informe o nome e telefone do responsável legal', 'error');
       return;
+    }
+
+    if (isChild && guardianPhone) {
+      const gVal = validateBrazilianPhone(guardianPhone);
+      if (!gVal.valid) {
+        showToast(`Responsável: ${gVal.error}`, 'error');
+        return;
+      }
+    }
+
+    if (emergencyPhone) {
+      const emVal = validateBrazilianPhone(emergencyPhone);
+      if (!emVal.valid) {
+        showToast(`Emergência: ${emVal.error}`, 'error');
+        return;
+      }
     }
 
     try {
@@ -171,7 +194,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
               <input
                 type="tel"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => setPhone(maskBrazilianPhone(e.target.value))}
                 placeholder="(11) 99999-9999"
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
               />
@@ -227,7 +250,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
                   <input
                     type="tel"
                     value={guardianPhone}
-                    onChange={e => setGuardianPhone(e.target.value)}
+                    onChange={e => setGuardianPhone(maskBrazilianPhone(e.target.value))}
                     placeholder="(11) 98888-8888"
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white"
                   />
@@ -262,7 +285,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
               <input
                 type="tel"
                 value={emergencyPhone}
-                onChange={e => setEmergencyPhone(e.target.value)}
+                onChange={e => setEmergencyPhone(maskBrazilianPhone(e.target.value))}
                 placeholder="(11) 99999-9999"
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
               />

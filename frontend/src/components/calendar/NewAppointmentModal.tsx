@@ -9,12 +9,14 @@ interface NewAppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialPrefill?: { date?: string; time?: string };
 }
 
 export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   isOpen,
   onClose,
-  onSuccess
+  onSuccess,
+  initialPrefill
 }) => {
   const { showToast } = useToast();
   const { clientTermLabel } = useAuth();
@@ -47,6 +49,9 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setConflictError(null);
+      if (initialPrefill?.date) {
+        setDate(initialPrefill.date);
+      }
       Promise.all([
         ApiClient.get<Patient[]>('/v1/patients'),
         ApiClient.get<Professional[]>('/v1/professionals'),
@@ -64,7 +69,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         if (srvs.length > 0) setServiceId(srvs[0].id);
       }).catch(() => {});
     }
-  }, [isOpen]);
+  }, [isOpen, initialPrefill]);
 
   // Consulta slots livres imediatamente ao alterar profissional, serviço, data ou sala
   useEffect(() => {
@@ -77,17 +82,44 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
       const roomParam = roomId ? `&roomId=${encodeURIComponent(roomId)}` : '';
       ApiClient.get<any>(`/v1/slots/available?professionalId=${professionalId}&serviceId=${serviceId}&date=${date}${roomParam}`)
         .then(data => {
-          setAvailableSlots(data.slots || []);
+          const slots: AvailableSlot[] = data.slots || [];
+          setAvailableSlots(slots);
+          if (initialPrefill?.time) {
+            const prefillTime = initialPrefill.time;
+            const match = slots.find(s => s.time === prefillTime || s.time.startsWith(prefillTime));
+            if (match) {
+              setSelectedSlot(match);
+            } else {
+              const customSlot: AvailableSlot = {
+                time: prefillTime,
+                startTime: `${date}T${prefillTime}:00`,
+                endTime: `${date}T${prefillTime}:30`,
+                durationMinutes: 30,
+                bufferMinutes: 0
+              };
+              setSelectedSlot(customSlot);
+            }
+          }
         })
         .catch(() => {
           setAvailableSlots([]);
+          if (initialPrefill?.time) {
+            const prefillTime = initialPrefill.time;
+            setSelectedSlot({
+              time: prefillTime,
+              startTime: `${date}T${prefillTime}:00`,
+              endTime: `${date}T${prefillTime}:30`,
+              durationMinutes: 30,
+              bufferMinutes: 0
+            });
+          }
         })
         .finally(() => setLoadingSlots(false));
     } else {
       setAvailableSlots([]);
       setSelectedSlot(null);
     }
-  }, [professionalId, serviceId, date, roomId]);
+  }, [professionalId, serviceId, date, roomId, initialPrefill]);
 
   if (!isOpen) return null;
 

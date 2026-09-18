@@ -2,6 +2,7 @@ import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinica
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 
 /**
@@ -244,14 +245,38 @@ export class ClinicalController {
       const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;
       const moduleDataJson = moduleData ? (typeof moduleData === 'string' ? moduleData : JSON.stringify(moduleData)) : null;
 
+      // Assinatura eletrônica e integridade criptográfica
+      let signatureHash: string | null = null;
+      let signedAt: string | null = null;
+      let signedByUserId: string | null = null;
+      let signerName: string | null = null;
+      let signerRegistration: string | null = null;
+      let sealedAt: string | null = null;
+
+      if (isSealed) {
+        const prof = db.prepare('SELECT name, registration_type, registration_number FROM professionals WHERE id = ?').get(resolvedProfId) as any;
+        signedAt = new Date().toISOString();
+        sealedAt = signedAt;
+        signedByUserId = req.user?.userId || null;
+        signerName = prof?.name || creatorName;
+        signerRegistration = prof?.registration_type && prof?.registration_number 
+          ? `${prof.registration_type} ${prof.registration_number}` 
+          : (prof?.registration_number || null);
+
+        const payloadToHash = `${tenantId}|${patientId}|${resolvedProfId}|${sessionDate}|${title}|${clinicalEvolution || ''}|${signedAt}|${signerRegistration || ''}`;
+        signatureHash = crypto.createHash('sha256').update(payloadToHash).digest('hex');
+      }
+
       const insertStmt = db.prepare(`
         INSERT INTO records (
           id, tenant_id, patient_id, appointment_id, professional_id,
           session_date, session_time, procedure_name, title, clinical_evolution,
           technical_notes, private_notes, conducts, clinical_data_json, module_type,
-          module_data_json, is_sealed, created_by, updated_by, created_at, updated_at
+          module_data_json, is_sealed, signature_hash, signed_at, signed_by_user_id,
+          signer_name, signer_registration, sealed_at, amendments_json,
+          created_by, updated_by, created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, datetime('now'), datetime('now'))
       `);
 
       insertStmt.run(
@@ -272,12 +297,18 @@ export class ClinicalController {
         moduleType || null,
         moduleDataJson,
         isSealed ? 1 : 0,
+        signatureHash,
+        signedAt,
+        signedByUserId,
+        signerName,
+        signerRegistration,
+        sealedAt,
         creatorName,
         creatorName
       );
 
-      logAudit(req, 'CREATE_CLINICAL_RECORD', 'records', id, { patientId, title, isSealed, moduleType });
-      res.status(201).json({ id, message: 'Registro clínico / evolução gravado com sucesso' });
+      logAudit(req, 'CREATE_CLINICAL_RECORD', 'records', id, { patientId, title, isSealed, moduleType, signatureHash });
+      res.status(201).json({ id, signatureHash, signedAt, isSealed: !!isSealed, message: 'Registro clínico / evolução gravado com sucesso' });
     } catch (err: any) {
       console.error('[ClinicalController.create] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar evolução clínica' });
@@ -285,11 +316,12 @@ export class ClinicalController {
   }
 
   // 4. Atualiza evolução com trilha de autoria e versionamento (Item 11)
+  // REGRA DE SEGURANÇA: Registros selados NÃO são sobrescritos. Alterações preservam histórico via aditivos/retificações.
   static update(req: Request, res: Response): void {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
-      const { title, clinicalEvolution, technicalNotes, privateNotes, isSealed } = req.body;
+      const { title, clinicalEvolution, technicalNotes, privateNotes, isSealed, reason, amendmentReason, notes } = req.body;
 
       const record = db.prepare('SELECT * FROM records WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!record) {
@@ -302,13 +334,82 @@ export class ClinicalController {
         return;
       }
 
-      if (record.is_sealed === 1 && !req.body.overrideSealed) {
-        res.status(403).json({ error: 'Este prontuário foi lacrado e não pode ser sobrescrito diretamente (integridade legal)' });
+      const editorName = req.user?.name || req.user?.email || 'Operador';
+
+      // ── CASO A: Registro já está SELADO ─────────────────────────────
+      // REGRA: Nunca sobrescreve o conteúdo original; salva aditivo/retificação preservando histórico
+      if (record.is_sealed === 1) {
+        const amendmentText = clinicalEvolution || technicalNotes || notes || req.body.amendmentText;
+        if (!amendmentText || !String(amendmentText).trim()) {
+          res.status(400).json({
+            error: 'Este prontuário está lacrado/selado. Para registrar uma retificação, informe o texto do aditivo clínico.',
+            isSealed: true
+          });
+          return;
+        }
+
+        let amendments: any[] = [];
+        try {
+          if (record.amendments_json) {
+            amendments = JSON.parse(record.amendments_json);
+          }
+        } catch (_) {
+          amendments = [];
+        }
+
+        const prof = req.user ? db.prepare('SELECT p.id, p.name, p.registration_type, p.registration_number FROM professionals p WHERE p.user_id = ? AND p.tenant_id = ?').get(req.user.userId, tenantId) as any : null;
+        const nowIso = new Date().toISOString();
+        const amendmentId = 'amd-' + uuidv4().slice(0, 8);
+        const effectiveReason = reason || amendmentReason || 'Retificação Clínica / Aditivo Posterior';
+        const amendmentHash = crypto.createHash('sha256').update(`${record.id}|${nowIso}|${amendmentText}|${effectiveReason}`).digest('hex');
+
+        const newAmendment = {
+          id: amendmentId,
+          created_at: nowIso,
+          created_by_user_id: req.user?.userId || null,
+          author_name: prof?.name || editorName,
+          author_registration: prof ? `${prof.registration_type || ''} ${prof.registration_number || ''}`.trim() : null,
+          reason: effectiveReason,
+          amendment_text: String(amendmentText).trim(),
+          signature_hash: amendmentHash
+        };
+
+        amendments.push(newAmendment);
+
+        // Histórico de trilha
+        let history: any[] = [];
+        try {
+          if (record.edit_history_json) history = JSON.parse(record.edit_history_json);
+        } catch (_) {}
+        history.push({
+          action: 'ADD_AMENDMENT',
+          amendment_id: amendmentId,
+          edited_by: editorName,
+          edited_at: nowIso,
+          reason: effectiveReason
+        });
+
+        db.prepare(`
+          UPDATE records SET
+            amendments_json = ?,
+            edit_history_json = ?,
+            updated_by = ?,
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(JSON.stringify(amendments), JSON.stringify(history), editorName, id, tenantId);
+
+        logAudit(req, 'ADD_RECORD_AMENDMENT', 'records', id, { amendmentId, effectiveReason, amendmentHash });
+        res.json({
+          id,
+          amendmentId,
+          isSealed: true,
+          message: 'Aditivo clínico registrado com integridade criptográfica. O registro original foi mantido inalterado.',
+          amendments
+        });
         return;
       }
 
-      const editorName = req.user?.name || req.user?.email || 'Operador';
-
+      // ── CASO B: Registro NÃO está selado ────────────────────────────
       // Constrói histórico de versionamento (Item 11)
       let history: any[] = [];
       try {
@@ -325,6 +426,30 @@ export class ClinicalController {
         previous_session_date: record.session_date
       });
 
+      // Se está sendo selado nesta requisição
+      let newSignatureHash = record.signature_hash;
+      let newSignedAt = record.signed_at;
+      let newSignedByUserId = record.signed_by_user_id;
+      let newSignerName = record.signer_name;
+      let newSignerRegistration = record.signer_registration;
+      let newSealedAt = record.sealed_at;
+
+      if (isSealed && record.is_sealed !== 1) {
+        const prof = db.prepare('SELECT name, registration_type, registration_number FROM professionals WHERE id = ?').get(record.professional_id) as any;
+        newSignedAt = new Date().toISOString();
+        newSealedAt = newSignedAt;
+        newSignedByUserId = req.user?.userId || null;
+        newSignerName = prof?.name || editorName;
+        newSignerRegistration = prof?.registration_type && prof?.registration_number 
+          ? `${prof.registration_type} ${prof.registration_number}` 
+          : (prof?.registration_number || null);
+
+        const effectiveTitle = title !== undefined ? title : record.title;
+        const effectiveEvolution = clinicalEvolution !== undefined ? clinicalEvolution : record.clinical_evolution;
+        const payloadToHash = `${tenantId}|${record.patient_id}|${record.professional_id}|${record.session_date}|${effectiveTitle}|${effectiveEvolution || ''}|${newSignedAt}|${newSignerRegistration || ''}`;
+        newSignatureHash = crypto.createHash('sha256').update(payloadToHash).digest('hex');
+      }
+
       const updateStmt = db.prepare(`
         UPDATE records SET
           title = COALESCE(?, title),
@@ -332,6 +457,12 @@ export class ClinicalController {
           technical_notes = COALESCE(?, technical_notes),
           private_notes = COALESCE(?, private_notes),
           is_sealed = COALESCE(?, is_sealed),
+          signature_hash = COALESCE(?, signature_hash),
+          signed_at = COALESCE(?, signed_at),
+          signed_by_user_id = COALESCE(?, signed_by_user_id),
+          signer_name = COALESCE(?, signer_name),
+          signer_registration = COALESCE(?, signer_registration),
+          sealed_at = COALESCE(?, sealed_at),
           updated_by = ?,
           edit_history_json = ?,
           updated_at = datetime('now')
@@ -344,19 +475,96 @@ export class ClinicalController {
         technicalNotes !== undefined ? technicalNotes : null,
         privateNotes !== undefined ? privateNotes : null,
         isSealed !== undefined ? (isSealed ? 1 : 0) : null,
+        newSignatureHash || null,
+        newSignedAt || null,
+        newSignedByUserId || null,
+        newSignerName || null,
+        newSignerRegistration || null,
+        newSealedAt || null,
         editorName,
         JSON.stringify(history),
         id,
         tenantId
       );
 
-      logAudit(req, 'UPDATE_CLINICAL_RECORD', 'records', id, { editorName, versionCount: history.length });
-      res.json({ message: 'Evolução clínica atualizada e versionada com sucesso!' });
+      logAudit(req, 'UPDATE_CLINICAL_RECORD', 'records', id, { editorName, versionCount: history.length, isSealed: !!isSealed });
+      res.json({ message: 'Evolução clínica atualizada com sucesso!', isSealed: !!isSealed, signatureHash: newSignatureHash });
     } catch (err: any) {
       console.error('[ClinicalController.update] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar registro clínico' });
     }
   }
+
+  // 4.1 Adiciona Aditivo / Retificação Clínica explicitamente
+  static addAmendment(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenantId;
+      const { amendmentText, notes, reason } = req.body;
+
+      const record = db.prepare('SELECT * FROM records WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!record) {
+        res.status(404).json({ error: 'Prontuário não encontrado' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, record.patient_id)) {
+        res.status(403).json({ error: 'Acesso restrito (Sigilo LGPD)' });
+        return;
+      }
+
+      const text = amendmentText || notes;
+      if (!text || !String(text).trim()) {
+        res.status(400).json({ error: 'O texto do aditivo/retificação clínica é obrigatório.' });
+        return;
+      }
+
+      let amendments: any[] = [];
+      try {
+        if (record.amendments_json) amendments = JSON.parse(record.amendments_json);
+      } catch (_) { amendments = []; }
+
+      const editorName = req.user?.name || req.user?.email || 'Profissional';
+      const prof = req.user ? db.prepare('SELECT p.id, p.name, p.registration_type, p.registration_number FROM professionals p WHERE p.user_id = ? AND p.tenant_id = ?').get(req.user.userId, tenantId) as any : null;
+      const nowIso = new Date().toISOString();
+      const amendmentId = 'amd-' + uuidv4().slice(0, 8);
+      const effectiveReason = reason || 'Aditivo / Retificação Clínica';
+      const hash = crypto.createHash('sha256').update(`${record.id}|${nowIso}|${text}|${effectiveReason}`).digest('hex');
+
+      const item = {
+        id: amendmentId,
+        created_at: nowIso,
+        created_by_user_id: req.user?.userId || null,
+        author_name: prof?.name || editorName,
+        author_registration: prof ? `${prof.registration_type || ''} ${prof.registration_number || ''}`.trim() : null,
+        reason: effectiveReason,
+        amendment_text: String(text).trim(),
+        signature_hash: hash
+      };
+
+      amendments.push(item);
+
+      db.prepare(`
+        UPDATE records SET
+          amendments_json = ?,
+          updated_by = ?,
+          updated_at = datetime('now')
+        WHERE id = ? AND tenant_id = ?
+      `).run(JSON.stringify(amendments), editorName, id, tenantId);
+
+      logAudit(req, 'ADD_RECORD_AMENDMENT', 'records', id, { amendmentId, hash });
+      res.status(201).json({
+        id,
+        amendmentId,
+        message: 'Aditivo clínico registrado com sucesso.',
+        amendments
+      });
+    } catch (err: any) {
+      console.error('[ClinicalController.addAmendment] Erro:', err);
+      res.status(500).json({ error: 'Erro ao registrar aditivo clínico' });
+    }
+  }
+
 
   // 5. Exportação Oficial em Formato A4 com Identidade da Clínica e Localidade Automática (Itens 12, 13, 14)
   static exportPdfHtml(req: Request, res: Response): void {

@@ -421,11 +421,15 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
     // Compatibilidade com schemaVersion 1 ou legados
     const res = item.results;
     if (res.schemaVersion === 2) {
-      setRecord(res);
+      setRecord({
+        ...res,
+        referredBy: item.referred_by || item.referredBy || res.referredBy || ''
+      });
     } else {
       // Reconstrói a partir do modelo legado
       setRecord({
         ...EMPTY_RECORD,
+        referredBy: item.referred_by || item.referredBy || '',
         audiometry: {
           ...EMPTY_RECORD.audiometry,
           rightAir: res.audiometry?.rightAir || res.rightAir || {},
@@ -489,6 +493,7 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
         patientId,
         examType: record.modality,
         examDate,
+        referredBy: record.referredBy || null,
         results: {
           ...record,
           schemaVersion: 2,
@@ -744,6 +749,16 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
                     <option value="M">Masculino</option>
                     <option value="outro">Outro</option>
                   </select>
+                </div>
+                <div className="pt-2 border-t border-slate-200/60">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">Encaminhado por (opcional):</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Dr. Silva (Otorrino), Escola..."
+                    value={record.referredBy || ''}
+                    onChange={e => setRecord(prev => ({ ...prev, referredBy: e.target.value }))}
+                    className="w-full px-2 py-1 rounded-lg border border-slate-300 text-xs bg-white focus:border-sky-500 focus:outline-none"
+                  />
                 </div>
               </div>
             </div>

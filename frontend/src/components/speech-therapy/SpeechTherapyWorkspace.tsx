@@ -27,7 +27,9 @@ import {
   BookOpen,
   MessageSquare,
   Wind,
-  Layers
+  Layers,
+  Paperclip,
+  ExternalLink
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -43,6 +45,16 @@ import { FonoEvolutionReportModal } from './FonoEvolutionReportModal';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { HomeSchoolProgramManager } from '../common/HomeSchoolProgramManager';
 import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
+import { FileImageUploader, FileUploadedInfo } from '../common/FileImageUploader';
+import { SecureFileImage } from '../common/SecureFileImage';
+
+export interface StructuredGoalItem {
+  id: string;
+  goal: string;
+  interventions: string;
+  targetPeriod: string;
+  status: 'a_iniciar' | 'em_andamento' | 'alcancado';
+}
 
 interface SpeechTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -100,6 +112,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
     | 'goals'
     | 'home_program'
     | 'treatment_plans'
+    | 'complementary'
     | 'finish'
   >('phonemes');
 
@@ -242,6 +255,41 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
     homeSchoolGuidance: 'Não interromper a fala da criança; valorizar a comunicação espontânea e repetir com o modelo correto sem cobrar perfeição imediata.',
     frequencySessions: '1 a 2 vezes por semana, duração de 45 minutos'
   });
+  const [planReferredBy, setPlanReferredBy] = useState<string>('');
+  const [structuredGoals, setStructuredGoals] = useState<StructuredGoalItem[]>([
+    {
+      id: 'g-1',
+      goal: 'Instalação e automatização do fonema /r/ brando em fala espontânea',
+      interventions: 'Bombardeio auditivo com fones, discriminação com pares mínimos e modelagem proprioceptiva.',
+      targetPeriod: '12 sessões',
+      status: 'em_andamento'
+    },
+    {
+      id: 'g-2',
+      goal: 'Adequação de vedamento labial e tônus orbicular em repouso',
+      interventions: 'Exercícios miofuncionais com botão, contra-resistência de espátula e treino mastigatório bilateral.',
+      targetPeriod: '8 sessões',
+      status: 'em_andamento'
+    }
+  ]);
+
+  // Testes Complementares & Anexos
+  const [complementaryTests, setComplementaryTests] = useState<any[]>([]);
+  const [loadingCompTests, setLoadingCompTests] = useState<boolean>(false);
+  const [showNewCompTestModal, setShowNewCompTestModal] = useState<boolean>(false);
+  const [compForm, setCompForm] = useState({
+    testName: '',
+    testDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()),
+    referredBy: '',
+    resultScore: '',
+    notes: '',
+    attachmentUrl: '',
+    attachmentName: ''
+  });
+
+  // Campos específicos de Fala & Fonologia
+  const [speechReferredBy, setSpeechReferredBy] = useState<string>('');
+  const [coarticulationBreakdown, setCoarticulationBreakdown] = useState<string>('Ausente (coarticulação fluida)');
 
   // 10. Finalização da Consulta
   const [consultationTitle, setConsultationTitle] = useState<string>('Consulta Fonoaudiológica');
@@ -291,7 +339,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   const loadPatientData = async (patId: string) => {
     try {
       setLoading(true);
-      const [anaRes, langRes, phonRes, oroRes, voiRes, fluRes, dysRes, audRes, planRes] = await Promise.allSettled([
+      const [anaRes, langRes, phonRes, oroRes, voiRes, fluRes, dysRes, audRes, planRes, compRes] = await Promise.allSettled([
         ApiClient.get<any>(`/v1/speech-therapy/anamnesis/${patId}`),
         ApiClient.get<any>(`/v1/speech-therapy/language/${patId}`),
         ApiClient.get<any>(`/v1/speech-therapy/phonemes/${patId}`),
@@ -300,20 +348,35 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
         ApiClient.get<any>(`/v1/speech-therapy/fluency/${patId}`),
         ApiClient.get<any>(`/v1/speech-therapy/dysphagia/${patId}`),
         ApiClient.get<any[]>(`/v1/speech-therapy/audiology/${patId}`),
-        ApiClient.get<any[]>(`/v1/speech-therapy/treatment-plans/${patId}`)
+        ApiClient.get<any[]>(`/v1/speech-therapy/treatment-plans/${patId}`),
+        ApiClient.get<any[]>(`/v1/speech-therapy/complementary-tests/${patId}`)
       ]);
 
       if (anaRes.status === 'fulfilled' && anaRes.value && anaRes.value.data) setAnamnesisData(anaRes.value.data);
       if (langRes.status === 'fulfilled' && langRes.value && langRes.value.data) setLanguageData(langRes.value.data);
-      if (phonRes.status === 'fulfilled' && phonRes.value && Array.isArray(phonRes.value.phonemes)) {
-        setPhonemesList(phonRes.value.phonemes);
+      if (phonRes.status === 'fulfilled' && phonRes.value) {
+        if (Array.isArray(phonRes.value.phonemes)) setPhonemesList(phonRes.value.phonemes);
+        if (phonRes.value.referredBy) setSpeechReferredBy(phonRes.value.referredBy);
+        if (phonRes.value.coarticulationBreakdown) setCoarticulationBreakdown(phonRes.value.coarticulationBreakdown);
       }
       if (oroRes.status === 'fulfilled' && oroRes.value && oroRes.value.data) setOrofacialData(oroRes.value.data);
       if (voiRes.status === 'fulfilled' && voiRes.value && voiRes.value.data) setVoiceData(voiRes.value.data);
       if (fluRes.status === 'fulfilled' && fluRes.value && fluRes.value.data) setFluencyData(fluRes.value.data);
       if (dysRes.status === 'fulfilled' && dysRes.value && dysRes.value.data) setDysphagiaData(dysRes.value.data);
       if (audRes.status === 'fulfilled' && Array.isArray(audRes.value)) setAudiologyList(audRes.value);
-      if (planRes.status === 'fulfilled' && Array.isArray(planRes.value)) setTreatmentPlans(planRes.value);
+      if (planRes.status === 'fulfilled' && Array.isArray(planRes.value)) {
+        setTreatmentPlans(planRes.value);
+        const latestPlan = planRes.value[0];
+        if (latestPlan) {
+          if (latestPlan.referredBy) setPlanReferredBy(latestPlan.referredBy);
+          if (Array.isArray(latestPlan.goalsStructured) && latestPlan.goalsStructured.length > 0) {
+            setStructuredGoals(latestPlan.goalsStructured);
+          }
+        }
+      }
+      if (compRes.status === 'fulfilled' && Array.isArray(compRes.value)) {
+        setComplementaryTests(compRes.value);
+      }
     } catch (err) {
       console.warn('Erro ao carregar dados fonoaudiológicos:', err);
     } finally {
@@ -369,7 +432,9 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
       setSaving(true);
       await ApiClient.post('/v1/speech-therapy/phonemes', {
         patientId: selectedPatientId,
-        phonemes: phonemesList
+        phonemes: phonemesList,
+        referredBy: speechReferredBy || null,
+        coarticulationBreakdown: coarticulationBreakdown || null
       });
       showToast('Mapeamento fonêmico salvo com sucesso!', 'success');
     } catch (err: any) {
@@ -419,6 +484,97 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
     }
   };
 
+  // Salva Plano Terapêutico Fonoaudiológico com Múltiplos Objetivos e Intervenções
+  const handleSaveTreatmentPlan = async () => {
+    if (!selectedPatientId) {
+      showToast('Selecione um paciente', 'info');
+      return;
+    }
+    try {
+      setSaving(true);
+      const goalsSummary = structuredGoals.map(g => `${g.goal} (${g.status})`).join('; ');
+      const strategiesSummary = structuredGoals.map(g => g.interventions).filter(Boolean).join(' | ');
+
+      await ApiClient.post('/v1/speech-therapy/treatment-plans', {
+        patientId: selectedPatientId,
+        title: planForm.title,
+        goals: goalsSummary || planForm.goals,
+        strategies: strategiesSummary || planForm.strategies,
+        homeSchoolGuidance: planForm.homeSchoolGuidance,
+        frequencySessions: planForm.frequencySessions,
+        referredBy: planReferredBy || null,
+        goalsStructured: structuredGoals
+      });
+
+      showToast('Plano Terapêutico Fonoaudiológico salvo com sucesso!', 'success');
+      const refreshedPlans = await ApiClient.get<any[]>(`/v1/speech-therapy/treatment-plans/${selectedPatientId}`);
+      if (Array.isArray(refreshedPlans)) setTreatmentPlans(refreshedPlans);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar plano terapêutico', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Salvar Teste Complementar Fonoaudiológico
+  const handleSaveComplementaryTest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientId) {
+      showToast('Selecione um paciente', 'info');
+      return;
+    }
+    if (!compForm.testName.trim()) {
+      showToast('Informe o nome do teste complementar', 'info');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await ApiClient.post('/v1/speech-therapy/complementary-tests', {
+        patientId: selectedPatientId,
+        appointmentId: initialAppointmentId || null,
+        testName: compForm.testName,
+        testDate: compForm.testDate,
+        referredBy: compForm.referredBy || null,
+        resultScore: compForm.resultScore || null,
+        notes: compForm.notes || null,
+        attachmentUrl: compForm.attachmentUrl || null,
+        attachmentName: compForm.attachmentName || null
+      });
+
+      showToast('Teste complementar registrado com sucesso!', 'success');
+      setCompForm({
+        testName: '',
+        testDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()),
+        referredBy: '',
+        resultScore: '',
+        notes: '',
+        attachmentUrl: '',
+        attachmentName: ''
+      });
+      setShowNewCompTestModal(false);
+
+      const refreshed = await ApiClient.get<any[]>(`/v1/speech-therapy/complementary-tests/${selectedPatientId}`);
+      if (Array.isArray(refreshed)) setComplementaryTests(refreshed);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar teste complementar', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Remover Teste Complementar
+  const handleDeleteComplementaryTest = async (id: string) => {
+    if (!window.confirm('Deseja remover este teste complementar?')) return;
+    try {
+      await ApiClient.delete(`/v1/speech-therapy/complementary-tests/${id}`);
+      setComplementaryTests(prev => prev.filter(t => t.id !== id));
+      showToast('Teste complementar removido', 'info');
+    } catch (err: any) {
+      showToast('Erro ao remover teste complementar', 'error');
+    }
+  };
+
   // Finalizar Consulta de Fono de Forma Atômica
   const handleFinishConsultation = async () => {
     if (!selectedPatientId) {
@@ -440,18 +596,24 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
         conducts: consultationConducts || undefined,
         anamnesisData,
         languageData,
-        phonemesData: { phonemes: phonemesList },
+        phonemesData: {
+          phonemes: phonemesList,
+          referredBy: speechReferredBy || undefined,
+          coarticulationBreakdown: coarticulationBreakdown || undefined
+        },
         orofacialData,
         voiceData,
         fluencyData,
-        treatmentPlanData: planForm,
+        treatmentPlanData: {
+          ...planForm,
+          referredBy: planReferredBy || undefined,
+          goalsStructured: structuredGoals
+        },
         dysphagiaData,
         audiologyData,
         audiologyRecordId: currentAudiologyRecordId || undefined,
         audioData: audioBlobUrl
       });
-
-
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar atendimento de Fono', 'error');
     } finally {
@@ -525,6 +687,17 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               <span>{selectedPatient.full_name}</span>
             </div>
           )}
+
+          {selectedPatientId && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('finish')}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-500/25 transition-all cursor-pointer whitespace-nowrap"
+            >
+              <CheckCircle2 className="w-4 h-4 text-white" />
+              <span>Finalizar Atendimento</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -542,7 +715,8 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             { id: 'aac', label: 'Comunicação CAA', icon: Layers },
             { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
             { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
-            { id: 'treatment_plans', label: 'Plano Singular', icon: FileText },
+            { id: 'treatment_plans', label: 'Plano Terapêutico', icon: Target },
+            { id: 'complementary', label: 'Testes Complementares', icon: FileText },
             { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
           ].map(tab => {
             const Icon = tab.icon;
@@ -651,6 +825,34 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                   <span className="px-2.5 py-1 rounded-lg bg-purple-100 text-purple-800 font-bold border border-purple-200">
                     Distorção (Ceceio / Interdentalização)
                   </span>
+                </div>
+
+                {/* ENCAMINHADO POR E QUEBRA DE COARTICULAÇÃO */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Encaminhado por (opcional):</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Pediatra Dr. Carlos, Neurologista, Escola..."
+                      value={speechReferredBy}
+                      onChange={e => setSpeechReferredBy(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Quebra de Coarticulação:</label>
+                    <select
+                      value={coarticulationBreakdown}
+                      onChange={e => setCoarticulationBreakdown(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:border-sky-500 focus:outline-none"
+                    >
+                      <option value="Ausente (coarticulação fluida)">Ausente (coarticulação fluida entre sílabas e palavras)</option>
+                      <option value="Leve em encontros consonantais">Leve (quebras pontuais em encontros consonantais / clusters)</option>
+                      <option value="Moderada em polissílabos">Moderada (dificuldade em transições silábicas e polissílabos)</option>
+                      <option value="Severa na fala encadeada">Severa (produção silábica isolada / quebra sistemática na fala encadeada)</option>
+                      <option value="Presente com esforço articulatório">Presente com esforço articulatório / tateio fonético</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* TABELA DE FONEMAS */}
@@ -1221,38 +1423,434 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 8: PLANO TERAPÊUTICO */}
+            {/* ABA 8: PLANO TERAPÊUTICO FONOAUDIOLÓGICO */}
             {activeTab === 'treatment_plans' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <Target className="w-4 h-4 text-sky-600" />
-                      Plano Terapêutico Fonoaudiológico
+                      Plano Terapêutico Fonoaudiológico (Metas & Intervenções)
                     </h3>
+                    <p className="text-xs text-slate-500">
+                      Definição de múltiplos objetivos terapêuticos, intervenções específicas, prazos e orientações.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleSaveTreatmentPlan}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{saving ? 'Salvando...' : 'Salvar Plano Terapêutico'}</span>
+                  </button>
+                </div>
+
+                {/* DADOS GERAIS DO PLANO */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Título do Plano</label>
+                    <input
+                      type="text"
+                      value={planForm.title}
+                      onChange={e => setPlanForm({ ...planForm, title: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Encaminhado por (opcional):</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Neuropediatra, Escola, Otorrino..."
+                      value={planReferredBy}
+                      onChange={e => setPlanReferredBy(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Frequência das Sessões</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 1 a 2 vezes por semana, 45 min"
+                      value={planForm.frequencySessions}
+                      onChange={e => setPlanForm({ ...planForm, frequencySessions: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white"
+                    />
                   </div>
                 </div>
 
+                {/* OBJETIVOS ESTRUTURADOS & INTERVENÇÕES */}
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Metas Terapêuticas</label>
-                    <textarea
-                      rows={3}
-                      value={planForm.goals}
-                      onChange={e => setPlanForm({ ...planForm, goals: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5 text-sky-600" />
+                      Objetivos Terapêuticos & Intervenções ({structuredGoals.length})
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newId = 'g-' + Date.now();
+                        setStructuredGoals(prev => [
+                          ...prev,
+                          {
+                            id: newId,
+                            goal: '',
+                            interventions: '',
+                            targetPeriod: '12 sessões',
+                            status: 'em_andamento'
+                          }
+                        ]);
+                      }}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Adicionar Objetivo</span>
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Orientações para Casa e Escola</label>
-                    <textarea
-                      rows={2}
-                      value={planForm.homeSchoolGuidance}
-                      onChange={e => setPlanForm({ ...planForm, homeSchoolGuidance: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
+
+                  {structuredGoals.length === 0 ? (
+                    <div className="p-6 text-center rounded-2xl border border-dashed border-slate-300 text-xs text-slate-400">
+                      Nenhum objetivo adicionado ainda. Clique em "+ Adicionar Objetivo" para definir metas e intervenções.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {structuredGoals.map((item, idx) => (
+                        <div key={item.id} className="p-4 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-3">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <span className="font-bold text-xs text-slate-700">Objetivo #{idx + 1}</span>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={item.status}
+                                onChange={e => {
+                                  const updated = [...structuredGoals];
+                                  updated[idx].status = e.target.value as any;
+                                  setStructuredGoals(updated);
+                                }}
+                                className={`px-2 py-1 rounded-lg text-xs font-bold border ${
+                                  item.status === 'alcancado'
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : item.status === 'em_andamento'
+                                    ? 'bg-sky-50 text-sky-800 border-sky-200'
+                                    : 'bg-slate-50 text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                <option value="a_iniciar">A Iniciar</option>
+                                <option value="em_andamento">Em Andamento</option>
+                                <option value="alcancado">Alcançado</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setStructuredGoals(prev => prev.filter((_, i) => i !== idx));
+                                }}
+                                className="p-1 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                title="Remover objetivo"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Objetivo Terapêutico Fonoaudiológico</label>
+                              <textarea
+                                rows={2}
+                                placeholder="Ex: Adequação da produção do fonema /s/ em posição medial..."
+                                value={item.goal}
+                                onChange={e => {
+                                  const updated = [...structuredGoals];
+                                  updated[idx].goal = e.target.value;
+                                  setStructuredGoals(updated);
+                                }}
+                                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-sky-500 focus:outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-1">Intervenções / Estratégias & Recursos</label>
+                              <textarea
+                                rows={2}
+                                placeholder="Ex: Treino proprioceptivo tátil, pistas visuais em espelho, bombardeio auditivo..."
+                                value={item.interventions}
+                                onChange={e => {
+                                  const updated = [...structuredGoals];
+                                  updated[idx].interventions = e.target.value;
+                                  setStructuredGoals(updated);
+                                }}
+                                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-sky-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Prazo Estimado / Número de Sessões</label>
+                            <input
+                              type="text"
+                              placeholder="Ex: 8 a 12 sessões, reavaliação em 3 meses"
+                              value={item.targetPeriod}
+                              onChange={e => {
+                                const updated = [...structuredGoals];
+                                updated[idx].targetPeriod = e.target.value;
+                                setStructuredGoals(updated);
+                              }}
+                              className="w-full max-w-sm px-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-sky-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* ORIENTAÇÕES CASA E ESCOLA */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Orientações Gerais para Casa e Escola</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Instruções para família e educadores: modelo correto sem punição, valorização da fala funcional, rotinas comunicativas..."
+                    value={planForm.homeSchoolGuidance}
+                    onChange={e => setPlanForm({ ...planForm, homeSchoolGuidance: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                  />
+                </div>
+
+                {/* HISTÓRICO DE PLANOS ANTERIORES */}
+                {treatmentPlans.length > 0 && (
+                  <div className="pt-4 border-t border-slate-200 space-y-3">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-slate-400" />
+                      Planos Fonoaudiológicos Anteriores ({treatmentPlans.length})
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      {treatmentPlans.map(tp => (
+                        <div key={tp.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800">{tp.title || 'Plano Terapêutico'}</span>
+                            <span className="text-[10px] text-slate-500">{tp.created_at ? new Date(tp.created_at).toLocaleDateString('pt-BR') : ''}</span>
+                          </div>
+                          {tp.referredBy && <p className="text-[11px] text-slate-500"><strong>Encaminhado por:</strong> {tp.referredBy}</p>}
+                          {tp.goals && <p className="text-slate-600 line-clamp-2"><strong>Metas:</strong> {tp.goals}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ABA: TESTES COMPLEMENTARES & ANEXOS */}
+            {activeTab === 'complementary' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-sky-600" />
+                      Testes Complementares & Anexos Fonoaudiológicos
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Cadastre testes específicos, protocolos externos, avaliações padronizadas e anexos de arquivos/fotos sem substituir os exames existentes.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCompTestModal(prev => !prev)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>{showNewCompTestModal ? 'Fechar Formulário' : 'Novo Teste Complementar'}</span>
+                  </button>
+                </div>
+
+                {/* FORMULÁRIO DE NOVO TESTE COMPLEMENTAR */}
+                {showNewCompTestModal && (
+                  <form onSubmit={handleSaveComplementaryTest} className="p-5 rounded-2xl bg-sky-50/40 border border-sky-200 space-y-4 text-xs">
+                    <div className="flex items-center justify-between pb-2 border-b border-sky-100">
+                      <h4 className="font-bold text-sky-900 text-sm">Registrar Teste Complementar / Avaliação</h4>
+                      <span className="text-[11px] text-sky-700 font-semibold">* Campos principais</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Nome do Teste / Protocolo *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ex: TDF, ABFW Vocabulário, PAC Simplificado..."
+                          value={compForm.testName}
+                          onChange={e => setCompForm({ ...compForm, testName: e.target.value })}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Data da Aplicação *</label>
+                        <input
+                          type="date"
+                          required
+                          value={compForm.testDate}
+                          onChange={e => setCompForm({ ...compForm, testDate: e.target.value })}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Encaminhado por (opcional):</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Neuropediatra, Otorrino, Escola..."
+                          value={compForm.referredBy}
+                          onChange={e => setCompForm({ ...compForm, referredBy: e.target.value })}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Resultado / Escore / Pontuação</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Percentil 65, Escore Z -1.2, Adequado..."
+                          value={compForm.resultScore}
+                          onChange={e => setCompForm({ ...compForm, resultScore: e.target.value })}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Parecer / Observações Clínicas</label>
+                        <input
+                          type="text"
+                          placeholder="Síntese dos achados fonoaudiológicos observados..."
+                          value={compForm.notes}
+                          onChange={e => setCompForm({ ...compForm, notes: e.target.value })}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:border-sky-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* UPLOAD DE ANEXO OU FOTO DO PROTOCOLO */}
+                    <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                      <span className="block text-xs font-bold text-slate-700">Anexo do Teste (Documento / Foto do Protocolo):</span>
+                      <FileImageUploader
+                        patientId={selectedPatientId}
+                        appointmentId={initialAppointmentId}
+                        category="fono_complementary"
+                        label="Anexar Foto ou Arquivo do Teste"
+                        buttonText="Selecionar Arquivo / Foto"
+                        onUploaded={(info: FileUploadedInfo) => {
+                          setCompForm(prev => ({
+                            ...prev,
+                            attachmentUrl: info.url || info.objectKey,
+                            attachmentName: info.originalFilename || info.filename || 'Anexo do Teste'
+                          }));
+                          showToast('Arquivo anexado com sucesso!', 'success');
+                        }}
+                        onRemoved={() => {
+                          setCompForm(prev => ({ ...prev, attachmentUrl: '', attachmentName: '' }));
+                        }}
+                      />
+                      {compForm.attachmentName && (
+                        <p className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Anexo selecionado: {compForm.attachmentName}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowNewCompTestModal(false)}
+                        className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={saving}
+                        className="px-5 py-2 text-xs font-bold rounded-xl text-white bg-sky-600 hover:bg-sky-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                      >
+                        {saving ? 'Salvando...' : 'Salvar Teste Complementar'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* LISTA DE TESTES COMPLEMENTARES CADASTRADOS */}
+                {complementaryTests.length === 0 ? (
+                  <div className="bg-slate-50/50 p-8 text-center rounded-2xl border border-slate-200 text-xs text-slate-400 space-y-2">
+                    <FileText className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p>Nenhum teste complementar ou protocolo registrado para este paciente.</p>
+                    <p className="text-[11px] text-slate-400">Clique em "+ Novo Teste Complementar" para registrar avaliações padronizadas ou anexar documentos externos.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {complementaryTests.map(test => (
+                      <div key={test.id} className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-sky-300 transition-all shadow-xs space-y-3 text-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-slate-900">{test.testName}</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
+                              {test.testDate ? new Date(test.testDate).toLocaleDateString('pt-BR') : 'Data n/d'}
+                            </span>
+                            {test.referredBy && (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                                Encaminhado por: {test.referredBy}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {test.resultScore && (
+                              <span className="font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs">
+                                Resultado: {test.resultScore}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteComplementaryTest(test.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                              title="Remover teste"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {test.notes && (
+                          <p className="text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <strong>Parecer Clínico:</strong> {test.notes}
+                          </p>
+                        )}
+
+                        {test.attachmentUrl && (
+                          <div className="flex items-center gap-2 pt-1">
+                            <Paperclip className="w-3.5 h-3.5 text-sky-600" />
+                            <a
+                              href={test.attachmentUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-sky-700 font-bold hover:underline inline-flex items-center gap-1"
+                            >
+                              <span>{test.attachmentName || 'Visualizar Anexo do Teste'}</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        )}
+
+                        {test.professionalName && (
+                          <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+                            Registrado por: <strong>{test.professionalName}</strong>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1288,6 +1886,22 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                     onChange={e => setConsultationTitle(e.target.value)}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold"
                   />
+                </div>
+
+                {/* RESUMO DOS DADOS DA SESSÃO */}
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-500 block">Encaminhado por:</span>
+                    <span className="font-semibold text-slate-800">{speechReferredBy || planReferredBy || 'Demanda espontânea'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-500 block">Quebra de Coarticulação:</span>
+                    <span className="font-semibold text-slate-800">{coarticulationBreakdown || 'Ausente'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-500 block">Metas no Plano:</span>
+                    <span className="font-semibold text-slate-800">{structuredGoals.length} objetivo(s) estruturado(s)</span>
+                  </div>
                 </div>
 
                 <div>

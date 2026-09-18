@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { validateAndFormatBrazilianPhone } from '../utils/phone-validator';
 
 export class PatientController {
   static list(req: Request, res: Response): void {
@@ -120,11 +121,38 @@ export class PatientController {
       } = req.body;
 
       const effectiveFullName = String(fullName || req.body.name || '').trim();
-      const effectivePhone = String(phone || req.body.telephone || '').trim() || '(00) 00000-0000';
+      const rawPhone = String(phone || req.body.telephone || '').trim();
 
       if (!effectiveFullName) {
         res.status(400).json({ error: 'Nome completo é obrigatório' });
         return;
+      }
+
+      const phoneValidation = validateAndFormatBrazilianPhone(rawPhone, true);
+      if (!phoneValidation.isValid) {
+        res.status(400).json({ error: phoneValidation.error || 'Telefone brasileiro inválido (verifique o DDD e a quantidade de dígitos)' });
+        return;
+      }
+      const effectivePhone = phoneValidation.formatted!;
+
+      let effectiveWhatsapp = effectivePhone;
+      if (whatsapp && String(whatsapp).trim() !== rawPhone) {
+        const wppVal = validateAndFormatBrazilianPhone(whatsapp, false);
+        if (!wppVal.isValid) {
+          res.status(400).json({ error: wppVal.error || 'WhatsApp inválido' });
+          return;
+        }
+        effectiveWhatsapp = wppVal.formatted || effectivePhone;
+      }
+
+      let effectiveEmergencyPhone = null;
+      if (emergencyPhone) {
+        const emVal = validateAndFormatBrazilianPhone(emergencyPhone, false);
+        if (!emVal.isValid) {
+          res.status(400).json({ error: emVal.error || 'Telefone de emergência inválido' });
+          return;
+        }
+        effectiveEmergencyPhone = emVal.formatted || null;
       }
 
       const patientId = 'pat-' + uuidv4().slice(0, 8);
@@ -147,14 +175,14 @@ export class PatientController {
         gender || req.body.sex || null,
         email || null,
         effectivePhone,
-        whatsapp || phone,
+        effectiveWhatsapp,
         address || null,
         city || null,
         state || null,
         zipCode || null,
         photoUrl || null,
         emergencyContact || null,
-        emergencyPhone || null,
+        effectiveEmergencyPhone,
         notesAdmin || null,
         isChild ? 1 : 0,
         petMetadata ? JSON.stringify(petMetadata) : null
@@ -209,6 +237,44 @@ export class PatientController {
       const effectivePhoto = photoUrl !== undefined ? photoUrl : (req.body.avatar_url !== undefined ? req.body.avatar_url : null);
       const effectiveGender = gender !== undefined ? gender : (req.body.sex !== undefined ? req.body.sex : null);
 
+      let effectivePhoneToUpdate = undefined;
+      if (phone !== undefined) {
+        const pVal = validateAndFormatBrazilianPhone(phone, true);
+        if (!pVal.isValid) {
+          res.status(400).json({ error: pVal.error || 'Telefone brasileiro inválido' });
+          return;
+        }
+        effectivePhoneToUpdate = pVal.formatted;
+      }
+
+      let effectiveWhatsappToUpdate = undefined;
+      if (whatsapp !== undefined) {
+        if (whatsapp) {
+          const wVal = validateAndFormatBrazilianPhone(whatsapp, false);
+          if (!wVal.isValid) {
+            res.status(400).json({ error: wVal.error || 'WhatsApp inválido' });
+            return;
+          }
+          effectiveWhatsappToUpdate = wVal.formatted;
+        } else {
+          effectiveWhatsappToUpdate = null;
+        }
+      }
+
+      let effectiveEmergencyPhoneToUpdate = undefined;
+      if (emergencyPhone !== undefined) {
+        if (emergencyPhone) {
+          const eVal = validateAndFormatBrazilianPhone(emergencyPhone, false);
+          if (!eVal.isValid) {
+            res.status(400).json({ error: eVal.error || 'Telefone de emergência inválido' });
+            return;
+          }
+          effectiveEmergencyPhoneToUpdate = eVal.formatted;
+        } else {
+          effectiveEmergencyPhoneToUpdate = null;
+        }
+      }
+
       const updateStmt = db.prepare(`
         UPDATE patients SET
           full_name = COALESCE(?, full_name),
@@ -243,15 +309,15 @@ export class PatientController {
         cpf || null,
         effectiveGender || null,
         email || null,
-        phone || null,
-        whatsapp || null,
+        effectivePhoneToUpdate !== undefined ? effectivePhoneToUpdate : null,
+        effectiveWhatsappToUpdate !== undefined ? effectiveWhatsappToUpdate : null,
         address || null,
         city || null,
         state || null,
         zipCode || null,
         effectivePhoto || null,
         emergencyContact || null,
-        emergencyPhone || null,
+        effectiveEmergencyPhoneToUpdate !== undefined ? effectiveEmergencyPhoneToUpdate : null,
         notesAdmin || null,
         isChild !== undefined ? (isChild ? 1 : 0) : null,
         active !== undefined ? (active ? 1 : 0) : null,

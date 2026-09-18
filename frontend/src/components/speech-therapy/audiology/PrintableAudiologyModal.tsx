@@ -206,6 +206,7 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
                 <div><b>Paciente:</b> {patient.full_name}</div>
                 <div><b>Data de Nasc.:</b> {patient.birth_date || 'Não informada'} | <b>Sexo:</b> {patient.gender || 'Não informado'}</div>
                 <div><b>CPF:</b> {patient.cpf || 'Não informado'}</div>
+                {record.referredBy && <div><b>Encaminhado por:</b> {record.referredBy}</div>}
               </div>
               <div className="space-y-1 text-right">
                 <div><b>Fonoaudiólogo(a):</b> {record.classification.professionalName || professional?.name || 'Profissional Responsável'}</div>

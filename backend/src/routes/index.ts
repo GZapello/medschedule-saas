@@ -329,6 +329,7 @@ api.get('/v1/clinical-records/:id', requireTenant, requireRole('clinic_admin', '
 api.get('/v1/clinical-records/:id/print', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.exportPdfHtml);
 api.post('/v1/clinical-records', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.create);
 api.put('/v1/clinical-records/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.update);
+api.post('/v1/clinical-records/:id/amendments', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.addAmendment);
 
 // ==========================================
 // REAVALIAÇÕES LONGITUDINAIS & METAS TERAPÊUTICAS
@@ -487,6 +488,10 @@ api.post('/v1/speech-therapy/audiology', requireTenant, requireRole('clinic_admi
 
 api.get('/v1/speech-therapy/treatment-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listTreatmentPlans);
 api.post('/v1/speech-therapy/treatment-plans', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveTreatmentPlan);
+
+api.get('/v1/speech-therapy/complementary-tests/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listComplementaryTests);
+api.post('/v1/speech-therapy/complementary-tests', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveComplementaryTest);
+api.delete('/v1/speech-therapy/complementary-tests/:id', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.deleteComplementaryTest);
 
 // Itens Novos: Matriz de Disfagia, Processos Fonológicos, Amostras de Fluência, CAA/AAC, Análise de Linguagem
 api.get('/v1/speech-therapy/dysphagia-matrix/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getDysphagiaMatrix);

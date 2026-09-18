@@ -188,9 +188,14 @@ const AppContent: React.FC = () => {
 
   const [authInitialAction, setAuthInitialAction] = useState<'login' | 'create-clinic' | 'register-user'>('login');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
-  const [isAIOpen, setIsAIOpen] = useState<boolean>(false);
   const [isNewApptOpen, setIsNewApptOpen] = useState<boolean>(false);
+  const [newApptPrefill, setNewApptPrefill] = useState<{ date?: string; time?: string } | undefined>(undefined);
   const [isNewPatientOpen, setIsNewPatientOpen] = useState<boolean>(false);
+
+  const handleOpenNewAppointment = (prefill?: { date?: string; time?: string }) => {
+    setNewApptPrefill(prefill);
+    setIsNewApptOpen(true);
+  };
 
   // Contexto ativo para a IA — rastreado via eventos de componentes filhos
   const [aiActivePatientId, setAiActivePatientId] = useState<string | undefined>(undefined);
@@ -198,6 +203,7 @@ const AppContent: React.FC = () => {
   const [aiInitialPrompt, setAiInitialPrompt] = useState<string | undefined>(undefined);
   const [aiInitialTab, setAiInitialTab] = useState<'chat' | 'audio_draft' | 'improve_text' | undefined>(undefined);
   const [aiAutoSend, setAiAutoSend] = useState<boolean>(false);
+  const [isAIOpen, setIsAIOpen] = useState<boolean>(false);
 
   // Escuta eventos de contexto disparados por componentes filhos (PatientsView, CalendarView, etc.)
   useEffect(() => {
@@ -803,13 +809,13 @@ const AppContent: React.FC = () => {
           {currentView === 'dashboard' && (
             <DashboardView
               onNavigate={setCurrentView}
-              onOpenNewAppointment={() => setIsNewApptOpen(true)}
+              onOpenNewAppointment={handleOpenNewAppointment}
               onOpenNewPatient={() => setIsNewPatientOpen(true)}
             />
           )}
 
           {currentView === 'calendar' && (
-            <CalendarView onOpenNewAppointment={() => setIsNewApptOpen(true)} />
+            <CalendarView onOpenNewAppointment={handleOpenNewAppointment} />
           )}
 
           {currentView === 'patients' && (
@@ -964,7 +970,11 @@ const AppContent: React.FC = () => {
       {/* Modais Globais */}
       <NewAppointmentModal
         isOpen={isNewApptOpen}
-        onClose={() => setIsNewApptOpen(false)}
+        onClose={() => {
+          setIsNewApptOpen(false);
+          setNewApptPrefill(undefined);
+        }}
+        initialPrefill={newApptPrefill}
         onSuccess={() => setCurrentView('calendar')}
       />
 

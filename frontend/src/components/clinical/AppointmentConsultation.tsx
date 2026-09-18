@@ -29,12 +29,8 @@ export function AppointmentConsultation({
     (appointment.clinical_module !== 'ZemdaBody' ? appointment.clinical_module : undefined) ||
     (initialModuleType !== 'ZemdaBody' ? initialModuleType : undefined);
 
-  // Aba ativa da consulta: 'records' (Prontuário/Evolução), 'specialized' (Módulo Especializado), 'zemda_body' (ZemdaBody)
-  const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>(() => {
-    if (appointment.clinical_module === 'ZemdaBody' || initialModuleType === 'ZemdaBody') return 'zemda_body';
-    if (['ZemdaOdonto', 'ZemdaNutri', 'ZemdaTO', 'ZemdaFono'].includes(effectiveModuleType)) return 'specialized';
-    return 'records';
-  });
+  // FLUXO DE ATENDIMENTO: "Iniciar atendimento" DEVE SEMPRE abrir o Prontuário / Evolução Clínica primeiro ('records')
+  const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>('records');
 
   useEffect(() => {
     ApiClient.get(`/v1/appointments/${appointment.id}/completion`)
@@ -192,7 +188,7 @@ export function AppointmentConsultation({
     );
   }
 
-  // Padrão: Prontuário / QuickConsultationModal com acesso ao ZemdaBody
+  // Padrão: Prontuário / QuickConsultationModal com acesso ao Módulo Especializado e ZemdaBody
   return (
     <QuickConsultationModal
       appointment={{
@@ -203,6 +199,15 @@ export function AppointmentConsultation({
       onClose={onClose}
       onFinished={onFinished}
       onOpenZemdaBody={() => setActiveTab('zemda_body')}
+      onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
+      specializedModuleName={
+        effectiveModuleType === 'ZemdaFono' ? 'ZemdaFono' :
+        effectiveModuleType === 'ZemdaOdonto' ? 'ZemdaOdonto' :
+        effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
+        effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
+        effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
+        (isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
+      }
     />
   );
 }
