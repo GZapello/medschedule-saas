@@ -10,6 +10,7 @@ import { isOccupationalTherapistOrClinicManager } from './occupational-therapy.c
 import { isSpeechTherapistOrClinicManager } from './speech-therapy.controller';
 import { isDentistOrClinicManager } from './dentistry.controller';
 import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
+import { hasPsychopedagogyAccess } from './psychopedagogy.controller';
 
 export class DocumentsController {
   static consultationStatus(req: Request, res: Response): void {
@@ -32,14 +33,22 @@ export class DocumentsController {
 
     let moduleType = resolveClinicalModule(appt, req.tenantId);
     if (!moduleType) {
-      const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(appt.id, req.tenantId) as { module_type?: string } | undefined;
+      const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' AND module_type != 'general' LIMIT 1").get(appt.id, req.tenantId) as { module_type?: string } | undefined;
       if (existingRec?.module_type) {
         moduleType = existingRec.module_type;
       }
     }
     if (!moduleType) {
       const text = [prof?.profession_id, prof?.profession_slug, prof?.profession_name, prof?.practice_areas, prof?.service_name].filter(Boolean).join(' ').toLowerCase();
-      if (text.includes('fono') || text.includes('crfa')) moduleType = 'ZemdaFono';
+      if (
+        prof?.profession_id === 'prof-psicopedagogo' ||
+        prof?.profession_id === 'prof-psicopedagogia' ||
+        prof?.profession_slug === 'psicopedagogo' ||
+        prof?.profession_slug === 'psicopedagogia' ||
+        text.includes('psicopedag') ||
+        text.includes('abpp')
+      ) moduleType = 'ZemdaPP';
+      else if (text.includes('fono') || text.includes('crfa')) moduleType = 'ZemdaFono';
       else if (text.includes('nutri') || text.includes('crn') || text.includes('diet')) moduleType = 'ZemdaNutri';
       else if (text.includes('ocupacional') || text.includes('terapia-ocupacional')) moduleType = 'ZemdaTO';
       else if (text.includes('odonto') || text.includes('dentis') || text.includes('cro')) moduleType = 'ZemdaOdonto';
@@ -538,7 +547,8 @@ export class DocumentsController {
 
       const moduleAccess: Record<string, (request: Request) => boolean> = {
         ZemdaNutri: isNutritionistOrClinicManager, ZemdaTO: isOccupationalTherapistOrClinicManager,
-        ZemdaFono: isSpeechTherapistOrClinicManager, ZemdaOdonto: isDentistOrClinicManager, ZemdaFisio: isPhysiotherapistOrClinicManager
+        ZemdaFono: isSpeechTherapistOrClinicManager, ZemdaOdonto: isDentistOrClinicManager, ZemdaFisio: isPhysiotherapistOrClinicManager,
+        ZemdaPP: (request: Request) => hasPsychopedagogyAccess(request, appt.patient_id)
       };
       if (evolution?.moduleType && evolution.moduleType !== 'general' && (!moduleAccess[evolution.moduleType] || !moduleAccess[evolution.moduleType](req))) {
         res.status(403).json({ error: 'Sem permissão para este módulo clínico.' }); return;

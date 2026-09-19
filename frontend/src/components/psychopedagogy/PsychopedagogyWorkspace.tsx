@@ -240,18 +240,18 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
         const [pat, profRes, assessRes, sessRes, domsRes, instsRes, plansRes, contactsRes, sharesRes] = await Promise.all([
           ApiClient.get<any>(`/v1/patients/${selectedPatientId}`),
           ApiClient.get<any>(`/v1/psychopedagogy/profile/${selectedPatientId}`).catch(() => null),
-          ApiClient.get<any>(`/v1/psychopedagogy/assessment/${selectedPatientId}`).catch(() => null),
+          ApiClient.get<any>(`/v1/psychopedagogy/assessments/${selectedPatientId}`).catch(() => null),
           ApiClient.get<any[]>(`/v1/psychopedagogy/sessions/${selectedPatientId}`).catch(() => []),
-          ApiClient.get<any[]>(`/v1/psychopedagogy/learning-domains/${selectedPatientId}`).catch(() => []),
+          ApiClient.get<any[]>(`/v1/psychopedagogy/domains/${selectedPatientId}`).catch(() => []),
           ApiClient.get<any[]>(`/v1/psychopedagogy/instruments/${selectedPatientId}`).catch(() => []),
-          ApiClient.get<any[]>(`/v1/psychopedagogy/intervention-plans/${selectedPatientId}`).catch(() => []),
+          ApiClient.get<any[]>(`/v1/psychopedagogy/plans/${selectedPatientId}`).catch(() => []),
           ApiClient.get<any[]>(`/v1/psychopedagogy/school-contacts/${selectedPatientId}`).catch(() => []),
           ApiClient.get<any[]>(`/v1/psychopedagogy/shares/${selectedPatientId}`).catch(() => [])
         ]);
 
         setPatientData(pat);
         if (profRes) setProfile(profRes);
-        if (assessRes) setAssessment(assessRes);
+        if (assessRes) setAssessment(Array.isArray(assessRes) ? (assessRes[0] || {}) : assessRes);
         setSessions(sessRes || []);
         setDomains(domsRes || []);
         setInstruments(instsRes || []);
@@ -273,7 +273,19 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     if (!selectedPatientId) return;
     try {
       setSaving(true);
-      await ApiClient.post(`/v1/psychopedagogy/profile/${selectedPatientId}`, profile);
+      await ApiClient.post('/v1/psychopedagogy/profile', {
+        patientId: selectedPatientId,
+        schoolName: profile.school_name || profile.schoolName,
+        schoolGrade: profile.grade_level || profile.school_grade || profile.schoolGrade,
+        schoolShift: profile.shift || profile.school_shift || profile.schoolShift,
+        schoolType: profile.school_type || profile.schoolType,
+        teacherName: profile.teacher_name || profile.teacherName,
+        coordinatorName: profile.coordinator_name || profile.coordinatorName,
+        pedagogicalComplaint: profile.main_complaint || profile.pedagogical_complaint || profile.pedagogicalComplaint,
+        referralSource: profile.referral_source || profile.referralSource,
+        specialNeedsNotes: profile.special_needs_notes || profile.specialNeedsNotes,
+        ...profile
+      });
       showToast('Perfil do aprendente salvo com sucesso!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar perfil.', 'error');
@@ -287,9 +299,11 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     if (!selectedPatientId) return;
     try {
       setSaving(true);
-      await ApiClient.post(`/v1/psychopedagogy/assessment/${selectedPatientId}`, {
-        ...assessment,
-        assessment_type: assessmentMode
+      await ApiClient.post('/v1/psychopedagogy/assessments', {
+        patientId: selectedPatientId,
+        appointmentId: initialAppointmentId,
+        mode: assessmentMode,
+        ...assessment
       });
       showToast('Avaliação e hipóteses diagnósticas salvas!', 'success');
     } catch (err: any) {
@@ -304,9 +318,16 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     if (!selectedPatientId) return;
     try {
       setSaving(true);
-      await ApiClient.post(`/v1/psychopedagogy/sessions/${selectedPatientId}`, {
+      await ApiClient.post('/v1/psychopedagogy/sessions', {
         ...newSession,
-        appointment_id: initialAppointmentId
+        patientId: selectedPatientId,
+        appointmentId: initialAppointmentId,
+        sessionDate: newSession.session_date,
+        sessionNumber: newSession.session_number,
+        activitiesPerformed: newSession.activities_developed,
+        studentEngagement: newSession.learner_reactions,
+        observations: newSession.results_observations,
+        nextSessionPlan: newSession.next_steps
       });
       showToast('Sessão psicopedagógica registrada!', 'success');
       const updated = await ApiClient.get<any[]>(`/v1/psychopedagogy/sessions/${selectedPatientId}`);
@@ -334,7 +355,15 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
     try {
       setSaving(true);
-      await ApiClient.post(`/v1/psychopedagogy/instruments/${selectedPatientId}`, newInstrument);
+      await ApiClient.post('/v1/psychopedagogy/instruments', {
+        patientId: selectedPatientId,
+        instrumentName: newInstrument.instrument_name,
+        instrumentCategory: newInstrument.instrument_category,
+        applicationDate: newInstrument.application_date,
+        percentileOrResult: newInstrument.results_summary,
+        observations: newInstrument.normative_reference,
+        ...newInstrument
+      });
       showToast('Instrumento psicopedagógico registrado!', 'success');
       const updated = await ApiClient.get<any[]>(`/v1/psychopedagogy/instruments/${selectedPatientId}`);
       setInstruments(updated || []);
@@ -348,7 +377,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
       setBlockedAlert(null);
     } catch (err: any) {
       // Se for bloqueio ético do SATEPSI/CFP
-      if (err.message && err.message.includes('CFP') || err.message.includes('SATEPSI') || err.message.includes('Psicologia')) {
+      if (err.message && (err.message.includes('CFP') || err.message.includes('SATEPSI') || err.message.includes('Psicologia'))) {
         setBlockedAlert(err.message);
       } else {
         showToast(err.message || 'Erro ao salvar instrumento.', 'error');
@@ -364,9 +393,13 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
     try {
       setSaving(true);
-      const res = await ApiClient.post<any>(`/v1/psychopedagogy/consultations/finish`, {
+      const res = await ApiClient.post<any>('/v1/psychopedagogy/sessions/finish', {
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId,
+        sessionDate: new Date().toISOString().split('T')[0],
+        title: 'Atendimento Psicopedagógico (ZemdaPP)',
+        clinicalEvolution: newSession.results_observations || newSession.activities_developed || newSession.objectives || 'Atendimento psicopedagógico finalizado.',
+        technicalNotes: newSession.next_steps || '',
         isSealed: true,
         useDigitalSignature: signatureMode === 'pades',
         sessionData: {

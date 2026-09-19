@@ -189,11 +189,20 @@ function extractFileIdFromPhotoInput(p: any, tenantId: string): string | null {
   if (!p) return null;
   let directId = p.file_id || p.fileId || null;
   if (directId && typeof directId === 'string' && directId.trim()) {
-    return directId.trim();
+    const cleanId = directId.trim();
+    try {
+      const attach = db.prepare("SELECT id FROM file_attachments WHERE id = ? AND (clinic_id = ? OR clinic_id = 'global')").get(cleanId, tenantId) as any;
+      if (attach && attach.id) return attach.id;
+    } catch (_) {}
+    return null;
   }
   const url = String(p.photo_url || '').trim();
   if (url.startsWith('att-')) {
-    return url;
+    try {
+      const attach = db.prepare("SELECT id FROM file_attachments WHERE id = ? AND (clinic_id = ? OR clinic_id = 'global')").get(url, tenantId) as any;
+      if (attach && attach.id) return attach.id;
+    } catch (_) {}
+    return null;
   }
   let objectKey: string | null = null;
   if (url.includes('token=')) {
@@ -213,7 +222,7 @@ function extractFileIdFromPhotoInput(p: any, tenantId: string): string | null {
 
   if (objectKey) {
     try {
-      const attach = db.prepare('SELECT id FROM file_attachments WHERE object_key = ? AND clinic_id = ?').get(objectKey, tenantId) as any;
+      const attach = db.prepare("SELECT id FROM file_attachments WHERE object_key = ? AND (clinic_id = ? OR clinic_id = 'global')").get(objectKey, tenantId) as any;
       if (attach && attach.id) return attach.id;
     } catch (_) {}
   }

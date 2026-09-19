@@ -1,5 +1,5 @@
 import { BillingView, BillingBanner, useBillingSummary } from './components/billing/BillingView';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { Navbar } from './components/common/Navbar';
@@ -106,6 +106,7 @@ const AppContent: React.FC = () => {
     currentTenant,
     loading,
     reloadSession,
+    isSuperAdmin,
     isPhysiotherapist,
     isZemdaFisio,
     isDentist,
@@ -216,6 +217,9 @@ const AppContent: React.FC = () => {
   const [aiAutoSend, setAiAutoSend] = useState<boolean>(false);
   const [isAIOpen, setIsAIOpen] = useState<boolean>(false);
 
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
   // Escuta eventos de contexto disparados por componentes filhos (PatientsView, CalendarView, etc.)
   useEffect(() => {
     const handlePatientContext = (e: Event) => {
@@ -243,7 +247,12 @@ const AppContent: React.FC = () => {
 
     const handleNavigate = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.view) setCurrentView(detail.view);
+      if (detail?.view) {
+        if ((detail.view === 'superadmin' || detail.view === 'audit') && currentUserRef.current?.role !== 'superadmin') {
+          return;
+        }
+        setCurrentView(detail.view);
+      }
     };
 
     window.addEventListener('zemda-ai-patient-context', handlePatientContext);
@@ -261,8 +270,10 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (currentUser?.role === 'superadmin') {
       setCurrentView('superadmin');
+    } else if (currentView === 'superadmin') {
+      setCurrentView('dashboard');
     }
-  }, [currentUser?.role]);
+  }, [currentUser?.role, currentView]);
 
   // Sincronização dinâmica de Metadados de SEO, Canonical e Google Analytics 4 na SPA
   useEffect(() => {
@@ -1013,7 +1024,7 @@ const AppContent: React.FC = () => {
 
           {currentView === 'settings' && <SettingsView />}
 
-          {currentView === 'superadmin' && <SuperAdminView />}
+          {currentView === 'superadmin' && isSuperAdmin && <SuperAdminView />}
         </main>
       </div>
 

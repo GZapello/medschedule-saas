@@ -98,6 +98,13 @@ function getNextWednesday() {
   return d.toISOString().split('T')[0];
 }
 
+function registerMockAttachment(id, clinicId, category = 'personal_assessment') {
+  db.prepare(`
+    INSERT INTO file_attachments (id, clinic_id, uploaded_by, object_key, original_filename, mime_type, file_size, category, created_at, updated_at)
+    VALUES (?, ?, 'system', ?, ?, 'image/jpeg', 1024, ?, datetime('now'), datetime('now'))
+  `).run(id, clinicId, `clinics/${clinicId}/photos/${id}.jpg`, `${id}.jpg`, category);
+}
+
 async function runAllTests() {
   const server = app.listen(3099);
   console.log('\n================================================================');
@@ -276,6 +283,19 @@ async function runAllTests() {
       ) VALUES (?, ?, 'AG-PP-001', ?, ?, ?, ?, ?, 'confirmed', datetime('now'), datetime('now'))
     `).run(ppApptId, tenantId, ppProfId, patientId, serviceId, `${testDate}T14:00:00`, `${testDate}T14:50:00`);
 
+    // Validação de segurança: Não-superadmin não pode acessar métricas administrativas globais
+    const metricsBlockRes = await makeRequest('GET', '/api/v1/admin/metrics', {
+      Authorization: `Bearer ${adminToken}`,
+      'X-Tenant-ID': tenantId
+    });
+    assert(metricsBlockRes.status === 403, 'Acesso a /v1/admin/metrics bloqueado (HTTP 403) para não-superadmin');
+
+    // Validação do utilitário clinical-module.ts
+    const { isPrimaryClinicalModule } = require('./dist/utils/clinical-module');
+    assert(isPrimaryClinicalModule('ZemdaPP') === true, 'isPrimaryClinicalModule reconhece ZemdaPP como primário');
+    assert(isPrimaryClinicalModule('general') === false, 'isPrimaryClinicalModule estritamente exclui general');
+    assert(isPrimaryClinicalModule('ZemdaBody') === false, 'isPrimaryClinicalModule estritamente exclui ZemdaBody');
+
     // Simulação da dedução de módulo usada em AppointmentConsultation.tsx & QuickConsultationModal.tsx
     const ppProfData = db.prepare(`
       SELECT p.*, prof.name as prof_name, prof.slug as prof_slug
@@ -305,6 +325,14 @@ async function runAllTests() {
       tenantId: tenantId
     });
 
+    // Validação da rota de status de consulta
+    const completionRes = await makeRequest('GET', `/api/v1/appointments/${ppApptId}/completion`, {
+      Authorization: `Bearer ${ppToken}`,
+      'X-Tenant-ID': tenantId
+    });
+    assert(completionRes.status === 200, 'GET /v1/appointments/:id/completion responde com HTTP 200');
+    assert(completionRes.body.moduleType === 'ZemdaPP', 'Status da consulta identifica moduleType = ZemdaPP para psicopedagogo');
+
     const ppProfileRes = await makeRequest('GET', `/api/v1/psychopedagogy/profile/${patientId}`, {
       Authorization: `Bearer ${ppToken}`,
       'X-Tenant-ID': tenantId
@@ -332,6 +360,19 @@ async function runAllTests() {
     const apptCheck = db.prepare('SELECT id, status FROM appointments WHERE id = ?').get(ppApptId);
     assert(apptCheck && apptCheck.status === 'confirmed', 'Atendimento na agenda continua ativo e consistente');
 
+    // Validação de finalização global com ZemdaPP (DocumentsController.finishConsultation)
+    const finishRes = await makeRequest('POST', `/api/v1/appointments/${ppApptId}/finish`, {
+      Authorization: `Bearer ${ppToken}`,
+      'X-Tenant-ID': tenantId
+    }, {
+      evolution: {
+        moduleType: 'ZemdaPP',
+        text: 'Atendimento psicopedagógico finalizado com evolução clínica.'
+      },
+      saveOnly: true
+    });
+    assert(finishRes.status === 200, 'Finalização/salvamento com ZemdaPP autorizada com sucesso (HTTP 200)');
+
     // =========================================================================
     // TESTE 6: Atendimento de outra profissão (ex.: Odonto) NÃO exibe ZemdaPP
     // =========================================================================
@@ -349,42 +390,32 @@ async function runAllTests() {
     assert(!isDentistPP, 'Profissional de Odontologia não é classificado como ZemdaPP');
 
     // =========================================================================
-    // TESTE 7: Profissional sem permissão do ZemdaBody tem rotas bloqueadas (403)
+    // TESTE 7: SuperAdmin ou usuário não-clínico bloqueado do ZemdaBody (403)
     // =========================================================================
-    console.log('\n[TESTE 7] Profissional sem permissão do ZemdaBody -> rotas bloqueadas (HTTP 403)');
-    const noBodyUserId = 'user-nobody-' + uuidv4().slice(0, 8);
+    console.log('\n[TESTE 7] SuperAdmin ou usuário não-clínico bloqueado do ZemdaBody (HTTP 403)');
+    const superAdminUserId = 'user-super-' + uuidv4().slice(0, 8);
     db.prepare(`
-      INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, created_at)
-      VALUES (?, ?, 'Dr. Sem ZemdaBody', 'sem.body@zemda.com', 'hash_test', 'professional', 'active', datetime('now'))
-    `).run(noBodyUserId, tenantId);
+      INSERT INTO users (id, name, email, password_hash, role, status, created_at)
+      VALUES (?, 'Super Administrador', 'superadmin@zemda.com', 'hash_test', 'superadmin', 'active', datetime('now'))
+    `).run(superAdminUserId);
 
-    db.prepare(`
-      INSERT INTO clinic_users (id, tenant_id, user_id, role, status, zemda_body_enabled, permissions_json, created_at)
-      VALUES (?, ?, ?, 'professional', 'active', 0, '[]', datetime('now'))
-    `).run('cu-' + uuidv4().slice(0, 8), tenantId, noBodyUserId);
-
-    const noBodyToken = generateToken({
-      userId: noBodyUserId,
-      email: 'sem.body@zemda.com',
-      role: 'professional',
-      tenantId: tenantId
+    const superAdminToken = generateToken({
+      userId: superAdminUserId,
+      email: 'superadmin@zemda.com',
+      role: 'superadmin'
     });
 
-    const bodyAccessBlockedRes = await makeRequest('GET', `/api/v1/body-assessments/patient/${patientId}`, {
-      Authorization: `Bearer ${noBodyToken}`,
+    const superAccessBlockedRes = await makeRequest('GET', `/api/v1/body-assessments/patient/${patientId}`, {
+      Authorization: `Bearer ${superAdminToken}`,
       'X-Tenant-ID': tenantId
     });
 
-    assert(bodyAccessBlockedRes.status === 403, 'Acesso ao ZemdaBody bloqueado com HTTP 403 para profissional não autorizado');
-    assert(
-      (bodyAccessBlockedRes.body.error || '').toLowerCase().includes('não autorizado'),
-      'Mensagem clara de acesso não autorizado retornada'
-    );
+    assert(superAccessBlockedRes.status === 403, 'Acesso ao ZemdaBody bloqueado com HTTP 403 para superadmin (dados clínicos restritos à clínica)');
 
     // =========================================================================
-    // TESTE 8: Profissional com permissão do ZemdaBody acessa normalmente
+    // TESTE 8: Profissional clínico com acesso universal ao ZemdaBody (HTTP 200)
     // =========================================================================
-    console.log('\n[TESTE 8] Profissional com autorização do gestor acessa ZemdaBody normalmente');
+    console.log('\n[TESTE 8] Profissional clínico acessa ZemdaBody universalmente sem travas manuais');
     const withBodyUserId = 'user-withbody-' + uuidv4().slice(0, 8);
     db.prepare(`
       INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, created_at)
@@ -393,7 +424,7 @@ async function runAllTests() {
 
     db.prepare(`
       INSERT INTO clinic_users (id, tenant_id, user_id, role, status, zemda_body_enabled, permissions_json, created_at)
-      VALUES (?, ?, ?, 'professional', 'active', 1, '["access_zemda_body"]', datetime('now'))
+      VALUES (?, ?, ?, 'professional', 'active', 1, '[]', datetime('now'))
     `).run('cu-' + uuidv4().slice(0, 8), tenantId, withBodyUserId);
 
     const withBodyToken = generateToken({
@@ -407,7 +438,7 @@ async function runAllTests() {
       Authorization: `Bearer ${withBodyToken}`,
       'X-Tenant-ID': tenantId
     });
-    assert(bodyAccessAllowedRes.status === 200, 'Acesso liberado ao ZemdaBody com HTTP 200');
+    assert(bodyAccessAllowedRes.status === 200, 'Acesso liberado universalmente ao ZemdaBody com HTTP 200');
 
     // =========================================================================
     // TESTE 9: [ Ver Prontuários Anteriores ] lista histórico decrescente com selo
@@ -478,6 +509,11 @@ async function runAllTests() {
     const fileRight = 'att-right-' + uuidv4().slice(0, 8);
     const fileLeft = 'att-left-' + uuidv4().slice(0, 8);
 
+    registerMockAttachment(fileFront, tenantId, 'personal_assessment');
+    registerMockAttachment(fileBack, tenantId, 'personal_assessment');
+    registerMockAttachment(fileRight, tenantId, 'personal_assessment');
+    registerMockAttachment(fileLeft, tenantId, 'personal_assessment');
+
     const assessRes1 = await makeRequest('POST', '/api/v1/personal/assessments', {
       Authorization: `Bearer ${ptToken}`,
       'X-Tenant-ID': tenantId
@@ -510,11 +546,31 @@ async function runAllTests() {
     const allHaveFileId = savedPhotos1.every(p => !!p.file_id);
     assert(allHaveFileId, 'Todas as 4 fotos persistem o file_id do R2');
 
+    // Validação de segurança: extractFileIdFromPhotoInput rejeita file_id não existente em file_attachments
+    const fakeFileId = 'att-fake-unregistered-' + uuidv4().slice(0, 6);
+    const assessResFake = await makeRequest('POST', '/api/v1/personal/assessments', {
+      Authorization: `Bearer ${ptToken}`,
+      'X-Tenant-ID': tenantId
+    }, {
+      patient_id: patientId,
+      assessment_date: '2026-09-02',
+      weight: 80,
+      height: 180,
+      photos: [
+        { photo_type: 'front', file_id: fakeFileId, photo_url: '' }
+      ]
+    });
+    assert(assessResFake.status === 201, 'Requisição com ID não registrado processada (HTTP 201)');
+    const fakeInDb = db.prepare('SELECT id FROM personal_assessment_photos WHERE file_id = ?').get(fakeFileId);
+    assert(!fakeInDb, 'extractFileIdFromPhotoInput rejeita ID arbitrário não registrado em file_attachments');
+
     // =========================================================================
     // TESTE 11: Reavaliação física preserva fotos anteriores e cria novo histórico
     // =========================================================================
     console.log('\n[TESTE 11] Reavaliação física no ZemdaPersonal preserva histórico fotográfico');
     const fileFront2 = 'att-front2-' + uuidv4().slice(0, 8);
+    registerMockAttachment(fileFront2, tenantId, 'personal_assessment');
+
     const assessRes2 = await makeRequest('POST', '/api/v1/personal/assessments', {
       Authorization: `Bearer ${ptToken}`,
       'X-Tenant-ID': tenantId
@@ -545,6 +601,8 @@ async function runAllTests() {
     console.log('\n[TESTE 12] Exercício no ZemdaPersonal com file_id: adicionar, trocar e remover');
     const exFile1 = 'att-ex-foto1-' + uuidv4().slice(0, 8);
     const exFile2 = 'att-ex-foto2-' + uuidv4().slice(0, 8);
+    registerMockAttachment(exFile1, tenantId, 'exercises');
+    registerMockAttachment(exFile2, tenantId, 'exercises');
 
     // Passo 1: Adicionar exercício com foto
     const createExRes = await makeRequest('POST', '/api/v1/personal/exercises', {
@@ -634,7 +692,15 @@ async function runAllTests() {
     const userFalseId = regZemdaBodyFalse.body.user.id;
     const clinicFalse = db.prepare('SELECT zemda_body_enabled FROM clinic_users WHERE user_id = ?').get(userFalseId);
     assert(clinicFalse && clinicFalse.zemda_body_enabled === 0, 'zemda_body_enabled = 0 persistido no banco');
-    assert(regZemdaBodyFalse.body.user.zemdaBodyEnabled === false, 'user.zemdaBodyEnabled === false retornado no payload');
+    assert(regZemdaBodyFalse.body.user.zemdaBodyEnabled === false, 'user.zemdaBodyEnabled === false retornado no payload de cadastro');
+
+    // Validação de acesso universal ao fazer login como usuário clínico
+    const loginFalseRes = await makeRequest('POST', '/api/v1/auth/login', {}, {
+      email: regZemdaBodyFalse.body.user.email,
+      password: 'SenhaForte123@'
+    });
+    assert(loginFalseRes.status === 200, 'Login do gestor realizado com sucesso (HTTP 200)');
+    assert(loginFalseRes.body.user.zemdaBodyEnabled === true, 'No login, usuário clínico possui ZemdaBody universalmente disponível');
 
   } catch (error) {
     console.error('Erro fatal durante execução dos testes:', error);

@@ -517,18 +517,26 @@ api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('
 // ==========================================
 api.get('/v1/psychopedagogy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.getProfile);
 api.post('/v1/psychopedagogy/profile', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveProfile);
+api.post('/v1/psychopedagogy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveProfile);
 api.get('/v1/psychopedagogy/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listAssessments);
+api.get('/v1/psychopedagogy/assessment/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listAssessments);
 api.post('/v1/psychopedagogy/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveAssessment);
+api.post('/v1/psychopedagogy/assessment/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveAssessment);
 api.get('/v1/psychopedagogy/domains/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listDomains);
+api.get('/v1/psychopedagogy/learning-domains/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listDomains);
 api.post('/v1/psychopedagogy/domains', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveDomain);
 api.get('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listSessions);
 api.post('/v1/psychopedagogy/sessions', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSession);
+api.post('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSession);
 api.post('/v1/psychopedagogy/sessions/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.finishSession);
+api.post('/v1/psychopedagogy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.finishSession);
 api.get('/v1/psychopedagogy/plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listPlans);
+api.get('/v1/psychopedagogy/intervention-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listPlans);
 api.post('/v1/psychopedagogy/plans', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.savePlan);
 api.post('/v1/psychopedagogy/goals', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveGoal);
 api.get('/v1/psychopedagogy/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listInstruments);
 api.post('/v1/psychopedagogy/instruments', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveInstrument);
+api.post('/v1/psychopedagogy/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveInstrument);
 api.get('/v1/psychopedagogy/school-contacts/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listSchoolContacts);
 api.post('/v1/psychopedagogy/school-contacts', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSchoolContact);
 api.get('/v1/psychopedagogy/institutional-cases', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listInstitutionalCases);

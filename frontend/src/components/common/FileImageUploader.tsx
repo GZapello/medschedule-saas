@@ -297,8 +297,9 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
 
       const savedFile = completeResponse.file;
 
-      // Exclui anexo anterior substituído para não duplicar no storage
-      if (previousTarget && previousTarget !== finalObjectKey && previousTarget !== savedFile.id) {
+      // Exclui anexo anterior substituído para não duplicar no storage (mas NUNCA exclui de avaliações físicas históricas)
+      const isHistoricalAssessment = category === 'personal_assessment' || category?.startsWith('personal_assessment');
+      if (previousTarget && previousTarget !== finalObjectKey && previousTarget !== savedFile.id && !isHistoricalAssessment) {
         try {
           await ApiClient.delete(`/files/${encodeURIComponent(previousTarget)}`);
         } catch (_) {}
@@ -359,8 +360,15 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         setViewerUrl(freshUrl);
         setCurrentUrl(freshUrl);
       } catch (err: any) {
-        console.warn('[FileImageUploader] Falha ao carregar visualização por fileId:', err);
-        setErrorMessage('Não foi possível carregar a imagem para visualização.');
+        console.warn('[FileImageUploader] Falha na 1ª tentativa ao carregar visualização, tentando novamente...', err);
+        try {
+          const retryUrl = await fetchFreshFileUrl(currentFileId, true);
+          setViewerUrl(retryUrl);
+          setCurrentUrl(retryUrl);
+        } catch (retryErr: any) {
+          console.error('[FileImageUploader] Falha ao carregar visualização por fileId:', retryErr);
+          setErrorMessage('Não foi possível carregar a imagem para visualização.');
+        }
       } finally {
         setIsLoadingViewUrl(false);
       }

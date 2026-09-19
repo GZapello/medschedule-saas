@@ -289,7 +289,7 @@ export class AuthController {
         isManagerUser || (isProfessionalUser && (cuRow?.zemda_personal_enabled === 1 || userPermissions.includes('access_zemda_personal')))
       );
       const zemdaBodyEnabled = user.role !== 'superadmin' && (
-        cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
+        user.role === 'clinic_admin' || user.role === 'professional' || cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
       );
 
       const needsLegalAcceptance = user.role !== 'superadmin' && (
@@ -526,7 +526,7 @@ export class AuthController {
         isManagerUser || (isProfessionalUser && (cuRow?.zemda_personal_enabled === 1 || userPermissions.includes('access_zemda_personal')))
       );
       const zemdaBodyEnabled = user.role !== 'superadmin' && (
-        cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
+        user.role === 'clinic_admin' || user.role === 'professional' || cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
       );
 
       const needsLegalAcceptance = user.role !== 'superadmin' && (

@@ -98,7 +98,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   } = useAuth();
   const { showToast } = useToast();
 
-  const effectiveModule = moduleType || appointment.clinical_module;
+  const effectiveModule = (moduleType && moduleType !== 'general' ? moduleType : undefined) ||
+    (appointment.clinical_module && appointment.clinical_module !== 'general' && appointment.clinical_module !== 'ZemdaBody' ? appointment.clinical_module : undefined);
 
   const isAppointmentPP =
     effectiveModule === 'ZemdaPP' ||

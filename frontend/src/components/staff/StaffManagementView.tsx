@@ -43,7 +43,6 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas' },
   { id: 'view_reports', label: 'Acessar relatórios e exportar planilhas' },
   { id: 'manage_settings', label: 'Alterar configurações da clínica' },
-  { id: 'access_zemda_body', label: 'ZemdaBody (Mapa Corporal): Acesso permitido' },
   { id: 'access_zemda_personal', label: 'ZemdaPersonal (Treinamento & Personal): Acesso permitido' }
 ];
 
@@ -1075,42 +1074,7 @@ export const StaffManagementView: React.FC = () => {
                   const currentPerms = editingPermissionsUser.permissions || [];
                   const isChecked = currentPerms.includes(p.id);
 
-                  if (p.id === 'access_zemda_body') {
-                    return (
-                      <div
-                        key={p.id}
-                        className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl space-y-1.5 my-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-extrabold uppercase tracking-wide text-indigo-900">
-                            Mapeamento Corporal (ZemdaBody)
-                          </span>
-                        </div>
-                        <label className="flex items-center gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={e => {
-                              const updated = e.target.checked
-                                ? [...currentPerms, p.id]
-                                : currentPerms.filter((id: string) => id !== p.id);
-                              setEditingPermissionsUser({
-                                ...editingPermissionsUser,
-                                permissions: updated
-                              });
-                            }}
-                            className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
-                          />
-                          <span className="text-xs font-bold text-indigo-950">
-                            ZemdaBody: Acesso permitido
-                          </span>
-                        </label>
-                        <p className="text-[11px] text-indigo-700 pl-6.5 leading-relaxed">
-                          Habilita o mapa corporal anatômico de pontos de dor, histórico evolutivo e avaliações corporais na clínica.
-                        </p>
-                      </div>
-                    );
-                  }
+
 
                   return (
                     <label

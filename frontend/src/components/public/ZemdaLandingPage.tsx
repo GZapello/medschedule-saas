@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PublicHeader } from './PublicHeader';
 import { PublicFooter } from './PublicFooter';
+import { RevealOnScroll } from './RevealOnScroll';
 import {
   CheckCircle2,
   ArrowRight,
@@ -242,100 +243,104 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[550px] bg-gradient-to-b from-teal-50/70 via-emerald-50/40 to-transparent blur-3xl -z-10 pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-4xl mx-auto text-center space-y-6">
-            {/* Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-semibold shadow-xs">
-              <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-              <span>SaaS Especializado em Saúde • Web & Desktop</span>
+          <RevealOnScroll>
+            <div className="max-w-4xl mx-auto text-center space-y-6">
+              {/* Pill Badge */}
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-semibold shadow-xs">
+                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                <span>SaaS Especializado em Saúde • Web & Desktop</span>
+              </div>
+
+              {/* Título Principal */}
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-950 leading-[1.15]">
+                Um sistema.{' '}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600">
+                  Toda a sua clínica.
+                </span>{' '}
+                <br className="hidden sm:inline" />
+                Uma experiência feita para a sua profissão.
+              </h1>
+
+              {/* Subtítulo */}
+              <p className="text-base sm:text-xl text-slate-600 font-normal leading-relaxed max-w-3xl mx-auto">
+                Gestão, prontuário, agenda, financeiro e ferramentas clínicas especializadas em uma única plataforma.
+              </p>
+
+              {/* Botões de Ação */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
+                <button
+                  type="button"
+                  onClick={onRegisterClinic}
+                  className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-lg shadow-teal-600/25 hover:shadow-xl hover:shadow-teal-600/35 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>Começar agora</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('funcionalidades')}
+                  className="w-full sm:w-auto px-8 py-4 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl shadow-xs hover:border-slate-300 transition-all cursor-pointer"
+                >
+                  Ver funcionalidades
+                </button>
+              </div>
+
+              {/* Badges de Confiança */}
+              <div className="pt-6 flex flex-wrap items-center justify-center gap-y-2 gap-x-6 text-xs font-semibold text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                  Fácil de usar
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                  Seguro e confiável
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                  Suporte humanizado
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                  Mais tempo para seus pacientes
+                </span>
+              </div>
             </div>
-
-            {/* Título Principal */}
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-950 leading-[1.15]">
-              Um sistema.{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600">
-                Toda a sua clínica.
-              </span>{' '}
-              <br className="hidden sm:inline" />
-              Uma experiência feita para a sua profissão.
-            </h1>
-
-            {/* Subtítulo */}
-            <p className="text-base sm:text-xl text-slate-600 font-normal leading-relaxed max-w-3xl mx-auto">
-              Gestão, prontuário, agenda, financeiro e ferramentas clínicas especializadas em uma única plataforma.
-            </p>
-
-            {/* Botões de Ação */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-              <button
-                type="button"
-                onClick={onRegisterClinic}
-                className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-lg shadow-teal-600/25 hover:shadow-xl hover:shadow-teal-600/35 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>Começar agora</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => scrollToSection('funcionalidades')}
-                className="w-full sm:w-auto px-8 py-4 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl shadow-xs hover:border-slate-300 transition-all cursor-pointer"
-              >
-                Ver funcionalidades
-              </button>
-            </div>
-
-            {/* Badges de Confiança */}
-            <div className="pt-6 flex flex-wrap items-center justify-center gap-y-2 gap-x-6 text-xs font-semibold text-slate-600">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                Fácil de usar
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                Seguro e confiável
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                Suporte humanizado
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                Mais tempo para seus pacientes
-              </span>
-            </div>
-          </div>
+          </RevealOnScroll>
 
           {/* Realistic Desktop / Laptop Mockup Frame (NO mobile/cellphone!) */}
-          <div className="mt-14 max-w-5xl mx-auto">
-            <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200/90 via-slate-100 to-slate-200/60 shadow-2xl shadow-slate-300/60 border border-slate-300/80">
-              {/* Laptop Screen Bezel */}
-              <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
-                {/* Top Camera Notch / Bar */}
-                <div className="h-6 bg-slate-900/95 flex items-center justify-center px-4 border-b border-slate-800 relative">
-                  <div className="flex items-center gap-1.5 absolute left-4">
-                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+          <RevealOnScroll delayMs={150}>
+            <div className="mt-14 max-w-5xl mx-auto">
+              <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200/90 via-slate-100 to-slate-200/60 shadow-2xl shadow-slate-300/60 border border-slate-300/80">
+                {/* Laptop Screen Bezel */}
+                <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
+                  {/* Top Camera Notch / Bar */}
+                  <div className="h-6 bg-slate-900/95 flex items-center justify-center px-4 border-b border-slate-800 relative">
+                    <div className="flex items-center gap-1.5 absolute left-4">
+                      <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                    </div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700" />
                   </div>
-                  <div className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700" />
+
+                  {/* Dashboard Image Display */}
+                  <div className="relative bg-white aspect-[16/10] sm:aspect-[16/9.5] overflow-hidden">
+                    <img
+                      src="/landing/gestao-completa-mockup.jpg"
+                      alt="Zemda Dashboard Desktop"
+                      className="w-full h-full object-cover object-top"
+                    />
+                  </div>
                 </div>
 
-                {/* Dashboard Image Display */}
-                <div className="relative bg-white aspect-[16/10] sm:aspect-[16/9.5] overflow-hidden">
-                  <img
-                    src="/landing/gestao-completa-mockup.jpg"
-                    alt="Zemda Dashboard Desktop"
-                    className="w-full h-full object-cover object-top"
-                  />
+                {/* Laptop Base Stand / Hinge */}
+                <div className="h-3 sm:h-4 bg-gradient-to-b from-slate-300 to-slate-400 rounded-b-2xl mx-12 sm:mx-20 shadow-md flex items-center justify-center">
+                  <div className="w-16 sm:w-24 h-1 bg-slate-400/80 rounded-full" />
                 </div>
-              </div>
-
-              {/* Laptop Base Stand / Hinge */}
-              <div className="h-3 sm:h-4 bg-gradient-to-b from-slate-300 to-slate-400 rounded-b-2xl mx-12 sm:mx-20 shadow-md flex items-center justify-center">
-                <div className="w-16 sm:w-24 h-1 bg-slate-400/80 rounded-full" />
               </div>
             </div>
-          </div>
+          </RevealOnScroll>
         </div>
       </section>
 
@@ -346,33 +351,36 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           {/* Header da Seção */}
-          <div className="text-center max-w-3xl mx-auto space-y-4">
-            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              O Zemda entende a sua profissão
-            </h2>
-            <p className="text-base text-slate-600 leading-relaxed">
-              Soluções personalizadas para diferentes áreas da saúde, com as ferramentas que você realmente precisa.
-            </p>
+          <RevealOnScroll>
+            <div className="text-center max-w-3xl mx-auto space-y-4">
+              <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+                O Zemda entende a sua profissão
+              </h2>
+              <p className="text-base text-slate-600 leading-relaxed">
+                Soluções personalizadas para diferentes áreas da saúde, com as ferramentas que você realmente precisa.
+              </p>
 
-            {/* Badges de Destaque */}
-            <div className="pt-2 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
-              <span className="px-3.5 py-1.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/70 flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-teal-600" />
-                Feito para a sua rotina
-              </span>
-              <span className="px-3.5 py-1.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/70 flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-teal-600" />
-                Evolui com a sua área
-              </span>
-              <span className="px-3.5 py-1.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/70 flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-teal-600" />
-                Mais tempo para o que importa
-              </span>
+              {/* Badges de Destaque */}
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
+                <span className="px-3.5 py-1.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/70 flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-teal-600" />
+                  Feito para a sua rotina
+                </span>
+                <span className="px-3.5 py-1.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/70 flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-teal-600" />
+                  Evolui com a sua área
+                </span>
+                <span className="px-3.5 py-1.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/70 flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-teal-600" />
+                  Mais tempo para o que importa
+                </span>
+              </div>
             </div>
-          </div>
+          </RevealOnScroll>
 
           {/* Grid de Cards das 8 Áreas Profissionais */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <RevealOnScroll delayMs={100}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {professionalAreas.map(area => {
               const IconComp = area.icon;
               const cardHref = area.id === 'body' ? '/#zemdabody' : `/${area.seoSlug}`;
@@ -422,24 +430,27 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 </a>
               );
             })}
-          </div>
+            </div>
+          </RevealOnScroll>
 
           {/* Destaque Obrigatório: Regra de Plano e Profissão */}
-          <div className="max-w-3xl mx-auto rounded-2xl bg-gradient-to-r from-teal-50 via-emerald-50/50 to-teal-50 border border-teal-200/70 p-5 text-center shadow-xs">
-            <p className="text-sm sm:text-base font-bold text-teal-950">
-              O plano define a quantidade de acessos e a profissão de cada usuário define o módulo liberado.
-            </p>
-            <p className="text-xs text-teal-800 mt-1">
-              Diferentes profissões na mesma clínica? Cada membro acessa os recursos específicos de sua área mantendo a gestão unificada.
-            </p>
-          </div>
+          <RevealOnScroll delayMs={150}>
+            <div className="max-w-3xl mx-auto rounded-2xl bg-gradient-to-r from-teal-50 via-emerald-50/50 to-teal-50 border border-teal-200/70 p-5 text-center shadow-xs">
+              <p className="text-sm sm:text-base font-bold text-teal-950">
+                O plano define a quantidade de acessos e a profissão de cada usuário define o módulo liberado.
+              </p>
+              <p className="text-xs text-teal-800 mt-1">
+                Diferentes profissões na mesma clínica? Cada membro acessa os recursos específicos de sua área mantendo a gestão unificada.
+              </p>
+            </div>
 
-          {/* Slogan Inferior */}
-          <div className="text-center pt-2">
-            <p className="text-xs uppercase tracking-widest font-bold text-slate-400">
-              Diferentes profissões. A mesma essência. Mais saúde para todos.
-            </p>
-          </div>
+            {/* Slogan Inferior */}
+            <div className="text-center pt-4">
+              <p className="text-xs uppercase tracking-widest font-bold text-slate-400">
+                Diferentes profissões. A mesma essência. Mais saúde para todos.
+              </p>
+            </div>
+          </RevealOnScroll>
         </div>
       </section>
 
@@ -450,23 +461,26 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
           {/* Header */}
-          <div className="text-center max-w-3xl mx-auto space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
-              Gestão Completa
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
-              Toda a sua clínica em um só lugar
-            </h2>
-            <p className="text-base text-slate-600 leading-relaxed">
-              Do atendimento ao financeiro, o Zemda centraliza tudo o que você precisa para uma gestão mais simples, organizada e eficiente.
-            </p>
-          </div>
+          <RevealOnScroll>
+            <div className="text-center max-w-3xl mx-auto space-y-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
+                Gestão Completa
+              </span>
+              <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
+                Toda a sua clínica em um só lugar
+              </h2>
+              <p className="text-base text-slate-600 leading-relaxed">
+                Do atendimento ao financeiro, o Zemda centraliza tudo o que você precisa para uma gestão mais simples, organizada e eficiente.
+              </p>
+            </div>
+          </RevealOnScroll>
 
           {/* Grid com Laptop Desktop no Centro e Features nas laterais (Como na imagem 1) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            {/* Coluna Esquerda: 4 Features */}
-            <div className="lg:col-span-3 space-y-4">
-              {managementFeatures
+          <RevealOnScroll delayMs={100}>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+              {/* Coluna Esquerda: 4 Features */}
+              <div className="lg:col-span-3 space-y-4">
+                {managementFeatures
                 .filter(f => f.side === 'left')
                 .map((feature, idx) => {
                   const IconComp = feature.icon;
@@ -542,43 +556,46 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                     </div>
                   );
                 })}
+              </div>
             </div>
-          </div>
+          </RevealOnScroll>
 
           {/* CTA & Badges da Seção */}
-          <div className="text-center space-y-4 pt-4">
-            <button
-              type="button"
-              onClick={onRegisterClinic}
-              className="inline-flex items-center gap-2 px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-lg shadow-teal-600/25 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <span>Começar agora</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+          <RevealOnScroll delayMs={150}>
+            <div className="text-center space-y-4 pt-4">
+              <button
+                type="button"
+                onClick={onRegisterClinic}
+                className="inline-flex items-center gap-2 px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-lg shadow-teal-600/25 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span>Começar agora</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
 
-            <div className="flex flex-wrap items-center justify-center gap-y-2 gap-x-6 text-xs font-semibold text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                Fácil de usar
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                Seguro e confiável
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                Suporte humanizado
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                Mais tempo para seus pacientes
-              </span>
+              <div className="flex flex-wrap items-center justify-center gap-y-2 gap-x-6 text-xs font-semibold text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                  Fácil de usar
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                  Seguro e confiável
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                  Suporte humanizado
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                  Mais tempo para seus pacientes
+                </span>
+              </div>
+
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 pt-2">
+                Zemda • Saúde e Gestão em Harmonia
+              </p>
             </div>
-
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 pt-2">
-              Zemda • Saúde e Gestão em Harmonia
-            </p>
-          </div>
+          </RevealOnScroll>
         </div>
       </section>
 
@@ -591,148 +608,152 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             {/* Texto & Destaques */}
             <div className="lg:col-span-5 space-y-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-bold uppercase tracking-wider">
-                <Crosshair className="w-3.5 h-3.5 text-teal-600" />
-                <span>ZemdaBody</span>
-              </div>
+              <RevealOnScroll>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-bold uppercase tracking-wider">
+                  <Crosshair className="w-3.5 h-3.5 text-teal-600" />
+                  <span>ZemdaBody</span>
+                </div>
 
-              <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">
-                Seu paciente, visualizado de outra forma.
-              </h2>
+                <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight mt-4">
+                  Seu paciente, visualizado de outra forma.
+                </h2>
 
-              <p className="text-base text-slate-600 leading-relaxed">
-                Avaliação corporal completa, de forma simples e visual. Registre, acompanhe e mostre a evolução dos seus pacientes com o ZemdaBody.
-              </p>
+                <p className="text-base text-slate-600 leading-relaxed mt-2">
+                  Avaliação corporal completa, de forma simples e visual. Registre, acompanhe e mostre a evolução dos seus pacientes com o ZemdaBody.
+                </p>
 
-              <div className="space-y-4 pt-2">
-                {/* 1. Mapas corporais interativos */}
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
-                    <Crosshair className="w-5 h-5" />
+                <div className="space-y-4 pt-4">
+                  {/* 1. Mapas corporais interativos */}
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
+                      <Crosshair className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Mapas corporais interativos
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Registre avaliações de forma visual e intuitiva diretamente na anatomia humana.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">
-                      Mapas corporais interativos
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Registre avaliações de forma visual e intuitiva diretamente na anatomia humana.
-                    </p>
+
+                  {/* 2. Histórico e evolução */}
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
+                      <Activity className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Histórico e evolução do paciente
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Compare avaliações ao longo do tempo e comprove os resultados do tratamento.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3. Acompanhamento do paciente */}
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Análises profissionais e acompanhamento
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Mais embasamento para sua conduta clínica, laudos e orientações pós-atendimento.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 4. Recursos para diferentes áreas */}
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
+                      <Award className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">
+                        Recursos para diferentes áreas
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Ideal para Fisioterapia, Avaliação Postural, Terapia Ocupacional, Medicina e Educação Física.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                {/* 2. Histórico e evolução */}
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
-                    <Activity className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">
-                      Histórico e evolução do paciente
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Compare avaliações ao longo do tempo e comprove os resultados do tratamento.
-                    </p>
+                {/* Botão & Badges */}
+                <div className="pt-6 space-y-4">
+                  <button
+                    type="button"
+                    onClick={onRegisterClinic}
+                    className="px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-lg shadow-teal-600/20 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <span>Conhecer o ZemdaBody</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-500">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                      Fácil de usar
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                      Seguro e confiável
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                      Suporte humanizado
+                    </span>
                   </div>
                 </div>
-
-                {/* 3. Acompanhamento do paciente */}
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">
-                      Análises profissionais e acompanhamento
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Mais embasamento para sua conduta clínica, laudos e orientações pós-atendimento.
-                    </p>
-                  </div>
-                </div>
-
-                {/* 4. Recursos para diferentes áreas */}
-                <div className="flex items-start gap-3.5">
-                  <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
-                    <Award className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">
-                      Recursos para diferentes áreas
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Ideal para Fisioterapia, Avaliação Postural, Terapia Ocupacional, Medicina e Educação Física.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Botão & Badges */}
-              <div className="pt-4 space-y-4">
-                <button
-                  type="button"
-                  onClick={onRegisterClinic}
-                  className="px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-lg shadow-teal-600/20 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2"
-                >
-                  <span>Conhecer o ZemdaBody</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-
-                <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-500">
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                    Fácil de usar
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                    Seguro e confiável
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-                    Suporte humanizado
-                  </span>
-                </div>
-              </div>
+              </RevealOnScroll>
             </div>
 
             {/* Desktop Mockup do ZemdaBody (Notebook / Desktop) */}
             <div className="lg:col-span-7">
-              <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200 via-slate-100 to-slate-200/80 shadow-2xl shadow-teal-950/10 border border-slate-300/80">
-                <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
-                  {/* Top Bar */}
-                  <div className="h-5 bg-slate-900/90 flex items-center justify-center px-3">
-                    <div className="w-2 h-2 rounded-full bg-slate-800 border border-slate-700" />
+              <RevealOnScroll delayMs={150}>
+                <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200 via-slate-100 to-slate-200/80 shadow-2xl shadow-teal-950/10 border border-slate-300/80">
+                  <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
+                    {/* Top Bar */}
+                    <div className="h-5 bg-slate-900/90 flex items-center justify-center px-3">
+                      <div className="w-2 h-2 rounded-full bg-slate-800 border border-slate-700" />
+                    </div>
+
+                    {/* ZemdaBody Desktop Interface View */}
+                    <div className="relative bg-white aspect-[16/10] overflow-hidden">
+                      <img
+                        src="/landing/zemdabody-mockup.jpg"
+                        alt="ZemdaBody Avaliação Corporal Desktop"
+                        className="w-full h-full object-cover object-top"
+                      />
+                    </div>
                   </div>
 
-                  {/* ZemdaBody Desktop Interface View */}
-                  <div className="relative bg-white aspect-[16/10] overflow-hidden">
-                    <img
-                      src="/landing/zemdabody-mockup.jpg"
-                      alt="ZemdaBody Avaliação Corporal Desktop"
-                      className="w-full h-full object-cover object-top"
-                    />
+                  {/* Laptop Base */}
+                  <div className="h-3 bg-gradient-to-b from-slate-300 to-slate-400 rounded-b-2xl mx-16 shadow-md flex items-center justify-center">
+                    <div className="w-20 h-1 bg-slate-400/80 rounded-full" />
                   </div>
                 </div>
 
-                {/* Laptop Base */}
-                <div className="h-3 bg-gradient-to-b from-slate-300 to-slate-400 rounded-b-2xl mx-16 shadow-md flex items-center justify-center">
-                  <div className="w-20 h-1 bg-slate-400/80 rounded-full" />
+                {/* Card Destaque Inferior */}
+                <div className="mt-6 bg-white border border-teal-100 rounded-2xl p-4 shadow-sm flex items-center gap-4 max-w-lg mx-auto">
+                  <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0 border border-teal-200/50">
+                    <Heart className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-bold text-slate-900">
+                      Visualize. Acompanhe. Evolua.
+                    </h5>
+                    <p className="text-xs text-slate-500">
+                      Mais resultados e clareza para você e seus pacientes.
+                    </p>
+                  </div>
                 </div>
-              </div>
-
-              {/* Card Destaque Inferior */}
-              <div className="mt-6 bg-white border border-teal-100 rounded-2xl p-4 shadow-sm flex items-center gap-4 max-w-lg mx-auto">
-                <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0 border border-teal-200/50">
-                  <Heart className="w-5 h-5" />
-                </div>
-                <div>
-                  <h5 className="text-sm font-bold text-slate-900">
-                    Visualize. Acompanhe. Evolua.
-                  </h5>
-                  <p className="text-xs text-slate-500">
-                    Mais resultados e clareza para você e seus pacientes.
-                  </p>
-                </div>
-              </div>
+              </RevealOnScroll>
             </div>
           </div>
         </div>
@@ -988,59 +1009,63 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
         className="py-20 sm:py-28 bg-white border-y border-slate-100 relative"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
-          <div className="text-center max-w-3xl mx-auto space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
-              Simplicidade em 3 Passos
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
-              Uma plataforma. Múltiplas áreas.
-            </h2>
-            <p className="text-base text-slate-600 leading-relaxed">
-              O Zemda foi construído para se adaptar ao jeito que você e seus profissionais atendem.
-            </p>
-          </div>
+          <RevealOnScroll>
+            <div className="text-center max-w-3xl mx-auto space-y-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
+                Simplicidade em 3 Passos
+              </span>
+              <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
+                Uma plataforma. Múltiplas áreas.
+              </h2>
+              <p className="text-base text-slate-600 leading-relaxed">
+                O Zemda foi construído para se adaptar ao jeito que você e seus profissionais atendem.
+              </p>
+            </div>
+          </RevealOnScroll>
 
           {/* 3 Passos Explicativos */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Passo 1 */}
-            <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
-              <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
-                1
+          <RevealOnScroll delayMs={150}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+              {/* Passo 1 */}
+              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
+                  1
+                </div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  O usuário se cadastra e informa sua profissão.
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Ao criar a conta da clínica ou cadastrar um novo profissional, é informado o nicho de atuação (Psicologia, Fonoaudiologia, Nutrição, Fisioterapia, etc.).
+                </p>
               </div>
-              <h3 className="text-lg font-bold text-slate-900">
-                O usuário se cadastra e informa sua profissão.
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Ao criar a conta da clínica ou cadastrar um novo profissional, é informado o nicho de atuação (Psicologia, Fonoaudiologia, Nutrição, Fisioterapia, etc.).
-              </p>
-            </div>
 
-            {/* Passo 2 */}
-            <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
-              <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
-                2
+              {/* Passo 2 */}
+              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
+                  2
+                </div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  O Zemda identifica a área profissional.
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  A inteligência da plataforma ajusta automaticamente as fichas clínicas, termos de consentimento, histórico e ferramentas pertinentes.
+                </p>
               </div>
-              <h3 className="text-lg font-bold text-slate-900">
-                O Zemda identifica a área profissional.
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                A inteligência da plataforma ajusta automaticamente as fichas clínicas, termos de consentimento, histórico e ferramentas pertinentes.
-              </p>
-            </div>
 
-            {/* Passo 3 */}
-            <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
-              <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
-                3
+              {/* Passo 3 */}
+              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
+                <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
+                  3
+                </div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  O módulo correspondente é liberado automaticamente.
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Sem complicação ou chamados de suporte. O usuário já acessa sua experiência dedicada pronta para uso imediato.
+                </p>
               </div>
-              <h3 className="text-lg font-bold text-slate-900">
-                O módulo correspondente é liberado automaticamente.
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Sem complicação ou chamados de suporte. O usuário já acessa sua experiência dedicada pronta para uso imediato.
-              </p>
             </div>
-          </div>
+          </RevealOnScroll>
         </div>
       </section>
 
@@ -1050,48 +1075,52 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
         className="py-20 sm:py-28 bg-[#fafbfc] relative"
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="text-center space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
-              Dúvidas Frequentes
-            </span>
-            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-              Perguntas frequentes
-            </h2>
-            <p className="text-base text-slate-600">
-              Tudo o que você precisa saber sobre o funcionamento do Zemda.
-            </p>
-          </div>
+          <RevealOnScroll>
+            <div className="text-center space-y-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
+                Dúvidas Frequentes
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
+                Perguntas frequentes
+              </h2>
+              <p className="text-base text-slate-600">
+                Tudo o que você precisa saber sobre o funcionamento do Zemda.
+              </p>
+            </div>
+          </RevealOnScroll>
 
-          <div className="space-y-4">
-            {faqItems.map((item, index) => {
-              const isOpen = openFaqIndex === index;
-              return (
-                <div
-                  key={index}
-                  className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden transition-all"
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleFaq(index)}
-                    className="w-full p-6 text-left flex items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors cursor-pointer"
+          <RevealOnScroll delayMs={100}>
+            <div className="space-y-4">
+              {faqItems.map((item, index) => {
+                const isOpen = openFaqIndex === index;
+                return (
+                  <div
+                    key={index}
+                    className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden transition-all"
                   >
-                    <span className="text-sm sm:text-base font-bold text-slate-900">
-                      {item.question}
-                    </span>
-                    <div className={`w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 transition-transform ${isOpen ? 'rotate-180 bg-teal-50 text-teal-700' : 'text-slate-500'}`}>
-                      <ChevronDown className="w-4 h-4" />
-                    </div>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleFaq(index)}
+                      className="w-full p-6 text-left flex items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    >
+                      <span className="text-sm sm:text-base font-bold text-slate-900">
+                        {item.question}
+                      </span>
+                      <div className={`w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 transition-transform ${isOpen ? 'rotate-180 bg-teal-50 text-teal-700' : 'text-slate-500'}`}>
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+                    </button>
 
-                  {isOpen && (
-                    <div className="px-6 pb-6 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-4">
-                      {item.answer}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    {isOpen && (
+                      <div className="px-6 pb-6 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-4">
+                        {item.answer}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </RevealOnScroll>
         </div>
       </section>
 
@@ -1100,33 +1129,35 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
         <div className="absolute inset-0 bg-gradient-to-b from-teal-50/40 via-emerald-50/20 to-white -z-10 pointer-events-none" />
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
-          <div className="space-y-4 max-w-2xl mx-auto">
-            <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
-              Sua rotina pode ser mais simples.
-            </h2>
-            <p className="text-base text-slate-600 leading-relaxed">
-              Junte-se à nova geração de clínicas e profissionais de saúde que transformaram sua gestão com o Zemda.
-            </p>
-          </div>
+          <RevealOnScroll>
+            <div className="space-y-4 max-w-2xl mx-auto">
+              <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
+                Sua rotina pode ser mais simples.
+              </h2>
+              <p className="text-base text-slate-600 leading-relaxed">
+                Junte-se à nova geração de clínicas e profissionais de saúde que transformaram sua gestão com o Zemda.
+              </p>
+            </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              type="button"
-              onClick={onRegisterClinic}
-              className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-xl shadow-teal-600/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
-            >
-              <span>Começar agora</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6">
+              <button
+                type="button"
+                onClick={onRegisterClinic}
+                className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-xl shadow-teal-600/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>Começar agora</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
 
-            <button
-              type="button"
-              onClick={onLogin}
-              className="w-full sm:w-auto px-8 py-4 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl shadow-xs transition-all cursor-pointer"
-            >
-              Já tenho uma conta
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={onLogin}
+                className="w-full sm:w-auto px-8 py-4 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl shadow-xs transition-all cursor-pointer"
+              >
+                Já tenho uma conta
+              </button>
+            </div>
+          </RevealOnScroll>
         </div>
       </section>
 

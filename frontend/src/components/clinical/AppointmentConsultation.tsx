@@ -43,10 +43,13 @@ export function AppointmentConsultation({
     (isNutritionist || (currentUser?.professionName || '').toLowerCase().includes('nutri')) ? 'ZemdaNutri' :
     undefined;
 
-  const effectiveModuleType = status?.moduleType ||
-    (appointment.clinical_module && appointment.clinical_module !== 'ZemdaBody' ? appointment.clinical_module : undefined) ||
-    (initialModuleType && initialModuleType !== 'ZemdaBody' ? initialModuleType : undefined) ||
-    deducedModuleFromProfession;
+  const effectiveModuleType =
+    (status?.moduleType && status.moduleType !== 'general' ? status.moduleType : undefined) ||
+    (appointment.clinical_module && appointment.clinical_module !== 'ZemdaBody' && appointment.clinical_module !== 'general' ? appointment.clinical_module : undefined) ||
+    (initialModuleType && initialModuleType !== 'ZemdaBody' && initialModuleType !== 'general' ? initialModuleType : undefined) ||
+    deducedModuleFromProfession ||
+    (status?.moduleType === 'general' ? 'general' : undefined) ||
+    'general';
 
   // FLUXO DE ATENDIMENTO: "Iniciar atendimento" DEVE SEMPRE abrir o Prontuário / Evolução Clínica primeiro ('records')
   const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>('records');

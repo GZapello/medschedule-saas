@@ -296,7 +296,7 @@ export class StaffController {
       }
 
       const permsJson = JSON.stringify(permissions);
-      const zemdaBodyActive = permissions.includes('access_zemda_body') ? 1 : 0;
+      const zemdaBodyActive = 1; // Universal para profissionais e equipe clínica
       const zemdaPersonalActive = permissions.includes('access_zemda_personal') ? 1 : 0;
       const userRole = user.role || 'professional';
       db.prepare(`

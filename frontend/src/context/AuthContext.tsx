@@ -300,8 +300,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isPersonalTrainer = !isSuperAdmin && isStrictPersonalTrainer;
 
-  // ZemdaBody: módulo complementar universal mediante liberação do gerenciador da clínica
-  const isZemdaBody = !isPatient && (
+  // ZemdaBody: módulo complementar universal para todos os profissionais clínicos e administradores de clínica
+  const isZemdaBody = !isPatient && !isSuperAdmin && (
+    isClinicAdmin ||
+    isProfessional ||
     userPermissions.includes('access_zemda_body') ||
     Boolean((currentUser as any)?.zemdaBodyEnabled) ||
     Boolean((currentUser as any)?.zemda_body_enabled)

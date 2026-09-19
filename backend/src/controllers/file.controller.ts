@@ -19,6 +19,11 @@ export function getSigningSecret(): string {
   return secret;
 }
 
+export function canonicalizeClinicId(tenantId: string): string {
+  if (!tenantId) return '';
+  return tenantId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+}
+
 export class FileController {
   /**
    * POST /api/files/upload-ticket ou /api/v1/files/upload-ticket
@@ -319,8 +324,9 @@ export class FileController {
       }
 
       // Validação estrita de isolamento multiclínica na chave do objeto
-      // A chave DEVE iniciar com clinics/{tenantId}/
-      if (!String(objectKey).startsWith(`clinics/${tenantId}/`)) {
+      const sanitizedClinicId = canonicalizeClinicId(tenantId);
+      const isTenantPrefix = String(objectKey).startsWith(`clinics/${tenantId}/`) || String(objectKey).startsWith(`clinics/${sanitizedClinicId}/`);
+      if (!isTenantPrefix) {
         res.status(403).json({
           error: 'Chave de objeto incompatível com o contexto da clínica autenticada'
         });
@@ -328,8 +334,9 @@ export class FileController {
       }
 
       if (!isClinicOrExerciseAsset && patientId) {
-        const expectedPrefix = `clinics/${tenantId}/patients/${patientId}/`;
-        if (!String(objectKey).startsWith(expectedPrefix)) {
+        const expectedPrefix1 = `clinics/${tenantId}/patients/${patientId}/`;
+        const expectedPrefix2 = `clinics/${sanitizedClinicId}/patients/${patientId}/`;
+        if (!String(objectKey).startsWith(expectedPrefix1) && !String(objectKey).startsWith(expectedPrefix2)) {
           res.status(403).json({
             error: 'Chave de objeto incompatível com o contexto da clínica e paciente autenticados'
           });
@@ -441,6 +448,8 @@ export class FileController {
         message: 'Upload confirmado e registrado com sucesso',
         file: {
           id: attachmentId,
+          fileId: attachmentId,
+          file_id: attachmentId,
           objectKey: objectKey,
           object_key: objectKey,
           filename: String(filename),
@@ -486,13 +495,21 @@ export class FileController {
       }
 
       const decodedId = decodeURIComponent(String(id || '')).trim();
+      const sanitizedClinicId = canonicalizeClinicId(tenantId);
 
       // Validação estrita por clínica: busca por ID ou por object_key (inclui arquivos globais de biblioteca)
       let file = db
-        .prepare('SELECT * FROM file_attachments WHERE (id = ? OR object_key = ?) AND (clinic_id = ? OR clinic_id = "global")')
-        .get(decodedId, decodedId, tenantId) as any;
+        .prepare('SELECT * FROM file_attachments WHERE (id = ? OR object_key = ?) AND (clinic_id = ? OR clinic_id = ? OR clinic_id = "global")')
+        .get(decodedId, decodedId, tenantId, sanitizedClinicId) as any;
 
       if (!file) {
+        // Logging técnico seguro sem expor tokens HMAC
+        const foreignFile = db.prepare('SELECT id, clinic_id, object_key FROM file_attachments WHERE id = ? OR object_key = ?').get(decodedId, decodedId) as any;
+        if (foreignFile) {
+          console.warn(`[FileController.getFileUrl] Acesso não autorizado: arquivo ${decodedId} (key=${foreignFile.object_key}) pertence à clínica ${foreignFile.clinic_id}, mas foi solicitado por ${tenantId}`);
+        } else {
+          console.warn(`[FileController.getFileUrl] Arquivo não encontrado: query=${decodedId}, tenantId=${tenantId}`);
+        }
         res.status(404).json({
           error: 'Arquivo não encontrado ou acesso não autorizado para esta clínica'
         });
@@ -506,7 +523,7 @@ export class FileController {
         const nowInSeconds = Math.floor(Date.now() / 1000);
         const readPayload = {
           action: 'read',
-          clinicId: file.clinic_id || tenantId,
+          clinicId: canonicalizeClinicId(file.clinic_id || tenantId),
           objectKey: file.object_key,
           exp: nowInSeconds + 300
         };

@@ -149,18 +149,16 @@ export class PsychopedagogyController {
   static async saveProfile(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.tenantId!;
-      const {
-        patientId,
-        schoolName,
-        schoolGrade,
-        schoolShift,
-        schoolType,
-        teacherName,
-        coordinatorName,
-        pedagogicalComplaint,
-        referralSource,
-        specialNeedsNotes
-      } = req.body;
+      const patientId = String(req.params.patientId || req.body.patientId || req.body.patient_id || '');
+      const schoolName = req.body.schoolName || req.body.school_name;
+      const schoolGrade = req.body.schoolGrade || req.body.school_grade || req.body.grade_level;
+      const schoolShift = req.body.schoolShift || req.body.school_shift || req.body.shift;
+      const schoolType = req.body.schoolType || req.body.school_type;
+      const teacherName = req.body.teacherName || req.body.teacher_name;
+      const coordinatorName = req.body.coordinatorName || req.body.coordinator_name;
+      const pedagogicalComplaint = req.body.pedagogicalComplaint || req.body.pedagogical_complaint || req.body.main_complaint;
+      const referralSource = req.body.referralSource || req.body.referral_source;
+      const specialNeedsNotes = req.body.specialNeedsNotes || req.body.special_needs_notes;
 
       if (!patientId) {
         res.status(400).json({ error: 'patientId é obrigatório.' });
@@ -235,7 +233,6 @@ export class PsychopedagogyController {
       const tenantId = req.tenantId!;
       const {
         id,
-        patientId,
         appointmentId,
         assessmentDate,
         mode = 'clinical',
@@ -250,6 +247,7 @@ export class PsychopedagogyController {
         pedagogicalMediationJson,
         status = 'in_progress'
       } = req.body;
+      const patientId = String(req.params.patientId || req.body.patientId || req.body.patient_id || '');
 
       if (!patientId) {
         res.status(400).json({ error: 'patientId é obrigatório.' });
@@ -362,7 +360,6 @@ export class PsychopedagogyController {
       const tenantId = req.tenantId!;
       const {
         id,
-        patientId,
         appointmentId,
         sessionDate,
         sessionNumber,
@@ -374,6 +371,11 @@ export class PsychopedagogyController {
         homeGuidelines,
         nextSessionPlan
       } = req.body;
+      const patientId = String(req.params.patientId || req.body.patientId || req.body.patient_id || '');
+      const activities = activitiesPerformed || req.body.activities_developed || null;
+      const reactions = studentEngagement || req.body.learner_reactions || null;
+      const obs = observations || req.body.results_observations || null;
+      const nextPlan = nextSessionPlan || req.body.next_steps || null;
 
       if (!patientId) {
         res.status(400).json({ error: 'patientId é obrigatório.' });
@@ -410,8 +412,8 @@ export class PsychopedagogyController {
           WHERE id = ? AND tenant_id = ?
         `).run(
           sessionDate || null, sessionNumber || null, objectives || null, pedagogicalResources || null,
-          activitiesPerformed || null, studentEngagement || null, observations || null,
-          homeGuidelines || null, nextSessionPlan || null, id, tenantId
+          activities, reactions, obs,
+          homeGuidelines || null, nextPlan, id, tenantId
         );
 
         res.json({ success: true, id, message: 'Sessão atualizada.' });
@@ -426,8 +428,8 @@ export class PsychopedagogyController {
           ) VALUES (?, ?, ?, ?, ?, COALESCE(?, date('now')), ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))
         `).run(
           newId, tenantId, patientId, professionalId, appointmentId || null, sessionDate || null,
-          sessionNumber || null, objectives || null, pedagogicalResources || null, activitiesPerformed || null,
-          studentEngagement || null, observations || null, homeGuidelines || null, nextSessionPlan || null
+          sessionNumber || null, objectives || null, pedagogicalResources || null, activities,
+          reactions, obs, homeGuidelines || null, nextPlan
         );
 
         res.status(201).json({ success: true, id: newId, message: 'Sessão criada.' });
@@ -444,10 +446,10 @@ export class PsychopedagogyController {
   static async finishSession(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.tenantId!;
+      const patientId = String(req.body.patientId || req.body.patient_id || req.params.patientId || '');
+      const appointmentId = req.body.appointmentId || req.body.appointment_id;
       const {
         sessionId,
-        patientId,
-        appointmentId,
         sessionDate,
         title,
         clinicalEvolution,
@@ -478,7 +480,8 @@ export class PsychopedagogyController {
         : 'CBO 2394-25';
 
       const signedAt = new Date().toISOString();
-      const evolutionContent = clinicalEvolution || req.body.observations || 'Atendimento Psicopedagógico concluído';
+      const sessionData = req.body.sessionData || {};
+      const evolutionContent = clinicalEvolution || req.body.observations || sessionData.results_observations || sessionData.activities_developed || sessionData.objectives || 'Atendimento Psicopedagógico concluído';
 
       const hashPayload = `${tenantId}|${patientId}|${req.user?.userId}|${signedAt}|${evolutionContent}`;
       const signatureHash = crypto.createHash('sha256').update(hashPayload, 'utf8').digest('hex');
@@ -636,15 +639,13 @@ export class PsychopedagogyController {
   static async saveInstrument(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.tenantId!;
-      const {
-        patientId,
-        instrumentName,
-        instrumentCategory,
-        applicationDate,
-        rawScore,
-        percentileOrResult,
-        observations
-      } = req.body;
+      const patientId = String(req.params.patientId || req.body.patientId || req.body.patient_id || '');
+      const instrumentName = req.body.instrumentName || req.body.instrument_name;
+      const instrumentCategory = req.body.instrumentCategory || req.body.instrument_category || 'Provas Operatórias';
+      const applicationDate = req.body.applicationDate || req.body.application_date;
+      const rawScore = req.body.rawScore || req.body.raw_score;
+      const percentileOrResult = req.body.percentileOrResult || req.body.results_summary;
+      const observations = req.body.observations || req.body.normative_reference;
 
       if (!patientId || !instrumentName) {
         res.status(400).json({ error: 'patientId e instrumentName são obrigatórios.' });

@@ -1,21 +1,38 @@
 import { completeProfessionalProfile } from './professional-profile';
 import { db } from '../config/database';
 
-export const isPrimaryClinicalModule = (module?: string | null): boolean =>
-  !!module && module !== 'ZemdaBody';
+export const PRIMARY_CLINICAL_MODULES = [
+  'ZemdaFono',
+  'ZemdaOdonto',
+  'ZemdaTO',
+  'ZemdaFisio',
+  'ZemdaNutri',
+  'ZemdaPP'
+];
 
-// Body maps complement a consultation; legacy Body assignments must not lock it.
+export const isPrimaryClinicalModule = (module?: string | null): boolean =>
+  !!module && PRIMARY_CLINICAL_MODULES.includes(module);
+
+// Body maps complement a consultation; legacy Body assignments or 'general' must not lock it.
 export function resolveClinicalModule(appointment: any, tenantId: any): string | null {
   if (isPrimaryClinicalModule(appointment.clinical_module)) return appointment.clinical_module;
-  const record = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' ORDER BY created_at LIMIT 1")
+  const record = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' AND module_type != 'general' ORDER BY created_at LIMIT 1")
     .get(appointment.id, tenantId) as any;
-  if (record?.module_type) return record.module_type;
+  if (record?.module_type && isPrimaryClinicalModule(record.module_type)) return record.module_type;
   if (appointment.professional_id) {
     const prof = db.prepare(`SELECT p.user_id, p.practice_areas, pr.name, pr.slug, pr.id FROM professionals p
       LEFT JOIN professions pr ON pr.id=p.profession_id WHERE p.id=? AND p.tenant_id=?`)
       .get(appointment.professional_id, tenantId) as any;
     const profile = prof?.user_id ? completeProfessionalProfile(prof.user_id, tenantId, { profession_name: prof.name, practice_areas: prof.practice_areas }) : null;
     const text = [prof?.id, prof?.name, prof?.slug, prof?.practice_areas, profile?.profession_name, profile?.practice_areas].filter(Boolean).join(' ').toLowerCase();
+    if (
+      prof?.id === 'prof-psicopedagogo' ||
+      prof?.id === 'prof-psicopedagogia' ||
+      prof?.slug === 'psicopedagogo' ||
+      prof?.slug === 'psicopedagogia' ||
+      text.includes('psicopedag') ||
+      text.includes('abpp')
+    ) return 'ZemdaPP';
     if (text.includes('fono') || text.includes('crfa')) return 'ZemdaFono';
     if (text.includes('nutri') || text.includes('crn') || text.includes('diet')) return 'ZemdaNutri';
     if (text.includes('ocupacional') || text.includes('terapia-ocupacional')) return 'ZemdaTO';

@@ -52,7 +52,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
     managerPracticeAreas: '',
     managerRegistrationType: 'CREFITO',
     managerRegistrationNumber: '',
-    zemdaBodyEnabled: false
+    zemdaBodyEnabled: true
   });
 
   const PRACTICE_AREAS_SUGGESTIONS: Record<string, string[]> = {
@@ -483,21 +483,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       <option value="Outro">Outro profissional da saúde</option>
                     </select>
 
-                    <div className="mt-2.5 p-3 rounded-xl bg-teal-50/60 border border-teal-100/80">
-                      <p className="text-[11px] text-teal-900 font-medium mb-2 leading-relaxed">
-                        ZemdaBody está disponível para todas as áreas profissionais, conforme liberação do gerenciador da clínica.
+                    <div className="mt-2.5 p-3 rounded-xl bg-teal-50/70 border border-teal-200/80 flex items-center gap-2.5">
+                      <Activity className="w-4 h-4 text-teal-700 shrink-0" />
+                      <p className="text-[11px] text-teal-900 font-medium leading-relaxed">
+                        <strong className="font-bold">ZemdaBody Incluso:</strong> O Mapa Corporal e Avaliação Física são ativados automaticamente para todos os profissionais clínicos da sua clínica.
                       </p>
-                      <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={formData.zemdaBodyEnabled}
-                          onChange={e => setFormData({ ...formData, zemdaBodyEnabled: e.target.checked })}
-                          className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
-                        />
-                        <span className="text-xs font-semibold text-slate-700">
-                          Liberar ZemdaBody para este profissional
-                        </span>
-                      </label>
                     </div>
                   </div>
 
