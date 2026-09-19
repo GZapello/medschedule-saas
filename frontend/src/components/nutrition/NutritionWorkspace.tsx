@@ -31,6 +31,7 @@ import {
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 
 interface NutritionWorkspaceProps {
   initialPatientId?: string;
@@ -52,6 +53,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [patientSearch, setPatientSearch] = useState<string>('');
+  const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Abas do Módulo
   const [activeTab, setActiveTab] = useState<
@@ -628,6 +630,18 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
               <User className="w-3.5 h-3.5 text-emerald-600" />
               <span>{selectedPatient.full_name}</span>
             </div>
+          )}
+
+          {selectedPatientId && (
+            <button
+              type="button"
+              onClick={() => setShowPreviousRecordsModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
+              title="Visualizar histórico completo de prontuários e evoluções anteriores"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Ver Prontuários Anteriores</span>
+            </button>
           )}
         </div>
       </div>
@@ -1607,6 +1621,14 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           </div>
         )}
       </div>
+
+      {showPreviousRecordsModal && selectedPatientId && (
+        <PatientPreviousRecordsModal
+          patientId={selectedPatientId}
+          patientName={selectedPatient?.full_name}
+          onClose={() => setShowPreviousRecordsModal(false)}
+        />
+      )}
     </div>
   );
 };

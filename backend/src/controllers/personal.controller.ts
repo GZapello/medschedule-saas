@@ -1896,12 +1896,19 @@ export class PersonalController {
       }
 
       const exercises = db.prepare(`
-        SELECT we.*, pe.instructions, pe.photo_url as exercise_default_photo
+        SELECT we.*, pe.instructions, pe.photo_url as exercise_default_photo,
+               COALESCE(we.exercise_file_id, pe.exercise_file_id) as effective_exercise_file_id
         FROM personal_workout_exercises we
         LEFT JOIN personal_exercises pe ON pe.id = we.exercise_id
         WHERE we.workout_id = ? AND we.tenant_id = ?
         ORDER BY we.order_index ASC
       `).all(id, tenantId) as any[];
+
+      exercises.forEach((ex: any) => {
+        if (!ex.exercise_file_id && ex.effective_exercise_file_id) {
+          ex.exercise_file_id = ex.effective_exercise_file_id;
+        }
+      });
 
       // Agrupa cálculo de volume semanal por grupo muscular desse treino
       const muscleVolume: Record<string, number> = {};
@@ -1944,7 +1951,20 @@ export class PersonalController {
         );
 
         if (Array.isArray(exercises)) {
-          const insertEx = db.prepare(`
+          let hasFileIdCol = true;
+          try {
+            const cols = db.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
+            hasFileIdCol = cols.includes('exercise_file_id');
+          } catch (_) {}
+
+          const insertExWithFileId = db.prepare(`
+            INSERT INTO personal_workout_exercises (
+              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
+              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url, exercise_file_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          const insertExLegacy = db.prepare(`
             INSERT INTO personal_workout_exercises (
               id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
               sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url
@@ -1953,14 +1973,28 @@ export class PersonalController {
 
           exercises.forEach((ex: any, idx: number) => {
             const weId = 'pwe-' + uuidv4().slice(0, 8);
-            insertEx.run(
-              weId, tenantId, workoutId, ex.exercise_id || null, idx + 1,
-              ex.name || 'Exercício', ex.muscle_group || 'Geral',
-              Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
-              ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
-              ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-              ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null
-            );
+            const effectiveFileId = ex.exercise_file_id || (ex.exercise_id ? (db.prepare('SELECT exercise_file_id FROM personal_exercises WHERE id = ?').get(ex.exercise_id) as any)?.exercise_file_id : null) || null;
+
+            if (hasFileIdCol) {
+              insertExWithFileId.run(
+                weId, tenantId, workoutId, ex.exercise_id || null, idx + 1,
+                ex.name || 'Exercício', ex.muscle_group || 'Geral',
+                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
+                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
+                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
+                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null,
+                effectiveFileId
+              );
+            } else {
+              insertExLegacy.run(
+                weId, tenantId, workoutId, ex.exercise_id || null, idx + 1,
+                ex.name || 'Exercício', ex.muscle_group || 'Geral',
+                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
+                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
+                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
+                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null
+              );
+            }
           });
         }
       });
@@ -2013,7 +2047,20 @@ export class PersonalController {
         if (Array.isArray(exercises)) {
           db.prepare('DELETE FROM personal_workout_exercises WHERE workout_id = ? AND tenant_id = ?').run(id, tenantId);
 
-          const insertEx = db.prepare(`
+          let hasFileIdCol = true;
+          try {
+            const cols = db.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
+            hasFileIdCol = cols.includes('exercise_file_id');
+          } catch (_) {}
+
+          const insertExWithFileId = db.prepare(`
+            INSERT INTO personal_workout_exercises (
+              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
+              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url, exercise_file_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          const insertExLegacy = db.prepare(`
             INSERT INTO personal_workout_exercises (
               id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
               sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url
@@ -2022,14 +2069,28 @@ export class PersonalController {
 
           exercises.forEach((ex: any, idx: number) => {
             const weId = 'pwe-' + uuidv4().slice(0, 8);
-            insertEx.run(
-              weId, tenantId, id, ex.exercise_id || null, idx + 1,
-              ex.name || 'Exercício', ex.muscle_group || 'Geral',
-              Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
-              ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
-              ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-              ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null
-            );
+            const effectiveFileId = ex.exercise_file_id || (ex.exercise_id ? (db.prepare('SELECT exercise_file_id FROM personal_exercises WHERE id = ?').get(ex.exercise_id) as any)?.exercise_file_id : null) || null;
+
+            if (hasFileIdCol) {
+              insertExWithFileId.run(
+                weId, tenantId, id, ex.exercise_id || null, idx + 1,
+                ex.name || 'Exercício', ex.muscle_group || 'Geral',
+                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
+                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
+                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
+                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null,
+                effectiveFileId
+              );
+            } else {
+              insertExLegacy.run(
+                weId, tenantId, id, ex.exercise_id || null, idx + 1,
+                ex.name || 'Exercício', ex.muscle_group || 'Geral',
+                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
+                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
+                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
+                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null
+              );
+            }
           });
         }
       });

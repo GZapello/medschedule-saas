@@ -200,7 +200,7 @@ export class AuthController {
       let userPermissions: string[] = [];
       let cuRow: any = null;
       if (user.tenant_id) {
-        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_personal_enabled, zemda_body_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
@@ -288,6 +288,9 @@ export class AuthController {
       const zemdaPersonalEnabled = user.role !== 'superadmin' && isStrictPersonalTrainer && (
         isManagerUser || (isProfessionalUser && (cuRow?.zemda_personal_enabled === 1 || userPermissions.includes('access_zemda_personal')))
       );
+      const zemdaBodyEnabled = user.role !== 'superadmin' && (
+        cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
+      );
 
       const needsLegalAcceptance = user.role !== 'superadmin' && (
         user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
@@ -327,7 +330,8 @@ export class AuthController {
           zemdaToEnabled,
           zemdaFonoEnabled,
           zemdaPPEnabled,
-          zemdaPersonalEnabled
+          zemdaPersonalEnabled,
+          zemdaBodyEnabled
         },
         tenant: tenantData
       });
@@ -432,7 +436,7 @@ export class AuthController {
       let userPermissions: string[] = [];
       let cuRow: any = null;
       if (user.tenant_id) {
-        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_personal_enabled, zemda_body_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
@@ -521,6 +525,9 @@ export class AuthController {
       const zemdaPersonalEnabled = user.role !== 'superadmin' && isStrictPersonalTrainer && (
         isManagerUser || (isProfessionalUser && (cuRow?.zemda_personal_enabled === 1 || userPermissions.includes('access_zemda_personal')))
       );
+      const zemdaBodyEnabled = user.role !== 'superadmin' && (
+        cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
+      );
 
       const needsLegalAcceptance = user.role !== 'superadmin' && (
         user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
@@ -559,7 +566,8 @@ export class AuthController {
           zemdaToEnabled,
           zemdaFonoEnabled,
           zemdaPPEnabled,
-          zemdaPersonalEnabled
+          zemdaPersonalEnabled,
+          zemdaBodyEnabled
         },
         tenant: tenantData
       });

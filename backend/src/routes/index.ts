@@ -72,6 +72,7 @@ api.get('/v1/health', (req, res) => {
 api.post('/v1/auth/login', AuthController.login);
 api.post('/v1/auth/register', AuthController.register);
 api.post('/v1/public/tenants/register', TenantController.registerPublic);
+api.post('/v1/tenants/register-public', TenantController.registerPublic);
 api.get('/v1/public/tenants', TenantController.listPublic);
 
 // Validação e Registro via Convite Único da Clínica (Itens 14 a 23)

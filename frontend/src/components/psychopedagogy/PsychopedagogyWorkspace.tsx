@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import {
   GraduationCap,
   BookOpen,
@@ -55,6 +56,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [patientData, setPatientData] = useState<any>(null);
   const [searchPatient, setSearchPatient] = useState<string>('');
+  const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Modo: Clínico vs Institucional
   const [assessmentMode, setAssessmentMode] = useState<'clinical' | 'institutional'>('clinical');
@@ -490,6 +492,19 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
               ))}
             </select>
           </div>
+
+          {/* Botão Ver Prontuários Anteriores */}
+          {selectedPatientId && (
+            <button
+              type="button"
+              onClick={() => setShowPreviousRecordsModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-colors cursor-pointer shadow-xs"
+              title="Visualizar histórico completo de prontuários e evoluções anteriores"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Ver Prontuários Anteriores</span>
+            </button>
+          )}
 
           {/* Botão de Assistente IA Psicopedagógica */}
           <button
@@ -1471,6 +1486,14 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
             </div>
           </div>
         </div>
+      )}
+
+      {showPreviousRecordsModal && selectedPatientId && (
+        <PatientPreviousRecordsModal
+          patientId={selectedPatientId}
+          patientName={patientData?.full_name || patientData?.name}
+          onClose={() => setShowPreviousRecordsModal(false)}
+        />
       )}
     </div>
   );

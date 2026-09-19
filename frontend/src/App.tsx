@@ -200,10 +200,10 @@ const AppContent: React.FC = () => {
   const [authInitialAction, setAuthInitialAction] = useState<'login' | 'create-clinic' | 'register-user'>('login');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [isNewApptOpen, setIsNewApptOpen] = useState<boolean>(false);
-  const [newApptPrefill, setNewApptPrefill] = useState<{ date?: string; time?: string } | undefined>(undefined);
+  const [newApptPrefill, setNewApptPrefill] = useState<{ date?: string; time?: string; professionalId?: string } | undefined>(undefined);
   const [isNewPatientOpen, setIsNewPatientOpen] = useState<boolean>(false);
 
-  const handleOpenNewAppointment = (prefill?: { date?: string; time?: string }) => {
+  const handleOpenNewAppointment = (prefill?: { date?: string; time?: string; professionalId?: string }) => {
     setNewApptPrefill(prefill);
     setIsNewApptOpen(true);
   };

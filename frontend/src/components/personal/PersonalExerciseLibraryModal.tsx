@@ -725,7 +725,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
               <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
                 <FileImageUploader
                   label="Foto do exercício"
-                  buttonText="+ Adicionar foto"
+                  buttonText="Adicionar Foto"
                   category="exercises"
                   patientId="exercises"
                   exerciseId={editingExerciseId || undefined}

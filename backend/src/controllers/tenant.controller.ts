@@ -32,21 +32,25 @@ export class TenantController {
   // 1. Cadastro Público de Nova Clínica ("Criar Minha Clínica" - status inicial 'pending')
   static async registerPublic(req: Request, res: Response): Promise<void> {
     try {
-      const {
-        responsibleName,
-        email,
-        phone,
-        password,
-        clinicName,
-        tradeName,
-        cnpjCpf,
-        city,
-        state,
-        termsAccepted,
-        privacyAccepted,
-        marketingAccepted,
-        marketingOptIn
-      } = req.body;
+      const responsibleName = (req.body.responsibleName || req.body.adminName || '').trim();
+      const email = (req.body.email || req.body.adminEmail || '').trim();
+      const phone = req.body.phone;
+      const password = req.body.password;
+      const clinicName = (req.body.clinicName || '').trim();
+      const tradeName = req.body.tradeName;
+      const cnpjCpf = req.body.cnpjCpf;
+      const city = req.body.city;
+      const state = req.body.state;
+      const termsAccepted = req.body.termsAccepted !== undefined ? req.body.termsAccepted : true;
+      const privacyAccepted = req.body.privacyAccepted !== undefined ? req.body.privacyAccepted : true;
+      const marketingAccepted = req.body.marketingAccepted;
+      const marketingOptIn = req.body.marketingOptIn;
+
+      const managerProfession = req.body.managerProfession || req.body.profession || null;
+      const managerPracticeAreas = req.body.managerPracticeAreas || req.body.practiceAreas || null;
+      const managerRegistrationType = req.body.managerRegistrationType || req.body.registrationType || null;
+      const managerRegistrationNumber = req.body.managerRegistrationNumber || req.body.registrationNumber || null;
+      const zemdaBodyEnabled = req.body.zemdaBodyEnabled;
 
       if (!responsibleName || !email || !password || !clinicName) {
         res.status(400).json({ error: 'Nome do responsável, e-mail, senha e nome da clínica são obrigatórios' });
@@ -58,7 +62,7 @@ export class TenantController {
         return;
       }
 
-      const cleanEmail = email.trim().toLowerCase();
+      const cleanEmail = email.toLowerCase();
 
       // Verifica se o e-mail já existe
       const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
@@ -91,13 +95,6 @@ export class TenantController {
       if (banned.some(t => t.slug === baseSlug || (identity && String(t.cnpj_cpf || '').replace(/\D/g, '') === identity) || t.email === cleanEmail || t.responsible_email === cleanEmail)) {
         res.status(403).json({ error: 'Esta clínica está banida. Somente o Administrador do Sistema pode liberar seu cadastro.' }); return;
       }
-
-      const {
-        managerProfession,
-        managerPracticeAreas,
-        managerRegistrationType,
-        managerRegistrationNumber
-      } = req.body;
 
       // Insere o tenant com status PENDENTE e registro dos termos aceitos
       const insertTenant = db.prepare(`
@@ -180,16 +177,27 @@ export class TenantController {
         userAgent
       );
 
+      const isZemdaBodyOpted = zemdaBodyEnabled === true || zemdaBodyEnabled === 1 || zemdaBodyEnabled === 'true';
+      const initialPermissions = isZemdaBodyOpted ? JSON.stringify(['access_zemda_body']) : JSON.stringify([]);
+
       // Associa em clinic_users com a profissão e área clínica do gestor
       db.prepare(`
         INSERT INTO clinic_users (
           id, tenant_id, user_id, role, status, is_manager,
-          profession_custom, practice_areas, created_at
+          profession_custom, practice_areas, permissions_json, zemda_body_enabled, created_at
         ) VALUES (
           ?, ?, ?, 'clinic_admin', 'pending', 1,
-          ?, ?, datetime('now')
+          ?, ?, ?, ?, datetime('now')
         )
-      `).run('cu-' + uuidv4().slice(0, 8), tenantId, userId, managerProfession || null, managerPracticeAreas || null);
+      `).run(
+        'cu-' + uuidv4().slice(0, 8),
+        tenantId,
+        userId,
+        managerProfession || null,
+        managerPracticeAreas || null,
+        initialPermissions,
+        isZemdaBodyOpted ? 1 : 0
+      );
 
       // Se o gestor também for profissional de saúde clínico, cria o registro em professionals
       if (managerProfession && managerProfession !== 'Gestor / Administrador') {
@@ -266,7 +274,8 @@ export class TenantController {
         registrationNumber: managerRegistrationNumber || null,
         termsVersionAccepted: CURRENT_TERMS_VERSION,
         privacyVersionAccepted: CURRENT_PRIVACY_VERSION,
-        permissions: [],
+        permissions: isZemdaBodyOpted ? ['access_zemda_body'] : [],
+        zemdaBodyEnabled: isZemdaBodyOpted,
         zemdaFisioEnabled: isPhysioUser,
         zemdaOdontoEnabled: isDentistUser,
         zemdaNutriEnabled: isNutriUser,

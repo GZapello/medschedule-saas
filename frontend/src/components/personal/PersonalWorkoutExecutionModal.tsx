@@ -16,6 +16,7 @@ import {
 import { Workout, WorkoutExercise } from './types';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { SecureFileImage } from '../common/SecureFileImage';
 
 interface PersonalWorkoutExecutionModalProps {
   isOpen: boolean;
@@ -221,6 +222,17 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <span className="text-xs font-black text-slate-400">#{exIdx + 1}</span>
+                  {(ex.exercise_file_id || ex.photo_url) && (
+                    <div className="w-10 h-10 rounded-xl bg-slate-200 border border-slate-300 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      <SecureFileImage
+                        fileId={ex.exercise_file_id}
+                        fallbackUrl={ex.photo_url}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        placeholderText=""
+                      />
+                    </div>
+                  )}
                   <div>
                     <h4 className="font-bold text-slate-800 text-sm">{ex.name}</h4>
                     <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">

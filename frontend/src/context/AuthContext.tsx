@@ -300,8 +300,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isPersonalTrainer = !isSuperAdmin && isStrictPersonalTrainer;
 
-  // ZemdaBody: disponível para todas as áreas profissionais da saúde e administradores
-  const isZemdaBody = !isPatient && (isClinicAdmin || isProfessional || userPermissions.includes('access_zemda_body') || currentUser?.role !== 'receptionist');
+  // ZemdaBody: módulo complementar universal mediante liberação do gerenciador da clínica
+  const isZemdaBody = !isPatient && (
+    userPermissions.includes('access_zemda_body') ||
+    Boolean((currentUser as any)?.zemdaBodyEnabled) ||
+    Boolean((currentUser as any)?.zemda_body_enabled)
+  );
 
   // ZemdaPersonal: Profissão = Personal Trainer + permissão ativa → liberar ZemdaPersonal. Outra profissão → não exibir e não permitir acesso
   const isZemdaPersonal = !isSuperAdmin && (

@@ -25,6 +25,7 @@ import {
   ClipboardCheck
 } from 'lucide-react';
 import { BodyPainMapCanvas } from './BodyPainMapCanvas';
+import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 
 export const PhysiotherapyRecordsView: React.FC = () => {
   const { clientTermLabel, currentTenant, currentUser } = useAuth();
@@ -46,6 +47,7 @@ export const PhysiotherapyRecordsView: React.FC = () => {
   const [showAssessmentModal, setShowAssessmentModal] = useState<boolean>(false);
   const [showEvolutionModal, setShowEvolutionModal] = useState<boolean>(false);
   const [viewingAssessment, setViewingAssessment] = useState<PhysiotherapyAssessment | null>(null);
+  const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Accordion open/close no formulário de avaliação
   const [openSection, setOpenSection] = useState<{ [key: string]: boolean }>({
@@ -269,6 +271,16 @@ export const PhysiotherapyRecordsView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {selectedPatientId && (
+            <button
+              onClick={() => setShowPreviousRecordsModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-teal-100 bg-teal-800/80 hover:bg-teal-700 border border-teal-600/50 rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
+              title="Visualizar histórico de prontuários anteriores deste paciente"
+            >
+              <FileText className="w-4 h-4 text-teal-300" />
+              <span>Ver Prontuários Anteriores</span>
+            </button>
+          )}
           <button
             onClick={() => setShowAssessmentModal(true)}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-teal-950 bg-teal-400 hover:bg-teal-300 rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
@@ -1167,6 +1179,14 @@ export const PhysiotherapyRecordsView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {showPreviousRecordsModal && selectedPatientId && (
+        <PatientPreviousRecordsModal
+          isOpen={showPreviousRecordsModal}
+          onClose={() => setShowPreviousRecordsModal(false)}
+          patientId={selectedPatientId}
+          patientName={currentPatient?.full_name}
+        />
       )}
     </div>
   );

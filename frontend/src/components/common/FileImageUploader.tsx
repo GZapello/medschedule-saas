@@ -551,10 +551,10 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
               onClick={handleOpenFileDialog}
               disabled={disabled || isUploading}
               className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs disabled:opacity-50"
-              title="Substituir imagem"
+              title="Trocar imagem"
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Substituir</span>
+              <span>Trocar Foto</span>
             </button>
 
             <button
@@ -565,7 +565,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
               title="Remover anexo"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Remover</span>
+              <span>Remover Foto</span>
             </button>
           </div>
         </div>

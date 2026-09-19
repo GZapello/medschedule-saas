@@ -22,13 +22,31 @@ export function AppointmentConsultation({
   onClose: () => void;
   onFinished: () => void;
 }) {
-  const { isNutritionist, isOccupationalTherapist, isSpeechTherapist, isDentist, isPsychopedagogue } = useAuth();
+  const {
+    isNutritionist,
+    isOccupationalTherapist,
+    isSpeechTherapist,
+    isDentist,
+    isPsychopedagogue,
+    isZemdaPP,
+    isZemdaBody,
+    currentUser
+  } = useAuth();
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
 
+  const deducedModuleFromProfession =
+    (isPsychopedagogue || isZemdaPP || (currentUser?.professionName || '').toLowerCase().includes('psicopedag') || (appointment.service_name || '').toLowerCase().includes('psicopedag')) ? 'ZemdaPP' :
+    (isSpeechTherapist || (currentUser?.professionName || '').toLowerCase().includes('fono')) ? 'ZemdaFono' :
+    (isDentist || (currentUser?.professionName || '').toLowerCase().includes('odonto') || (currentUser?.professionName || '').toLowerCase().includes('dentis')) ? 'ZemdaOdonto' :
+    (isOccupationalTherapist || (currentUser?.professionName || '').toLowerCase().includes('ocupacional')) ? 'ZemdaTO' :
+    (isNutritionist || (currentUser?.professionName || '').toLowerCase().includes('nutri')) ? 'ZemdaNutri' :
+    undefined;
+
   const effectiveModuleType = status?.moduleType ||
-    (appointment.clinical_module !== 'ZemdaBody' ? appointment.clinical_module : undefined) ||
-    (initialModuleType !== 'ZemdaBody' ? initialModuleType : undefined);
+    (appointment.clinical_module && appointment.clinical_module !== 'ZemdaBody' ? appointment.clinical_module : undefined) ||
+    (initialModuleType && initialModuleType !== 'ZemdaBody' ? initialModuleType : undefined) ||
+    deducedModuleFromProfession;
 
   // FLUXO DE ATENDIMENTO: "Iniciar atendimento" DEVE SEMPRE abrir o Prontuário / Evolução Clínica primeiro ('records')
   const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>('records');
@@ -171,13 +189,15 @@ export function AppointmentConsultation({
             >
               <Stethoscope className="w-3.5 h-3.5" /> Módulo Clínico
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('zemda_body')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer"
-            >
-              <Activity className="w-3.5 h-3.5" /> ZemdaBody
-            </button>
+            {isZemdaBody && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('zemda_body')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer"
+              >
+                <Activity className="w-3.5 h-3.5" /> ZemdaBody
+              </button>
+            )}
           </div>
         </div>
         <Workspace
@@ -200,7 +220,7 @@ export function AppointmentConsultation({
       moduleType={effectiveModuleType || 'general'}
       onClose={onClose}
       onFinished={onFinished}
-      onOpenZemdaBody={() => setActiveTab('zemda_body')}
+      onOpenZemdaBody={isZemdaBody ? () => setActiveTab('zemda_body') : undefined}
       onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
       specializedModuleName={
         effectiveModuleType === 'ZemdaPP' ? 'ZemdaPP' :
@@ -209,7 +229,7 @@ export function AppointmentConsultation({
         effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
         effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
         effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
-        (isPsychopedagogue ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
+        (isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
       }
     />
   );

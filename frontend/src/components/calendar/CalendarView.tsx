@@ -24,7 +24,7 @@ import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
 
 interface CalendarViewProps {
-  onOpenNewAppointment: (prefill?: { date?: string; time?: string }) => void;
+  onOpenNewAppointment: (prefill?: { date?: string; time?: string; professionalId?: string }) => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment }) => {
@@ -322,7 +322,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           </div>
 
           <button
-            onClick={() => onOpenNewAppointment()}
+            onClick={() => onOpenNewAppointment(selectedProf !== 'all' ? { professionalId: selectedProf } : undefined)}
             className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
           >
             <Plus className="w-4 h-4" />
@@ -378,7 +378,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         key={dayIdx}
                         onClick={(e) => {
                           if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-empty-slot') === 'true') {
-                            onOpenNewAppointment({ date: dayStr, time: timeSlot });
+                            onOpenNewAppointment({
+                              date: dayStr,
+                              time: timeSlot,
+                              professionalId: selectedProf !== 'all' ? selectedProf : undefined
+                            });
                           }
                         }}
                         className="border-r border-slate-100 last:border-r-0 p-1 relative hover:bg-indigo-50/40 transition-colors group/slot cursor-pointer min-h-[75px]"
@@ -433,7 +437,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               Atendimentos para {currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </h3>
             <button
-              onClick={() => onOpenNewAppointment({ date: formatDateLocal(currentDate), time: '09:00' })}
+              onClick={() => onOpenNewAppointment({
+                date: formatDateLocal(currentDate),
+                time: '09:00',
+                professionalId: selectedProf !== 'all' ? selectedProf : undefined
+              })}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl"
             >
               <Plus className="w-4 h-4" /> Novo neste dia

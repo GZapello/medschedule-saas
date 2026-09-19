@@ -40,6 +40,7 @@ import { Perio6SitesGrid } from './Perio6SitesGrid';
 import { DentalImplantsManager } from './DentalImplantsManager';
 import { DentalProstheticsKanban } from './DentalProstheticsKanban';
 import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
+import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
@@ -60,6 +61,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [patientSearch, setPatientSearch] = useState<string>('');
+  const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Abas do Módulo
   const [activeTab, setActiveTab] = useState<
@@ -584,6 +586,15 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPreviousRecordsModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition-colors cursor-pointer"
+              title="Visualizar histórico de prontuários anteriores deste paciente"
+            >
+              <FileText className="w-3.5 h-3.5 text-cyan-600" />
+              <span>Ver Prontuários Anteriores</span>
+            </button>
             <span className="px-3 py-1 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-full text-xs font-bold">
               Prontuário Ativo
             </span>
@@ -1701,6 +1712,14 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           setSuccessMsg(`${accepted.length} elemento(s) atualizado(s) no Odontograma!`);
         }}
       />
+      {showPreviousRecordsModal && selectedPatientId && (
+        <PatientPreviousRecordsModal
+          isOpen={showPreviousRecordsModal}
+          onClose={() => setShowPreviousRecordsModal(false)}
+          patientId={selectedPatientId}
+          patientName={selectedPatient?.full_name || selectedPatient?.name}
+        />
+      )}
     </div>
   );
 };

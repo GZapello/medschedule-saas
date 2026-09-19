@@ -42,6 +42,7 @@ import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { HomeSchoolProgramManager } from '../common/HomeSchoolProgramManager';
 import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
 import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
+import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 
 interface OccupationalTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -62,6 +63,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
+  const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Switcher de Área de Atuação da TO
   const [practiceArea, setPracticeArea] = useState<
@@ -547,6 +549,18 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
               <User className="w-3.5 h-3.5 text-teal-600" />
               <span>{selectedPatient.full_name}</span>
             </div>
+          )}
+
+          {selectedPatientId && (
+            <button
+              type="button"
+              onClick={() => setShowPreviousRecordsModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+              title="Visualizar histórico de prontuários anteriores deste paciente"
+            >
+              <FileText className="w-3.5 h-3.5 text-teal-600" />
+              <span>Ver Prontuários Anteriores</span>
+            </button>
           )}
         </div>
       </div>
@@ -1322,6 +1336,14 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             title={comparisonTitle}
             items={comparisonItems}
           />
+          {showPreviousRecordsModal && selectedPatientId && (
+            <PatientPreviousRecordsModal
+              isOpen={showPreviousRecordsModal}
+              onClose={() => setShowPreviousRecordsModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name}
+            />
+          )}
         </>
       )}
     </div>

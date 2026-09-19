@@ -21,11 +21,13 @@ import {
   ArrowLeft,
   Copy,
   GitCompare,
-  X
+  X,
+  FileText
 } from 'lucide-react';
 import { Student, Workout, Assessment, WorkoutLog, PersonalRecord, AttendanceStats } from './types';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { PersonalEvolutionCharts } from './PersonalEvolutionCharts';
 import { PersonalBeforeAfterModal } from './PersonalBeforeAfterModal';
 import { SecureFileImage } from '../common/SecureFileImage';
@@ -75,6 +77,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [compareCurrentId, setCompareCurrentId] = useState<string | undefined>(undefined);
   const [comparePreviousId, setComparePreviousId] = useState<string | undefined>(undefined);
+  const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Modal de Edição de Aluno
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -256,6 +259,15 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           >
             <Printer className="w-3.5 h-3.5" />
             Ficha / PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowPreviousRecordsModal(true)}
+            className="px-3.5 py-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+            title="Visualizar histórico de prontuários clínicos e evoluções anteriores"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Ver Prontuários Anteriores
           </button>
           <button
             onClick={onOpenAIAssistant}
@@ -1012,6 +1024,14 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {showPreviousRecordsModal && (
+        <PatientPreviousRecordsModal
+          patientId={studentId}
+          patientName={student.name}
+          onClose={() => setShowPreviousRecordsModal(false)}
+        />
       )}
     </div>
   );

@@ -2481,6 +2481,13 @@ export function initializeDatabase(): void {
     }
   } catch (_) {}
 
+  try {
+    const weCols = rawDb.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
+    if (!weCols.includes('exercise_file_id')) {
+      rawDb.exec('ALTER TABLE personal_workout_exercises ADD COLUMN exercise_file_id TEXT');
+    }
+  } catch (_) {}
+
   // Executa seed caso não existam categorias cadastradas
   try {
     const checkStmt = db.prepare("SELECT count(*) as total FROM categories");

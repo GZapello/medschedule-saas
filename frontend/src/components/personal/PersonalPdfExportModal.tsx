@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Student, Workout, Assessment, StrengthTestItem, EnduranceTestItem } from './types';
 import { useAuth } from '../../context/AuthContext';
+import { SecureFileImage } from '../common/SecureFileImage';
 
 interface PersonalPdfExportModalProps {
   isOpen: boolean;
@@ -272,8 +273,14 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                             {exportType === 'full_workout' && (
                               <td className="py-1 px-2">
                                 <div className="w-8 h-8 rounded-lg bg-slate-100 overflow-hidden border border-slate-200 flex items-center justify-center">
-                                  {ex.photo_url ? (
-                                    <img src={ex.photo_url} alt="" className="w-full h-full object-cover" />
+                                  {ex.exercise_file_id || ex.photo_url ? (
+                                    <SecureFileImage
+                                      fileId={ex.exercise_file_id}
+                                      fallbackUrl={ex.photo_url}
+                                      alt=""
+                                      className="w-full h-full object-cover"
+                                      placeholderText=""
+                                    />
                                   ) : (
                                     <Dumbbell className="w-3.5 h-3.5 text-slate-300" />
                                   )}

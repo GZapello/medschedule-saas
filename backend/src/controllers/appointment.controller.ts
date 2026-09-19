@@ -53,6 +53,105 @@ export function validateClinicBusinessHours(tenantId: string, startTime: string,
   }
 }
 
+export function validateProfessionalSchedule(tenantId: string, professionalId: string, startTime: string, endTime: string): { valid: boolean; error?: string } {
+  try {
+    const normalizedStart = startTime.includes('T') ? startTime : startTime.replace(' ', 'T');
+    const normalizedEnd = endTime.includes('T') ? endTime : endTime.replace(' ', 'T');
+    const apptDate = new Date(normalizedStart);
+    const dayOfWeek = isNaN(apptDate.getDay()) ? -1 : apptDate.getDay();
+    if (dayOfWeek === -1) return { valid: false, error: 'Data de agendamento inválida.' };
+
+    const timeOnly = (dStr: string) => {
+      const parts = dStr.split('T');
+      return parts[1]?.slice(0, 5) || '00:00';
+    };
+    const reqStartTime = timeOnly(normalizedStart);
+    const reqEndTime = timeOnly(normalizedEnd);
+
+    // 1. Busca os turnos de trabalho ativos do profissional para esse dia da semana
+    const activeShifts = db.prepare(`
+      SELECT start_time, end_time, break_start, break_end
+      FROM schedules
+      WHERE tenant_id = ? AND professional_id = ? AND day_of_week = ? AND is_active = 1
+      ORDER BY start_time ASC
+    `).all(tenantId, professionalId, dayOfWeek) as {
+      start_time: string;
+      end_time: string;
+      break_start: string | null;
+      break_end: string | null;
+    }[];
+
+    if (!activeShifts || activeShifts.length === 0) {
+      return {
+        valid: false,
+        error: 'O profissional não possui escala de trabalho ativa neste dia da semana.'
+      };
+    }
+
+    // 2. Verifica se o horário solicitado cabe integralmente em algum turno ativo sem coincidir com pausa
+    let fitsInAnyShift = false;
+    let breakConflict = false;
+
+    for (const shift of activeShifts) {
+      const shiftStart = shift.start_time || '08:00';
+      const shiftEnd = shift.end_time || '18:00';
+      const breakStart = shift.break_start;
+      const breakEnd = shift.break_end;
+
+      const insideShift = reqStartTime >= shiftStart && reqEndTime <= shiftEnd;
+      let insideBreak = false;
+      if (breakStart && breakEnd) {
+        insideBreak = (reqStartTime >= breakStart && reqStartTime < breakEnd) ||
+                      (reqEndTime > breakStart && reqEndTime <= breakEnd) ||
+                      (reqStartTime <= breakStart && reqEndTime >= breakEnd);
+      }
+
+      if (insideBreak) {
+        breakConflict = true;
+      }
+
+      if (insideShift && !insideBreak) {
+        fitsInAnyShift = true;
+        break;
+      }
+    }
+
+    if (!fitsInAnyShift) {
+      if (breakConflict) {
+        return {
+          valid: false,
+          error: 'O horário solicitado coincide com o intervalo de descanso do profissional.'
+        };
+      }
+      return {
+        valid: false,
+        error: 'O horário solicitado está fora da escala de trabalho ativa do profissional.'
+      };
+    }
+
+    // 3. Verifica se não coincide com período de bloqueio / férias / ausência
+    const block = db.prepare(`
+      SELECT title FROM blocked_times
+      WHERE tenant_id = ?
+        AND (professional_id = ? OR professional_id IS NULL)
+        AND REPLACE(start_datetime, ' ', 'T') < ?
+        AND REPLACE(end_datetime, ' ', 'T') > ?
+      LIMIT 1
+    `).get(tenantId, professionalId, normalizedEnd, normalizedStart) as { title: string } | undefined;
+
+    if (block) {
+      return {
+        valid: false,
+        error: `O profissional possui um bloqueio de agenda neste horário: ${block.title || 'Ausência'}.`
+      };
+    }
+
+    return { valid: true };
+  } catch (e) {
+    return { valid: true };
+  }
+}
+
 export class AppointmentController {
   static list(req: Request, res: Response): void {
     try {
@@ -249,6 +348,13 @@ export class AppointmentController {
       const hoursCheck = validateClinicBusinessHours(tenantId, normalizedStartTime, normalizedEndTime);
       if (!hoursCheck.valid) {
         res.status(400).json({ error: hoursCheck.error });
+        return;
+      }
+
+      // 0b. Validação da escala de trabalho ativa do profissional (Item 1)
+      const scheduleCheck = validateProfessionalSchedule(tenantId, professionalId, normalizedStartTime, normalizedEndTime);
+      if (!scheduleCheck.valid) {
+        res.status(400).json({ error: scheduleCheck.error });
         return;
       }
 

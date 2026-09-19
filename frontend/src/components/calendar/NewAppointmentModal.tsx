@@ -9,7 +9,7 @@ interface NewAppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  initialPrefill?: { date?: string; time?: string };
+  initialPrefill?: { date?: string; time?: string; professionalId?: string };
 }
 
 export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
@@ -65,7 +65,10 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         setInsurances(ins || []);
         setRooms(rms || []);
         if (pats.length > 0) setPatientId(pats[0].id);
-        if (profs.length > 0) setProfessionalId(profs[0].id);
+        const targetProfId = initialPrefill?.professionalId && profs.some(p => p.id === initialPrefill.professionalId)
+          ? initialPrefill.professionalId
+          : (profs.length > 0 ? profs[0].id : '');
+        setProfessionalId(targetProfId);
         if (srvs.length > 0) setServiceId(srvs[0].id);
       }).catch(() => {});
     }
@@ -90,29 +93,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             if (match) {
               setSelectedSlot(match);
             } else {
-              const customSlot: AvailableSlot = {
-                time: prefillTime,
-                startTime: `${date}T${prefillTime}:00`,
-                endTime: `${date}T${prefillTime}:30`,
-                durationMinutes: 30,
-                bufferMinutes: 0
-              };
-              setSelectedSlot(customSlot);
+              setSelectedSlot(null);
             }
           }
         })
         .catch(() => {
           setAvailableSlots([]);
-          if (initialPrefill?.time) {
-            const prefillTime = initialPrefill.time;
-            setSelectedSlot({
-              time: prefillTime,
-              startTime: `${date}T${prefillTime}:00`,
-              endTime: `${date}T${prefillTime}:30`,
-              durationMinutes: 30,
-              bufferMinutes: 0
-            });
-          }
+          setSelectedSlot(null);
         })
         .finally(() => setLoadingSlots(false));
     } else {

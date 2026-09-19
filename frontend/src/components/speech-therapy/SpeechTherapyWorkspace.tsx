@@ -47,6 +47,7 @@ import { HomeSchoolProgramManager } from '../common/HomeSchoolProgramManager';
 import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
 import { FileImageUploader, FileUploadedInfo } from '../common/FileImageUploader';
 import { SecureFileImage } from '../common/SecureFileImage';
+import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 
 export interface StructuredGoalItem {
   id: string;
@@ -90,6 +91,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
   const [comparisonItems, setComparisonItems] = useState<any[]>([]);
   const [comparisonTitle, setComparisonTitle] = useState('Comparativo de Reavaliação Fonoaudiológica');
+  const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState(false);
 
   // Dados do Audiograma Interativo (inicializado totalmente vazio conforme Guia CFFa 2023)
   const [audiogramData, setAudiogramData] = useState<AudiogramData>({
@@ -690,14 +692,26 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
           )}
 
           {selectedPatientId && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('finish')}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-500/25 transition-all cursor-pointer whitespace-nowrap"
-            >
-              <CheckCircle2 className="w-4 h-4 text-white" />
-              <span>Finalizar Atendimento</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowPreviousRecordsModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                title="Visualizar histórico de prontuários anteriores deste paciente"
+              >
+                <FileText className="w-3.5 h-3.5 text-sky-600" />
+                <span>Ver Prontuários Anteriores</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('finish')}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-500/25 transition-all cursor-pointer whitespace-nowrap"
+              >
+                <CheckCircle2 className="w-4 h-4 text-white" />
+                <span>Finalizar Atendimento</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1999,6 +2013,14 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             title={comparisonTitle}
             items={comparisonItems}
           />
+          {showPreviousRecordsModal && selectedPatientId && (
+            <PatientPreviousRecordsModal
+              isOpen={showPreviousRecordsModal}
+              onClose={() => setShowPreviousRecordsModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name}
+            />
+          )}
         </>
       )}
     </div>

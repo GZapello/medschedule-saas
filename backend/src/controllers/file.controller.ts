@@ -487,16 +487,10 @@ export class FileController {
 
       const decodedId = decodeURIComponent(String(id || '')).trim();
 
-      // Validação estrita por clínica: busca por ID ou por object_key
+      // Validação estrita por clínica: busca por ID ou por object_key (inclui arquivos globais de biblioteca)
       let file = db
-        .prepare('SELECT * FROM file_attachments WHERE id = ? AND clinic_id = ?')
-        .get(decodedId, tenantId) as any;
-
-      if (!file) {
-        file = db
-          .prepare('SELECT * FROM file_attachments WHERE object_key = ? AND clinic_id = ?')
-          .get(decodedId, tenantId) as any;
-      }
+        .prepare('SELECT * FROM file_attachments WHERE (id = ? OR object_key = ?) AND (clinic_id = ? OR clinic_id = "global")')
+        .get(decodedId, decodedId, tenantId) as any;
 
       if (!file) {
         res.status(404).json({
@@ -512,7 +506,7 @@ export class FileController {
         const nowInSeconds = Math.floor(Date.now() / 1000);
         const readPayload = {
           action: 'read',
-          clinicId: tenantId,
+          clinicId: file.clinic_id || tenantId,
           objectKey: file.object_key,
           exp: nowInSeconds + 300
         };

@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { ReferralModal } from './ReferralModal';
+import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
 import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
 import { OdontogramCanvas, OdontogramData } from '../dentistry/OdontogramCanvas';
@@ -92,11 +93,21 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     isSpeechTherapist,
     isPsychopedagogue,
     isZemdaPP,
+    isZemdaBody,
     currentUser
   } = useAuth();
   const { showToast } = useToast();
 
   const effectiveModule = moduleType || appointment.clinical_module;
+
+  const isAppointmentPP =
+    effectiveModule === 'ZemdaPP' ||
+    isPsychopedagogue ||
+    isZemdaPP ||
+    Boolean(appointment.clinical_module === 'ZemdaPP') ||
+    (appointment.service_name || '').toLowerCase().includes('psicopedag') ||
+    (currentUser?.professionName || '').toLowerCase().includes('psicopedag') ||
+    (currentUser?.professionSlug || '').toLowerCase().includes('psicopedag');
 
   const [loadingPatient, setLoadingPatient] = useState<boolean>(true);
   const [patientData, setPatientData] = useState<any>(null);
@@ -154,21 +165,22 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     isAppointmentTO ? 'ZemdaTO' :
     isAppointmentFono ? 'ZemdaFono' :
     isAppointmentPhysio ? 'ZemdaFisio' :
+    isAppointmentPP ? 'ZemdaPP' :
     'general'
   );
 
   const resolvedSpecializedName = specializedModuleName || (
-    isPsychopedagogue || isZemdaPP || effectiveModule === 'ZemdaPP' ? 'ZemdaPP' :
+    isAppointmentPP ? 'ZemdaPP' :
     isSpeechTherapist || effectiveModule === 'ZemdaFono' ? 'ZemdaFono' :
     isDentist || effectiveModule === 'ZemdaOdonto' ? 'ZemdaOdonto' :
     isOccupationalTherapist || effectiveModule === 'ZemdaTO' ? 'ZemdaTO' :
     isNutritionist || effectiveModule === 'ZemdaNutri' ? 'ZemdaNutri' :
     isPhysiotherapist || effectiveModule === 'ZemdaFisio' ? 'ZemdaFisio' :
-    (currentUser?.professionName || (currentUser as any)?.profession_name || '').toLowerCase().includes('psic') ? 'ZemdaPP' :
     undefined
   );
 
   const [showZemdaBodyModal, setShowZemdaBodyModal] = useState<boolean>(false);
+  const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Campos clínicos
   const [title, setTitle] = useState<string>(
@@ -783,22 +795,35 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               </button>
             )}
 
-            {/* Botão de Acesso Rápido ao ZemdaBody */}
+            {/* Botão de Histórico de Prontuários Anteriores */}
             <button
               type="button"
-              onClick={() => {
-                if (onOpenZemdaBody) {
-                  onOpenZemdaBody();
-                } else {
-                  setShowZemdaBodyModal(true);
-                }
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-teal-600 hover:bg-teal-500 text-white shadow-xs transition-colors cursor-pointer"
-              title="Abrir mapa corporal clínico ZemdaBody"
+              onClick={() => setShowPreviousRecordsModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-xs transition-colors cursor-pointer"
+              title="Visualizar prontuários e evoluções anteriores deste paciente"
             >
-              <Activity className="w-4 h-4" />
-              <span>ZemdaBody</span>
+              <FileText className="w-3.5 h-3.5 text-indigo-300" />
+              <span>Ver Prontuários Anteriores</span>
             </button>
+
+            {/* Botão de Acesso Rápido ao ZemdaBody (apenas quando autorizado pelo gestor) */}
+            {isZemdaBody && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenZemdaBody) {
+                    onOpenZemdaBody();
+                  } else {
+                    setShowZemdaBodyModal(true);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-teal-600 hover:bg-teal-500 text-white shadow-xs transition-colors cursor-pointer"
+                title="Abrir mapa corporal clínico ZemdaBody"
+              >
+                <Activity className="w-4 h-4" />
+                <span>ZemdaBody</span>
+              </button>
+            )}
 
             <button
               onClick={onClose}
@@ -1932,6 +1957,16 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           professionalId={appointment.professional_id}
           professionalName={appointment.professional_name}
           module={effectiveModule}
+        />
+      )}
+
+      {/* Modal de Prontuários Anteriores */}
+      {showPreviousRecordsModal && (
+        <PatientPreviousRecordsModal
+          isOpen={showPreviousRecordsModal}
+          onClose={() => setShowPreviousRecordsModal(false)}
+          patientId={appointment.patient_id}
+          patientName={patientName}
         />
       )}
 

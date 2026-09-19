@@ -132,9 +132,13 @@ export class ClinicalController {
       const stmt = db.prepare(`
         SELECT 
           r.id, r.tenant_id, r.patient_id, r.appointment_id, r.professional_id,
-          r.session_date, r.session_time, r.procedure_name, r.title, r.clinical_evolution,
-          r.technical_notes, r.private_notes, r.conducts, r.clinical_data_json, r.module_type,
-          r.module_data_json, r.is_sealed, r.created_by, r.updated_by, r.edit_history_json,
+          r.session_date, r.session_date as consultation_date, r.session_time, r.session_time as consultation_time,
+          r.procedure_name, r.title, r.clinical_evolution,
+          r.technical_notes, r.private_notes, r.conducts, r.conducts as conduct_plan,
+          COALESCE(r.module_type, p.practice_areas, 'Geral') as specialty_or_module,
+          r.clinical_data_json, r.module_type,
+          r.module_data_json, r.is_sealed, r.signature_hash, r.signed_at, r.signer_name, r.signer_registration, r.sealed_at,
+          r.created_by, r.updated_by, r.edit_history_json,
           r.created_at, r.updated_at,
           p.name as professional_name, p.registration_type, p.registration_number,
           (SELECT COUNT(*) FROM documents WHERE record_id = r.id) as total_attachments
