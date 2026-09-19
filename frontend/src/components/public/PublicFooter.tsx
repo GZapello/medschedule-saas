@@ -176,6 +176,20 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({
               </li>
               <li>
                 <a
+                  href="/sistema-para-psicopedagogos"
+                  onClick={(e) => {
+                    if (onNavigateSeoPage) {
+                      e.preventDefault();
+                      onNavigateSeoPage('sistema-para-psicopedagogos');
+                    }
+                  }}
+                  className="hover:text-teal-600 transition-colors cursor-pointer block"
+                >
+                  ZemdaPP — Psicopedagogia
+                </a>
+              </li>
+              <li>
+                <a
                   href="/sistema-para-psicologos"
                   onClick={(e) => {
                     if (onNavigateSeoPage) {

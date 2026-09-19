@@ -6,6 +6,7 @@ import { NutritionWorkspace } from '../nutrition/NutritionWorkspace';
 import { OccupationalTherapyWorkspace } from '../occupational-therapy/OccupationalTherapyWorkspace';
 import { SpeechTherapyWorkspace } from '../speech-therapy/SpeechTherapyWorkspace';
 import { DentistryWorkspace } from '../dentistry/DentistryWorkspace';
+import { PsychopedagogyWorkspace } from '../psychopedagogy/PsychopedagogyWorkspace';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { Activity, FileText, Stethoscope, ChevronLeft } from 'lucide-react';
@@ -21,7 +22,7 @@ export function AppointmentConsultation({
   onClose: () => void;
   onFinished: () => void;
 }) {
-  const { isNutritionist, isOccupationalTherapist, isSpeechTherapist, isDentist } = useAuth();
+  const { isNutritionist, isOccupationalTherapist, isSpeechTherapist, isDentist, isPsychopedagogue } = useAuth();
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
 
@@ -79,6 +80,7 @@ export function AppointmentConsultation({
     effectiveModuleType === 'ZemdaNutri' ? NutritionWorkspace :
     effectiveModuleType === 'ZemdaTO' ? OccupationalTherapyWorkspace :
     effectiveModuleType === 'ZemdaFono' ? SpeechTherapyWorkspace :
+    effectiveModuleType === 'ZemdaPP' ? PsychopedagogyWorkspace :
     null;
 
   // Se o profissional estiver visualizando o ZemdaBody dentro do mesmo atendimento:
@@ -201,12 +203,13 @@ export function AppointmentConsultation({
       onOpenZemdaBody={() => setActiveTab('zemda_body')}
       onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
       specializedModuleName={
+        effectiveModuleType === 'ZemdaPP' ? 'ZemdaPP' :
         effectiveModuleType === 'ZemdaFono' ? 'ZemdaFono' :
         effectiveModuleType === 'ZemdaOdonto' ? 'ZemdaOdonto' :
         effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
         effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
         effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
-        (isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
+        (isPsychopedagogue ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
       }
     />
   );

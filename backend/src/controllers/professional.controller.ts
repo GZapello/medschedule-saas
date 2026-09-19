@@ -312,12 +312,14 @@ export class ProfessionalController {
         const isNutri = combinedText.includes('nutri') || combinedText.includes('crn') || combinedText.includes('diet');
         const isTO = combinedText.includes('terapia ocupacional') || combinedText.includes('terapeuta ocupacional') || combinedText.includes('ocupacional');
         const isFono = combinedText.includes('fono') || combinedText.includes('crfa');
+        const isPP = professionId === 'prof-psicopedagogo' || combinedText.includes('psicopedago') || combinedText.includes('abpp');
 
         const fEnabled = isPhysio ? 1 : 0;
         const oEnabled = isDentist ? 1 : 0;
         const nEnabled = isNutri ? 1 : 0;
         const toEnabled = isTO ? 1 : 0;
         const foEnabled = isFono ? 1 : 0;
+        const ppEnabled = isPP ? 1 : 0;
 
         // Atualiza sinalizadores de módulo no registro do profissional
         db.prepare(`
@@ -326,9 +328,10 @@ export class ProfessionalController {
             zemda_odonto_enabled = ?,
             zemda_nutri_enabled = ?,
             zemda_to_enabled = ?,
-            zemda_fono_enabled = ?
+            zemda_fono_enabled = ?,
+            zemda_pp_enabled = ?
           WHERE id = ? AND tenant_id = ?
-        `).run(fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, id, tenantId);
+        `).run(fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, ppEnabled, id, tenantId);
 
         if (currentProf.user_id) {
           // Atualiza usuário vinculado
@@ -342,9 +345,10 @@ export class ProfessionalController {
               zemda_nutri_enabled = ?,
               zemda_to_enabled = ?,
               zemda_fono_enabled = ?,
+              zemda_pp_enabled = ?,
               updated_at = datetime('now')
             WHERE id = ?
-          `).run(professionId, newProfName || null, practiceAreas || null, fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, currentProf.user_id);
+          `).run(professionId, newProfName || null, practiceAreas || null, fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, ppEnabled, currentProf.user_id);
 
           // Atualiza clinic_users
           db.prepare(`
@@ -354,9 +358,10 @@ export class ProfessionalController {
               zemda_nutri_enabled = ?,
               zemda_to_enabled = ?,
               zemda_fono_enabled = ?,
+              zemda_pp_enabled = ?,
               profession_custom = ?
             WHERE user_id = ? AND tenant_id = ?
-          `).run(fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, newProfName || null, currentProf.user_id, tenantId);
+          `).run(fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, ppEnabled, newProfName || null, currentProf.user_id, tenantId);
 
           // Se for gestor, sincroniza tenant
           const cu = db.prepare('SELECT is_manager FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(currentProf.user_id, tenantId) as any;

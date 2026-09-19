@@ -31,7 +31,8 @@ import {
   Apple,
   Hand,
   Mic,
-  Dumbbell
+  Dumbbell,
+  GraduationCap
 } from 'lucide-react';
 import { openZemdaAI } from '../../utils/aiHelper';
 
@@ -73,6 +74,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isZemdaTO,
     isSpeechTherapist,
     isZemdaFono,
+    isPsychopedagogue,
+    isZemdaPP,
     isZemdaPersonal,
     isZemdaBody,
     clientTermLabel
@@ -127,6 +130,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'ZemdaFono (Fonoaudiologia)',
           icon: Mic,
           visible: isSpeechTherapist || isZemdaFono
+        },
+        {
+          id: 'zemda-pp',
+          label: 'ZemdaPP (Psicopedagogia)',
+          icon: GraduationCap,
+          visible: isPsychopedagogue || isZemdaPP
         },
         {
           id: 'zemda-personal',

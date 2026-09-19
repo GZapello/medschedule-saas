@@ -419,7 +419,62 @@ export const SEO_ROUTES: SeoRoute[] = [
       }
     ],
     ctaHeadline: 'Dê um salto de organização no seu consultório de Nutrição',
-    ctaSubheadline: 'Conheça a plataforma Zemda e descubra recursos dedicados para acompanhamento nutricional e agendamento inteligente.'
+  },
+
+  // 8.1 Sistema para Psicopedagogos (ZemdaPP - CBO 2394-25)
+  {
+    slug: 'sistema-para-psicopedagogos',
+    path: '/sistema-para-psicopedagogos',
+    title: 'ZemdaPP • Sistema para Psicopedagogos e Clínicas de Psicopedagogia',
+    metaDescription: 'Software completo para psicopedagogos clínicos e institucionais (CBO 2394-25). Avaliação psicopedagógica, plano de intervenção (PIP), parceria escola-família e evoluções em conformidade com as diretrizes da ABPp.',
+    keywords: 'sistema para psicopedagogos, software psicopedagogia, prontuario psicopedagogico, plano de intervencao psicopedagogica, avaliacao psicopedagogica, ABPp, zemda, zemdapp',
+    canonical: `${OFFICIAL_DOMAIN}/sistema-para-psicopedagogos`,
+    indexable: true,
+    inSitemap: true,
+    badge: 'ZemdaPP — Psicopedagogia',
+    h1: 'O Software Definitivo para Psicopedagogia Clínica e Institucional',
+    h2: 'Avaliações, plano de intervenção (PIP), escuta familiar e parceria com a escola em uma só plataforma',
+    summary: 'Apoio especializado para o psicopedagogo acompanhar o desenvolvimento cognitivo e as aprendizagens com segurança, sigilo profissional e clareza metodológica (CBO 2394-25).',
+    features: [
+      {
+        title: 'Avaliação Psicopedagógica Estruturada (Modo Clínico e Institucional)',
+        description: 'Instrumentos para leitura, escrita, matemática, funções executivas e análise do clima pedagógico escolar.'
+      },
+      {
+        title: 'Plano de Intervenção Psicopedagógica (PIP) com Metas Claras',
+        description: 'Construa estratégias de mediação pedagógica com objetivos SMART e acompanhamento percentual de evolução.'
+      },
+      {
+        title: 'Parceria com a Escola e Escuta da Família',
+        description: 'Registre reuniões com a coordenação pedagógica, visitas escolares e devolutivas familiares com total rastreabilidade.'
+      },
+      {
+        title: 'Sigilo Absoluto e Bloqueio Ético de Instrumentos',
+        description: 'Isolamento de prontuário com proteção LGPD e bloqueio automático de testes privativos da Psicologia (SATEPSI/CFP).'
+      }
+    ],
+    benefits: [
+      'Registro seguro das sessões com assinatura eletrônica e selamento oficial',
+      'Emissão de relatórios psicopedagógicos formatados para escolas e médicos',
+      'Facilidade no acompanhamento longitudinal do aprendente',
+      'Atendimento em conformidade com as boas práticas da ABPp e CBO 2394-25'
+    ],
+    faqs: [
+      {
+        question: 'O registro na ABPp é obrigatório para utilizar o ZemdaPP?',
+        answer: 'Não. O registro na Associação Brasileira de Psicopedagogia (ABPp) é opcional. O profissional pode registrar seu número de associado, selecionar outro vínculo ou declarar não informado.'
+      },
+      {
+        question: 'A Psicopedagogia já é uma profissão regulamentada por lei federal?',
+        answer: 'A ocupação é formalmente reconhecida pelo Ministério do Trabalho (CBO 2394-25). O projeto de lei de regulamentação profissional (PL 1675/2023) foi aprovado pelo Congresso Nacional e aguarda os trâmites legais de sanção.'
+      },
+      {
+        question: 'Posso emitir relatórios psicopedagógicos para encaminhamento escolar ou neurológico?',
+        answer: 'Sim! O ZemdaPP permite emitir relatórios detalhados, pareceres técnicos e declarações de acompanhamento prontos para impressão ou compartilhamento seguro com assinatura eletrônica ou digital.'
+      }
+    ],
+    ctaHeadline: 'Organize sua prática psicopedagógica com o ZemdaPP',
+    ctaSubheadline: 'Experimente a plataforma pensada especificamente para as necessidades do psicopedagogo clínico e institucional.'
   },
 
   // 9. Agenda Online
@@ -778,6 +833,11 @@ export function isValidInternalRoute(rawPath: string): boolean {
     return true;
   }
 
+  // Validação pública oficial de documentos: /verificar-documento/:token
+  if (/^\/verificar-documento\/[a-zA-Z0-9_-]+$/i.test(norm)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -815,12 +875,14 @@ Allow: /sistema-para-psicologos
 Allow: /sistema-para-fonoaudiologos
 Allow: /sistema-para-fisioterapeutas
 Allow: /sistema-para-nutricionistas
+Allow: /sistema-para-psicopedagogos
 Allow: /agenda-online
 Allow: /prontuario
 Allow: /gestao-financeira
 Allow: /blog
 Allow: /termos-de-uso
 Allow: /privacidade
+Allow: /verificar-documento
 
 # APIs
 Disallow: /api/

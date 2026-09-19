@@ -90,6 +90,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     isNutritionist,
     isOccupationalTherapist,
     isSpeechTherapist,
+    isPsychopedagogue,
+    isZemdaPP,
     currentUser
   } = useAuth();
   const { showToast } = useToast();
@@ -156,12 +158,13 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   );
 
   const resolvedSpecializedName = specializedModuleName || (
+    isPsychopedagogue || isZemdaPP || effectiveModule === 'ZemdaPP' ? 'ZemdaPP' :
     isSpeechTherapist || effectiveModule === 'ZemdaFono' ? 'ZemdaFono' :
     isDentist || effectiveModule === 'ZemdaOdonto' ? 'ZemdaOdonto' :
     isOccupationalTherapist || effectiveModule === 'ZemdaTO' ? 'ZemdaTO' :
     isNutritionist || effectiveModule === 'ZemdaNutri' ? 'ZemdaNutri' :
     isPhysiotherapist || effectiveModule === 'ZemdaFisio' ? 'ZemdaFisio' :
-    (currentUser?.professionName || (currentUser as any)?.profession_name || '').toLowerCase().includes('psic') ? 'ZemdaPsico' :
+    (currentUser?.professionName || (currentUser as any)?.profession_name || '').toLowerCase().includes('psic') ? 'ZemdaPP' :
     undefined
   );
 

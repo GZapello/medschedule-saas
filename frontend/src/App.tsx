@@ -16,6 +16,8 @@ import { DentistryWorkspace } from './components/dentistry/DentistryWorkspace';
 import { NutritionWorkspace } from './components/nutrition/NutritionWorkspace';
 import { OccupationalTherapyWorkspace } from './components/occupational-therapy/OccupationalTherapyWorkspace';
 import { SpeechTherapyWorkspace } from './components/speech-therapy/SpeechTherapyWorkspace';
+import { PsychopedagogyWorkspace } from './components/psychopedagogy/PsychopedagogyWorkspace';
+import { VerifyDocumentView } from './components/public/VerifyDocumentView';
 import { ProfessionalsView } from './components/professionals/ProfessionalsView';
 import { ServicesView } from './components/services/ServicesView';
 import { FinancialView } from './components/financial/FinancialView';
@@ -114,6 +116,8 @@ const AppContent: React.FC = () => {
     isZemdaTO,
     isSpeechTherapist,
     isZemdaFono,
+    isPsychopedagogue,
+    isZemdaPP,
     isZemdaPersonal
   } = useAuth();
 
@@ -173,6 +177,13 @@ const AppContent: React.FC = () => {
     return null;
   };
   const [activeLegalPage, setActiveLegalPage] = useState<'terms' | 'privacy' | null>(getInitialLegalPage);
+
+  // Roteamento para verificação pública de documento (/verificar-documento/:token)
+  const getInitialVerificationToken = (): string | null => {
+    const match = window.location.pathname.match(/^\/verificar-documento\/([^/]+)/);
+    return match ? match[1] : null;
+  };
+  const [activeVerificationToken, setActiveVerificationToken] = useState<string | null>(getInitialVerificationToken);
 
   const navigateToSeoPage = (slug: string) => {
     if (SEO_PAGES[slug]) {
@@ -399,6 +410,12 @@ const AppContent: React.FC = () => {
         window.history.pushState(null, '', '/');
         return;
       }
+      // 3.0 Se estiver em verificação pública de documento, volta para home
+      if (activeVerificationToken) {
+        setActiveVerificationToken(null);
+        window.history.pushState(null, '', '/');
+        return;
+      }
       // 3.1 Se estiver em link de teste grátis, volta para home
       if (activeTrialToken) {
         setActiveTrialToken(null);
@@ -443,6 +460,9 @@ const AppContent: React.FC = () => {
       } else {
         setActiveSeoSlug(null);
       }
+
+      const verificationMatch = window.location.pathname.match(/^\/verificar-documento\/([^/]+)/);
+      setActiveVerificationToken(verificationMatch ? verificationMatch[1] : null);
 
       const match = window.location.pathname.match(/^\/agendar\/([^/]+)/);
       setActiveProfSlug(match ? match[1] : null);
@@ -530,6 +550,20 @@ const AppContent: React.FC = () => {
           <p className="text-slate-300 text-sm font-semibold">Carregando Zemda...</p>
         </div>
       </div>
+    );
+  }
+
+  // Se o usuário está acessando verificação pública de autenticidade de documento (/verificar-documento/:token)
+  if (activeVerificationToken) {
+    return (
+      <VerifyDocumentView
+        token={activeVerificationToken}
+        onBackToHome={() => {
+          setActiveVerificationToken(null);
+          window.history.pushState(null, '', '/');
+          if (!currentUser) setPublicView('landing');
+        }}
+      />
     );
   }
 
@@ -926,6 +960,22 @@ const AppContent: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaFono</h2>
                 <p className="text-sm text-slate-600 mb-4">
                   Este módulo clínico é de uso exclusivo para fonoaudiólogos e profissionais com área de atuação em <strong>Fonoaudiologia</strong>.
+                </p>
+              </div>
+            )
+          )}
+
+          {currentView === 'zemda-pp' && (
+            (isPsychopedagogue || isZemdaPP) ? (
+              <PsychopedagogyWorkspace />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaPP</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Este módulo clínico é de uso exclusivo para psicopedagogos com área de atuação em <strong>Psicopedagogia</strong>.
                 </p>
               </div>
             )

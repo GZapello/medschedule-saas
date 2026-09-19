@@ -27,7 +27,8 @@ import {
   Brain,
   Mic,
   Eye,
-  Crosshair
+  Crosshair,
+  GraduationCap
 } from 'lucide-react';
 
 interface ZemdaLandingPageProps {
@@ -68,6 +69,16 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
       color: 'bg-rose-50 text-rose-600 border-rose-100',
       badgeColor: 'text-rose-600 bg-rose-50',
       seoSlug: 'sistema-para-fonoaudiologos'
+    },
+    {
+      id: 'pp',
+      brand: 'ZemdaPP',
+      area: 'Psicopedagogia',
+      desc: 'Avaliação da aprendizagem, PIP, funções executivas e sessões com sigilo.',
+      icon: GraduationCap,
+      color: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+      badgeColor: 'text-indigo-600 bg-indigo-50',
+      seoSlug: 'sistema-para-psicopedagogos'
     },
     {
       id: 'psico',

@@ -31,6 +31,7 @@ export interface User {
   zemdaNutriEnabled?: boolean;
   zemdaToEnabled?: boolean;
   zemdaFonoEnabled?: boolean;
+  zemdaPPEnabled?: boolean;
   permissions?: string[];
 }
 
@@ -542,4 +543,100 @@ export interface PhysiotherapyEvolution {
   registration_type?: string;
   registration_number?: string;
   specialty_name?: string;
+}
+
+// 8. Central de Certificados Digitais ICP-Brasil e Assinaturas
+export interface DigitalCertificate {
+  id: string;
+  tenant_id: string;
+  holder_type: 'professional' | 'patient';
+  holder_id: string;
+  certificate_type: 'A1' | 'A3' | 'remote';
+  serial_number: string;
+  subject_name: string;
+  subject_cpf_masked?: string;
+  issuer: string;
+  valid_from: string;
+  valid_to: string;
+  fingerprint_sha256: string;
+  provider: string;
+  status: 'valid' | 'expired' | 'revoked' | 'pending';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DigitalSignature {
+  id: string;
+  tenant_id: string;
+  document_type: string;
+  document_id: string;
+  signer_type: 'professional' | 'patient';
+  signer_id: string;
+  certificate_id?: string;
+  signature_type: 'pades' | 'cades' | 'electronic';
+  signature_hash: string;
+  signed_at: string;
+  pades_visual_stamp_json?: string;
+  verification_url?: string;
+  verification_token?: string;
+  is_valid: number;
+  created_at: string;
+}
+
+// 9. ZemdaPP (Psicopedagogia Clínica & Institucional)
+export interface PsychopedagogyProfile {
+  id: string;
+  tenant_id: string;
+  patient_id: string;
+  school_name?: string;
+  grade_level?: string;
+  shift?: string;
+  teacher_name?: string;
+  coordinator_name?: string;
+  main_complaint?: string;
+  family_dynamics?: string;
+  development_history?: string;
+  strengths?: string;
+  difficulties?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PsychopedagogyAssessment {
+  id: string;
+  tenant_id: string;
+  patient_id: string;
+  professional_id: string;
+  assessment_type: 'clinical' | 'institutional';
+  status: 'in_progress' | 'completed' | 'archived';
+  pedagogical_hypothesis?: string;
+  conclusions?: string;
+  recommendations?: string;
+  is_sealed: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PsychopedagogySession {
+  id: string;
+  tenant_id: string;
+  patient_id: string;
+  professional_id: string;
+  appointment_id?: string;
+  session_number?: number;
+  session_date: string;
+  objectives?: string;
+  activities_developed?: string;
+  learner_reactions?: string;
+  interventions_performed?: string;
+  results_observations?: string;
+  next_steps?: string;
+  is_sealed: number;
+  signature_hash?: string;
+  signed_at?: string;
+  signer_name?: string;
+  signer_registration?: string;
+  sealed_at?: string;
+  created_at: string;
+  updated_at: string;
 }

@@ -673,16 +673,24 @@ export class AIController {
           improvedText = formatSoapFallback(originalText);
           explanation = 'Estruturado nos eixos Subjetivo, Objetivo, Avaliação e Plano.';
           break;
+        case 'psychopedagogy':
+          improvedText = `Observações do Desenvolvimento Pedagógico:\n${originalText}\n\nHipóteses Pedagógicas & Mediação Didática:\n- Foco na estimulação de processos cognitivos e engajamento da aprendizagem.\n- Adaptações de rotina escolar e recursos didáticos estruturados.`;
+          explanation = 'Estruturado para hipóteses pedagógicas e intervenção didática (sem diagnóstico médico ou psicológico).';
+          break;
         default:
           improvedText = cleanGrammar(originalText);
           explanation = 'Texto aprimorado com clareza e precisão.';
       }
 
+      const disclaimer = mode === 'psychopedagogy'
+        ? 'Este parecer/sugestão pedagógica gerada por inteligência artificial destina-se exclusivamente a suporte ao profissional psicopedagogo e não constitui laudo médico ou diagnóstico psicológico.'
+        : 'Rascunho gerado por IA para revisão do profissional.';
+
       res.json({
         originalText,
         improvedText,
         explanation,
-        disclaimer: 'Rascunho gerado por IA para revisão do profissional.'
+        disclaimer
       });
     } catch (err: any) {
       console.error('[AIController.improveText] Erro:', err);

@@ -20,8 +20,20 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
   const { showToast } = useToast();
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<any>(null);
+  const [digitalSignature, setDigitalSignature] = useState<any>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const triggeredActionRef = useRef<boolean>(false);
+
+  const parsedStamp = React.useMemo(() => {
+    if (!digitalSignature?.pades_visual_stamp_json) return null;
+    try {
+      return typeof digitalSignature.pades_visual_stamp_json === 'string'
+        ? JSON.parse(digitalSignature.pades_visual_stamp_json)
+        : digitalSignature.pades_visual_stamp_json;
+    } catch {
+      return null;
+    }
+  }, [digitalSignature]);
 
   useEffect(() => {
     async function loadDocument() {
@@ -33,8 +45,14 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
           documentType === 'pending_exam' ? `/v1/pending-exams/${documentId}/document` :
           `/v1/clinical/exam-requests/${documentId}`;
 
-        const res = await ApiClient.get<any>(endpoint);
+        const [res, sigRes] = await Promise.all([
+          ApiClient.get<any>(endpoint),
+          ApiClient.get<any>(`/v1/digital-signatures/document/${documentType}/${documentId}`).catch(() => null)
+        ]);
         setData(res);
+        if (sigRes?.signature) {
+          setDigitalSignature(sigRes.signature);
+        }
       } catch (err: any) {
         showToast('Erro ao carregar documento para impressão', 'error');
       } finally {
@@ -366,8 +384,38 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="border-t border-slate-200 pt-4 mt-12 text-center text-[10px] text-slate-500 space-y-1 page-break-inside-avoid">
-            {doc.signature_hash ? (
+          <div className="border-t border-slate-200 pt-4 mt-8 text-center text-[10px] text-slate-500 space-y-2 page-break-inside-avoid">
+            {parsedStamp ? (
+              <div className="border border-slate-300 rounded-xl p-3 bg-slate-50/70 flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+                {parsedStamp.qrCodeDataUrl && (
+                  <img
+                    src={parsedStamp.qrCodeDataUrl}
+                    alt="QR Code de Verificação"
+                    className="w-16 h-16 shrink-0 border border-slate-200 rounded-lg p-0.5 bg-white shadow-xs"
+                  />
+                )}
+                <div className="flex-1 space-y-0.5">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[11px]">
+                    <span className="w-2 h-2 rounded-full bg-teal-600" />
+                    <span>{parsedStamp.title || 'DOCUMENTO ASSINADO DIGITALMENTE'}</span>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-teal-100 text-teal-800 font-bold">
+                      {parsedStamp.standard || 'ICP-Brasil'}
+                    </span>
+                  </div>
+                  <div className="text-slate-700 font-medium">
+                    Signatário: <strong>{parsedStamp.signerName}</strong>
+                    {parsedStamp.signerRegistration && <span> • {parsedStamp.signerRegistration}</span>}
+                    {parsedStamp.signedAt && <span> em {new Date(parsedStamp.signedAt).toLocaleString('pt-BR')}</span>}
+                  </div>
+                  <div className="font-mono text-[9px] text-slate-500 break-all">
+                    Hash SHA-256: {parsedStamp.hashSha256}
+                  </div>
+                  <div className="text-[9px] text-slate-500">
+                    Validação pública: <a href={parsedStamp.verificationUrl} target="_blank" rel="noopener noreferrer" className="text-teal-700 underline font-semibold">{parsedStamp.verificationUrl}</a>
+                  </div>
+                </div>
+              </div>
+            ) : doc.signature_hash ? (
               <>
                 <div className="font-medium text-slate-700">
                   Documento assinado eletronicamente por{' '}

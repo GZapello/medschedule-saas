@@ -28,6 +28,8 @@ interface AuthContextType {
   isZemdaTO: boolean;
   isSpeechTherapist: boolean;
   isZemdaFono: boolean;
+  isPsychopedagogue: boolean;
+  isZemdaPP: boolean;
   isPersonalTrainer: boolean;
   isZemdaPersonal: boolean;
   isZemdaBody: boolean;
@@ -252,6 +254,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     Boolean(currentUser?.zemdaFonoEnabled || hasFonoArea);
   const isZemdaFono = isSpeechTherapist;
 
+  // Regra Estrita de Acesso ao ZemdaPP (Psicopedagogia):
+  const hasPPArea =
+    profId === 'prof-psicopedagogo' ||
+    profId === 'prof-psicopedagogia' ||
+    profId.includes('psicopedago') ||
+    profSlug.includes('psicopedago') ||
+    profName.includes('psicopedago') ||
+    practiceAreas.includes('psicopedago') ||
+    practiceAreas.includes('abpp');
+
+  const isPsychopedagogue = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
+    Boolean(currentUser?.zemdaPPEnabled || hasPPArea);
+  const isZemdaPP = isPsychopedagogue;
+
   // Regra Estrita de Acesso ao ZemdaPersonal (Exclusivo para Personal Trainer):
   const isPersonalTrainerId =
     profId === 'prof-personal-trainer' ||
@@ -323,6 +339,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaTO,
         isSpeechTherapist,
         isZemdaFono,
+        isPsychopedagogue,
+        isZemdaPP,
         isPersonalTrainer,
         isZemdaPersonal,
         isZemdaBody,

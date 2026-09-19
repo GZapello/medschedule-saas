@@ -44,6 +44,8 @@ import { FreeTrialController } from '../controllers/free-trial.controller';
 import { FileController } from '../controllers/file.controller';
 import { ClinicalReassessmentController } from '../controllers/clinical-reassessment.controller';
 import { ClinicalGoalsController } from '../controllers/clinical-goals.controller';
+import { DigitalCertificateController } from '../controllers/digital-certificate.controller';
+import { PsychopedagogyController } from '../controllers/psychopedagogy.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -80,6 +82,9 @@ api.post('/v1/auth/register-invite', AuthController.registerWithInvite);
 // Validação e Ativação de Teste Grátis
 api.get('/v1/public/free-trials/validate/:token', FreeTrialController.validateToken);
 api.post('/v1/public/free-trials/activate/:token', FreeTrialController.activate);
+
+// Validação Pública de Documentos Clínicos e Assinaturas (PAdES / ICP-Brasil / Eletrônica)
+api.get('/v1/public/verify-document/:verificationToken', DigitalCertificateController.publicVerifyDocument);
 
 // Taxonomia pública (para formulários e página pública)
 api.get('/v1/taxonomy/categories', TaxonomyController.listCategories);
@@ -505,6 +510,44 @@ api.post('/v1/speech-therapy/aac', requireTenant, requireRole('clinic_admin', 'p
 api.post('/v1/speech-therapy/analyze-language', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.analyzeLanguageSample);
 
 api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.finishConsultation);
+
+// ==========================================
+// MÓDULO ZEMDAPP (PSICOPEDAGOGIA CLÍNICA E INSTITUCIONAL - CBO 2394-25)
+// ==========================================
+api.get('/v1/psychopedagogy/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.getProfile);
+api.post('/v1/psychopedagogy/profile', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveProfile);
+api.get('/v1/psychopedagogy/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listAssessments);
+api.post('/v1/psychopedagogy/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveAssessment);
+api.get('/v1/psychopedagogy/domains/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listDomains);
+api.post('/v1/psychopedagogy/domains', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveDomain);
+api.get('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listSessions);
+api.post('/v1/psychopedagogy/sessions', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSession);
+api.post('/v1/psychopedagogy/sessions/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.finishSession);
+api.get('/v1/psychopedagogy/plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listPlans);
+api.post('/v1/psychopedagogy/plans', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.savePlan);
+api.post('/v1/psychopedagogy/goals', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveGoal);
+api.get('/v1/psychopedagogy/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listInstruments);
+api.post('/v1/psychopedagogy/instruments', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveInstrument);
+api.get('/v1/psychopedagogy/school-contacts/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listSchoolContacts);
+api.post('/v1/psychopedagogy/school-contacts', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSchoolContact);
+api.get('/v1/psychopedagogy/institutional-cases', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listInstitutionalCases);
+api.post('/v1/psychopedagogy/institutional-cases', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveInstitutionalCase);
+api.get('/v1/psychopedagogy/shares/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listShares);
+api.post('/v1/psychopedagogy/shares', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.createShare);
+api.delete('/v1/psychopedagogy/shares/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.deleteShare);
+api.get('/v1/psychopedagogy/retention-policy', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.getRetentionPolicy);
+api.post('/v1/psychopedagogy/retention-policy', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveRetentionPolicy);
+
+// ==========================================
+// CENTRAL DE CERTIFICADOS DIGITAIS ICP-BRASIL & ASSINATURA PAdES
+// ==========================================
+api.get('/v1/digital-certificates/status', authMiddleware, DigitalCertificateController.getProviderStatus);
+api.get('/v1/digital-certificates', requireTenant, DigitalCertificateController.listCertificates);
+api.post('/v1/digital-certificates/connect', requireTenant, DigitalCertificateController.connectCertificate);
+api.delete('/v1/digital-certificates/:id', requireTenant, DigitalCertificateController.deleteCertificate);
+api.post('/v1/digital-signatures/sign', requireTenant, DigitalCertificateController.signDocument);
+api.post('/v1/digital-signatures/validate', requireTenant, DigitalCertificateController.validateSignature);
+api.get('/v1/digital-signatures/:id', requireTenant, DigitalCertificateController.getSignature);
 
 // ==========================================
 // MÓDULO CLÍNICO ZEMDABODY (MAPA CORPORAL & CANETA CLÍNICA)

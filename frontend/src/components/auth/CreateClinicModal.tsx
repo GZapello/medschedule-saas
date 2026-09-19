@@ -132,11 +132,23 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
       'Harmonização Orofacial',
       'Odontopediatria',
       'Cirurgia Bucomaxilofacial'
+    ],
+    Psicopedagogia: [
+      'Psicopedagogia Clínica',
+      'Psicopedagogia Institucional / Escolar',
+      'Dificuldades e Transtornos de Aprendizagem',
+      'Dislexia e Disortografia',
+      'Discalculia e Raciocínio Lógico',
+      'Estimulação de Funções Executivas e TDAH',
+      'Intervenção Precoce e Neuroaprendizagem',
+      'Orientação Familiar e Escolar',
+      'Adaptação Curricular e Inclusão'
     ]
   };
 
   const getSuggestionsForProfession = (prof: string): string[] => {
     const low = prof.toLowerCase();
+    if (low.includes('psicopedag') || low.includes('abpp')) return PRACTICE_AREAS_SUGGESTIONS['Psicopedagogia'];
     if (low.includes('fono')) return PRACTICE_AREAS_SUGGESTIONS['Fonoaudiologia'];
     if (low.includes('psic') || low.includes('terapeuta cognitivo') || low.includes('psicanalista')) return PRACTICE_AREAS_SUGGESTIONS['Psicologia'];
     if (low.includes('terapeuta ocupacional') || low.includes('terapia ocupacional') || low.includes('ocupacional')) return PRACTICE_AREAS_SUGGESTIONS['Terapia Ocupacional'];
@@ -151,7 +163,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
   const handleManagerProfessionChange = (val: string) => {
     let regType = formData.managerRegistrationType;
     const low = val.toLowerCase();
-    if (low.includes('fono')) {
+    if (low.includes('psicopedag') || low.includes('abpp')) {
+      regType = 'ABPp';
+    } else if (low.includes('fono')) {
       regType = 'CRFa';
     } else if (low.includes('psic')) {
       regType = 'CRP';
@@ -454,6 +468,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       onChange={e => handleManagerProfessionChange(e.target.value)}
                       className="w-full px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500"
                     >
+                      <option value="Psicopedagogia">Psicopedagogia → ZemdaPP (CBO 2394-25)</option>
                       <option value="Fonoaudiologia">Fonoaudiologia → ZemdaFono</option>
                       <option value="Psicologia">Psicologia → ZemdaPsico</option>
                       <option value="Terapia Ocupacional">Terapia Ocupacional → ZemdaTO</option>
@@ -471,11 +486,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                     <>
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Conselho / Registro Profissional
+                          Conselho / Associação / Registro Profissional
                         </label>
                         <input
                           type="text"
-                          placeholder="Ex: CRFa, CRP, CREFITO, CRN, CREF, CRO, CRM"
+                          placeholder="Ex: ABPp, CRFa, CRP, CREFITO, CRN, CREF, CRO, CRM"
                           value={formData.managerRegistrationType}
                           onChange={e => setFormData({ ...formData, managerRegistrationType: e.target.value })}
                           className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-teal-500 uppercase"

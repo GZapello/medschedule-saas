@@ -144,7 +144,7 @@ export class AuthController {
         profDetails = db.prepare(`
           SELECT 
             p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled,
+            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
@@ -156,7 +156,7 @@ export class AuthController {
         // Se não houver registro formal em professionals, verifica clinic_users / users / tenant
         if (!profDetails && user.role === 'clinic_admin') {
           const cu = db.prepare(`
-            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled,
+            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled,
                    u.profession_name, u.practice_areas as user_practice_areas,
                    u.registration_type, u.registration_number
             FROM clinic_users cu
@@ -170,7 +170,8 @@ export class AuthController {
           if (pName || pAreas) {
             const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
             let deducedProfId: string | undefined = undefined;
-            if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
+            if (pName.toLowerCase().includes('psicopedag')) deducedProfId = 'prof-psicopedagogo';
+            else if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
             else if (pName.toLowerCase().includes('odonto') || pName.toLowerCase().includes('dentis')) deducedProfId = 'prof-dentista';
             else if (pName.toLowerCase().includes('nutri')) deducedProfId = 'prof-nutricionista';
             else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
@@ -187,7 +188,8 @@ export class AuthController {
               zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 1,
               zemda_nutri_enabled: cu?.zemda_nutri_enabled ?? 1,
               zemda_to_enabled: cu?.zemda_to_enabled ?? 1,
-              zemda_fono_enabled: cu?.zemda_fono_enabled ?? 1
+              zemda_fono_enabled: cu?.zemda_fono_enabled ?? 1,
+              zemda_pp_enabled: cu?.zemda_pp_enabled ?? 1
             };
           }
         }
@@ -198,7 +200,7 @@ export class AuthController {
       let userPermissions: string[] = [];
       let cuRow: any = null;
       if (user.tenant_id) {
-        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
@@ -252,6 +254,12 @@ export class AuthController {
         checkProfText.includes('fono') ||
         checkProfText.includes('crfa');
 
+      const isPPUser =
+        profDetails?.profession_id === 'prof-psicopedagogo' ||
+        profDetails?.profession_id === 'prof-psicopedagogia' ||
+        checkProfText.includes('psicopedago') ||
+        checkProfText.includes('abpp');
+
       const isPersonalUser =
         profDetails?.profession_id === 'prof-personal-trainer' ||
         profDetails?.profession_id === 'prof-educacao-fisica' ||
@@ -262,7 +270,7 @@ export class AuthController {
         checkProfText.includes('educacao fisica');
 
       const hasConflictingProfession =
-        isPhysioUser || isDentistUser || isNutriUser || isTOUser || isFonoUser ||
+        isPhysioUser || isDentistUser || isNutriUser || isTOUser || isFonoUser || isPPUser ||
         profDetails?.profession_id === 'prof-medico' ||
         profDetails?.profession_id === 'prof-psicologo';
 
@@ -276,6 +284,7 @@ export class AuthController {
       const zemdaNutriEnabled = user.role !== 'superadmin' && isNutriUser && (isProfessionalUser || isManagerUser);
       const zemdaToEnabled = user.role !== 'superadmin' && isTOUser && (isProfessionalUser || isManagerUser);
       const zemdaFonoEnabled = user.role !== 'superadmin' && isFonoUser && (isProfessionalUser || isManagerUser);
+      const zemdaPPEnabled = user.role !== 'superadmin' && (isPPUser || Boolean(profDetails?.zemda_pp_enabled) || Boolean(cuRow?.zemda_pp_enabled)) && (isProfessionalUser || isManagerUser);
       const zemdaPersonalEnabled = user.role !== 'superadmin' && isStrictPersonalTrainer && (
         isManagerUser || (isProfessionalUser && (cuRow?.zemda_personal_enabled === 1 || userPermissions.includes('access_zemda_personal')))
       );
@@ -317,6 +326,7 @@ export class AuthController {
           zemdaNutriEnabled,
           zemdaToEnabled,
           zemdaFonoEnabled,
+          zemdaPPEnabled,
           zemdaPersonalEnabled
         },
         tenant: tenantData
@@ -369,7 +379,7 @@ export class AuthController {
         profDetails = db.prepare(`
           SELECT 
             p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled,
+            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
@@ -380,7 +390,7 @@ export class AuthController {
 
         if (!profDetails && user.role === 'clinic_admin') {
           const cu = db.prepare(`
-            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled,
+            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled,
                    u.profession_name, u.practice_areas as user_practice_areas,
                    u.registration_type, u.registration_number
             FROM clinic_users cu
@@ -394,7 +404,8 @@ export class AuthController {
           if (pName || pAreas) {
             const pSlug = pName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
             let deducedProfId: string | undefined = undefined;
-            if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
+            if (pName.toLowerCase().includes('psicopedag')) deducedProfId = 'prof-psicopedagogo';
+            else if (pName.toLowerCase().includes('fisio')) deducedProfId = 'prof-fisioterapeuta';
             else if (pName.toLowerCase().includes('odonto') || pName.toLowerCase().includes('dentis')) deducedProfId = 'prof-dentista';
             else if (pName.toLowerCase().includes('nutri')) deducedProfId = 'prof-nutricionista';
             else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
@@ -411,7 +422,8 @@ export class AuthController {
               zemda_odonto_enabled: cu?.zemda_odonto_enabled ?? 1,
               zemda_nutri_enabled: cu?.zemda_nutri_enabled ?? 1,
               zemda_to_enabled: cu?.zemda_to_enabled ?? 1,
-              zemda_fono_enabled: cu?.zemda_fono_enabled ?? 1
+              zemda_fono_enabled: cu?.zemda_fono_enabled ?? 1,
+              zemda_pp_enabled: cu?.zemda_pp_enabled ?? 1
             };
           }
         }
@@ -420,7 +432,7 @@ export class AuthController {
       let userPermissions: string[] = [];
       let cuRow: any = null;
       if (user.tenant_id) {
-        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
@@ -475,6 +487,12 @@ export class AuthController {
         checkProfText.includes('fono') ||
         checkProfText.includes('crfa');
 
+      const isPPUser =
+        profDetails?.profession_id === 'prof-psicopedagogo' ||
+        profDetails?.profession_id === 'prof-psicopedagogia' ||
+        checkProfText.includes('psicopedago') ||
+        checkProfText.includes('abpp');
+
       const isPersonalUser =
         profDetails?.profession_id === 'prof-personal-trainer' ||
         profDetails?.profession_id === 'prof-educacao-fisica' ||
@@ -485,7 +503,7 @@ export class AuthController {
         checkProfText.includes('educacao fisica');
 
       const hasConflictingProfession =
-        isPhysioUser || isDentistUser || isNutriUser || isTOUser || isFonoUser ||
+        isPhysioUser || isDentistUser || isNutriUser || isTOUser || isFonoUser || isPPUser ||
         profDetails?.profession_id === 'prof-medico' ||
         profDetails?.profession_id === 'prof-psicologo';
 
@@ -499,6 +517,7 @@ export class AuthController {
       const zemdaNutriEnabled = user.role !== 'superadmin' && isNutriUser && (isProfessionalUser || isManagerUser);
       const zemdaToEnabled = user.role !== 'superadmin' && isTOUser && (isProfessionalUser || isManagerUser);
       const zemdaFonoEnabled = user.role !== 'superadmin' && isFonoUser && (isProfessionalUser || isManagerUser);
+      const zemdaPPEnabled = user.role !== 'superadmin' && (isPPUser || Boolean(profDetails?.zemda_pp_enabled) || Boolean(cuRow?.zemda_pp_enabled)) && (isProfessionalUser || isManagerUser);
       const zemdaPersonalEnabled = user.role !== 'superadmin' && isStrictPersonalTrainer && (
         isManagerUser || (isProfessionalUser && (cuRow?.zemda_personal_enabled === 1 || userPermissions.includes('access_zemda_personal')))
       );
@@ -539,6 +558,7 @@ export class AuthController {
           zemdaNutriEnabled,
           zemdaToEnabled,
           zemdaFonoEnabled,
+          zemdaPPEnabled,
           zemdaPersonalEnabled
         },
         tenant: tenantData

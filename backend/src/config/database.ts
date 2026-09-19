@@ -250,6 +250,11 @@ export function initializeDatabase(): void {
     addColIfMissing('clinic_users', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('users', 'zemda_fono_enabled', 'INTEGER DEFAULT 0');
 
+    // Módulo ZemdaPP (Psicopedagogia Clínica e Institucional)
+    addColIfMissing('professionals', 'zemda_pp_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_pp_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_pp_enabled', 'INTEGER DEFAULT 0');
+
     // Alteração de profissão única durante o ciclo de vida da conta
     addColIfMissing('professionals', 'profession_change_used', 'INTEGER DEFAULT 0');
     addColIfMissing('professionals', 'profession_changed_at', 'TEXT');
@@ -2599,4 +2604,262 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   } catch (repairErr) {
     console.warn('[Database] Aviso ao executar repairLegacyPhotoUrls:', repairErr);
   }
+
+  // ============================================================================
+  // TABELAS: CERTIFICADOS DIGITAIS ICP-BRASIL E ASSINATURA PAdES
+  // ============================================================================
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS digital_certificates (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      holder_type TEXT NOT NULL CHECK(holder_type IN ('professional', 'patient')),
+      holder_id TEXT NOT NULL,
+      certificate_type TEXT NOT NULL CHECK(certificate_type IN ('A1', 'A3', 'remote')),
+      serial_number TEXT NOT NULL,
+      subject_name TEXT NOT NULL,
+      subject_cpf_cnpj TEXT NOT NULL,
+      issuer TEXT NOT NULL,
+      valid_from TEXT NOT NULL,
+      valid_until TEXT NOT NULL,
+      fingerprint_sha256 TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_reference TEXT,
+      status TEXT NOT NULL CHECK(status IN ('valid', 'expired', 'revoked', 'pending')) DEFAULT 'valid',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_validated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_digital_certificates_holder ON digital_certificates(tenant_id, holder_type, holder_id);
+
+    CREATE TABLE IF NOT EXISTS digital_signatures (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      document_id TEXT NOT NULL,
+      document_type TEXT NOT NULL,
+      certificate_id TEXT NOT NULL,
+      file_id TEXT,
+      signed_file_id TEXT,
+      sha256_hash TEXT NOT NULL,
+      signature_format TEXT NOT NULL DEFAULT 'PAdES',
+      verification_token TEXT UNIQUE NOT NULL,
+      validation_result_json TEXT,
+      signed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (certificate_id) REFERENCES digital_certificates(id) ON DELETE RESTRICT
+    );
+    CREATE INDEX IF NOT EXISTS idx_digital_signatures_doc ON digital_signatures(tenant_id, document_type, document_id);
+    CREATE INDEX IF NOT EXISTS idx_digital_signatures_token ON digital_signatures(verification_token);
+  `);
+
+  // ============================================================================
+  // TABELAS: MÓDULO ZEMDAPP (PSICOPEDAGOGIA CLÍNICA E INSTITUCIONAL - CBO 2394-25)
+  // ============================================================================
+  rawDb.exec(`
+    CREATE TABLE IF NOT EXISTS psychopedagogy_profiles (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      school_name TEXT,
+      school_grade TEXT,
+      school_shift TEXT,
+      school_type TEXT,
+      teacher_name TEXT,
+      coordinator_name TEXT,
+      pedagogical_complaint TEXT,
+      referral_source TEXT,
+      special_needs_notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_profiles_patient ON psychopedagogy_profiles(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      assessment_date TEXT NOT NULL DEFAULT (date('now')),
+      mode TEXT NOT NULL DEFAULT 'clinical' CHECK(mode IN ('clinical', 'institutional')),
+      pedagogical_contract TEXT,
+      initial_goals_json TEXT,
+      reading_analysis_json TEXT,
+      writing_analysis_json TEXT,
+      math_analysis_json TEXT,
+      cognitive_processes_json TEXT,
+      school_work_analysis_json TEXT,
+      institutional_climate_json TEXT,
+      pedagogical_mediation_json TEXT,
+      status TEXT NOT NULL DEFAULT 'in_progress',
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      signature_hash TEXT,
+      signed_at TEXT,
+      signed_by_user_id TEXT,
+      signer_name TEXT,
+      signer_registration TEXT,
+      sealed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_assessments_patient ON psychopedagogy_assessments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_sessions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      session_date TEXT NOT NULL DEFAULT (date('now')),
+      session_number INTEGER,
+      objectives TEXT,
+      pedagogical_resources TEXT,
+      activities_performed TEXT,
+      student_engagement TEXT,
+      observations TEXT,
+      home_guidelines TEXT,
+      next_session_plan TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      signature_hash TEXT,
+      signed_at TEXT,
+      signed_by_user_id TEXT,
+      signer_name TEXT,
+      signer_registration TEXT,
+      sealed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_sessions_patient ON psychopedagogy_sessions(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_learning_domains (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      domain_category TEXT NOT NULL,
+      score_or_level TEXT,
+      qualitative_description TEXT,
+      assessment_date TEXT NOT NULL DEFAULT (date('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_domains_patient ON psychopedagogy_learning_domains(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_instruments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      instrument_name TEXT NOT NULL,
+      instrument_category TEXT NOT NULL,
+      application_date TEXT NOT NULL DEFAULT (date('now')),
+      raw_score TEXT,
+      percentile_or_result TEXT,
+      observations TEXT,
+      is_psychological_privative INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_instruments_patient ON psychopedagogy_instruments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_intervention_plans (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      plan_title TEXT NOT NULL,
+      start_date TEXT NOT NULL DEFAULT (date('now')),
+      review_date TEXT,
+      general_objective TEXT,
+      methodological_approach TEXT,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'revised', 'cancelled')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_plans_patient ON psychopedagogy_intervention_plans(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_goals (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      goal_description TEXT NOT NULL,
+      target_date TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'achieved', 'revised')),
+      progress_percentage INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (plan_id) REFERENCES psychopedagogy_intervention_plans(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_goals_plan ON psychopedagogy_goals(plan_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_school_contacts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      contact_date TEXT NOT NULL DEFAULT (date('now')),
+      contact_type TEXT NOT NULL DEFAULT 'school_visit',
+      school_contact_person TEXT NOT NULL,
+      school_contact_role TEXT,
+      discussion_summary TEXT,
+      agreed_adaptations TEXT,
+      next_contact_date TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_school_contacts ON psychopedagogy_school_contacts(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_institutional_cases (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      institution_name TEXT NOT NULL,
+      institution_type TEXT,
+      project_title TEXT NOT NULL,
+      target_audience TEXT,
+      assessment_scope TEXT,
+      actions_plan TEXT,
+      results_summary TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_institutional_cases ON psychopedagogy_institutional_cases(tenant_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_shares (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      shared_by_user_id TEXT NOT NULL,
+      shared_with_user_id TEXT NOT NULL,
+      access_level TEXT NOT NULL DEFAULT 'read' CHECK(access_level IN ('read', 'write')),
+      expires_at TEXT,
+      reason TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_pp_shares ON psychopedagogy_shares(tenant_id, patient_id, shared_with_user_id);
+
+    CREATE TABLE IF NOT EXISTS psychopedagogy_retention_policies (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL UNIQUE,
+      retention_years INTEGER NOT NULL DEFAULT 5,
+      auto_archive INTEGER NOT NULL DEFAULT 1,
+      notify_before_archive_days INTEGER NOT NULL DEFAULT 30,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+  `);
 }
