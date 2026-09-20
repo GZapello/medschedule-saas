@@ -81,11 +81,35 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     fetchCalendarData();
   }, []);
 
+  // Atualização automática na virada do dia (23:59 -> 00:00)
+  useEffect(() => {
+    let lastDateStr = new Date().toDateString();
+    const interval = setInterval(() => {
+      const now = new Date();
+      const nowDateStr = now.toDateString();
+      if (nowDateStr !== lastDateStr) {
+        lastDateStr = nowDateStr;
+        setCurrentDate(prev => {
+          // Se estava visualizando o dia de ontem ou hoje, sincroniza para hoje
+          const isViewingTodayOrPast = prev.toDateString() === new Date(now.getTime() - 86400000).toDateString() ||
+                                       prev.toDateString() === nowDateStr;
+          if (isViewingTodayOrPast) {
+            return new Date();
+          }
+          return prev;
+        });
+        fetchCalendarData();
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Navegação temporal
   const handlePrev = () => {
     const d = new Date(currentDate);
     if (viewMode === 'day') d.setDate(d.getDate() - 1);
-    else if (viewMode === 'week') d.setDate(d.getDate() - 7);
+    else if (viewMode === 'week') d.setDate(d.getDate() - 6);
     else d.setMonth(d.getMonth() - 1);
     setCurrentDate(d);
   };
@@ -93,7 +117,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const handleNext = () => {
     const d = new Date(currentDate);
     if (viewMode === 'day') d.setDate(d.getDate() + 1);
-    else if (viewMode === 'week') d.setDate(d.getDate() + 7);
+    else if (viewMode === 'week') d.setDate(d.getDate() + 6);
     else d.setMonth(d.getMonth() + 1);
     setCurrentDate(d);
   };
@@ -214,15 +238,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     return true;
   });
 
-  // Cálculo dos dias da semana para a visualização semanal
+  // Cálculo dos dias da semana: inicia SEMPRE a partir da data base (HOJE como primeiro dia exibido)
   const getWeekDays = (baseDate: Date) => {
-    const start = new Date(baseDate);
-    const day = start.getDay();
-    start.setDate(start.getDate() - day + (day === 0 ? -6 : 1)); // Inicia na Segunda-feira
     const days: Date[] = [];
-    for (let i = 0; i < 6; i++) { // Seg a Sáb
-      const d = new Date(start);
-      d.setDate(d.getDate() + i);
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + i);
       days.push(d);
     }
     return days;

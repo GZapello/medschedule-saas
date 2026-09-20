@@ -42,6 +42,7 @@ import { DentalProstheticsKanban } from './DentalProstheticsKanban';
 import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
+import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
@@ -1014,6 +1015,16 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                         )}
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {selectedPatientId && (
+                  <div className="pt-4 border-t border-slate-100">
+                    <MeasurableGoalsManager
+                      patientId={selectedPatientId}
+                      domain="dentistry"
+                      title="Metas Clínicas Odontológicas & Progresso"
+                    />
                   </div>
                 )}
               </div>

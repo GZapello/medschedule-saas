@@ -33,6 +33,8 @@ import {
 } from 'lucide-react';
 import { PsychologyDocumentModal } from './PsychologyDocumentModal';
 import { PsychologyHistoryModal } from './PsychologyHistoryModal';
+import { ExternalTestsManager } from '../common/ExternalTestsManager';
+import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 
 interface PsychologyWorkspaceProps {
   initialPatientId?: string;
@@ -54,7 +56,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [searchPatient, setSearchPatient] = useState<string>('');
 
-  type TabKey = 'anamnese' | 'eem' | 'risk' | 'assessments' | 'screenings' | 'sessions' | 'goals';
+  type TabKey = 'anamnese' | 'eem' | 'risk' | 'assessments' | 'screenings' | 'sessions' | 'goals' | 'external_tests';
   const [activeTab, setActiveTab] = useState<TabKey>('sessions');
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -615,7 +617,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 sm:px-6 py-3 shadow-xs">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-linear-to-br from-teal-700 to-slate-900 flex items-center justify-center text-white shadow-xs">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-700 to-slate-900 flex items-center justify-center text-white shadow-xs">
               <Brain className="w-5 h-5" />
             </div>
             <div>
@@ -708,7 +710,8 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             { id: 'risk', label: '4. Avaliação de Risco', icon: AlertTriangle },
             { id: 'assessments', label: '5. Avaliação & SATEPSI', icon: Award },
             { id: 'screenings', label: '6. Triagens & Escalas', icon: BookOpen },
-            { id: 'goals', label: '7. Metas Terapêuticas', icon: Target }
+            { id: 'goals', label: '7. Metas Terapêuticas', icon: Target },
+            { id: 'external_tests', label: '8. Testes Externos & Laudos', icon: FileCheck }
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -919,7 +922,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                     <button
                       type="submit"
                       disabled={saving || !currentSession.clinicalEvolution.trim()}
-                      className="px-6 py-3 bg-linear-to-r from-teal-700 to-slate-900 hover:from-teal-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                      className="px-6 py-3 bg-gradient-to-r from-teal-700 to-slate-900 hover:from-teal-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       {saving ? 'Concluindo e Selando...' : 'Concluir Atendimento'}
@@ -1464,13 +1467,13 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             {activeTab === 'assessments' && (
               <div className="space-y-6">
                 {/* Banner Oficial SATEPSI */}
-                <div className="bg-linear-to-r from-teal-900 to-slate-900 rounded-2xl p-5 text-white shadow-xs flex flex-wrap items-center justify-between gap-4">
-                  <div className="space-y-1 max-w-2xl">
+                <div className="bg-slate-900 border border-teal-900/80 rounded-2xl p-5 text-white shadow-md flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1.5 max-w-2xl">
                     <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-teal-300" />
-                      <h3 className="font-extrabold text-sm">Sistema de Avaliação de Testes Psicológicos (SATEPSI)</h3>
+                      <ShieldCheck className="w-5 h-5 text-teal-400" />
+                      <h3 className="font-extrabold text-sm text-white">Sistema de Avaliação de Testes Psicológicos (SATEPSI)</h3>
                     </div>
-                    <p className="text-xs text-teal-100 leading-relaxed">
+                    <p className="text-xs text-teal-100/90 leading-relaxed">
                       Conforme a Resolução CFP nº 31/2022, o psicólogo deve utilizar exclusivamente testes psicológicos com parecer FAVORÁVEL do CFP. É expressamente vedada a reprodução integral ou de itens/estímulos de instrumentos privativos.
                     </p>
                   </div>
@@ -1478,9 +1481,9 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                     href="https://satepsi.cfp.org.br"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold rounded-xl text-xs transition-colors shadow-xs"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-teal-400 hover:bg-teal-300 text-slate-950 font-black rounded-xl text-xs transition-colors shadow-md cursor-pointer"
                   >
-                    <ExternalLink className="w-4 h-4" /> Consultar SATEPSI Oficial
+                    <ExternalLink className="w-4 h-4 text-slate-950" /> Consultar SATEPSI Oficial
                   </a>
                 </div>
 
@@ -1870,6 +1873,38 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                     </div>
                   )}
                 </div>
+
+                {selectedPatientId && (
+                  <div className="pt-2">
+                    <MeasurableGoalsManager
+                      patientId={selectedPatientId}
+                      domain="psychology"
+                      title="Metas Clínicas & Acompanhamento de Progresso — ZemdaPsico"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ========================================================================= */}
+            {/* ABA 8: TESTES EXTERNOS, LAUDOS E ANEXOS */}
+            {/* ========================================================================= */}
+            {activeTab === 'external_tests' && (
+              <div className="space-y-6">
+                {selectedPatientId ? (
+                  <ExternalTestsManager
+                    patientId={selectedPatientId}
+                    appointmentId={initialAppointmentId}
+                    moduleType="ZemdaPsico"
+                    accentColor="teal"
+                    title="Testes Externos, Protocolos & Laudos Anexados (ZemdaPsico)"
+                    subtitle="Anexe testes escaneados, laudos neuropsicológicos, protocolos e relatórios de suporte."
+                  />
+                ) : (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 text-xs">
+                    Selecione um paciente para gerenciar testes externos e laudos.
+                  </div>
+                )}
               </div>
             )}
           </>

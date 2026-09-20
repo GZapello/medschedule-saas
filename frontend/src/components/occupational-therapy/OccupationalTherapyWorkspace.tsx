@@ -27,7 +27,8 @@ import {
   Smile,
   LayoutDashboard,
   Calendar,
-  Columns
+  Columns,
+  Printer
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -44,6 +45,7 @@ import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
 import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
+import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
 
 interface OccupationalTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -100,6 +102,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState<boolean>(false);
 
   // 1. Perfil Ocupacional
   const [profileData, setProfileData] = useState<any>({
@@ -1298,6 +1301,15 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                 <div className="flex justify-end gap-3 pt-2">
                   <button
                     type="button"
+                    onClick={() => setShowFollowUpModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-all cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Gerar Orientações Domiciliares (PDF)</span>
+                  </button>
+
+                  <button
+                    type="button"
                     disabled={saving}
                     onClick={handleFinishConsultation}
                     className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-xs transition-all cursor-pointer disabled:opacity-50"
@@ -1356,6 +1368,18 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
               onClose={() => setShowPreviousRecordsModal(false)}
               patientId={selectedPatientId}
               patientName={selectedPatient?.full_name}
+            />
+          )}
+          {showFollowUpModal && selectedPatientId && (
+            <PatientFollowUpDocumentModal
+              isOpen={showFollowUpModal}
+              onClose={() => setShowFollowUpModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || 'Paciente'}
+              moduleType="ZemdaTO"
+              professionalName={currentUser?.name}
+              initialGuidelines="Seguir os treinos de autonomia, adaptação e estímulo sensorial em rotina domiciliar conforme planejado em sessão."
+              homeActivitiesText="1. Utilizar os recursos de tecnologia assistiva indicados.\n2. Estimular a autonomia nas atividades diárias respeitando o tempo do paciente.\n3. Registrar em diário de bordo os momentos de maior facilidade ou desafio."
             />
           )}
         </>

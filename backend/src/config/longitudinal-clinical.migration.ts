@@ -331,4 +331,9 @@ export function migrateLongitudinalClinical(rawDb: DatabaseSync): void {
   addColumnIfNotExists('dental_periodontal_records', 'sites_gte_6mm', 'INTEGER');
   addColumnIfNotExists('dental_periodontal_records', 'teeth_with_mobility', 'TEXT');
   addColumnIfNotExists('dental_periodontal_records', 'teeth_with_furcation', 'TEXT');
+
+  // Extensões para perfil clínico, observações e alertas estruturados do paciente
+  addColumnIfNotExists('patients', 'clinical_notes', 'TEXT');
+  addColumnIfNotExists('patients', 'important_alert', 'TEXT');
+  addColumnIfNotExists('patients', 'notes', 'TEXT');
 }

@@ -195,7 +195,7 @@ export const PsychologyDocumentModal: React.FC<PsychologyDocumentModalProps> = (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto" role="dialog" aria-modal="true">
       <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8 overflow-hidden border border-slate-100 flex flex-col max-h-[90vh]">
         {/* Top Header */}
-        <div className="bg-linear-to-r from-teal-800 to-slate-900 px-6 py-4 text-white flex items-center justify-between shrink-0">
+        <div className="bg-gradient-to-r from-teal-800 to-slate-900 px-6 py-4 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-white/10 rounded-xl">
               <FileText className="w-5 h-5 text-teal-300" />

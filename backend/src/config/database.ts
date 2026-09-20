@@ -6,6 +6,7 @@ import { migrateBilling } from './billing-migration';
 import { migrateConsultations } from './consultation-migration';
 import { migrateLongitudinalClinical } from './longitudinal-clinical.migration';
 import { seedExerciseLibrary } from './exercise-library.seed';
+import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
 
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
 const dbDir = path.dirname(dbPath);
@@ -2585,6 +2586,8 @@ export function initializeDatabase(): void {
   }
   migrateBilling(rawDb);
   migrateLongitudinalClinical(rawDb);
+  seedExerciseLibrary(rawDb);
+  seedNutritionFoodDatabase(rawDb);
   repairLegacyPhotoUrls(rawDb);
 }
 

@@ -8,6 +8,7 @@ import { SpeechTherapyWorkspace } from '../speech-therapy/SpeechTherapyWorkspace
 import { DentistryWorkspace } from '../dentistry/DentistryWorkspace';
 import { PsychologyWorkspace } from '../psychology/PsychologyWorkspace';
 import { PsychopedagogyWorkspace } from '../psychopedagogy/PsychopedagogyWorkspace';
+import { PhysiotherapyWorkspace } from '../physiotherapy/PhysiotherapyWorkspace';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { Activity, FileText, Stethoscope, ChevronLeft } from 'lucide-react';
@@ -32,6 +33,7 @@ export function AppointmentConsultation({
     isZemdaPsico,
     isPsychopedagogue,
     isZemdaPP,
+    isPhysiotherapist,
     isZemdaBody,
     currentUser
   } = useAuth();
@@ -45,6 +47,7 @@ export function AppointmentConsultation({
     (isDentist || (currentUser?.professionName || '').toLowerCase().includes('odonto') || (currentUser?.professionName || '').toLowerCase().includes('dentis')) ? 'ZemdaOdonto' :
     (isOccupationalTherapist || (currentUser?.professionName || '').toLowerCase().includes('ocupacional')) ? 'ZemdaTO' :
     (isNutritionist || (currentUser?.professionName || '').toLowerCase().includes('nutri')) ? 'ZemdaNutri' :
+    (isPhysiotherapist || (currentUser?.professionName || '').toLowerCase().includes('fisio') || (appointment.service_name || '').toLowerCase().includes('fisio')) ? 'ZemdaFisio' :
     undefined;
 
   const effectiveModuleType =
@@ -107,6 +110,7 @@ export function AppointmentConsultation({
     effectiveModuleType === 'ZemdaFono' ? SpeechTherapyWorkspace :
     effectiveModuleType === 'ZemdaPsico' ? PsychologyWorkspace :
     effectiveModuleType === 'ZemdaPP' ? PsychopedagogyWorkspace :
+    effectiveModuleType === 'ZemdaFisio' ? PhysiotherapyWorkspace :
     null;
 
   // Se o profissional estiver visualizando o ZemdaBody dentro do mesmo atendimento:

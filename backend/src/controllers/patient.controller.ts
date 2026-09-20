@@ -228,7 +228,7 @@ export class PatientController {
       const {
         fullName, socialName, birthDate, cpf, gender, email, phone, whatsapp,
         address, city, state, zipCode, photoUrl, emergencyContact, emergencyPhone,
-        notesAdmin, isChild, active,
+        notesAdmin, notes, clinicalNotes, importantAlert, isChild, active,
         healthInsuranceProvider, healthInsuranceCard, healthInsurancePlan,
         guardians
       } = req.body;
@@ -293,6 +293,9 @@ export class PatientController {
           emergency_contact = COALESCE(?, emergency_contact),
           emergency_phone = COALESCE(?, emergency_phone),
           notes_admin = COALESCE(?, notes_admin),
+          notes = COALESCE(?, notes),
+          clinical_notes = COALESCE(?, clinical_notes),
+          important_alert = COALESCE(?, important_alert),
           is_child = COALESCE(?, is_child),
           active = COALESCE(?, active),
           health_insurance_provider = COALESCE(?, health_insurance_provider),
@@ -318,7 +321,10 @@ export class PatientController {
         effectivePhoto || null,
         emergencyContact || null,
         effectiveEmergencyPhoneToUpdate !== undefined ? effectiveEmergencyPhoneToUpdate : null,
-        notesAdmin || null,
+        notesAdmin !== undefined ? notesAdmin : null,
+        notes !== undefined ? notes : null,
+        clinicalNotes !== undefined ? clinicalNotes : null,
+        importantAlert !== undefined ? importantAlert : null,
         isChild !== undefined ? (isChild ? 1 : 0) : null,
         active !== undefined ? (active ? 1 : 0) : null,
         healthInsuranceProvider !== undefined ? healthInsuranceProvider : null,

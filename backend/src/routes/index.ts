@@ -349,6 +349,7 @@ api.post('/v1/clinical/reassessments/compare', requireTenant, requireRole('clini
 
 api.get('/v1/clinical/goals/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.listByPatient);
 api.post('/v1/clinical/goals', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.create);
+api.put('/v1/clinical/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.updateProgress);
 api.put('/v1/clinical/goals/:id/progress', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.updateProgress);
 api.delete('/v1/clinical/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalGoalsController.delete);
 
@@ -363,6 +364,7 @@ api.put('/v1/physiotherapy/assessments/:id', requireTenant, requireRole('clinic_
 api.get('/v1/physiotherapy/evolutions/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listEvolutionsByPatient);
 api.post('/v1/physiotherapy/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createEvolution);
 api.put('/v1/physiotherapy/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.updateEvolution);
+api.post('/v1/physiotherapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.finishConsultation);
 
 // ==========================================
 // MÓDULO CLÍNICO ZEMDAODONTO (ODONTOLOGIA)
@@ -719,6 +721,7 @@ api.get('/v1/patients/:id/timeline', requireTenant, requireRole('clinic_admin', 
 api.get('/v1/patients/:id/allergies', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), PatientClinicalController.listAllergies);
 api.put('/v1/patients/:id/allergies-status', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.updateAllergyStatus);
 api.post('/v1/patients/:id/allergies', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.addAllergy);
+api.put('/v1/patients/:id/allergies/:allergyId', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.updateAllergy);
 api.delete('/v1/patients/:id/allergies/:allergyId', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.deleteAllergy);
 
 api.get('/v1/patients/:id/medications', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.listMedications);
@@ -749,6 +752,7 @@ api.get('/v1/clinics/document-templates', requireTenant, DocumentsController.lis
 api.put('/v1/clinics/document-templates/:documentType', requireTenant, requireRole('clinic_admin'), DocumentsController.upsertTemplate);
 api.post('/v1/appointments/:id/finish', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.finishConsultation);
 api.get('/v1/appointments/:id/completion', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.consultationStatus);
+api.post('/v1/clinical/consultations/start', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalController.startConsultation);
 
 // Gestão de Convênios
 api.get('/v1/insurances/clinic', requireTenant, InsuranceController.listClinicInsurances);

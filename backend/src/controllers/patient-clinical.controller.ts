@@ -348,6 +348,31 @@ export class PatientClinicalController {
     }
   }
 
+  static updateAllergy(req: Request, res: Response): void {
+    try {
+      const { id: patientId, allergyId } = req.params;
+      const tenantId = req.tenantId;
+      const { substance, reactionType, severity, notes, identifiedAt } = req.body;
+
+      db.prepare(`
+        UPDATE patient_allergies SET
+          substance = COALESCE(?, substance),
+          reaction_type = COALESCE(?, reaction_type),
+          severity = COALESCE(?, severity),
+          notes = COALESCE(?, notes),
+          identified_at = COALESCE(?, identified_at),
+          updated_at = datetime('now')
+        WHERE id = ? AND patient_id = ? AND tenant_id = ?
+      `).run(substance || null, reactionType || null, severity || null, notes || null, identifiedAt || null, allergyId, patientId, tenantId);
+
+      logAudit(req, 'UPDATE_ALLERGY', 'patient_allergies', allergyId, { patientId, substance });
+      res.json({ message: 'Alergia atualizada com sucesso' });
+    } catch (err: any) {
+      console.error('[PatientClinicalController.updateAllergy] Erro:', err);
+      res.status(500).json({ error: 'Erro ao atualizar alergia' });
+    }
+  }
+
   static deleteAllergy(req: Request, res: Response): void {
     try {
       const { id: patientId, allergyId } = req.params;

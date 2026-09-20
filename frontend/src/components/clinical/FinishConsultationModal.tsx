@@ -11,10 +11,13 @@ import {
   FileSpreadsheet,
   Share2,
   ChevronRight,
-  Printer
+  Printer,
+  Eye
 } from 'lucide-react';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { PrintableDocumentModal } from './PrintableDocumentModal';
+import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
+import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
 
 interface FinishConsultationModalProps {
   appointment: {
@@ -115,6 +118,9 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     hasReferral: boolean;
     generatedDocs: any;
   } | null>(null);
+
+  const [showFollowUpDocModal, setShowFollowUpDocModal] = useState<boolean>(false);
+  const [showRecordsModal, setShowRecordsModal] = useState<boolean>(false);
 
   const DRAFT_KEY = `zemda_draft_appt_${appointment.id}`;
 
@@ -369,18 +375,61 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setCompletionSummary(null);
-                onFinished();
-              }}
-              className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
-            >
-              Concluir e Voltar
-            </button>
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowFollowUpDocModal(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Gerar acompanhamento para o paciente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowRecordsModal(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-all cursor-pointer border border-slate-200"
+              >
+                <Eye className="w-4 h-4 text-slate-600" />
+                <span>Ver prontuário do paciente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCompletionSummary(null);
+                  onFinished();
+                }}
+                className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
+
+        {showFollowUpDocModal && (
+          <PatientFollowUpDocumentModal
+            isOpen={showFollowUpDocModal}
+            onClose={() => setShowFollowUpDocModal(false)}
+            patientId={appointment.patient_id}
+            patientName={appointment.patient_name || 'Paciente'}
+            appointmentId={appointment.id}
+            professionalName={appointment.professional_name}
+            serviceName={appointment.service_name}
+            moduleType={clinicalData?.moduleType}
+            initialGuidelines={clinicalData?.technicalNotes}
+          />
+        )}
+
+        {showRecordsModal && (
+          <PatientPreviousRecordsModal
+            isOpen={showRecordsModal}
+            onClose={() => setShowRecordsModal(false)}
+            patientId={appointment.patient_id}
+            patientName={appointment.patient_name || 'Paciente'}
+          />
+        )}
 
         {printDoc && (
           <PrintableDocumentModal

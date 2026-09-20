@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
+import { DocumentsController } from './documents.controller';
 
 /**
  * Validação de acesso exclusivo para Fisioterapia (Itens 8, 9, 10, 11, 13)
@@ -562,6 +563,99 @@ export class PhysiotherapyController {
     } catch (err: any) {
       console.error('[PhysiotherapyController.updateEvolution] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar evolução fisioterapêutica' });
+    }
+  }
+
+  /**
+   * Finalização segura do atendimento fisioterapêutico (Fluxos A e B)
+   */
+  static finishConsultation(req: Request, res: Response): void {
+    if (req.body.appointmentId) {
+      if (!isPhysiotherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Sem acesso ao módulo de fisioterapia.' });
+        return;
+      }
+      const body = req.body;
+      req.params.id = body.appointmentId;
+      req.body = {
+        ...body,
+        evolution: {
+          ...body,
+          moduleType: 'ZemdaFisio',
+          moduleData: { ...body },
+          clinicalEvolution: body.clinicalEvolution || 'Atendimento de fisioterapia concluído.'
+        }
+      };
+      DocumentsController.finishConsultation(req, res);
+      return;
+    }
+
+    try {
+      const tenantId = req.tenantId;
+      if (!isPhysiotherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito ao ZemdaFisio' });
+        return;
+      }
+
+      const {
+        patientId, clinicalEvolution, conducts, title, assessmentData,
+        goniometryData, muscleStrengthData, postureData, testsData, cbdfData,
+        treatmentPlanData, homeExercisesData, sessionDate, sessionTime
+      } = req.body;
+
+      if (!patientId || !clinicalEvolution) {
+        res.status(400).json({ error: 'patientId e clinicalEvolution são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      } else if (req.body.professionalId) {
+        profId = req.body.professionalId;
+      }
+
+      const creatorName = req.user?.name || req.user?.email || 'Fisioterapeuta';
+      const recordId = 'rec-fisio-' + uuidv4().slice(0, 8);
+      const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const recDate = sessionDate || spDateStr;
+      const recTime = sessionTime || null;
+      const recTitle = title || 'Consulta Fisioterapêutica (ZemdaFisio)';
+
+      const clinicalPayload = JSON.stringify({
+        assessmentData,
+        goniometryData,
+        muscleStrengthData,
+        postureData,
+        testsData,
+        cbdfData,
+        treatmentPlanData,
+        homeExercisesData,
+        moduleType: 'ZemdaFisio',
+        conducts
+      });
+
+      db.prepare(`
+        INSERT INTO records (
+          id, tenant_id, patient_id, professional_id, record_type,
+          title, description, conducted_at, conducted_time, created_by,
+          module_type, clinical_data_json, conducts, is_sealed, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'consultation', ?, ?, ?, ?, ?, 'ZemdaFisio', ?, ?, 1, datetime('now'), datetime('now'))
+      `).run(
+        recordId, tenantId, patientId, profId,
+        recTitle, clinicalEvolution, recDate, recTime, creatorName,
+        clinicalPayload, conducts || null
+      );
+
+      logAudit(req, 'FINISH_PHYSIO_CONSULTATION', 'records', recordId, { patientId, recordId });
+      res.status(201).json({
+        recordId,
+        message: 'Consulta de Fisioterapia finalizada com sucesso e gravada no prontuário'
+      });
+    } catch (err: any) {
+      console.error('[PhysiotherapyController.finishConsultation] Erro:', err);
+      res.status(500).json({ error: 'Erro ao finalizar consulta de fisioterapia' });
     }
   }
 }

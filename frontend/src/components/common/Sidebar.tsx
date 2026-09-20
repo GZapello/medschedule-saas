@@ -68,7 +68,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isClinicAdmin,
     isProfessional,
     isPhysiotherapist,
+    isZemdaFisio,
     isDentist,
+    isZemdaOdonto,
     isNutritionist,
     isZemdaNutri,
     isOccupationalTherapist,
@@ -108,13 +110,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-fisio',
           label: 'ZemdaFisio (Fisioterapia)',
           icon: Activity,
-          visible: isPhysiotherapist
+          visible: isPhysiotherapist || isZemdaFisio
         },
         {
           id: 'zemda-odonto',
           label: 'ZemdaOdonto (Odontologia)',
           icon: Smile,
-          visible: isDentist
+          visible: isDentist || isZemdaOdonto
         },
         {
           id: 'zemda-nutri',

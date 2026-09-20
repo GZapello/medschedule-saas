@@ -844,4 +844,154 @@ export class ClinicalController {
       res.status(500).json({ error: 'Erro ao gerar documento para impressão e PDF' });
     }
   }
+
+  /**
+   * POST /v1/clinical/consultations/start
+   * Inicia ou recupera atendimento ativo canônico (Fluxos A e B)
+   */
+  static startConsultation(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(403).json({ error: 'Clínica não identificada' });
+        return;
+      }
+
+      const { patientId, moduleType, professionalId: providedProfId, serviceId: providedServiceId } = req.body;
+      if (!patientId) {
+        res.status(400).json({ error: 'patientId é obrigatório para iniciar atendimento' });
+        return;
+      }
+
+      const patient = db.prepare('SELECT id, full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+      if (!patient) {
+        res.status(404).json({ error: 'Paciente não encontrado' });
+        return;
+      }
+
+      // Identifica o profissional autenticado ou selecionado
+      let profId: string | null = providedProfId || null;
+      if (!profId && req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id, name FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').get(req.user.userId, tenantId) as any;
+        if (prof) {
+          profId = prof.id;
+        }
+      }
+
+      if (!profId) {
+        const prof = db.prepare('SELECT id, name FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
+        if (prof) {
+          profId = prof.id;
+        }
+      }
+
+      if (!profId) {
+        res.status(400).json({ error: 'Nenhum profissional habilitado encontrado para vincular ao atendimento' });
+        return;
+      }
+
+      const effectiveModule = moduleType || 'general';
+
+      // 1. Verifica se já existe um atendimento in_progress para este paciente na clínica
+      const existingInProgress = db.prepare(`
+        SELECT a.*, p.name as professional_name, s.name as service_name, pat.full_name as patient_name
+        FROM appointments a
+        LEFT JOIN professionals p ON p.id = a.professional_id
+        LEFT JOIN services s ON s.id = a.service_id
+        LEFT JOIN patients pat ON pat.id = a.patient_id
+        WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status = 'in_progress'
+        ORDER BY a.start_time DESC LIMIT 1
+      `).get(tenantId, patientId) as any;
+
+      if (existingInProgress) {
+        if (moduleType && (!existingInProgress.clinical_module || existingInProgress.clinical_module === 'general')) {
+          db.prepare("UPDATE appointments SET clinical_module = ?, updated_at = datetime('now') WHERE id = ?").run(moduleType, existingInProgress.id);
+          existingInProgress.clinical_module = moduleType;
+        }
+        res.json({
+          appointmentId: existingInProgress.id,
+          appointment: existingInProgress,
+          created: false
+        });
+        return;
+      }
+
+      // 2. Verifica se existe agendamento hoje (scheduled ou confirmed) para este paciente
+      const today = new Date().toISOString().slice(0, 10);
+      const todayAppt = db.prepare(`
+        SELECT a.*, p.name as professional_name, s.name as service_name, pat.full_name as patient_name
+        FROM appointments a
+        LEFT JOIN professionals p ON p.id = a.professional_id
+        LEFT JOIN services s ON s.id = a.service_id
+        LEFT JOIN patients pat ON pat.id = a.patient_id
+        WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status IN ('scheduled', 'confirmed')
+          AND date(a.start_time) = ?
+        ORDER BY a.start_time ASC LIMIT 1
+      `).get(tenantId, patientId, today) as any;
+
+      if (todayAppt) {
+        db.prepare(`
+          UPDATE appointments 
+          SET status = 'in_progress', clinical_module = ?, updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(effectiveModule, todayAppt.id, tenantId);
+
+        todayAppt.status = 'in_progress';
+        todayAppt.clinical_module = effectiveModule;
+
+        logAudit(req, 'START_CONSULTATION', 'appointments', todayAppt.id, { patientId, moduleType: effectiveModule });
+
+        res.json({
+          appointmentId: todayAppt.id,
+          appointment: todayAppt,
+          created: false
+        });
+        return;
+      }
+
+      // 3. Se não houver agendamento prévio, cria atendimento canônico direto (Fluxo B)
+      let serviceId = providedServiceId || null;
+      if (!serviceId) {
+        const firstService = db.prepare('SELECT id FROM services WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
+        serviceId = firstService?.id || 'serv-default';
+      }
+
+      const now = new Date();
+      const startTime = now.toISOString();
+      const endTime = new Date(now.getTime() + 50 * 60000).toISOString();
+      const apptId = 'apt-' + uuidv4().slice(0, 8);
+      const apptNumber = `AT-${now.getFullYear()}-${uuidv4().slice(0, 6).toUpperCase()}`;
+
+      db.prepare(`
+        INSERT INTO appointments (
+          id, tenant_id, appointment_number, patient_id, professional_id,
+          service_id, start_time, end_time, status, clinical_module,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'in_progress', ?, datetime('now'), datetime('now'))
+      `).run(
+        apptId, tenantId, apptNumber, patientId, profId,
+        serviceId, startTime, endTime, effectiveModule
+      );
+
+      const createdAppt = db.prepare(`
+        SELECT a.*, p.name as professional_name, s.name as service_name, pat.full_name as patient_name
+        FROM appointments a
+        LEFT JOIN professionals p ON p.id = a.professional_id
+        LEFT JOIN services s ON s.id = a.service_id
+        LEFT JOIN patients pat ON pat.id = a.patient_id
+        WHERE a.id = ?
+      `).get(apptId) as any;
+
+      logAudit(req, 'START_DIRECT_CONSULTATION', 'appointments', apptId, { patientId, moduleType: effectiveModule });
+
+      res.status(201).json({
+        appointmentId: apptId,
+        appointment: createdAppt,
+        created: true
+      });
+    } catch (err: any) {
+      console.error('[ClinicalController.startConsultation] Erro:', err);
+      res.status(500).json({ error: 'Erro ao iniciar atendimento canônico' });
+    }
+  }
 }

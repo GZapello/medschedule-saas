@@ -29,7 +29,8 @@ import {
   Wind,
   Layers,
   Paperclip,
-  ExternalLink
+  ExternalLink,
+  Printer
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -49,6 +50,7 @@ import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
 import { FileImageUploader, FileUploadedInfo } from '../common/FileImageUploader';
 import { SecureFileImage } from '../common/SecureFileImage';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
+import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
 
 export interface StructuredGoalItem {
   id: string;
@@ -121,6 +123,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState<boolean>(false);
 
   // 1. Anamnese Fonoaudiológica
   const [anamnesisData, setAnamnesisData] = useState<any>({
@@ -1743,6 +1746,15 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                 <div className="flex justify-end gap-3 pt-2">
                   <button
                     type="button"
+                    onClick={() => setShowFollowUpModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition-all cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Gerar Orientações do Paciente (PDF)</span>
+                  </button>
+
+                  <button
+                    type="button"
                     disabled={saving}
                     onClick={handleFinishConsultation}
                     className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 shadow-md shadow-sky-500/20 transition-all cursor-pointer disabled:opacity-50"
@@ -1818,6 +1830,18 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               onClose={() => setShowPreviousRecordsModal(false)}
               patientId={selectedPatientId}
               patientName={selectedPatient?.full_name}
+            />
+          )}
+          {showFollowUpModal && selectedPatientId && (
+            <PatientFollowUpDocumentModal
+              isOpen={showFollowUpModal}
+              onClose={() => setShowFollowUpModal(false)}
+              patientId={selectedPatientId}
+              patientName={selectedPatient?.full_name || 'Paciente'}
+              moduleType="ZemdaFono"
+              professionalName={currentUser?.name}
+              initialGuidelines="Realizar os exercícios miofuncionais, de estimulação auditiva ou de linguagem conforme orientado na consulta fonoaudiológica."
+              homeActivitiesText="1. Manter boa hidratação ao longo do dia.\n2. Realizar os treinos vocais ou miofuncionais em ambiente tranquilo e em frente ao espelho.\n3. Anotar dúvidas e percepções do paciente para alinhamento no próximo atendimento."
             />
           )}
         </>

@@ -1,5 +1,4 @@
-import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Apple,
   Scale,
@@ -26,18 +25,64 @@ import {
   Flame,
   Utensils,
   BookOpen,
-  PieChart
+  PieChart,
+  Edit2,
+  X,
+  Printer,
+  ChevronDown,
+  ChevronUp,
+  Layers
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
+import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
+import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
 
 interface NutritionWorkspaceProps {
   initialPatientId?: string;
   initialAppointmentId?: string;
   onFinishConsultation?: () => void;
+}
+
+export interface FoodItem {
+  id: string;
+  name: string;
+  category?: string;
+  source: string;
+  source_code?: string;
+  energy_kcal: number;
+  protein_g: number;
+  carbohydrate_g: number;
+  lipid_g: number;
+  fiber_g?: number;
+}
+
+export interface MealPlanFoodItem {
+  food: string;
+  portion: string;
+  grams: number;
+  calories: number;
+  carb: number;
+  protein: number;
+  fat: number;
+  substitutions?: {
+    food: string;
+    portion: string;
+    calories: number;
+    carb: number;
+    protein: number;
+    fat: number;
+  }[];
+}
+
+export interface MealPlanMeal {
+  mealName: string;
+  mealTime: string;
+  items: MealPlanFoodItem[];
 }
 
 export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
@@ -47,24 +92,45 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 }) => {
   const { currentUser, currentTenant } = useAuth();
   const { showToast } = useToast();
+  const completion = useConsultationCompletion(onFinishConsultation);
 
   // Pacientes e Seleção
-  const completion = useConsultationCompletion(onFinishConsultation);
   const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
-  const [patientSearch, setPatientSearch] = useState<string>('');
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState<boolean>(false);
 
-  // Abas do Módulo
+  // 10 Abas Estruturadas (Item 9)
   const [activeTab, setActiveTab] = useState<
-    'anthropometry' | 'bioimpedance' | 'calculations' | 'recalls' | 'meal_plans' | 'goals' | 'anamnesis' | 'tests' | 'finish'
-  >('anthropometry');
+    'evolution' | 'anamnesis' | 'anthropometry' | 'bioimpedance' | 'recalls' | 'calculations' | 'meal_plans' | 'goals' | 'tests' | 'finish'
+  >('evolution');
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
 
-  // Dados Antropométricos
+  // 1. Evolução Clínica Nutricional
+  const [consultationTitle, setConsultationTitle] = useState<string>('Consulta Nutricional');
+  const [consultationEvolution, setConsultationEvolution] = useState<string>('');
+  const [consultationConducts, setConsultationConducts] = useState<string>('');
+  const [clinicalComplaints, setClinicalComplaints] = useState<string>('');
+  const [digestiveSymptoms, setDigestiveSymptoms] = useState<string>('Sem queixas digestivas relatadas');
+
+  // 2. Anamnese Nutricional
+  const [anamnesisData, setAnamnesisData] = useState({
+    digestiveHealth: 'regular',
+    bowelHabits: 'Diário, fezes tipo 3 ou 4 na escala de Bristol',
+    waterIntakeLiters: '2.0',
+    sleepQuality: 'Adequada (7-8 horas/noite)',
+    physicalActivity: 'Musculação 3x/semana moderada',
+    foodAllergies: '',
+    foodPreferences: '',
+    foodAversions: '',
+    supplementsInUse: '',
+    notes: ''
+  });
+
+  // 3. Antropometria
   const [assessments, setAssessments] = useState<any[]>([]);
   const [anthroForm, setAnthroForm] = useState({
     weight: '',
@@ -79,7 +145,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     notes: ''
   });
 
-  // Bioimpedância
+  // 4. Bioimpedância
   const [bioList, setBioList] = useState<any[]>([]);
   const [bioForm, setBioForm] = useState({
     bodyFatPercent: '',
@@ -93,24 +159,14 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     notes: ''
   });
 
-  // Calculadoras Nutricionais
-  const [calcFormula, setCalcFormula] = useState<'harris_benedict' | 'mifflin_st_jeor' | 'schofield' | 'dri'>('harris_benedict');
-  const [activityFactor, setActivityFactor] = useState<number>(1.2);
-  const [injuryFactor, setInjuryFactor] = useState<number>(1.0);
-  const [customBmr, setCustomBmr] = useState<string>('');
-  const [customGet, setCustomGet] = useState<string>('');
-  const [carbPercent, setCarbPercent] = useState<number>(50);
-  const [proteinPercent, setProteinPercent] = useState<number>(20);
-  const [fatPercent, setFatPercent] = useState<number>(30);
-
-  // Recordatório 24h
+  // 5. Recordatório 24h
   const [recalls, setRecalls] = useState<any[]>([]);
   const [recallForm, setRecallForm] = useState({
     recallDate: new Date().toISOString().split('T')[0],
     isWeekend: false,
     meals: [
-      { name: 'Café da Manhã', time: '08:00', foods: '', notes: '' },
-      { name: 'Colação', time: '10:30', foods: '', notes: '' },
+      { name: 'Café da Manhã', time: '07:30', foods: '', notes: '' },
+      { name: 'Colação (Manhã)', time: '10:00', foods: '', notes: '' },
       { name: 'Almoço', time: '12:30', foods: '', notes: '' },
       { name: 'Lanche da Tarde', time: '16:00', foods: '', notes: '' },
       { name: 'Jantar', time: '19:30', foods: '', notes: '' },
@@ -120,63 +176,82 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     notes: ''
   });
 
-  // Banco de Alimentos & Plano Alimentar
+  // 6. Calculadoras Nutricionais
+  const [calcFormula, setCalcFormula] = useState<'harris_benedict' | 'mifflin_st_jeor' | 'schofield' | 'dri'>('harris_benedict');
+  const [activityFactor, setActivityFactor] = useState<number>(1.2);
+  const [injuryFactor, setInjuryFactor] = useState<number>(1.0);
+  const [customBmr, setCustomBmr] = useState<string>('');
+  const [customGet, setCustomGet] = useState<string>('');
+  const [carbPercent, setCarbPercent] = useState<number>(50);
+  const [proteinPercent, setProteinPercent] = useState<number>(20);
+  const [fatPercent, setFatPercent] = useState<number>(30);
+
+  // 7. Construtor de Cardápio / Plano Alimentar (TACO / TBCA)
   const [foodSearchQuery, setFoodSearchQuery] = useState<string>('');
-  const [foodResults, setFoodResults] = useState<any[]>([]);
-  const [mealPlans, setMealPlans] = useState<any[]>([]);
-  const [planForm, setPlanForm] = useState<any>({
+  const [foodResults, setFoodResults] = useState<FoodItem[]>([]);
+  const [searchingFood, setSearchingFood] = useState<boolean>(false);
+  const [selectedMealIndexForAdd, setSelectedMealIndexForAdd] = useState<number>(0);
+  const [portionGramsInput, setPortionGramsInput] = useState<number>(100);
+  const [addingFoodTarget, setAddingFoodTarget] = useState<FoodItem | null>(null);
+  const [addingAsSubstitutionToItemIndex, setAddingAsSubstitutionToItemIndex] = useState<number | null>(null);
+
+  // Modal Criação de Receita
+  const [showRecipeModal, setShowRecipeModal] = useState<boolean>(false);
+  const [recipeName, setRecipeName] = useState<string>('');
+  const [recipeServings, setRecipeServings] = useState<number>(1);
+  const [recipeIngredients, setRecipeIngredients] = useState<
+    { food: FoodItem; grams: number }[]
+  >([]);
+
+  const [planForm, setPlanForm] = useState<{
+    title: string;
+    calorieTarget: string;
+    waterTargetMl: string;
+    generalGuidelines: string;
+    meals: MealPlanMeal[];
+  }>({
     title: 'Plano Alimentar Individualizado',
     calorieTarget: '2000',
     waterTargetMl: '2500',
-    generalGuidelines: 'Mastigue devagar e evite líquidos durante as refeições principais.',
+    generalGuidelines: 'Mastigue devagar e evite líquidos em excesso durante as refeições principais. Manter boa hidratação ao longo do dia.',
     meals: [
       {
         mealName: 'Café da Manhã',
         mealTime: '07:30',
-        items: [{ food: 'Ovo cozido', portion: '2 unidades (100g)', calories: 140, carb: 1, protein: 12, fat: 10 }]
+        items: [
+          { food: 'Ovo de galinha inteiro cozido', portion: '100g (2 un)', grams: 100, calories: 146, carb: 0.6, protein: 13.3, fat: 9.5 },
+          { food: 'Pão de trigo francês', portion: '50g (1 un)', grams: 50, calories: 150, carb: 29.3, protein: 4, fat: 1.5 }
+        ]
       },
       {
         mealName: 'Almoço',
         mealTime: '12:30',
         items: [
-          { food: 'Arroz integral cozido', portion: '4 colheres de sopa (100g)', calories: 120, carb: 25, protein: 2.6, fat: 1 },
-          { food: 'Feijão preto cozido', portion: '1 concha média (100g)', calories: 77, carb: 14, protein: 4.5, fat: 0.5 },
-          { food: 'Peito de frango grelhado', portion: '1 filé médio (120g)', calories: 190, carb: 0, protein: 36, fat: 4 }
+          { food: 'Arroz polido cozido', portion: '150g', grams: 150, calories: 192, carb: 42.2, protein: 3.8, fat: 0.3 },
+          { food: 'Feijão carioca cozido', portion: '100g', grams: 100, calories: 76, carb: 13.6, protein: 4.8, fat: 0.5 },
+          { food: 'Frango peito sem pele grelhado', portion: '120g', grams: 120, calories: 191, carb: 0, protein: 38.4, fat: 3.8 }
+        ]
+      },
+      {
+        mealName: 'Lanche da Tarde',
+        mealTime: '16:00',
+        items: [
+          { food: 'Banana prata crua', portion: '100g (1 un)', grams: 100, calories: 98, carb: 26, protein: 1.3, fat: 0.1 },
+          { food: 'Aveia em flocos', portion: '30g (2 col)', grams: 30, calories: 118, carb: 20, protein: 4.2, fat: 2.2 }
+        ]
+      },
+      {
+        mealName: 'Jantar',
+        mealTime: '19:30',
+        items: [
+          { food: 'Frango peito sem pele grelhado', portion: '120g', grams: 120, calories: 191, carb: 0, protein: 38.4, fat: 3.8 },
+          { food: 'Batata doce cozida', portion: '150g', grams: 150, calories: 116, carb: 27.6, protein: 0.9, fat: 0.2 }
         ]
       }
     ]
   });
 
-  // Metas Nutricionais
-  const [goals, setGoals] = useState<any[]>([]);
-  const [goalForm, setGoalForm] = useState({
-    title: 'Ingestão de Água',
-    description: 'Consumir no mínimo 2.5 litros de água por dia',
-    category: 'hydration',
-    targetValue: '2500 ml',
-    deadlineDate: ''
-  });
-
-  // Anamnese Nutricional
-  const [anamnesisData, setAnamnesisData] = useState<any>({
-    clinicalHistory: '',
-    bowelHabits: 'regular',
-    allergiesIntolerances: '',
-    foodAversions: '',
-    foodPreferences: '',
-    routineWakeUp: '07:00',
-    routineSleep: '23:00',
-    physicalActivity: 'Nenhuma no momento',
-    supplementsInUse: '',
-    notes: ''
-  });
-
-  // Finalização do Atendimento
-  const [consultationEvolution, setConsultationEvolution] = useState<string>('');
-  const [consultationConducts, setConsultationConducts] = useState<string>('');
-  const [consultationTitle, setConsultationTitle] = useState<string>('Consulta Nutricional');
-
-  // Carrega lista de pacientes da clínica
+  // Carrega pacientes
   useEffect(() => {
     async function loadPatients() {
       try {
@@ -191,7 +266,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     loadPatients();
   }, []);
 
-  // Seleciona paciente
+  // Seleção de paciente
   useEffect(() => {
     if (!selectedPatientId) {
       setSelectedPatient(null);
@@ -209,169 +284,403 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
   }, [selectedPatientId, patients]);
 
-  // Carrega todos os dados nutricionais do paciente selecionado
   const loadPatientData = async (patId: string) => {
     try {
       setLoading(true);
-      const [assRes, bioRes, recRes, planRes, goalRes, anaRes] = await Promise.allSettled([
+      const [assRes, bioRes, recRes, planRes, anaRes] = await Promise.allSettled([
         ApiClient.get<any[]>(`/v1/nutrition/assessments/${patId}`),
         ApiClient.get<any[]>(`/v1/nutrition/bioimpedance/${patId}`),
         ApiClient.get<any[]>(`/v1/nutrition/recalls/${patId}`),
         ApiClient.get<any[]>(`/v1/nutrition/meal-plans/${patId}`),
-        ApiClient.get<any[]>(`/v1/nutrition/goals/${patId}`),
         ApiClient.get<any>(`/v1/nutrition/anamnesis/${patId}`)
       ]);
 
       if (assRes.status === 'fulfilled' && Array.isArray(assRes.value)) {
         setAssessments(assRes.value);
+        if (assRes.value.length > 0) {
+          const latest = assRes.value[0];
+          setAnthroForm({
+            weight: latest.weight ? String(latest.weight) : '',
+            height: latest.height ? String(latest.height) : '',
+            waistCirc: latest.waist_circumference ? String(latest.waist_circumference) : '',
+            abdominalCirc: latest.abdominal_circumference ? String(latest.abdominal_circumference) : '',
+            hipCirc: latest.hip_circumference ? String(latest.hip_circumference) : '',
+            armCirc: latest.arm_circumference ? String(latest.arm_circumference) : '',
+            calfCirc: latest.calf_circumference ? String(latest.calf_circumference) : '',
+            neckCirc: latest.neck_circumference ? String(latest.neck_circumference) : '',
+            thighCirc: latest.thigh_circumference ? String(latest.thigh_circumference) : '',
+            notes: latest.notes || ''
+          });
+        }
       }
+
       if (bioRes.status === 'fulfilled' && Array.isArray(bioRes.value)) {
         setBioList(bioRes.value);
       }
+
       if (recRes.status === 'fulfilled' && Array.isArray(recRes.value)) {
         setRecalls(recRes.value);
       }
-      if (planRes.status === 'fulfilled' && Array.isArray(planRes.value)) {
-        setMealPlans(planRes.value);
+
+      if (planRes.status === 'fulfilled' && Array.isArray(planRes.value) && planRes.value.length > 0) {
+        const latestPlan = planRes.value[0];
+        try {
+          const parsedMeals = typeof latestPlan.meals_json === 'string' ? JSON.parse(latestPlan.meals_json) : latestPlan.meals_json;
+          if (Array.isArray(parsedMeals)) {
+            setPlanForm(prev => ({
+              ...prev,
+              title: latestPlan.title || prev.title,
+              calorieTarget: latestPlan.calorie_target ? String(latestPlan.calorie_target) : prev.calorieTarget,
+              waterTargetMl: latestPlan.water_target_ml ? String(latestPlan.water_target_ml) : prev.waterTargetMl,
+              generalGuidelines: latestPlan.general_guidelines || prev.generalGuidelines,
+              meals: parsedMeals
+            }));
+          }
+        } catch (e) {
+          console.warn('Erro ao processar plano existente:', e);
+        }
       }
-      if (goalRes.status === 'fulfilled' && Array.isArray(goalRes.value)) {
-        setGoals(goalRes.value);
+
+      if (anaRes.status === 'fulfilled' && anaRes.value) {
+        const a = anaRes.value;
+        setAnamnesisData({
+          digestiveHealth: a.digestive_health || 'regular',
+          bowelHabits: a.bowel_habits || '',
+          waterIntakeLiters: a.water_intake_liters ? String(a.water_intake_liters) : '2.0',
+          sleepQuality: a.sleep_quality || '',
+          physicalActivity: a.physical_activity || '',
+          foodAllergies: a.food_allergies || '',
+          foodPreferences: a.food_preferences || '',
+          foodAversions: a.food_aversions || '',
+          supplementsInUse: a.supplements_in_use || '',
+          notes: a.notes || ''
+        });
       }
-      if (anaRes.status === 'fulfilled' && anaRes.value && anaRes.value.data) {
-        setAnamnesisData(anaRes.value.data);
-      }
-    } catch (err: any) {
-      console.warn('Erro ao carregar dados do paciente no ZemdaNutri:', err);
+    } catch (err) {
+      console.warn('Erro ao carregar dados do paciente:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Cálculo automático de IMC
-  const calculatedBmi = React.useMemo(() => {
+  // Cálculo Dinâmico de IMC
+  const calculatedBmi = useMemo(() => {
     const w = parseFloat(anthroForm.weight.replace(',', '.'));
     const h = parseFloat(anthroForm.height.replace(',', '.'));
     if (!w || !h || h <= 0) return null;
-    const heightM = h > 3 ? h / 100 : h;
-    const bmi = w / (heightM * heightM);
-    return Math.round(bmi * 10) / 10;
+    const hMeters = h > 3 ? h / 100 : h;
+    return (w / (hMeters * hMeters)).toFixed(2);
   }, [anthroForm.weight, anthroForm.height]);
 
-  const bmiClassification = React.useMemo(() => {
-    if (!calculatedBmi) return '';
-    if (calculatedBmi < 18.5) return 'Baixo peso';
-    if (calculatedBmi < 25) return 'Eutrofia (Peso normal)';
-    if (calculatedBmi < 30) return 'Sobrepeso (Pré-obesidade)';
-    if (calculatedBmi < 35) return 'Obesidade Grau I';
-    if (calculatedBmi < 40) return 'Obesidade Grau II';
-    return 'Obesidade Grau III (Grave)';
+  const bmiClassification = useMemo(() => {
+    if (!calculatedBmi) return null;
+    const v = parseFloat(calculatedBmi);
+    if (v < 18.5) return { label: 'Baixo Peso', color: 'text-amber-600 bg-amber-50' };
+    if (v < 24.9) return { label: 'Eutrofia (Peso Normal)', color: 'text-emerald-700 bg-emerald-50' };
+    if (v < 29.9) return { label: 'Sobrepeso (Pré-obesidade)', color: 'text-amber-700 bg-amber-50' };
+    if (v < 34.9) return { label: 'Obesidade Grau I', color: 'text-rose-600 bg-rose-50' };
+    if (v < 39.9) return { label: 'Obesidade Grau II', color: 'text-rose-700 bg-rose-50' };
+    return { label: 'Obesidade Grau III (Grave)', color: 'text-rose-900 bg-rose-100' };
   }, [calculatedBmi]);
 
-  // Cálculo de Relação Cintura-Quadril (RCQ)
-  const calculatedRcq = React.useMemo(() => {
-    const waist = parseFloat(anthroForm.waistCirc.replace(',', '.'));
-    const hip = parseFloat(anthroForm.hipCirc.replace(',', '.'));
-    if (!waist || !hip || hip <= 0) return null;
-    return Math.round((waist / hip) * 100) / 100;
-  }, [anthroForm.waistCirc, anthroForm.hipCirc]);
-
-  // Cálculo do Gasto Energético (TMB & GET)
-  const calculatedEnergy = React.useMemo(() => {
-    const w = parseFloat(anthroForm.weight.replace(',', '.')) || (selectedPatient?.weight ? parseFloat(selectedPatient.weight) : 70);
-    const h = (parseFloat(anthroForm.height.replace(',', '.')) || (selectedPatient?.height ? parseFloat(selectedPatient.height) : 170));
-    const hCm = h > 3 ? h : h * 100;
-    const gender = (selectedPatient?.gender || 'female').toLowerCase();
+  // Cálculos Energéticos (TMB, GET, Macronutrientes)
+  const calculatedEnergy = useMemo(() => {
+    const w = parseFloat(anthroForm.weight.replace(',', '.')) || 70;
+    const h = parseFloat(anthroForm.height.replace(',', '.')) || 170;
+    const hCm = h < 3 ? h * 100 : h;
+    const isFemale = selectedPatient?.gender === 'female';
     const age = selectedPatient?.birth_date
-      ? Math.floor((new Date().getTime() - new Date(selectedPatient.birth_date).getTime()) / (365.25 * 86400000))
+      ? Math.floor((Date.now() - new Date(selectedPatient.birth_date).getTime()) / (365.25 * 86400000))
       : 30;
 
-    let tmb = 0;
+    let bmr = 0;
     if (calcFormula === 'harris_benedict') {
-      if (gender.startsWith('m')) {
-        tmb = 66.5 + (13.75 * w) + (5.003 * hCm) - (6.75 * age);
+      if (isFemale) {
+        bmr = 655.1 + 9.563 * w + 1.85 * hCm - 4.676 * age;
       } else {
-        tmb = 655.1 + (9.563 * w) + (1.850 * hCm) - (4.676 * age);
+        bmr = 66.5 + 13.75 * w + 5.003 * hCm - 6.755 * age;
       }
     } else if (calcFormula === 'mifflin_st_jeor') {
-      if (gender.startsWith('m')) {
-        tmb = (10 * w) + (6.25 * hCm) - (5 * age) + 5;
+      if (isFemale) {
+        bmr = 10 * w + 6.25 * hCm - 5 * age - 161;
       } else {
-        tmb = (10 * w) + (6.25 * hCm) - (5 * age) - 161;
+        bmr = 10 * w + 6.25 * hCm - 5 * age + 5;
+      }
+    } else if (calcFormula === 'schofield') {
+      if (isFemale) {
+        bmr = 14.818 * w + 486.6;
+      } else {
+        bmr = 15.057 * w + 692.2;
       }
     } else {
-      tmb = gender.startsWith('m') ? (15.3 * w) + 679 : (14.7 * w) + 496;
+      bmr = 10 * w + 6.25 * hCm - 5 * age;
     }
 
-    const effectiveBmr = customBmr ? parseFloat(customBmr) : Math.round(tmb);
-    const calculatedGet = Math.round(effectiveBmr * activityFactor * injuryFactor);
-    const effectiveGet = customGet ? parseFloat(customGet) : calculatedGet;
+    const finalBmr = customBmr ? parseFloat(customBmr) : Math.round(bmr);
+    const get = customGet ? parseFloat(customGet) : Math.round(finalBmr * activityFactor * injuryFactor);
 
-    const carbKcal = effectiveGet * (carbPercent / 100);
+    const carbKcal = (get * carbPercent) / 100;
+    const protKcal = (get * proteinPercent) / 100;
+    const fatKcal = (get * fatPercent) / 100;
+
     const carbG = Math.round(carbKcal / 4);
-
-    const protKcal = effectiveGet * (proteinPercent / 100);
     const protG = Math.round(protKcal / 4);
-    const protGPerKg = Math.round((protG / w) * 10) / 10;
-
-    const fatKcal = effectiveGet * (fatPercent / 100);
     const fatG = Math.round(fatKcal / 9);
+    const protGPerKg = (protG / w).toFixed(2);
 
     return {
-      bmr: effectiveBmr,
-      totalEnergy: effectiveGet,
+      bmr: finalBmr,
+      totalEnergy: get,
       carbG,
       protG,
-      protGPerKg,
-      fatG
+      fatG,
+      protGPerKg
     };
-  }, [anthroForm.weight, anthroForm.height, selectedPatient, calcFormula, activityFactor, injuryFactor, customBmr, customGet, carbPercent, proteinPercent, fatPercent]);
+  }, [
+    anthroForm.weight,
+    anthroForm.height,
+    selectedPatient,
+    calcFormula,
+    activityFactor,
+    injuryFactor,
+    customBmr,
+    customGet,
+    carbPercent,
+    proteinPercent,
+    fatPercent
+  ]);
 
-  // Salva Avaliação Antropométrica
-  const handleSaveAssessment = async () => {
+  // Totalizadores em Tempo Real do Plano Alimentar Atual
+  const planTotals = useMemo(() => {
+    let calories = 0;
+    let carb = 0;
+    let protein = 0;
+    let fat = 0;
+
+    planForm.meals.forEach(meal => {
+      meal.items.forEach(item => {
+        calories += item.calories || 0;
+        carb += item.carb || 0;
+        protein += item.protein || 0;
+        fat += item.fat || 0;
+      });
+    });
+
+    const w = parseFloat(anthroForm.weight.replace(',', '.')) || 70;
+    const protPerKg = (protein / w).toFixed(2);
+    const targetKcal = parseInt(planForm.calorieTarget) || calculatedEnergy.totalEnergy || 2000;
+    const caloriePercent = Math.min(150, Math.round((calories / targetKcal) * 100));
+
+    return {
+      calories: Math.round(calories),
+      carb: Math.round(carb * 10) / 10,
+      protein: Math.round(protein * 10) / 10,
+      fat: Math.round(fat * 10) / 10,
+      protPerKg,
+      targetKcal,
+      caloriePercent
+    };
+  }, [planForm.meals, planForm.calorieTarget, calculatedEnergy.totalEnergy, anthroForm.weight]);
+
+  // Busca de Alimentos no Banco TACO/TBCA
+  const handleSearchFood = async (q: string) => {
+    setFoodSearchQuery(q);
+    if (q.trim().length < 2) {
+      setFoodResults([]);
+      return;
+    }
+    try {
+      setSearchingFood(true);
+      const res = await ApiClient.get<FoodItem[]>(`/v1/nutrition/foods?q=${encodeURIComponent(q)}`);
+      if (Array.isArray(res)) {
+        setFoodResults(res);
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar alimentos:', err);
+    } finally {
+      setSearchingFood(false);
+    }
+  };
+
+  // Adicionar Alimento à Refeição Selecionada
+  const handleAddFoodToMeal = (food: FoodItem) => {
+    setAddingFoodTarget(food);
+    setPortionGramsInput(100);
+    setAddingAsSubstitutionToItemIndex(null);
+  };
+
+  const handleConfirmAddFood = () => {
+    if (!addingFoodTarget) return;
+
+    const grams = portionGramsInput || 100;
+    const cal = Math.round((addingFoodTarget.energy_kcal * grams) / 100);
+    const cho = Math.round(((addingFoodTarget.carbohydrate_g || 0) * grams) / 100 * 10) / 10;
+    const ptn = Math.round(((addingFoodTarget.protein_g || 0) * grams) / 100 * 10) / 10;
+    const lip = Math.round(((addingFoodTarget.lipid_g || 0) * grams) / 100 * 10) / 10;
+
+    const updatedMeals = [...planForm.meals];
+    const targetMeal = updatedMeals[selectedMealIndexForAdd];
+
+    if (!targetMeal) return;
+
+    if (addingAsSubstitutionToItemIndex !== null && targetMeal.items[addingAsSubstitutionToItemIndex]) {
+      // Adiciona como opção de substituição
+      const parentItem = targetMeal.items[addingAsSubstitutionToItemIndex];
+      if (!parentItem.substitutions) parentItem.substitutions = [];
+      parentItem.substitutions.push({
+        food: addingFoodTarget.name,
+        portion: `${grams}g`,
+        calories: cal,
+        carb: cho,
+        protein: ptn,
+        fat: lip
+      });
+      showToast(`Substituição adicionada a ${parentItem.food}!`, 'success');
+    } else {
+      // Adiciona como item principal
+      targetMeal.items.push({
+        food: addingFoodTarget.name,
+        portion: `${grams}g`,
+        grams,
+        calories: cal,
+        carb: cho,
+        protein: ptn,
+        fat: lip,
+        substitutions: []
+      });
+      showToast(`Alimento adicionado a ${targetMeal.mealName}!`, 'success');
+    }
+
+    setPlanForm({ ...planForm, meals: updatedMeals });
+    setAddingFoodTarget(null);
+    setAddingAsSubstitutionToItemIndex(null);
+  };
+
+  // Gerenciamento de Refeições
+  const handleAddMeal = () => {
+    const newMealName = prompt('Nome da nova refeição:', 'Lanche');
+    if (!newMealName) return;
+    setPlanForm({
+      ...planForm,
+      meals: [
+        ...planForm.meals,
+        {
+          mealName: newMealName,
+          mealTime: '15:00',
+          items: []
+        }
+      ]
+    });
+  };
+
+  const handleRemoveMeal = (mealIndex: number) => {
+    if (!confirm('Deseja remover esta refeição e seus alimentos?')) return;
+    const updated = planForm.meals.filter((_, idx) => idx !== mealIndex);
+    setPlanForm({ ...planForm, meals: updated });
+  };
+
+  const handleRemoveFoodItem = (mealIndex: number, itemIndex: number) => {
+    const updatedMeals = [...planForm.meals];
+    updatedMeals[mealIndex].items = updatedMeals[mealIndex].items.filter((_, idx) => idx !== itemIndex);
+    setPlanForm({ ...planForm, meals: updatedMeals });
+  };
+
+  const handleRemoveSubstitution = (mealIndex: number, itemIndex: number, subIndex: number) => {
+    const updatedMeals = [...planForm.meals];
+    const item = updatedMeals[mealIndex].items[itemIndex];
+    if (item && item.substitutions) {
+      item.substitutions = item.substitutions.filter((_, idx) => idx !== subIndex);
+      setPlanForm({ ...planForm, meals: updatedMeals });
+    }
+  };
+
+  // Criador de Receitas com cálculo por porção
+  const handleAddIngredientToRecipe = (food: FoodItem) => {
+    setRecipeIngredients(prev => [...prev, { food, grams: 100 }]);
+  };
+
+  const recipeTotals = useMemo(() => {
+    let calories = 0;
+    let carb = 0;
+    let protein = 0;
+    let fat = 0;
+
+    recipeIngredients.forEach(item => {
+      const g = item.grams || 100;
+      calories += (item.food.energy_kcal * g) / 100;
+      carb += ((item.food.carbohydrate_g || 0) * g) / 100;
+      protein += ((item.food.protein_g || 0) * g) / 100;
+      fat += ((item.food.lipid_g || 0) * g) / 100;
+    });
+
+    const servings = Math.max(1, recipeServings);
+    return {
+      totalCal: Math.round(calories),
+      totalCarb: Math.round(carb * 10) / 10,
+      totalProt: Math.round(protein * 10) / 10,
+      totalFat: Math.round(fat * 10) / 10,
+      perServingCal: Math.round(calories / servings),
+      perServingCarb: Math.round((carb / servings) * 10) / 10,
+      perServingProt: Math.round((protein / servings) * 10) / 10,
+      perServingFat: Math.round((fat / servings) * 10) / 10
+    };
+  }, [recipeIngredients, recipeServings]);
+
+  const handleApplyRecipeToMeal = (mealIndex: number) => {
+    if (!recipeName.trim() || recipeIngredients.length === 0) {
+      showToast('Preencha o nome da receita e adicione ingredientes', 'error');
+      return;
+    }
+
+    const updatedMeals = [...planForm.meals];
+    if (updatedMeals[mealIndex]) {
+      updatedMeals[mealIndex].items.push({
+        food: `Receita: ${recipeName} (1 porção)`,
+        portion: `1 porção de ${recipeServings}`,
+        grams: 100,
+        calories: recipeTotals.perServingCal,
+        carb: recipeTotals.perServingCarb,
+        protein: recipeTotals.perServingProt,
+        fat: recipeTotals.perServingFat,
+        substitutions: []
+      });
+      setPlanForm({ ...planForm, meals: updatedMeals });
+      showToast(`Receita ${recipeName} adicionada com sucesso!`, 'success');
+      setShowRecipeModal(false);
+      setRecipeName('');
+      setRecipeIngredients([]);
+    }
+  };
+
+  // Salvar Antropometria
+  const handleSaveAnthropometry = async () => {
     if (!selectedPatientId) {
-      showToast('Selecione um paciente para registrar avaliação', 'info');
+      showToast('Selecione um paciente', 'info');
       return;
     }
     if (!anthroForm.weight) {
-      showToast('Informe ao menos o peso atual do paciente', 'info');
+      showToast('Informe o peso do paciente', 'error');
       return;
     }
-
     try {
       setSaving(true);
-      const w = parseFloat(anthroForm.weight.replace(',', '.'));
-      const h = anthroForm.height ? parseFloat(anthroForm.height.replace(',', '.')) : null;
-
       await ApiClient.post('/v1/nutrition/assessments', {
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId || null,
-        weight: w,
-        height: h,
-        bmi: calculatedBmi,
-        waistCirc: anthroForm.waistCirc ? parseFloat(anthroForm.waistCirc.replace(',', '.')) : null,
-        abdominalCirc: anthroForm.abdominalCirc ? parseFloat(anthroForm.abdominalCirc.replace(',', '.')) : null,
-        hipCirc: anthroForm.hipCirc ? parseFloat(anthroForm.hipCirc.replace(',', '.')) : null,
-        armCirc: anthroForm.armCirc ? parseFloat(anthroForm.armCirc.replace(',', '.')) : null,
-        calfCirc: anthroForm.calfCirc ? parseFloat(anthroForm.calfCirc.replace(',', '.')) : null,
-        neckCirc: anthroForm.neckCirc ? parseFloat(anthroForm.neckCirc.replace(',', '.')) : null,
-        thighCirc: anthroForm.thighCirc ? parseFloat(anthroForm.thighCirc.replace(',', '.')) : null,
+        weight: parseFloat(anthroForm.weight.replace(',', '.')),
+        height: anthroForm.height ? parseFloat(anthroForm.height.replace(',', '.')) : null,
+        bmi: calculatedBmi ? parseFloat(calculatedBmi) : null,
+        waistCircumference: anthroForm.waistCirc ? parseFloat(anthroForm.waistCirc.replace(',', '.')) : null,
+        abdominalCircumference: anthroForm.abdominalCirc ? parseFloat(anthroForm.abdominalCirc.replace(',', '.')) : null,
+        hipCircumference: anthroForm.hipCirc ? parseFloat(anthroForm.hipCirc.replace(',', '.')) : null,
+        armCircumference: anthroForm.armCirc ? parseFloat(anthroForm.armCirc.replace(',', '.')) : null,
+        calfCircumference: anthroForm.calfCirc ? parseFloat(anthroForm.calfCirc.replace(',', '.')) : null,
+        neckCircumference: anthroForm.neckCirc ? parseFloat(anthroForm.neckCirc.replace(',', '.')) : null,
+        thighCircumference: anthroForm.thighCirc ? parseFloat(anthroForm.thighCirc.replace(',', '.')) : null,
         notes: anthroForm.notes
       });
-
       showToast('Avaliação antropométrica salva com sucesso!', 'success');
-      loadPatientData(selectedPatientId);
-      setAnthroForm({
-        weight: '',
-        height: '',
-        waistCirc: '',
-        abdominalCirc: '',
-        hipCirc: '',
-        armCirc: '',
-        calfCirc: '',
-        neckCirc: '',
-        thighCirc: '',
-        notes: ''
-      });
+      await loadPatientData(selectedPatientId);
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar avaliação antropométrica', 'error');
     } finally {
@@ -379,10 +688,10 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
   };
 
-  // Salva Bioimpedância
+  // Salvar Bioimpedância
   const handleSaveBioimpedance = async () => {
     if (!selectedPatientId) {
-      showToast('Selecione um paciente para registrar bioimpedância', 'info');
+      showToast('Selecione um paciente', 'info');
       return;
     }
     try {
@@ -395,25 +704,13 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         boneMassKg: bioForm.boneMassKg ? parseFloat(bioForm.boneMassKg.replace(',', '.')) : null,
         bodyWaterPercent: bioForm.bodyWaterPercent ? parseFloat(bioForm.bodyWaterPercent.replace(',', '.')) : null,
         visceralFat: bioForm.visceralFat ? parseFloat(bioForm.visceralFat.replace(',', '.')) : null,
-        basalMetabolicRateKcal: bioForm.basalMetabolicRateKcal ? parseFloat(bioForm.basalMetabolicRateKcal) : null,
+        basalMetabolicRateKcal: bioForm.basalMetabolicRateKcal ? parseInt(bioForm.basalMetabolicRateKcal) : null,
         metabolicAge: bioForm.metabolicAge ? parseInt(bioForm.metabolicAge) : null,
         deviceModel: bioForm.deviceModel || null,
         notes: bioForm.notes || null
       });
-
       showToast('Registro de bioimpedância salvo com sucesso!', 'success');
-      loadPatientData(selectedPatientId);
-      setBioForm({
-        bodyFatPercent: '',
-        muscleMassKg: '',
-        boneMassKg: '',
-        bodyWaterPercent: '',
-        visceralFat: '',
-        basalMetabolicRateKcal: '',
-        metabolicAge: '',
-        deviceModel: '',
-        notes: ''
-      });
+      await loadPatientData(selectedPatientId);
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar bioimpedância', 'error');
     } finally {
@@ -421,7 +718,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
   };
 
-  // Salva Recordatório 24h
+  // Salvar Recordatório 24h
   const handleSaveRecall = async () => {
     if (!selectedPatientId) {
       showToast('Selecione um paciente', 'info');
@@ -434,13 +731,12 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         appointmentId: initialAppointmentId || null,
         recallDate: recallForm.recallDate,
         isWeekend: recallForm.isWeekend,
-        meals: recallForm.meals,
+        mealsJson: recallForm.meals,
         waterIntakeMl: recallForm.waterIntakeMl ? parseInt(recallForm.waterIntakeMl) : null,
         notes: recallForm.notes
       });
-
-      showToast('Recordatório alimentar registrado com sucesso!', 'success');
-      loadPatientData(selectedPatientId);
+      showToast('Recordatório 24h salvo com sucesso!', 'success');
+      await loadPatientData(selectedPatientId);
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar recordatório', 'error');
     } finally {
@@ -448,24 +744,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
   };
 
-  // Busca no Banco de Alimentos (TACO)
-  const handleSearchFood = async (q: string) => {
-    setFoodSearchQuery(q);
-    if (q.trim().length < 2) {
-      setFoodResults([]);
-      return;
-    }
-    try {
-      const res = await ApiClient.get<any[]>(`/v1/nutrition/foods?q=${encodeURIComponent(q)}`);
-      if (Array.isArray(res)) {
-        setFoodResults(res);
-      }
-    } catch (err) {
-      console.warn('Erro ao buscar alimentos:', err);
-    }
-  };
-
-  // Salva Plano Alimentar
+  // Salvar Plano Alimentar
   const handleSaveMealPlan = async () => {
     if (!selectedPatientId) {
       showToast('Selecione um paciente', 'info');
@@ -481,9 +760,8 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         generalGuidelines: planForm.generalGuidelines,
         meals: planForm.meals
       });
-
-      showToast('Plano alimentar salvo com sucesso!', 'success');
-      loadPatientData(selectedPatientId);
+      showToast('Plano alimentar salvo com sucesso no banco de dados!', 'success');
+      await loadPatientData(selectedPatientId);
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar plano alimentar', 'error');
     } finally {
@@ -491,35 +769,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
   };
 
-  // Salva Meta Nutricional
-  const handleSaveGoal = async () => {
-    if (!selectedPatientId) {
-      showToast('Selecione um paciente', 'info');
-      return;
-    }
-    try {
-      setSaving(true);
-      await ApiClient.post('/v1/nutrition/goals', {
-        patientId: selectedPatientId,
-        ...goalForm
-      });
-      showToast('Meta nutricional cadastrada com sucesso!', 'success');
-      loadPatientData(selectedPatientId);
-      setGoalForm({
-        title: '',
-        description: '',
-        category: 'hydration',
-        targetValue: '',
-        deadlineDate: ''
-      });
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao salvar meta', 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Salva Anamnese Nutricional
+  // Salvar Anamnese
   const handleSaveAnamnesis = async () => {
     if (!selectedPatientId) {
       showToast('Selecione um paciente', 'info');
@@ -529,7 +779,8 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       setSaving(true);
       await ApiClient.post('/v1/nutrition/anamnesis', {
         patientId: selectedPatientId,
-        data: anamnesisData
+        ...anamnesisData,
+        waterIntakeLiters: anamnesisData.waterIntakeLiters ? parseFloat(anamnesisData.waterIntakeLiters.replace(',', '.')) : null
       });
       showToast('Anamnese nutricional salva com sucesso!', 'success');
     } catch (err: any) {
@@ -539,14 +790,15 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
   };
 
-  // Finalizar Consulta Nutricional de forma Atômica
+  // 10. Finalização Canônica do Atendimento
   const handleFinishConsultation = async () => {
     if (!selectedPatientId) {
       showToast('Selecione um paciente para finalizar o atendimento', 'info');
       return;
     }
     if (!consultationEvolution.trim()) {
-      showToast('Por favor, informe a evolução clínica e conduta nutricional', 'info');
+      showToast('Por favor, descreva a evolução clínica do paciente na aba Evolução ou Finalização', 'error');
+      setActiveTab('evolution');
       return;
     }
 
@@ -554,7 +806,9 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       setSaving(true);
       await completion.save('/v1/nutrition/consultations/finish', {
         patientId: selectedPatientId,
+        patientName: selectedPatient?.full_name,
         appointmentId: initialAppointmentId || null,
+        moduleType: 'ZemdaNutri',
         title: consultationTitle,
         clinicalEvolution: consultationEvolution,
         conducts: consultationConducts || undefined,
@@ -573,11 +827,11 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         } : null,
         calculationsData: calculatedEnergy,
         mealPlanData: planForm,
-        goalsData: goals, anamnesisData, bioimpedanceData: bioForm, recallData: recallForm, anthropometryForm: anthroForm, goalForm,
-        calculationInputs: { calcFormula, activityFactor, injuryFactor, customBmr, customGet, carbPercent, proteinPercent, fatPercent }
+        anamnesisData,
+        bioimpedanceData: bioForm,
+        recallData: recallForm
       });
-
-
+      showToast('Consulta nutricional finalizada e gravada com sucesso!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar consulta nutricional', 'error');
     } finally {
@@ -585,9 +839,24 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
   };
 
+  // Helper para texto do plano alimentar para o documento do paciente
+  const generatedMealPlanText = useMemo(() => {
+    return planForm.meals.map(m => {
+      const itemsList = m.items.map(it => {
+        let text = `• ${it.food} (${it.portion}) - ${it.calories} kcal`;
+        if (it.substitutions && it.substitutions.length > 0) {
+          text += '\n  ↳ Opções de substituição: ' + it.substitutions.map(s => `${s.food} (${s.portion})`).join(' ou ');
+        }
+        return text;
+      }).join('\n');
+      return `[ ${m.mealName.toUpperCase()} - ${m.mealTime} ]\n${itemsList}`;
+    }).join('\n\n');
+  }, [planForm.meals]);
+
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {completion.dialog}
+
       {/* CABEÇALHO DO MÓDULO ZEMDANUTRI */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -602,7 +871,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              Avaliação antropométrica, composição corporal, calculadoras energéticas, planos alimentares e prontuário integrado.
+              Evolução, avaliação antropométrica, composição corporal, calculadoras energéticas, planos alimentares e metas.
             </p>
           </div>
         </div>
@@ -634,31 +903,44 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           )}
 
           {selectedPatientId && (
-            <button
-              type="button"
-              onClick={() => setShowPreviousRecordsModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
-              title="Visualizar histórico completo de prontuários e evoluções anteriores"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Ver Prontuários Anteriores</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowPreviousRecordsModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-xs cursor-pointer whitespace-nowrap"
+                title="Visualizar histórico completo de prontuários anteriores"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Prontuários Anteriores</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowFollowUpModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all shadow-xs cursor-pointer whitespace-nowrap"
+                title="Imprimir guia com orientações e plano para o paciente"
+              >
+                <Printer className="w-3.5 h-3.5 text-teal-600" />
+                <span>Guia do Paciente</span>
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* ABAS DE NAVEGAÇÃO */}
-      <div className="bg-white border-b border-slate-200 px-6 flex items-center gap-2 overflow-x-auto no-scrollbar">
+      {/* 10 ABAS DE NAVEGAÇÃO ORDENADAS (Item 9) */}
+      <div className="bg-white border-b border-slate-200 px-6 flex items-center gap-1 overflow-x-auto no-scrollbar">
         {[
-          { id: 'anthropometry', label: 'Antropometria', icon: Scale },
-          { id: 'bioimpedance', label: 'Bioimpedância', icon: Activity },
-          { id: 'calculations', label: 'Calculadoras TMB / GET', icon: Calculator },
-          { id: 'recalls', label: 'Recordatório 24h', icon: Clock },
-          { id: 'meal_plans', label: 'Plano Alimentar (TACO)', icon: Utensils },
-          { id: 'goals', label: 'Metas Nutricionais', icon: Target },
-          { id: 'anamnesis', label: 'Anamnese Nutricional', icon: BookOpen },
-          { id: 'tests', label: 'Testes & Exames Externos', icon: FileText },
-          { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
+          { id: 'evolution', label: '1. Evolução', icon: Activity },
+          { id: 'anamnesis', label: '2. Anamnese', icon: BookOpen },
+          { id: 'anthropometry', label: '3. Antropometria', icon: Scale },
+          { id: 'bioimpedance', label: '4. Composição / Bioimpedância', icon: Activity },
+          { id: 'recalls', label: '5. Recordatório 24h', icon: Clock },
+          { id: 'calculations', label: '6. Cálculos Energéticos', icon: Calculator },
+          { id: 'meal_plans', label: '7. Plano Alimentar Builder', icon: Utensils },
+          { id: 'goals', label: '8. Metas', icon: Target },
+          { id: 'tests', label: '9. Testes Externos', icon: FileText },
+          { id: 'finish', label: '10. Finalização', icon: CheckCircle2 }
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -666,13 +948,13 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
                 isActive
                   ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
                   : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
               <span>{tab.label}</span>
             </button>
           );
@@ -688,13 +970,251 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
             </div>
             <h3 className="text-base font-bold text-slate-800">Selecione um Paciente</h3>
             <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Escolha um paciente no menu superior para visualizar ou registrar avaliações antropométricas, bioimpedância e planos alimentares.
+              Escolha um paciente no seletor superior para iniciar a consulta nutricional, avaliar antropometria e construir o plano alimentar.
             </p>
           </div>
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
 
-            {/* ABA 1: ANTROPOMETRIA */}
+            {/* ========================================== */}
+            {/* ABA 1: EVOLUÇÃO CLÍNICA NUTRICIONAL */}
+            {/* ========================================== */}
+            {activeTab === 'evolution' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-emerald-600" />
+                      Evolução Clínica & Conduta Nutricional
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Registro longitudinal do atendimento, estado nutricional, adesão dietética e condutas.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('finish')}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Ir para Finalização
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Título da Consulta</label>
+                    <input
+                      type="text"
+                      value={consultationTitle}
+                      onChange={e => setConsultationTitle(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Sintomas Digestivos / Gastrointestinais</label>
+                    <input
+                      type="text"
+                      value={digestiveSymptoms}
+                      onChange={e => setDigestiveSymptoms(e.target.value)}
+                      placeholder="Ex: Refluxo, distensão abdominal, constipação..."
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Queixas Principais & Relato Subjetivo do Paciente
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={clinicalComplaints}
+                    onChange={e => setClinicalComplaints(e.target.value)}
+                    placeholder="Relato do paciente sobre fome, saciedade, rotina, apetite e rotina alimentar..."
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Evolução Clínica Nutricional *
+                  </label>
+                  <textarea
+                    rows={5}
+                    value={consultationEvolution}
+                    onChange={e => setConsultationEvolution(e.target.value)}
+                    placeholder="Descreva detalhadamente a evolução do paciente: avaliação do peso atual, adesão ao plano alimentar anterior, mudanças no comportamento alimentar, diagnóstico nutricional e raciocínio clínico..."
+                    className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Conduta Dietoterápica & Prescrições Nutricionais
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={consultationConducts}
+                    onChange={e => setConsultationConducts(e.target.value)}
+                    placeholder="Ajustes calóricos, introdução ou remoção de alimentos, suplementação (creatina, whey, ômega 3), metas comportamentais e data de retorno..."
+                    className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <span className="text-xs text-slate-400">
+                    A evolução é vinculada automaticamente ao prontuário do paciente na finalização.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('anthropometry')}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Avançar para Antropometria →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================== */}
+            {/* ABA 2: ANAMNESE NUTRICIONAL */}
+            {/* ========================================== */}
+            {activeTab === 'anamnesis' && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-emerald-600" />
+                      Anamnese Nutricional Detalhada
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Hábitos alimentares, rotina, histórico de aversões, alergias e saúde intestinal.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Saúde Digestiva Geral</label>
+                    <select
+                      value={anamnesisData.digestiveHealth}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, digestiveHealth: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none bg-white"
+                    >
+                      <option value="otima">Ótima / Sem queixas</option>
+                      <option value="regular">Regular / Queixas esporádicas</option>
+                      <option value="ruim">Ruim (Azia, refluxo ou dor frequente)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Hábito Intestinal (Escala Bristol)</label>
+                    <input
+                      type="text"
+                      value={anamnesisData.bowelHabits}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, bowelHabits: e.target.value })}
+                      placeholder="Ex: 1x ao dia, Bristol tipo 4"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Ingestão Hídrica Habitual (L/dia)</label>
+                    <input
+                      type="text"
+                      value={anamnesisData.waterIntakeLiters}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, waterIntakeLiters: e.target.value })}
+                      placeholder="Ex: 2.0"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Qualidade do Sono & Rotina</label>
+                    <input
+                      type="text"
+                      value={anamnesisData.sleepQuality}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, sleepQuality: e.target.value })}
+                      placeholder="Ex: Dorme às 23h, acorda às 07h, sono reparador"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Atividade Física e Treinos</label>
+                    <input
+                      type="text"
+                      value={anamnesisData.physicalActivity}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, physicalActivity: e.target.value })}
+                      placeholder="Ex: Musculação 4x/semana + 30 min cardio"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Alergias e Intolerâncias Alimentares</label>
+                    <textarea
+                      rows={2}
+                      value={anamnesisData.foodAllergies}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, foodAllergies: e.target.value })}
+                      placeholder="Ex: Intolerância à lactose, alergia a frutos do mar, sensibilidade ao glúten..."
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Preferências e Alimentos Favoritos</label>
+                    <textarea
+                      rows={2}
+                      value={anamnesisData.foodPreferences}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, foodPreferences: e.target.value })}
+                      placeholder="Alimentos que o paciente faz questão de incluir no cardápio..."
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Aversões Alimentares</label>
+                    <textarea
+                      rows={2}
+                      value={anamnesisData.foodAversions}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, foodAversions: e.target.value })}
+                      placeholder="Alimentos que o paciente não consome de forma alguma..."
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Suplementos e Medicamentos em Uso</label>
+                    <textarea
+                      rows={2}
+                      value={anamnesisData.supplementsInUse}
+                      onChange={e => setAnamnesisData({ ...anamnesisData, supplementsInUse: e.target.value })}
+                      placeholder="Ex: Whey protein, creatina, multivitamínico, anticoncepcional..."
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleSaveAnamnesis}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {saving ? 'Salvando...' : 'Salvar Anamnese Nutricional'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================== */}
+            {/* ABA 3: ANTROPOMETRIA */}
+            {/* ========================================== */}
             {activeTab === 'anthropometry' && (
               <div className="space-y-6">
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
@@ -702,7 +1222,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                     <div>
                       <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                         <Scale className="w-4 h-4 text-emerald-600" />
-                        Nova Avaliação Antropométrica
+                        Avaliação Antropométrica
                       </h3>
                       <p className="text-xs text-slate-500">
                         Registro de peso, altura, circunferências e cálculo instantâneo de IMC e classificação.
@@ -718,13 +1238,15 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                         <div className="h-8 w-px bg-emerald-200" />
                         <div>
                           <span className="text-[10px] uppercase font-bold text-emerald-800">Classificação</span>
-                          <p className="text-xs font-bold text-emerald-900">{bmiClassification}</p>
+                          <p className={`text-xs font-bold px-2 py-0.5 rounded-md ${bmiClassification?.color}`}>
+                            {bmiClassification?.label}
+                          </p>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Peso Atual (kg) *</label>
                       <input
@@ -732,125 +1254,131 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                         placeholder="Ex: 72.5"
                         value={anthroForm.weight}
                         onChange={e => setAnthroForm({ ...anthroForm, weight: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Altura (cm ou m)</label>
                       <input
                         type="text"
-                        placeholder="Ex: 172 ou 1.72"
+                        placeholder="Ex: 175 ou 1.75"
                         value={anthroForm.height}
                         onChange={e => setAnthroForm({ ...anthroForm, height: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Circunferência da Cintura (cm)</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Cintura (cm)</label>
                       <input
                         type="text"
-                        placeholder="Ex: 82.0"
+                        placeholder="Ex: 82"
                         value={anthroForm.waistCirc}
                         onChange={e => setAnthroForm({ ...anthroForm, waistCirc: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Circunferência do Quadril (cm)</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Abdômen (cm)</label>
                       <input
                         type="text"
-                        placeholder="Ex: 98.0"
-                        value={anthroForm.hipCirc}
-                        onChange={e => setAnthroForm({ ...anthroForm, hipCirc: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Circunferência Abdominal (cm)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 86.0"
+                        placeholder="Ex: 88"
                         value={anthroForm.abdominalCirc}
                         onChange={e => setAnthroForm({ ...anthroForm, abdominalCirc: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Quadril (cm)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 102"
+                        value={anthroForm.hipCirc}
+                        onChange={e => setAnthroForm({ ...anthroForm, hipCirc: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Braço Relaxado (cm)</label>
                       <input
                         type="text"
-                        placeholder="Ex: 31.0"
+                        placeholder="Ex: 32"
                         value={anthroForm.armCirc}
                         onChange={e => setAnthroForm({ ...anthroForm, armCirc: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Panturrilha (cm)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 36.5"
-                        value={anthroForm.calfCirc}
-                        onChange={e => setAnthroForm({ ...anthroForm, calfCirc: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Coxa Medial (cm)</label>
                       <input
                         type="text"
-                        placeholder="Ex: 54.0"
+                        placeholder="Ex: 56"
                         value={anthroForm.thighCirc}
                         onChange={e => setAnthroForm({ ...anthroForm, thighCirc: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Panturrilha (cm)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 37"
+                        value={anthroForm.calfCirc}
+                        onChange={e => setAnthroForm({ ...anthroForm, calfCirc: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Pescoço (cm)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 38"
+                        value={anthroForm.neckCirc}
+                        onChange={e => setAnthroForm({ ...anthroForm, neckCirc: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Relação Cintura/Quadril</label>
+                      <div className="px-3 py-2 text-xs rounded-xl bg-slate-100 font-bold text-slate-700">
+                        {anthroForm.waistCirc && anthroForm.hipCirc && parseFloat(anthroForm.hipCirc) > 0
+                          ? (parseFloat(anthroForm.waistCirc) / parseFloat(anthroForm.hipCirc)).toFixed(2)
+                          : '—'}
+                      </div>
                     </div>
                   </div>
 
-                  {calculatedRcq && (
-                    <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between">
-                      <span className="font-semibold text-slate-700">Relação Cintura-Quadril (RCQ):</span>
-                      <span className="font-bold text-slate-900">{calculatedRcq}</span>
-                    </div>
-                  )}
-
                   <div className="mt-4">
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Observações Clínicas</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Observações da Avaliação Antropométrica</label>
                     <textarea
                       rows={2}
-                      placeholder="Ex: Paciente relata edema pré-menstrual ou retenção hídrica..."
+                      placeholder="Condições de aferição, balança utilizada, particularidades..."
                       value={anthroForm.notes}
                       onChange={e => setAnthroForm({ ...anthroForm, notes: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
                     />
                   </div>
 
-                  <div className="mt-4 flex justify-end">
+                  <div className="flex justify-end gap-3 mt-4 pt-3 border-t border-slate-100">
                     <button
                       type="button"
                       disabled={saving}
-                      onClick={handleSaveAssessment}
-                      className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                      onClick={handleSaveAnthropometry}
+                      className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                     >
                       {saving ? 'Salvando...' : 'Salvar Avaliação Antropométrica'}
                     </button>
                   </div>
                 </div>
 
-                {/* HISTÓRICO ANTROPOMÉTRICO */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
-                    <History className="w-4 h-4 text-slate-500" />
-                    Histórico de Evolução Antropométrica
-                  </h3>
-
-                  {assessments.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic py-4 text-center">Nenhuma avaliação antropométrica registrada ainda.</p>
-                  ) : (
+                {/* Histórico de Medições */}
+                {assessments.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Histórico Longitudinal de Antropometria ({assessments.length})
+                    </h4>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs text-left">
-                        <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                        <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
                           <tr>
                             <th className="py-2.5 px-3">Data</th>
                             <th className="py-2.5 px-3">Peso</th>
@@ -858,288 +1386,151 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                             <th className="py-2.5 px-3">IMC</th>
                             <th className="py-2.5 px-3">Cintura</th>
                             <th className="py-2.5 px-3">Quadril</th>
-                            <th className="py-2.5 px-3">Braço</th>
-                            <th className="py-2.5 px-3">Observações</th>
+                            <th className="py-2.5 px-3">RCQ</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {assessments.map(item => (
-                            <tr key={item.id} className="hover:bg-slate-50/60">
-                              <td className="py-2.5 px-3 font-semibold text-slate-700">{item.assessment_date}</td>
-                              <td className="py-2.5 px-3 font-bold text-slate-900">{item.weight} kg</td>
-                              <td className="py-2.5 px-3">{item.height ? `${item.height} cm` : '-'}</td>
-                              <td className="py-2.5 px-3">
-                                <span className="font-bold text-emerald-700">{item.bmi || '-'}</span>
+                          {assessments.map(a => (
+                            <tr key={a.id} className="hover:bg-slate-50/50">
+                              <td className="py-2.5 px-3 font-semibold text-slate-800">
+                                {new Date(a.conducted_at || a.created_at).toLocaleDateString('pt-BR')}
                               </td>
-                              <td className="py-2.5 px-3">{item.waist_circ ? `${item.waist_circ} cm` : '-'}</td>
-                              <td className="py-2.5 px-3">{item.hip_circ ? `${item.hip_circ} cm` : '-'}</td>
-                              <td className="py-2.5 px-3">{item.arm_circ ? `${item.arm_circ} cm` : '-'}</td>
-                              <td className="py-2.5 px-3 text-slate-500 max-w-xs truncate">{item.notes || '-'}</td>
+                              <td className="py-2.5 px-3 font-bold text-emerald-800">{a.weight} kg</td>
+                              <td className="py-2.5 px-3">{a.height} cm</td>
+                              <td className="py-2.5 px-3 font-semibold">{a.bmi || '—'}</td>
+                              <td className="py-2.5 px-3">{a.waist_circumference ? `${a.waist_circumference} cm` : '—'}</td>
+                              <td className="py-2.5 px-3">{a.hip_circumference ? `${a.hip_circumference} cm` : '—'}</td>
+                              <td className="py-2.5 px-3">
+                                {a.waist_circumference && a.hip_circumference
+                                  ? (a.waist_circumference / a.hip_circumference).toFixed(2)
+                                  : '—'}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* ABA 2: BIOIMPEDÂNCIA */}
+            {/* ========================================== */}
+            {/* ABA 4: COMPOSIÇÃO CORPORAL / BIOIMPEDÂNCIA */}
+            {/* ========================================== */}
             {activeTab === 'bioimpedance' && (
-              <div className="space-y-6">
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2">
-                    <Activity className="w-4 h-4 text-emerald-600" />
-                    Registro de Composição Corporal (Bioimpedância)
-                  </h3>
-                  <p className="text-xs text-slate-500 mb-4">
-                    Inserção dos dados do laudo de bioimpedância (InBody, Omron, Tanita ou compatíveis).
-                  </p>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">% Gordura Corporal (BF)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 22.4"
-                        value={bioForm.bodyFatPercent}
-                        onChange={e => setBioForm({ ...bioForm, bodyFatPercent: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Massa Muscular Esquelética (kg)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 28.5"
-                        value={bioForm.muscleMassKg}
-                        onChange={e => setBioForm({ ...bioForm, muscleMassKg: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Água Corporal Total (%)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 58.2"
-                        value={bioForm.bodyWaterPercent}
-                        onChange={e => setBioForm({ ...bioForm, bodyWaterPercent: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Gordura Visceral (Nível)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 4"
-                        value={bioForm.visceralFat}
-                        onChange={e => setBioForm({ ...bioForm, visceralFat: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Taxa Metabólica Basal (kcal)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 1450"
-                        value={bioForm.basalMetabolicRateKcal}
-                        onChange={e => setBioForm({ ...bioForm, basalMetabolicRateKcal: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Idade Metabólica (anos)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: 26"
-                        value={bioForm.metabolicAge}
-                        onChange={e => setBioForm({ ...bioForm, metabolicAge: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">Modelo do Equipamento</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: InBody 270"
-                        value={bioForm.deviceModel}
-                        onChange={e => setBioForm({ ...bioForm, deviceModel: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={handleSaveBioimpedance}
-                      className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                    >
-                      {saving ? 'Salvando...' : 'Salvar Registro de Bioimpedância'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* HISTÓRICO BIOIMPEDÂNCIA */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
-                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
-                    <History className="w-4 h-4 text-slate-500" />
-                    Histórico de Bioimpedâncias
-                  </h3>
-                  {bioList.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic py-4 text-center">Nenhum exame de bioimpedância registrado.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs text-left">
-                        <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                          <tr>
-                            <th className="py-2.5 px-3">Data</th>
-                            <th className="py-2.5 px-3">% Gordura</th>
-                            <th className="py-2.5 px-3">Massa Muscular</th>
-                            <th className="py-2.5 px-3">Água Corporal</th>
-                            <th className="py-2.5 px-3">Gordura Visceral</th>
-                            <th className="py-2.5 px-3">TMB</th>
-                            <th className="py-2.5 px-3">Equipamento</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {bioList.map(item => (
-                            <tr key={item.id} className="hover:bg-slate-50/60">
-                              <td className="py-2.5 px-3 font-semibold text-slate-700">{item.exam_date}</td>
-                              <td className="py-2.5 px-3 font-bold text-emerald-700">{item.body_fat_percent}%</td>
-                              <td className="py-2.5 px-3">{item.muscle_mass_kg ? `${item.muscle_mass_kg} kg` : '-'}</td>
-                              <td className="py-2.5 px-3">{item.body_water_percent ? `${item.body_water_percent}%` : '-'}</td>
-                              <td className="py-2.5 px-3">{item.visceral_fat || '-'}</td>
-                              <td className="py-2.5 px-3">{item.basal_metabolic_rate_kcal ? `${item.basal_metabolic_rate_kcal} kcal` : '-'}</td>
-                              <td className="py-2.5 px-3 text-slate-500">{item.device_model || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ABA 3: CALCULADORAS TMB / GET */}
-            {activeTab === 'calculations' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Calculator className="w-4 h-4 text-emerald-600" />
-                      Calculadora Nutricional & Gasto Energético
+                      <Activity className="w-4 h-4 text-emerald-600" />
+                      Composição Corporal & Bioimpedância Elétrica (BIA)
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Cálculo de TMB pelas equações padronizadas, estimativa de GET e distribuição de macronutrientes com override manual.
+                      Percentual de gordura, massa muscular esquelética, gordura visceral e água corporal.
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Equação Preditiva</label>
-                    <select
-                      value={calcFormula}
-                      onChange={e => setCalcFormula(e.target.value as any)}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                    >
-                      <option value="harris_benedict">Harris-Benedict (1984)</option>
-                      <option value="mifflin_st_jeor">Mifflin-St Jeor (1990)</option>
-                      <option value="schofield">Schofield (OMS)</option>
-                    </select>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Gordura Corporal (%)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 18.5"
+                      value={bioForm.bodyFatPercent}
+                      onChange={e => setBioForm({ ...bioForm, bodyFatPercent: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold"
+                    />
                   </div>
-
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Fator Atividade Física (FA)</label>
-                    <select
-                      value={activityFactor}
-                      onChange={e => setActivityFactor(parseFloat(e.target.value))}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                    >
-                      <option value={1.2}>Sedentário (1.20)</option>
-                      <option value={1.375}>Levemente ativo (1.375)</option>
-                      <option value={1.55}>Moderadamente ativo (1.55)</option>
-                      <option value={1.725}>Muito ativo (1.725)</option>
-                      <option value={1.9}>Extremamente ativo (1.90)</option>
-                    </select>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Massa Muscular (kg)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 33.2"
+                      value={bioForm.muscleMassKg}
+                      onChange={e => setBioForm({ ...bioForm, muscleMassKg: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
                   </div>
-
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Fator Injúria / Estresse (FI)</label>
-                    <select
-                      value={injuryFactor}
-                      onChange={e => setInjuryFactor(parseFloat(e.target.value))}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                    >
-                      <option value={1.0}>Normal / Sem injúria (1.00)</option>
-                      <option value={1.1}>Pós-operatório leve (1.10)</option>
-                      <option value={1.2}>Fratura / Infecção leve (1.20)</option>
-                      <option value={1.3}>Trauma / Cirurgia de grande porte (1.30)</option>
-                    </select>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Água Corporal (%)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 58.0"
+                      value={bioForm.bodyWaterPercent}
+                      onChange={e => setBioForm({ ...bioForm, bodyWaterPercent: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Gordura Visceral (Nível 1-59)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 4"
+                      value={bioForm.visceralFat}
+                      onChange={e => setBioForm({ ...bioForm, visceralFat: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Massa Óssea (kg)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 3.1"
+                      value={bioForm.boneMassKg}
+                      onChange={e => setBioForm({ ...bioForm, boneMassKg: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Taxa Metabólica Aparelho (kcal)</label>
+                    <input
+                      type="number"
+                      placeholder="Ex: 1650"
+                      value={bioForm.basalMetabolicRateKcal}
+                      onChange={e => setBioForm({ ...bioForm, basalMetabolicRateKcal: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Idade Metabólica (anos)</label>
+                    <input
+                      type="number"
+                      placeholder="Ex: 26"
+                      value={bioForm.metabolicAge}
+                      onChange={e => setBioForm({ ...bioForm, metabolicAge: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Modelo do Equipamento BIA</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: InBody 270, Omron 514"
+                      value={bioForm.deviceModel}
+                      onChange={e => setBioForm({ ...bioForm, deviceModel: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    />
                   </div>
                 </div>
 
-                {/* PAINEL DE RESULTADOS */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-5 bg-gradient-to-br from-emerald-50 to-green-50/50 rounded-2xl border border-emerald-200">
-                  <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
-                    <span className="text-[10px] uppercase font-bold text-emerald-800">Taxa Metabólica Basal (TMB)</span>
-                    <p className="text-xl font-extrabold text-emerald-700 mt-1">{calculatedEnergy.bmr} kcal</p>
-                    <span className="text-[10px] text-slate-400">Gasto em repouso</span>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
-                    <span className="text-[10px] uppercase font-bold text-emerald-800">Gasto Total (GET)</span>
-                    <p className="text-xl font-extrabold text-emerald-800 mt-1">{calculatedEnergy.totalEnergy} kcal</p>
-                    <span className="text-[10px] text-slate-400">TMB × FA × FI</span>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
-                    <span className="text-[10px] uppercase font-bold text-emerald-800">Meta Proteica</span>
-                    <p className="text-xl font-extrabold text-emerald-700 mt-1">{calculatedEnergy.protG} g</p>
-                    <span className="text-[10px] text-slate-400">{calculatedEnergy.protGPerKg} g/kg/dia</span>
-                  </div>
-
-                  <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
-                    <span className="text-[10px] uppercase font-bold text-emerald-800">Carboidratos / Lipídios</span>
-                    <p className="text-base font-extrabold text-slate-800 mt-1">{calculatedEnergy.carbG}g CHO | {calculatedEnergy.fatG}g LIP</p>
-                    <span className="text-[10px] text-slate-400">{carbPercent}% CHO / {fatPercent}% LIP</span>
-                  </div>
-                </div>
-
-                {/* AJUSTES MANUAIS (OVERRIDE) */}
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                  <h4 className="text-xs font-bold text-slate-800">Ajuste Manual / Sobrescrever Valores Pelo Nutricionista</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">TMB Manual (kcal)</label>
-                      <input
-                        type="number"
-                        placeholder={`Padrão: ${calculatedEnergy.bmr}`}
-                        value={customBmr}
-                        onChange={e => setCustomBmr(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">GET / Meta Calórica Manual (kcal)</label>
-                      <input
-                        type="number"
-                        placeholder={`Padrão: ${calculatedEnergy.totalEnergy}`}
-                        value={customGet}
-                        onChange={e => setCustomGet(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white"
-                      />
-                    </div>
-                  </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleSaveBioimpedance}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {saving ? 'Salvando...' : 'Salvar Registro de Bioimpedância'}
+                  </button>
                 </div>
               </div>
             )}
 
-            {/* ABA 4: RECORDATÓRIO 24H */}
+            {/* ========================================== */}
+            {/* ABA 5: RECORDATÓRIO 24H */}
+            {/* ========================================== */}
             {activeTab === 'recalls' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -1149,7 +1540,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                       Recordatório Alimentar de 24 Horas
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Registro minucioso da ingestão alimentar habitual ou das últimas 24 horas.
+                      Registro detalhado da ingestão alimentar habitual do dia anterior.
                     </p>
                   </div>
                 </div>
@@ -1169,7 +1560,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                     <select
                       value={recallForm.isWeekend ? 'yes' : 'no'}
                       onChange={e => setRecallForm({ ...recallForm, isWeekend: e.target.value === 'yes' })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none bg-white"
                     >
                       <option value="no">Dia de semana habitual</option>
                       <option value="yes">Fim de semana / Atípico</option>
@@ -1186,7 +1577,6 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                   </div>
                 </div>
 
-                {/* REFEIÇÕES DO RECORDATÓRIO */}
                 <div className="space-y-4">
                   {recallForm.meals.map((meal, idx) => (
                     <div key={idx} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
@@ -1223,7 +1613,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                     type="button"
                     disabled={saving}
                     onClick={handleSaveRecall}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     {saving ? 'Salvando...' : 'Salvar Recordatório 24h'}
                   </button>
@@ -1231,401 +1621,589 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 5: PLANO ALIMENTAR & TACO */}
-            {activeTab === 'meal_plans' && (
+            {/* ========================================== */}
+            {/* ABA 6: CÁLCULOS ENERGÉTICOS (TMB, GET, VET) */}
+            {/* ========================================== */}
+            {activeTab === 'calculations' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Utensils className="w-4 h-4 text-emerald-600" />
-                      Construtor de Cardápio / Plano Alimentar
+                      <Calculator className="w-4 h-4 text-emerald-600" />
+                      Calculadoras Energéticas & Distribuição de Macronutrientes
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Montagem das refeições com busca integrada na Tabela Brasileira de Composição de Alimentos (TACO).
+                      Cálculo de TMB e GET pelos métodos consagrados com distribuição percentual e g/kg.
                     </p>
                   </div>
                 </div>
 
-                {/* BUSCA NO BANCO DE ALIMENTOS */}
-                <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl space-y-3">
-                  <label className="block text-xs font-bold text-emerald-900">Pesquisar na Tabela TACO / IBGE</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Fórmula Preditiva da TMB</label>
+                    <select
+                      value={calcFormula}
+                      onChange={e => setCalcFormula(e.target.value as any)}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none bg-white"
+                    >
+                      <option value="harris_benedict">Harris-Benedict (1984)</option>
+                      <option value="mifflin_st_jeor">Mifflin-St Jeor (1990)</option>
+                      <option value="schofield">Schofield (OMS)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Fator Atividade Física (FA)</label>
+                    <select
+                      value={activityFactor}
+                      onChange={e => setActivityFactor(parseFloat(e.target.value))}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none bg-white"
+                    >
+                      <option value={1.2}>Sedentário (1.20)</option>
+                      <option value={1.375}>Levemente ativo (1.375)</option>
+                      <option value={1.55}>Moderadamente ativo (1.55)</option>
+                      <option value={1.725}>Muito ativo (1.725)</option>
+                      <option value={1.9}>Extremamente ativo (1.90)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Fator Injúria / Estresse (FI)</label>
+                    <select
+                      value={injuryFactor}
+                      onChange={e => setInjuryFactor(parseFloat(e.target.value))}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none bg-white"
+                    >
+                      <option value={1.0}>Normal / Sem estresse (1.00)</option>
+                      <option value={1.1}>Pós-operatório leve (1.10)</option>
+                      <option value={1.2}>Fratura / Infecção leve (1.20)</option>
+                      <option value={1.3}>Trauma / Cirurgia grande (1.30)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* PAINEL DE RESULTADOS */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-5 bg-gradient-to-br from-emerald-50 to-green-50/50 rounded-2xl border border-emerald-200">
+                  <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
+                    <span className="text-[10px] uppercase font-bold text-emerald-800">Taxa Metabólica Basal (TMB)</span>
+                    <p className="text-xl font-extrabold text-emerald-700 mt-1">{calculatedEnergy.bmr} kcal</p>
+                    <span className="text-[10px] text-slate-400">Gasto em repouso</span>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
+                    <span className="text-[10px] uppercase font-bold text-emerald-800">Gasto Total (GET)</span>
+                    <p className="text-xl font-extrabold text-emerald-800 mt-1">{calculatedEnergy.totalEnergy} kcal</p>
+                    <span className="text-[10px] text-slate-400">TMB × FA × FI</span>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
+                    <span className="text-[10px] uppercase font-bold text-emerald-800">Meta Proteica</span>
+                    <p className="text-xl font-extrabold text-emerald-700 mt-1">{calculatedEnergy.protG} g</p>
+                    <span className="text-[10px] text-slate-400">{calculatedEnergy.protGPerKg} g/kg/dia</span>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-emerald-100 shadow-xs">
+                    <span className="text-[10px] uppercase font-bold text-emerald-800">Carboidratos / Lipídios</span>
+                    <p className="text-base font-extrabold text-slate-800 mt-1">{calculatedEnergy.carbG}g CHO | {calculatedEnergy.fatG}g LIP</p>
+                    <span className="text-[10px] text-slate-400">{carbPercent}% CHO / {fatPercent}% LIP</span>
+                  </div>
+                </div>
+
+                {/* SLIDERS DE MACRONUTRIENTES */}
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
+                  <h4 className="text-xs font-bold text-slate-800">Ajuste da Distribuição dos Macronutrientes (%)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <div className="flex justify-between text-xs font-semibold mb-1">
+                        <span>Carboidratos: {carbPercent}%</span>
+                        <span className="text-slate-500">{calculatedEnergy.carbG}g</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="75"
+                        step="5"
+                        value={carbPercent}
+                        onChange={e => setCarbPercent(parseInt(e.target.value))}
+                        className="w-full accent-emerald-600"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-semibold mb-1">
+                        <span>Proteínas: {proteinPercent}%</span>
+                        <span className="text-slate-500">{calculatedEnergy.protG}g</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="50"
+                        step="5"
+                        value={proteinPercent}
+                        onChange={e => setProteinPercent(parseInt(e.target.value))}
+                        className="w-full accent-emerald-600"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-semibold mb-1">
+                        <span>Lipídios: {fatPercent}%</span>
+                        <span className="text-slate-500">{calculatedEnergy.fatG}g</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="50"
+                        step="5"
+                        value={fatPercent}
+                        onChange={e => setFatPercent(parseInt(e.target.value))}
+                        className="w-full accent-emerald-600"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Soma atual: {carbPercent + proteinPercent + fatPercent}%
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ========================================== */}
+            {/* ABA 7: CONSTRUTOR DE PLANO ALIMENTAR (TACO / TBCA) */}
+            {/* ========================================== */}
+            {activeTab === 'meal_plans' && (
+              <div className="space-y-6">
+                
+                {/* BANNER DE TOTAIS DO DIA X METAS */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-emerald-800">Totalizadores do Cardápio</span>
+                      <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                        <span>{planTotals.calories} kcal planejadas</span>
+                        <span className="text-xs text-slate-400 font-normal">
+                          / Meta: {planTotals.targetKcal} kcal ({planTotals.caloriePercent}%)
+                        </span>
+                      </h3>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <div className="px-3 py-1.5 bg-blue-50 text-blue-900 rounded-xl border border-blue-100 font-semibold">
+                        CHO: <strong>{planTotals.carb}g</strong>
+                      </div>
+                      <div className="px-3 py-1.5 bg-emerald-50 text-emerald-900 rounded-xl border border-emerald-100 font-semibold">
+                        PTN: <strong>{planTotals.protein}g</strong> ({planTotals.protPerKg} g/kg)
+                      </div>
+                      <div className="px-3 py-1.5 bg-amber-50 text-amber-900 rounded-xl border border-amber-100 font-semibold">
+                        LIP: <strong>{planTotals.fat}g</strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowRecipeModal(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-xl font-bold transition-colors cursor-pointer"
+                      >
+                        <PieChart className="w-3.5 h-3.5" />
+                        <span>+ Criar Receita</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        planTotals.caloriePercent > 105
+                          ? 'bg-amber-500'
+                          : planTotals.caloriePercent >= 90
+                          ? 'bg-emerald-500'
+                          : 'bg-blue-500'
+                      }`}
+                      style={{ width: `${Math.min(100, planTotals.caloriePercent)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* BUSCA NO BANCO DE ALIMENTOS — TACO / TBCA (Item 6) */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                        <Search className="w-4 h-4 text-emerald-600" />
+                        Banco de Alimentos — TACO / TBCA
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Busca rápida sem acentos por nome, categoria ou código oficial (TACO / Tabela Brasileira de Composição de Alimentos).
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">Inserir na refeição:</span>
+                      <select
+                        value={selectedMealIndexForAdd}
+                        onChange={e => setSelectedMealIndexForAdd(parseInt(e.target.value))}
+                        className="text-xs font-semibold px-2.5 py-1.5 border border-slate-200 rounded-xl bg-slate-50"
+                      >
+                        {planForm.meals.map((m, idx) => (
+                          <option key={idx} value={idx}>{m.mealName}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       type="text"
-                      placeholder="Digite o nome do alimento (ex: arroz, frango, aveia, banana)..."
+                      placeholder="Buscar alimento por nome ou categoria (ex: arroz, frango, feijão, aveia, maçã, queijo)..."
                       value={foodSearchQuery}
                       onChange={e => handleSearchFood(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-emerald-200 bg-white focus:outline-none focus:border-emerald-500"
+                      className="w-full pl-10 pr-4 py-2.5 text-xs rounded-xl border border-emerald-200 bg-emerald-50/20 focus:bg-white focus:outline-none focus:border-emerald-500 transition-colors"
                     />
                   </div>
 
+                  {searchingFood && (
+                    <p className="text-xs text-slate-400 py-2">Consultando banco de alimentos...</p>
+                  )}
+
                   {foodResults.length > 0 && (
-                    <div className="max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
+                    <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
                       {foodResults.map(item => (
-                        <div key={item.id} className="p-2.5 text-xs flex items-center justify-between hover:bg-slate-50">
-                          <div>
-                            <p className="font-bold text-slate-800">{item.name}</p>
-                            <span className="text-[10px] text-slate-500">
-                              {item.energy_kcal} kcal | CHO: {item.carbohydrate_g}g | PTN: {item.protein_g}g | LIP: {item.lipid_g}g
-                            </span>
+                        <div
+                          key={item.id}
+                          className="p-3 text-xs flex items-center justify-between hover:bg-emerald-50/50 transition-colors"
+                        >
+                          <div className="flex-1 pr-3">
+                            <div className="flex items-center gap-2">
+                              <strong className="text-slate-900">{item.name}</strong>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                {item.source}
+                              </span>
+                              {item.category && (
+                                <span className="text-[10px] text-slate-400">({item.category})</span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">
+                              Por 100g: <strong>{item.energy_kcal} kcal</strong> | CHO: {item.carbohydrate_g}g | PTN: {item.protein_g}g | LIP: {item.lipid_g}g
+                            </div>
                           </div>
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                            TACO
-                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAddFoodToMeal(item)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Adicionar
+                          </button>
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
 
-                {/* DADOS DO PLANO */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Título do Plano</label>
-                    <input
-                      type="text"
-                      value={planForm.title}
-                      onChange={e => setPlanForm({ ...planForm, title: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Meta Calórica Diária (kcal)</label>
-                    <input
-                      type="number"
-                      value={planForm.calorieTarget}
-                      onChange={e => setPlanForm({ ...planForm, calorieTarget: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Meta Hídrica (ml)</label>
-                    <input
-                      type="number"
-                      value={planForm.waterTargetMl}
-                      onChange={e => setPlanForm({ ...planForm, waterTargetMl: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                </div>
+                {/* MODAL ADICIONAR PORÇÃO ESPECÍFICA */}
+                {addingFoodTarget && (
+                  <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95">
+                      <div className="flex items-center justify-between border-b pb-3">
+                        <h4 className="font-bold text-sm text-slate-900">Definir Quantidade / Porção</h4>
+                        <button onClick={() => setAddingFoodTarget(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
 
-                {/* REFEIÇÕES DO PLANO */}
-                <div className="space-y-4">
-                  {planForm.meals.map((meal: any, mIdx: number) => (
-                    <div key={mIdx} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={meal.mealName}
-                            onChange={e => {
-                              const updated = [...planForm.meals];
-                              updated[mIdx].mealName = e.target.value;
-                              setPlanForm({ ...planForm, meals: updated });
-                            }}
-                            className="font-bold text-xs px-2 py-1 bg-white border border-slate-200 rounded-lg"
-                          />
-                          <input
-                            type="time"
-                            value={meal.mealTime}
-                            onChange={e => {
-                              const updated = [...planForm.meals];
-                              updated[mIdx].mealTime = e.target.value;
-                              setPlanForm({ ...planForm, meals: updated });
-                            }}
-                            className="text-xs px-2 py-1 bg-white border border-slate-200 rounded-lg"
-                          />
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-slate-800">{addingFoodTarget.name}</p>
+                        <p className="text-[11px] text-slate-500">
+                          Destino: <strong>{planForm.meals[selectedMealIndexForAdd]?.mealName}</strong>
+                          {addingAsSubstitutionToItemIndex !== null && ' (Substituição)'}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Quantidade em gramas (g)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={portionGramsInput}
+                          onChange={e => setPortionGramsInput(parseInt(e.target.value) || 100)}
+                          className="w-full px-3 py-2 text-xs border rounded-xl font-bold text-slate-900"
+                        />
+                      </div>
+
+                      <div className="p-3 bg-emerald-50 rounded-xl text-xs text-emerald-900 space-y-1">
+                        <span className="font-bold block text-[11px] uppercase">Valores calculados da porção:</span>
+                        <div className="grid grid-cols-4 gap-1 text-center font-bold">
+                          <div>{Math.round((addingFoodTarget.energy_kcal * portionGramsInput) / 100)} kcal</div>
+                          <div>CHO: {Math.round(((addingFoodTarget.carbohydrate_g || 0) * portionGramsInput) / 100)}g</div>
+                          <div>PTN: {Math.round(((addingFoodTarget.protein_g || 0) * portionGramsInput) / 100)}g</div>
+                          <div>LIP: {Math.round(((addingFoodTarget.lipid_g || 0) * portionGramsInput) / 100)}g</div>
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        {meal.items.map((item: any, iIdx: number) => (
-                          <div key={iIdx} className="flex items-center gap-2 text-xs bg-white p-2.5 rounded-lg border border-slate-200">
-                            <span className="font-semibold text-slate-800 flex-1">{item.food}</span>
-                            <span className="text-slate-500">{item.portion}</span>
-                            <span className="font-bold text-emerald-700">{item.calories} kcal</span>
-                          </div>
-                        ))}
+                      <div className="flex justify-end gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setAddingFoodTarget(null)}
+                          className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl font-medium"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleConfirmAddFood}
+                          className="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs"
+                        >
+                          Confirmar e Inserir
+                        </button>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                )}
+
+                {/* REFEIÇÕES DO PLANO BUILDER */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-slate-800">Refeições do Cardápio ({planForm.meals.length})</h4>
+                    <button
+                      type="button"
+                      onClick={handleAddMeal}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Adicionar Refeição
+                    </button>
+                  </div>
+
+                  {planForm.meals.map((meal, mIdx) => {
+                    let mealKcal = 0;
+                    let mealCho = 0;
+                    let mealPtn = 0;
+                    let mealLip = 0;
+                    meal.items.forEach(it => {
+                      mealKcal += it.calories || 0;
+                      mealCho += it.carb || 0;
+                      mealPtn += it.protein || 0;
+                      mealLip += it.fat || 0;
+                    });
+
+                    return (
+                      <div key={mIdx} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={meal.mealName}
+                              onChange={e => {
+                                const updated = [...planForm.meals];
+                                updated[mIdx].mealName = e.target.value;
+                                setPlanForm({ ...planForm, meals: updated });
+                              }}
+                              className="font-bold text-sm text-slate-900 bg-transparent hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg px-2 py-0.5"
+                            />
+                            <input
+                              type="time"
+                              value={meal.mealTime}
+                              onChange={e => {
+                                const updated = [...planForm.meals];
+                                updated[mIdx].mealTime = e.target.value;
+                                setPlanForm({ ...planForm, meals: updated });
+                              }}
+                              className="text-xs px-2 py-0.5 border border-slate-200 rounded-lg bg-slate-50"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg">
+                              {Math.round(mealKcal)} kcal (CHO: {Math.round(mealCho)}g | PTN: {Math.round(mealPtn)}g | LIP: {Math.round(mealLip)}g)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMeal(mIdx)}
+                              className="text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
+                              title="Remover refeição"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Itens da Refeição */}
+                        <div className="space-y-2">
+                          {meal.items.length === 0 ? (
+                            <p className="text-xs text-slate-400 italic py-2">
+                              Nenhum alimento nesta refeição. Pesquise na tabela TACO/TBCA acima para inserir itens.
+                            </p>
+                          ) : (
+                            meal.items.map((item, iIdx) => (
+                              <div key={iIdx} className="p-3 bg-slate-50/80 border border-slate-200/80 rounded-xl space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="flex-1 pr-2">
+                                    <span className="font-bold text-slate-900">{item.food}</span>
+                                    <span className="text-slate-500 ml-2 font-medium">({item.portion})</span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-bold text-emerald-700">{item.calories} kcal</span>
+                                    <span className="text-[11px] text-slate-500">
+                                      CHO: {item.carb}g | PTN: {item.protein}g | LIP: {item.fat}g
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedMealIndexForAdd(mIdx);
+                                        setAddingAsSubstitutionToItemIndex(iIdx);
+                                        showToast(`Pesquise um alimento acima para adicionar como substituição de ${item.food}`, 'info');
+                                      }}
+                                      className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md hover:bg-teal-100 transition-colors"
+                                      title="Adicionar opção de substituição"
+                                    >
+                                      + Substituição
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveFoodItem(mIdx, iIdx)}
+                                      className="text-slate-400 hover:text-rose-600 p-0.5"
+                                      title="Remover alimento"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Substituições */}
+                                {item.substitutions && item.substitutions.length > 0 && (
+                                  <div className="pl-4 border-l-2 border-teal-300 space-y-1 mt-1">
+                                    <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wider block">
+                                      Opções de Substituição:
+                                    </span>
+                                    {item.substitutions.map((sub, sIdx) => (
+                                      <div key={sIdx} className="flex items-center justify-between text-[11px] text-slate-600 bg-white p-1.5 rounded-lg border border-slate-200">
+                                        <span>↳ {sub.food} ({sub.portion}) - {sub.calories} kcal</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveSubstitution(mIdx, iIdx, sIdx)}
+                                          className="text-slate-400 hover:text-rose-600 p-0.5"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowFollowUpModal(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-50 text-teal-800 border border-teal-200 hover:bg-teal-100 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Visualizar Impressão A4 do Paciente
+                  </button>
+
                   <button
                     type="button"
                     disabled={saving}
                     onClick={handleSaveMealPlan}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                    className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                   >
-                    {saving ? 'Salvando...' : 'Salvar Plano Alimentar'}
+                    {saving ? 'Salvando...' : 'Salvar Plano Alimentar no Prontuário'}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ABA 6: METAS NUTRICIONAIS */}
+            {/* ========================================== */}
+            {/* ABA 8: METAS (Item 7) */}
+            {/* ========================================== */}
             {activeTab === 'goals' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Target className="w-4 h-4 text-emerald-600" />
-                      Metas Nutricionais & Acompanhamento
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Definição de metas comportamentais, de peso e hidratação com prazo.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Título da Meta</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Aumentar ingestão hídrica"
-                      value={goalForm.title}
-                      onChange={e => setGoalForm({ ...goalForm, title: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Categoria</label>
-                    <select
-                      value={goalForm.category}
-                      onChange={e => setGoalForm({ ...goalForm, category: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    >
-                      <option value="weight">Peso Corporal</option>
-                      <option value="hydration">Hidratação</option>
-                      <option value="nutrition">Alimentação / Hábito</option>
-                      <option value="activity">Atividade Física</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Valor Alvo</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: 2500 ml/dia ou 68 kg"
-                      value={goalForm.targetValue}
-                      onChange={e => setGoalForm({ ...goalForm, targetValue: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Prazo / Data Alvo</label>
-                    <input
-                      type="date"
-                      value={goalForm.deadlineDate}
-                      onChange={e => setGoalForm({ ...goalForm, deadlineDate: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Descrição / Instruções da Meta</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Instruções para o paciente atingir a meta..."
-                    value={goalForm.description}
-                    onChange={e => setGoalForm({ ...goalForm, description: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                  />
-                </div>
-
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={handleSaveGoal}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  >
-                    Adicionar Meta
-                  </button>
-                </div>
-
-                {/* LISTA DE METAS */}
-                <div className="border-t border-slate-100 pt-4 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-800">Metas Cadastradas</h4>
-                  {goals.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic py-2">Nenhuma meta cadastrada ainda.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {goals.map(g => (
-                        <div key={g.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-800">{g.title}</span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              {g.status === 'achieved' ? 'Atingida' : 'Em andamento'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-600">{g.description}</p>
-                          <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1">
-                            <span>Alvo: <strong>{g.target_value}</strong></span>
-                            {g.deadline_date && <span>Prazo: {g.deadline_date}</span>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ABA 7: ANAMNESE NUTRICIONAL */}
-            {activeTab === 'anamnesis' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-emerald-600" />
-                      Anamnese Nutricional Detalhada
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Histórico clínico, hábitos digestivos, aversões alimentares e rotina diária.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Histórico Clínico e Doenças Associadas</label>
-                    <textarea
-                      rows={3}
-                      placeholder="Ex: Diabetes Mellitus tipo 2, hipertensão arterial, histórico familiar..."
-                      value={anamnesisData.clinicalHistory}
-                      onChange={e => setAnamnesisData({ ...anamnesisData, clinicalHistory: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Alergias e Intolerâncias Alimentares</label>
-                    <textarea
-                      rows={3}
-                      placeholder="Ex: Intolerância à lactose, sensibilidade ao glúten, alergia a frutos do mar..."
-                      value={anamnesisData.allergiesIntolerances}
-                      onChange={e => setAnamnesisData({ ...anamnesisData, allergiesIntolerances: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Aversões Alimentares</label>
-                    <textarea
-                      rows={2}
-                      placeholder="Alimentos que o paciente recusa ou não consome..."
-                      value={anamnesisData.foodAversions}
-                      onChange={e => setAnamnesisData({ ...anamnesisData, foodAversions: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Preferências Alimentares</label>
-                    <textarea
-                      rows={2}
-                      placeholder="Alimentos e preparações preferidas pelo paciente..."
-                      value={anamnesisData.foodPreferences}
-                      onChange={e => setAnamnesisData({ ...anamnesisData, foodPreferences: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-3">
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={handleSaveAnamnesis}
-                    className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  >
-                    {saving ? 'Salvando...' : 'Salvar Anamnese Nutricional'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ABA: TESTES, EXAMES & AVALIAÇÕES EXTERNAS */}
-            {activeTab === 'tests' && selectedPatientId && (
-              <ExternalTestsManager
+              <MeasurableGoalsManager
                 patientId={selectedPatientId}
-                moduleType="ZemdaNutri"
-                appointmentId={initialAppointmentId}
-                accentColor="emerald"
-                title="Testes, Exames Laboratoriais & Avaliações Externas (ZemdaNutri)"
+                specialty="nutri"
+                moduleType="nutri"
               />
             )}
 
-            {/* ABA 8: FINALIZAR ATENDIMENTO */}
+            {/* ========================================== */}
+            {/* ABA 9: TESTES EXTERNOS (Item 4) */}
+            {/* ========================================== */}
+            {activeTab === 'tests' && (
+              <ExternalTestsManager
+                patientId={selectedPatientId}
+                moduleType="nutri"
+              />
+            )}
+
+            {/* ========================================== */}
+            {/* ABA 10: FINALIZAÇÃO CANÔNICA (Item 10) */}
+            {/* ========================================== */}
             {activeTab === 'finish' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      Finalizar Consulta Nutricional (Gravação Longitudinal no Prontuário)
+                      Finalização da Consulta Nutricional
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Gera o registro oficial com todas as avaliações, metas e plano alimentar vinculados de forma definitiva e atômica.
+                      Revisão geral, gravação no prontuário eletrônico com assinatura legal e geração de documento de acompanhamento.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Checklist da Consulta */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-xs">
+                    <span className="font-bold text-emerald-900 block mb-1">Antropometria</span>
+                    <p className="text-emerald-700">
+                      {anthroForm.weight ? `Peso: ${anthroForm.weight} kg (IMC: ${calculatedBmi || '—'})` : 'Nenhum peso aferido hoje'}
+                    </p>
+                  </div>
+                  <div className="p-3.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-xs">
+                    <span className="font-bold text-emerald-900 block mb-1">Cálculo Energético</span>
+                    <p className="text-emerald-700">
+                      GET: {calculatedEnergy.totalEnergy} kcal | PTN: {calculatedEnergy.protG}g
+                    </p>
+                  </div>
+                  <div className="p-3.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-xs">
+                    <span className="font-bold text-emerald-900 block mb-1">Cardápio Planejado</span>
+                    <p className="text-emerald-700">
+                      {planTotals.calories} kcal ({planForm.meals.length} refeições)
                     </p>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Título da Consulta</label>
-                  <input
-                    type="text"
-                    value={consultationTitle}
-                    onChange={e => setConsultationTitle(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Evolução Clínica Nutricional *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Evolução Clínica e Conduta Nutricional *</label>
                   <textarea
-                    rows={4}
-                    placeholder="Descreva o estado nutricional do paciente, evolução antropométrica, adesão ao plano anterior e diagnóstico nutricional..."
+                    rows={5}
                     value={consultationEvolution}
                     onChange={e => setConsultationEvolution(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                    placeholder="Descreva a evolução da consulta, conduta terapêutica e recomendações..."
+                    className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Condutas Nutricionais & Prescrições</label>
-                  <textarea
-                    rows={3}
-                    placeholder="Conduta dietoterápica, orientações gerais, prescrição de suplementos / fitoterápicos, data de retorno..."
-                    value={consultationConducts}
-                    onChange={e => setConsultationConducts(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                  />
-                </div>
-
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-900 flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h5 className="font-bold">Garantia de Persistência Sem Perda de Dados</h5>
-                    <p className="text-emerald-700 mt-0.5">
-                      Ao finalizar, a consulta é gravada no banco com transação atômica. O histórico antropométrico, plano e metas permanecerão acessíveis no prontuário.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-2">
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100">
                   <button
                     type="button"
-                    disabled={saving}
+                    onClick={() => setShowFollowUpModal(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4 text-teal-700" />
+                    <span>Gerar Acompanhamento para o Paciente</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={saving || !consultationEvolution.trim()}
                     onClick={handleFinishConsultation}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>{saving ? 'Finalizando...' : 'Finalizar Consulta e Gravar Prontuário'}</span>
+                    <span>{saving ? 'Gravando no Prontuário...' : 'Finalizar Atendimento'}</span>
                   </button>
                 </div>
               </div>
@@ -1635,6 +2213,113 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         )}
       </div>
 
+      {/* Modal Criar Receita */}
+      {showRecipeModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-sm text-slate-900">Criador de Receita com Macros por Porção</h3>
+              <button onClick={() => setShowRecipeModal(false)} className="p-1 text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Nome da Receita *</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Panqueca de Aveia e Banana"
+                  value={recipeName}
+                  onChange={e => setRecipeName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Rendimento (Nº de Porções) *</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={recipeServings}
+                  onChange={e => setRecipeServings(parseInt(e.target.value) || 1)}
+                  className="w-full px-3 py-2 text-xs border rounded-xl font-bold"
+                />
+              </div>
+            </div>
+
+            {/* Ingredientes adicionados */}
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-slate-700 block">
+                Ingredientes ({recipeIngredients.length}):
+              </span>
+              {recipeIngredients.length === 0 ? (
+                <p className="text-xs text-slate-400 italic bg-slate-50 p-2.5 rounded-xl">
+                  Nenhum ingrediente adicionado. Pesquise no banco TACO acima e clique em Adicionar.
+                </p>
+              ) : (
+                <div className="max-h-36 overflow-y-auto space-y-1.5">
+                  {recipeIngredients.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="font-medium text-slate-800">{item.food.name}</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.grams}
+                          onChange={e => {
+                            const updated = [...recipeIngredients];
+                            updated[idx].grams = parseInt(e.target.value) || 100;
+                            setRecipeIngredients(updated);
+                          }}
+                          className="w-16 px-1.5 py-0.5 border rounded text-xs font-bold text-center"
+                        />
+                        <span className="text-slate-400">g</span>
+                        <button
+                          type="button"
+                          onClick={() => setRecipeIngredients(recipeIngredients.filter((_, i) => i !== idx))}
+                          className="text-slate-400 hover:text-rose-600 p-0.5"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Painel por porção */}
+            <div className="p-3 bg-emerald-50 rounded-xl text-xs space-y-1">
+              <span className="text-[10px] font-bold text-emerald-900 uppercase">Valores por Porção (1/{recipeServings}):</span>
+              <div className="grid grid-cols-4 gap-2 text-center font-bold text-emerald-800">
+                <div>{recipeTotals.perServingCal} kcal</div>
+                <div>CHO: {recipeTotals.perServingCarb}g</div>
+                <div>PTN: {recipeTotals.perServingProt}g</div>
+                <div>LIP: {recipeTotals.perServingFat}g</div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setShowRecipeModal(false)}
+                className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyRecipeToMeal(selectedMealIndexForAdd)}
+                className="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs"
+              >
+                Inserir na Refeição Selecionada
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Prontuários Anteriores */}
       {showPreviousRecordsModal && selectedPatientId && (
         <PatientPreviousRecordsModal
           patientId={selectedPatientId}
@@ -1642,6 +2327,20 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           onClose={() => setShowPreviousRecordsModal(false)}
         />
       )}
+
+      {/* Modal Guia do Paciente (PDF Handout) */}
+      {showFollowUpModal && selectedPatientId && (
+        <PatientFollowUpDocumentModal
+          isOpen={showFollowUpModal}
+          onClose={() => setShowFollowUpModal(false)}
+          patientId={selectedPatientId}
+          patientName={selectedPatient?.full_name || 'Paciente'}
+          moduleType="ZemdaNutri"
+          initialGuidelines={planForm.generalGuidelines}
+          mealPlanText={generatedMealPlanText}
+        />
+      )}
+
     </div>
   );
 };

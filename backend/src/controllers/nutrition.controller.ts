@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 import { DocumentsController } from './documents.controller';
+import { seedNutritionFoodDatabase } from '../config/nutrition-foods.seed';
 
 /**
  * Validação de acesso exclusivo para Nutrição (ZemdaNutri - Regras 1 e 2)
@@ -388,71 +389,54 @@ export class NutritionController {
     }
   }
 
-  // 5. BANCO DE ALIMENTOS
+  // 5. BANCO DE ALIMENTOS (TACO / TBCA / PERSONALIZADO)
   static listFoodDatabase(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      const q = req.query.q ? String(req.query.q).toLowerCase() : '';
+      const rawQ = req.query.q ? String(req.query.q) : '';
       const category = req.query.category ? String(req.query.category) : '';
+
+      // Garante seed idempotente sempre pronto antes da busca
+      seedNutritionFoodDatabase(db);
+
+      // Função utilitária para remoção de acentos e busca tolerante
+      const foldAccents = (str: string): string => {
+        return (str || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .trim();
+      };
 
       let sql = 'SELECT * FROM nutrition_food_database WHERE (tenant_id = ? OR tenant_id IS NULL)';
       const params: any[] = [tenantId];
 
-      if (q) {
-        sql += ' AND LOWER(name) LIKE ?';
-        params.push(`%${q}%`);
-      }
       if (category) {
         sql += ' AND category = ?';
         params.push(category);
       }
-      sql += ' ORDER BY is_clinic_custom DESC, name ASC LIMIT 100';
 
-      const rows = db.prepare(sql).all(...params) as any[];
+      sql += ' ORDER BY is_clinic_custom DESC, name ASC';
 
-      // Se o banco estiver vazio na primeira chamada, insere catálogo básico de alimentos padrão (Tabela TACO/IBGE)
-      if (rows.length === 0 && !q && !category) {
-        const initialFoods = [
-          { name: 'Arroz Branco Cozido', cat: 'Cereais', size: 100, unit: 'g', kcal: 128, p: 2.5, c: 28.1, f: 0.2, fib: 1.6 },
-          { name: 'Arroz Integral Cozido', cat: 'Cereais', size: 100, unit: 'g', kcal: 124, p: 2.6, c: 25.8, f: 1.0, fib: 2.7 },
-          { name: 'Feijão Carioca Cozido', cat: 'Leguminosas', size: 100, unit: 'g', kcal: 76, p: 4.8, c: 13.6, f: 0.5, fib: 8.5 },
-          { name: 'Feijão Preto Cozido', cat: 'Leguminosas', size: 100, unit: 'g', kcal: 77, p: 4.5, c: 14.0, f: 0.5, fib: 8.4 },
-          { name: 'Peito de Frango Grelhado', cat: 'Carnes e Ovos', size: 100, unit: 'g', kcal: 159, p: 32.0, c: 0.0, f: 2.5, fib: 0.0 },
-          { name: 'Ovo de Galinha Cozido', cat: 'Carnes e Ovos', size: 50, unit: 'unid', kcal: 74, p: 6.3, c: 0.5, f: 5.0, fib: 0.0 },
-          { name: 'Filé de Tilápia Grelhado', cat: 'Pescados', size: 100, unit: 'g', kcal: 128, p: 26.0, c: 0.0, f: 2.7, fib: 0.0 },
-          { name: 'Patinho Bovino Moído', cat: 'Carnes e Ovos', size: 100, unit: 'g', kcal: 219, p: 35.9, c: 0.0, f: 7.3, fib: 0.0 },
-          { name: 'Batata Doce Cozida', cat: 'Tubérculos', size: 100, unit: 'g', kcal: 77, p: 0.6, c: 18.4, f: 0.1, fib: 2.2 },
-          { name: 'Mandioca / Aipim Cozido', cat: 'Tubérculos', size: 100, unit: 'g', kcal: 125, p: 0.6, c: 30.1, f: 0.3, fib: 1.6 },
-          { name: 'Aveia em Flocos', cat: 'Cereais', size: 30, unit: 'g', kcal: 118, p: 4.3, c: 20.0, f: 2.2, fib: 3.1 },
-          { name: 'Banana Prata', cat: 'Frutas', size: 100, unit: 'unid', kcal: 98, p: 1.3, c: 26.0, f: 0.1, fib: 2.0 },
-          { name: 'Maçã Fuji', cat: 'Frutas', size: 100, unit: 'unid', kcal: 56, p: 0.3, c: 15.2, f: 0.2, fib: 1.3 },
-          { name: 'Azeite de Oliva Extra Virgem', cat: 'Óleos e Gorduras', size: 10, unit: 'ml', kcal: 88, p: 0.0, c: 0.0, f: 10.0, fib: 0.0 },
-          { name: 'Castanha-do-Pará', cat: 'Oleaginosas', size: 15, unit: 'g', kcal: 98, p: 2.2, c: 1.8, f: 9.5, fib: 1.1 },
-          { name: 'Leite Desnatado', cat: 'Laticínios', size: 200, unit: 'ml', kcal: 70, p: 6.0, c: 10.0, f: 0.0, fib: 0.0 },
-          { name: 'Iogurte Natural Desnatado', cat: 'Laticínios', size: 170, unit: 'pote', kcal: 85, p: 7.0, c: 10.0, f: 0.5, fib: 0.0 },
-          { name: 'Whey Protein Concentrado 80%', cat: 'Suplementos', size: 30, unit: 'dose', kcal: 120, p: 24.0, c: 2.0, f: 1.5, fib: 0.0 },
-          { name: 'Brócolis Cozido', cat: 'Hortaliças', size: 100, unit: 'g', kcal: 25, p: 2.1, c: 4.4, f: 0.5, fib: 3.4 },
-          { name: 'Alface Crespa', cat: 'Hortaliças', size: 50, unit: 'g', kcal: 6, p: 0.6, c: 1.0, f: 0.1, fib: 0.9 }
-        ];
+      const allRows = db.prepare(sql).all(...params) as any[];
 
-        const insertStmt = db.prepare(`
-          INSERT INTO nutrition_food_database (
-            id, tenant_id, name, category, portion_size, portion_unit,
-            energy_kcal, protein_g, carbs_g, fat_g, fiber_g, is_clinic_custom
-          ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-        `);
-
-        for (const item of initialFoods) {
-          insertStmt.run('fd-' + uuidv4().slice(0, 8), item.name, item.cat, item.size, item.unit, item.kcal, item.p, item.c, item.f, item.fib);
-        }
-
-        const seeded = db.prepare('SELECT * FROM nutrition_food_database WHERE tenant_id IS NULL ORDER BY name ASC').all() as any[];
-        res.json(seeded);
+      if (!rawQ) {
+        res.json(allRows.slice(0, 100));
         return;
       }
 
-      res.json(rows);
+      const qNormalized = foldAccents(rawQ);
+      const matched = allRows.filter((item: any) => {
+        const normName = foldAccents(item.name);
+        const normCat = foldAccents(item.category);
+        const normCode = foldAccents(item.source_code || '');
+        const normSource = foldAccents(item.source || '');
+        return normName.includes(qNormalized) || normCat.includes(qNormalized) || normCode.includes(qNormalized) || normSource.includes(qNormalized);
+      });
+
+      res.json(matched.slice(0, 100));
     } catch (err: any) {
+      console.error('[NutritionController.listFoodDatabase] Erro:', err);
       res.status(500).json({ error: 'Erro ao buscar banco de alimentos' });
     }
   }

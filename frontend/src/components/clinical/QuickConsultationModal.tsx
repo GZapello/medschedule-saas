@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -13,6 +13,8 @@ import {
   Pill,
   Save,
   CheckCircle2,
+  Plus,
+  Edit2,
   Share2,
   FileText,
   Phone,
@@ -114,6 +116,16 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [patientData, setPatientData] = useState<any>(null);
   const [allergiesList, setAllergiesList] = useState<any[]>([]);
   const [medicationsList, setMedicationsList] = useState<any[]>([]);
+
+  // Estados dos Modais Rápidos de Alertas Clínicos (Alergias, Medicamentos, Observações)
+  const [showAllergiesModal, setShowAllergiesModal] = useState<boolean>(false);
+  const [showMedicationsModal, setShowMedicationsModal] = useState<boolean>(false);
+  const [showAlertsModal, setShowAlertsModal] = useState<boolean>(false);
+  const [editingAllergyId, setEditingAllergyId] = useState<string | null>(null);
+  const [allergyForm, setAllergyForm] = useState({ substance: '', reactionType: 'Cutânea', severity: 'moderate', notes: '' });
+  const [editingMedicationId, setEditingMedicationId] = useState<string | null>(null);
+  const [medicationForm, setMedicationForm] = useState({ medicationName: '', dosage: '', frequency: '', route: 'oral', status: 'active', notes: '' });
+  const [alertsForm, setAlertsForm] = useState({ importantAlert: '', clinicalNotes: '', notesAdmin: '' });
 
   // ZemdaFisio - Mapa de Dor & Avaliação Fisioterapêutica
   const [isAppointmentPhysio, setIsAppointmentPhysio] = useState<boolean>(() => effectiveModule ? effectiveModule === 'ZemdaFisio' : !!isPhysiotherapist);
@@ -362,34 +374,130 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   };
 
 
-  useEffect(() => {
-    async function loadPatientDetails() {
-      try {
-        setLoadingPatient(true);
-        const [patRes, allergiesRes, medsRes] = await Promise.allSettled([
-          ApiClient.get<any>(`/v1/patients/${appointment.patient_id}`),
-          ApiClient.get<any[]>(`/v1/patients/${appointment.patient_id}/allergies`),
-          ApiClient.get<any[]>(`/v1/patients/${appointment.patient_id}/medications`)
-        ]);
+  const loadPatientDetails = useCallback(async () => {
+    if (!appointment.patient_id) return;
+    try {
+      setLoadingPatient(true);
+      const [patRes, allergiesRes, medsRes] = await Promise.allSettled([
+        ApiClient.get<any>(`/v1/patients/${appointment.patient_id}`),
+        ApiClient.get<any[]>(`/v1/patients/${appointment.patient_id}/allergies`),
+        ApiClient.get<any[]>(`/v1/patients/${appointment.patient_id}/medications`)
+      ]);
 
-        if (patRes.status === 'fulfilled') {
-          setPatientData(patRes.value);
-        }
-        if (allergiesRes.status === 'fulfilled' && Array.isArray(allergiesRes.value)) {
-          setAllergiesList(allergiesRes.value);
-        }
-        if (medsRes.status === 'fulfilled' && Array.isArray(medsRes.value)) {
-          setMedicationsList(medsRes.value);
-        }
-      } catch (err: any) {
-        console.warn('Erro ao carregar dados do paciente:', err);
-      } finally {
-        setLoadingPatient(false);
+      if (patRes.status === 'fulfilled') {
+        setPatientData(patRes.value);
+        setAlertsForm({
+          importantAlert: patRes.value?.important_alert || '',
+          clinicalNotes: patRes.value?.clinical_notes || '',
+          notesAdmin: patRes.value?.notes_admin || patRes.value?.notes || ''
+        });
       }
+      if (allergiesRes.status === 'fulfilled' && Array.isArray(allergiesRes.value)) {
+        setAllergiesList(allergiesRes.value);
+      }
+      if (medsRes.status === 'fulfilled' && Array.isArray(medsRes.value)) {
+        setMedicationsList(medsRes.value);
+      }
+    } catch (err: any) {
+      console.warn('Erro ao carregar dados do paciente:', err);
+    } finally {
+      setLoadingPatient(false);
     }
-
-    loadPatientDetails();
   }, [appointment.patient_id]);
+
+  useEffect(() => {
+    loadPatientDetails();
+  }, [loadPatientDetails]);
+
+  // Handlers para Alergias
+  const handleSaveAllergy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!allergyForm.substance.trim()) {
+      showToast('Informe o nome da substância ou alérgeno.', 'error');
+      return;
+    }
+    try {
+      if (editingAllergyId) {
+        await ApiClient.put(`/v1/patients/${appointment.patient_id}/allergies/${editingAllergyId}`, allergyForm);
+        showToast('Alergia atualizada com sucesso!', 'success');
+      } else {
+        await ApiClient.post(`/v1/patients/${appointment.patient_id}/allergies`, allergyForm);
+        showToast('Alergia cadastrada com sucesso!', 'success');
+      }
+      setAllergyForm({ substance: '', reactionType: 'Cutânea', severity: 'moderate', notes: '' });
+      setEditingAllergyId(null);
+      setShowAllergiesModal(false);
+      await loadPatientDetails();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar alergia', 'error');
+    }
+  };
+
+  const handleDeleteAllergy = async (allergyId: string) => {
+    if (!confirm('Deseja excluir esta alergia?')) return;
+    try {
+      await ApiClient.delete(`/v1/patients/${appointment.patient_id}/allergies/${allergyId}`);
+      showToast('Alergia removida.', 'info');
+      await loadPatientDetails();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao remover alergia', 'error');
+    }
+  };
+
+  // Handlers para Medicamentos
+  const handleSaveMedication = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!medicationForm.medicationName.trim()) {
+      showToast('Informe o nome do medicamento.', 'error');
+      return;
+    }
+    try {
+      if (editingMedicationId) {
+        await ApiClient.put(`/v1/patients/${appointment.patient_id}/medications/${editingMedicationId}`, medicationForm);
+        showToast('Medicamento atualizado com sucesso!', 'success');
+      } else {
+        await ApiClient.post(`/v1/patients/${appointment.patient_id}/medications`, medicationForm);
+        showToast('Medicamento cadastrado com sucesso!', 'success');
+      }
+      setMedicationForm({ medicationName: '', dosage: '', frequency: '', route: 'oral', status: 'active', notes: '' });
+      setEditingMedicationId(null);
+      setShowMedicationsModal(false);
+      await loadPatientDetails();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar medicamento', 'error');
+    }
+  };
+
+  const handleDeleteMedication = async (medId: string) => {
+    if (!confirm('Deseja excluir este medicamento?')) return;
+    try {
+      await ApiClient.delete(`/v1/patients/${appointment.patient_id}/medications/${medId}`);
+      showToast('Medicamento removido.', 'info');
+      await loadPatientDetails();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao remover medicamento', 'error');
+    }
+  };
+
+  // Handler para Alertas e Observações
+  const handleSaveAlerts = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await ApiClient.put(`/v1/patients/${appointment.patient_id}`, {
+        important_alert: alertsForm.importantAlert,
+        importantAlert: alertsForm.importantAlert,
+        clinical_notes: alertsForm.clinicalNotes,
+        clinicalNotes: alertsForm.clinicalNotes,
+        notes: alertsForm.notesAdmin,
+        notes_admin: alertsForm.notesAdmin
+      });
+      showToast('Alertas e observações do paciente atualizados!', 'success');
+      setShowAlertsModal(false);
+      await loadPatientDetails();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao salvar alertas do paciente', 'error');
+    }
+  };
 
   // Verifica autorização estrita da área de atuação para exibir ZemdaFisio (Regras 1, 3, 4, 5 e 6)
   useEffect(() => {
@@ -963,15 +1071,29 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   : 'bg-emerald-50/50 border-emerald-200 text-emerald-900'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                {hasAllergies ? (
-                  <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                )}
-                <span className="font-bold text-xs uppercase tracking-wider">
-                  {hasAllergies ? 'Alergias Relatadas' : 'Alergias'}
-                </span>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  {hasAllergies ? (
+                    <AlertTriangle className="w-4 h-4 text-rose-600 animate-bounce" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  )}
+                  <span className="font-bold text-xs uppercase tracking-wider">
+                    {hasAllergies ? 'Alergias Relatadas' : 'Alergias'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingAllergyId(null);
+                    setAllergyForm({ substance: '', reactionType: 'Cutânea', severity: 'moderate', notes: '' });
+                    setShowAllergiesModal(true);
+                  }}
+                  className="p-1 rounded-lg hover:bg-black/10 text-slate-700 hover:text-slate-950 transition-colors cursor-pointer"
+                  title="Gerenciar Alergias (+)"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
               <p className="text-xs leading-relaxed font-medium">
                 {hasAllergies ? allergiesText : 'Nenhuma alergia conhecida relatada.'}
@@ -980,29 +1102,66 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
 
             {/* Medicamentos de uso contínuo */}
             <div className="p-3.5 rounded-2xl border bg-blue-50/50 border-blue-200 text-blue-950">
-              <div className="flex items-center gap-2 mb-1">
-                <Pill className="w-4 h-4 text-blue-600" />
-                <span className="font-bold text-xs uppercase tracking-wider">
-                  Medicamentos Contínuos
-                </span>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <Pill className="w-4 h-4 text-blue-600" />
+                  <span className="font-bold text-xs uppercase tracking-wider">
+                    Medicamentos Contínuos
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingMedicationId(null);
+                    setMedicationForm({ medicationName: '', dosage: '', frequency: '', route: 'oral', status: 'active', notes: '' });
+                    setShowMedicationsModal(true);
+                  }}
+                  className="p-1 rounded-lg hover:bg-blue-200/50 text-blue-800 hover:text-blue-950 transition-colors cursor-pointer"
+                  title="Gerenciar Medicamentos (+)"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
               <p className="text-xs leading-relaxed font-medium">
                 {medicationsList.length > 0
-                  ? medicationsList.map(m => `${m.name} ${m.dosage || ''}`).join(', ')
+                  ? medicationsList.map(m => `${m.medication_name || m.name} ${m.dosage || ''}`).join(', ')
                   : patientData?.continuous_medications || 'Nenhum medicamento contínuo registrado.'}
               </p>
             </div>
 
             {/* Observações importantes */}
             <div className="p-3.5 rounded-2xl border bg-amber-50/50 border-amber-200 text-amber-950">
-              <div className="flex items-center gap-2 mb-1">
-                <ShieldCheck className="w-4 h-4 text-amber-600" />
-                <span className="font-bold text-xs uppercase tracking-wider">
-                  Observações & Alertas
-                </span>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-600" />
+                  <span className="font-bold text-xs uppercase tracking-wider">
+                    Observações & Alertas
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAlertsForm({
+                      importantAlert: patientData?.important_alert || '',
+                      clinicalNotes: patientData?.clinical_notes || '',
+                      notesAdmin: patientData?.notes_admin || patientData?.notes || ''
+                    });
+                    setShowAlertsModal(true);
+                  }}
+                  className="p-1 rounded-lg hover:bg-amber-200/50 text-amber-800 hover:text-amber-950 transition-colors cursor-pointer"
+                  title="Editar Observações & Alertas (+)"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
               </div>
               <p className="text-xs leading-relaxed font-medium line-clamp-2">
-                {patientData?.notes || 'Sem observações administrativas ou clínicas adicionais.'}
+                {patientData?.important_alert && (
+                  <span className="font-bold text-rose-700 block mb-0.5">⚠️ ALERTA: {patientData.important_alert}</span>
+                )}
+                {patientData?.clinical_notes && (
+                  <span className="text-slate-800 block mb-0.5">Clínica: {patientData.clinical_notes}</span>
+                )}
+                {patientData?.notes_admin || patientData?.notes || (!patientData?.important_alert && !patientData?.clinical_notes ? 'Sem observações administrativas ou clínicas adicionais.' : '')}
               </p>
             </div>
 
@@ -1959,6 +2118,426 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           professionalName={appointment.professional_name}
           module={effectiveModule}
         />
+      )}
+
+      {/* Modal de Gerenciamento Rápido de Alergias */}
+      {showAllergiesModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-rose-50/50">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+                <h3 className="font-bold text-slate-800 text-base">Gerenciar Alergias do Paciente</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAllergiesModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {/* Lista atual */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Alergias Cadastradas ({allergiesList.length})
+                </h4>
+                {allergiesList.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl">
+                    Nenhuma alergia individual cadastrada.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {allergiesList.map((alg: any) => (
+                      <div
+                        key={alg.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl border border-rose-100 bg-rose-50/30 text-xs text-rose-950"
+                      >
+                        <div className="flex-1 min-w-0 pr-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold truncate">{alg.substance}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700">
+                              {alg.severity === 'severe' ? 'Grave' : alg.severity === 'moderate' ? 'Moderada' : 'Leve'}
+                            </span>
+                            {alg.reaction_type && (
+                              <span className="text-[10px] text-slate-500">{alg.reaction_type}</span>
+                            )}
+                          </div>
+                          {alg.notes && <p className="text-[11px] text-slate-600 truncate mt-0.5">{alg.notes}</p>}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingAllergyId(alg.id);
+                              setAllergyForm({
+                                substance: alg.substance,
+                                reactionType: alg.reaction_type || 'Cutânea',
+                                severity: alg.severity || 'moderate',
+                                notes: alg.notes || ''
+                              });
+                            }}
+                            className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-rose-100 transition-colors"
+                            title="Editar"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAllergy(alg.id)}
+                            className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-100 transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Formulário */}
+              <form onSubmit={handleSaveAllergy} className="pt-3 border-t border-slate-100 space-y-3">
+                <h4 className="text-xs font-bold text-slate-700">
+                  {editingAllergyId ? 'Editar Alergia' : 'Adicionar Nova Alergia'}
+                </h4>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Substância / Alérgeno *</label>
+                  <input
+                    type="text"
+                    required
+                    value={allergyForm.substance}
+                    onChange={e => setAllergyForm({ ...allergyForm, substance: e.target.value })}
+                    placeholder="Ex: Dipirona, Penicilina, Amendoim, Látex"
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Tipo de Reação</label>
+                    <select
+                      value={allergyForm.reactionType}
+                      onChange={e => setAllergyForm({ ...allergyForm, reactionType: e.target.value })}
+                      className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white"
+                    >
+                      <option value="Cutânea">Cutânea (Urticária, Rash)</option>
+                      <option value="Respiratória">Respiratória (Edema de glote, Broncoespasmo)</option>
+                      <option value="Anafilática">Anafilática (Choque anafilático)</option>
+                      <option value="Gastrointestinal">Gastrointestinal</option>
+                      <option value="Outra">Outra</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Gravidade</label>
+                    <select
+                      value={allergyForm.severity}
+                      onChange={e => setAllergyForm({ ...allergyForm, severity: e.target.value })}
+                      className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white"
+                    >
+                      <option value="mild">Leve</option>
+                      <option value="moderate">Moderada</option>
+                      <option value="severe">Grave</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Observações adicionais</label>
+                  <input
+                    type="text"
+                    value={allergyForm.notes}
+                    onChange={e => setAllergyForm({ ...allergyForm, notes: e.target.value })}
+                    placeholder="Detalhes sobre a manifestação clínica..."
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  {editingAllergyId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingAllergyId(null);
+                        setAllergyForm({ substance: '', reactionType: 'Cutânea', severity: 'moderate', notes: '' });
+                      }}
+                      className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-medium"
+                    >
+                      Cancelar Edição
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    {editingAllergyId ? 'Atualizar Alergia' : 'Salvar Alergia'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Gerenciamento Rápido de Medicamentos */}
+      {showMedicationsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-blue-50/50">
+              <div className="flex items-center gap-2">
+                <Pill className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-slate-800 text-base">Medicamentos de Uso Contínuo</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMedicationsModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {/* Lista atual */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Medicamentos Registrados ({medicationsList.length})
+                </h4>
+                {medicationsList.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl">
+                    Nenhum medicamento de uso contínuo registrado.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    {medicationsList.map((m: any) => (
+                      <div
+                        key={m.id}
+                        className="flex items-center justify-between p-2.5 rounded-xl border border-blue-100 bg-blue-50/30 text-xs text-blue-950"
+                      >
+                        <div className="flex-1 min-w-0 pr-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold truncate">{m.medication_name || m.name}</span>
+                            {m.dosage && <span className="text-[11px] text-blue-700">{m.dosage}</span>}
+                            {m.frequency && <span className="text-[10px] text-slate-500">({m.frequency})</span>}
+                          </div>
+                          {m.notes && <p className="text-[11px] text-slate-600 truncate mt-0.5">{m.notes}</p>}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingMedicationId(m.id);
+                              setMedicationForm({
+                                medicationName: m.medication_name || m.name || '',
+                                dosage: m.dosage || '',
+                                frequency: m.frequency || '',
+                                route: m.route || 'oral',
+                                status: m.status || 'active',
+                                notes: m.notes || ''
+                              });
+                            }}
+                            className="p-1 rounded text-slate-500 hover:text-slate-800 hover:bg-blue-100 transition-colors"
+                            title="Editar"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMedication(m.id)}
+                            className="p-1 rounded text-rose-500 hover:text-rose-700 hover:bg-blue-100 transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Formulário */}
+              <form onSubmit={handleSaveMedication} className="pt-3 border-t border-slate-100 space-y-3">
+                <h4 className="text-xs font-bold text-slate-700">
+                  {editingMedicationId ? 'Editar Medicamento' : 'Adicionar Novo Medicamento'}
+                </h4>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Nome do Medicamento *</label>
+                  <input
+                    type="text"
+                    required
+                    value={medicationForm.medicationName}
+                    onChange={e => setMedicationForm({ ...medicationForm, medicationName: e.target.value })}
+                    placeholder="Ex: Losartana Potássica, Metformina, Levotiroxina"
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Dosagem</label>
+                    <input
+                      type="text"
+                      value={medicationForm.dosage}
+                      onChange={e => setMedicationForm({ ...medicationForm, dosage: e.target.value })}
+                      placeholder="Ex: 50mg, 5ml, 1 gota"
+                      className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Frequência / Horário</label>
+                    <input
+                      type="text"
+                      value={medicationForm.frequency}
+                      onChange={e => setMedicationForm({ ...medicationForm, frequency: e.target.value })}
+                      placeholder="Ex: 1x ao dia pela manhã, de 8/8h"
+                      className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Via de Administração</label>
+                    <select
+                      value={medicationForm.route}
+                      onChange={e => setMedicationForm({ ...medicationForm, route: e.target.value })}
+                      className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                    >
+                      <option value="oral">Oral</option>
+                      <option value="sublingual">Sublingual</option>
+                      <option value="tópica">Tópica</option>
+                      <option value="inalatória">Inalatória</option>
+                      <option value="injetável">Injetável</option>
+                      <option value="ocular">Ocular</option>
+                      <option value="outra">Outra</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Status</label>
+                    <select
+                      value={medicationForm.status}
+                      onChange={e => setMedicationForm({ ...medicationForm, status: e.target.value })}
+                      className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                    >
+                      <option value="active">Uso Ativo / Contínuo</option>
+                      <option value="suspended">Suspenso Temporariamente</option>
+                      <option value="completed">Concluído</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Orientações / Observações</label>
+                  <input
+                    type="text"
+                    value={medicationForm.notes}
+                    onChange={e => setMedicationForm({ ...medicationForm, notes: e.target.value })}
+                    placeholder="Ex: Em jejum, com alimentos, etc."
+                    className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  {editingMedicationId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMedicationId(null);
+                        setMedicationForm({ medicationName: '', dosage: '', frequency: '', route: 'oral', status: 'active', notes: '' });
+                      }}
+                      className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-medium"
+                    >
+                      Cancelar Edição
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    {editingMedicationId ? 'Atualizar Medicamento' : 'Salvar Medicamento'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Gerenciamento Rápido de Observações e Alertas */}
+      {showAlertsModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-amber-50/50">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-amber-600" />
+                <h3 className="font-bold text-slate-800 text-base">Observações & Alertas do Paciente</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAlertsModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAlerts} className="p-5 overflow-y-auto space-y-4 flex-1">
+              <div>
+                <label className="block text-xs font-bold text-amber-800 mb-1">
+                  Alerta Importante (Destaque imediato em consultas)
+                </label>
+                <input
+                  type="text"
+                  value={alertsForm.importantAlert}
+                  onChange={e => setAlertsForm({ ...alertsForm, importantAlert: e.target.value })}
+                  placeholder="Ex: Risco de queda, fobia de agulha, cardiopata grave, gestante"
+                  className="w-full text-xs px-3 py-2 border border-amber-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none bg-amber-50/20 text-slate-800 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Notas Clínicas Gerais
+                </label>
+                <textarea
+                  rows={3}
+                  value={alertsForm.clinicalNotes}
+                  onChange={e => setAlertsForm({ ...alertsForm, clinicalNotes: e.target.value })}
+                  placeholder="Particularidades clínicas, histórico relevante ou condutas permanentes..."
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Observações Gerais / Administrativas
+                </label>
+                <textarea
+                  rows={2}
+                  value={alertsForm.notesAdmin}
+                  onChange={e => setAlertsForm({ ...alertsForm, notesAdmin: e.target.value })}
+                  placeholder="Preferências de horário, contato de emergência, etc..."
+                  className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAlertsModal(false)}
+                  className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  Salvar Observações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Modal de Prontuários Anteriores */}

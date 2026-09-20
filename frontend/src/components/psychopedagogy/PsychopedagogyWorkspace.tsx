@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
+import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import {
   GraduationCap,
   BookOpen,
@@ -1076,6 +1077,16 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
                     />
                   </div>
                 </div>
+
+                {selectedPatientId && (
+                  <div className="pt-4 border-t border-slate-100">
+                    <MeasurableGoalsManager
+                      patientId={selectedPatientId}
+                      domain="psychopedagogy"
+                      title="Metas Clínicas & Progresso — ZemdaPP"
+                    />
+                  </div>
+                )}
               </div>
             )}
 

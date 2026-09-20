@@ -36,6 +36,7 @@ import { PersonalWorkoutExecutionModal } from './PersonalWorkoutExecutionModal';
 import { PersonalPdfExportModal } from './PersonalPdfExportModal';
 import { PersonalAssessmentComparisonModal } from './PersonalAssessmentComparisonModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
+import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 
 interface PersonalStudentProfileProps {
   studentId: string;
@@ -661,7 +662,18 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
         )}
 
         {/* ABA: GRÁFICOS DE EVOLUÇÃO */}
-        {activeTab === 'evolution' && <PersonalEvolutionCharts history={evolutionHistory} />}
+        {activeTab === 'evolution' && (
+          <div className="space-y-6">
+            <PersonalEvolutionCharts history={evolutionHistory} />
+            {studentId && (
+              <MeasurableGoalsManager
+                patientId={studentId}
+                domain="personal_trainer"
+                title="Metas de Condicionamento, Carga & Composição Corporal"
+              />
+            )}
+          </div>
+        )}
 
         {/* ABA: FOTOS ANTES × DEPOIS */}
         {activeTab === 'photos' && (

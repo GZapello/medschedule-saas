@@ -11,7 +11,7 @@ import { PatientsView } from './components/patients/PatientsView';
 import { ClinicalRecordsView } from './components/clinical/ClinicalRecordsView';
 import { ZemdaBodyRecordsView } from './components/zemda-body/ZemdaBodyRecordsView';
 import { ZemdaPersonalView } from './components/personal/ZemdaPersonalView';
-import { PhysiotherapyRecordsView } from './components/physiotherapy/PhysiotherapyRecordsView';
+import { PhysiotherapyWorkspace } from './components/physiotherapy/PhysiotherapyWorkspace';
 import { DentistryWorkspace } from './components/dentistry/DentistryWorkspace';
 import { NutritionWorkspace } from './components/nutrition/NutritionWorkspace';
 import { OccupationalTherapyWorkspace } from './components/occupational-therapy/OccupationalTherapyWorkspace';
@@ -901,8 +901,8 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-fisio' && (
-            isPhysiotherapist ? (
-              <PhysiotherapyRecordsView />
+            (isPhysiotherapist || isZemdaFisio) ? (
+              <PhysiotherapyWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
@@ -917,7 +917,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-odonto' && (
-            isDentist ? (
+            (isDentist || isZemdaOdonto) ? (
               <DentistryWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
