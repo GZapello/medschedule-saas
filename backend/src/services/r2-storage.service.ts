@@ -20,7 +20,7 @@ export class R2StorageService {
     const accountId = process.env.R2_ACCOUNT_ID || '';
     const accessKeyId = process.env.R2_ACCESS_KEY_ID || '';
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
-    this.bucketName = process.env.R2_BUCKET_NAME || 'zemda-storage';
+    this.bucketName = process.env.R2_BUCKET_NAME || 'zemda-files';
 
     const endpoint =
       process.env.R2_ENDPOINT ||
@@ -44,6 +44,10 @@ export class R2StorageService {
 
   get isConfiguredClient(): boolean {
     return this.isConfigured;
+  }
+
+  get currentBucketName(): string {
+    return this.bucketName;
   }
 
   /**
@@ -160,8 +164,8 @@ export class R2StorageService {
         ) {
           return false;
         }
-        console.error('[R2StorageService.fileExists] Erro ao verificar objeto:', err);
-        throw err;
+        console.warn('[R2StorageService.fileExists] Aviso ao verificar objeto no R2 via S3 client:', err?.message || err);
+        return false;
       }
     }
 

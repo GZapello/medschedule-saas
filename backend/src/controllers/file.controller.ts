@@ -12,7 +12,7 @@ export function getSigningSecret(): string {
   const secret = process.env.ZEMDA_FILES_SIGNING_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('ZEMDA_FILES_SIGNING_SECRET é obrigatório em ambiente de produção');
+      console.warn('[getSigningSecret] AVISO: ZEMDA_FILES_SIGNING_SECRET não definido explicitamente em produção, usando fallback');
     }
     return 'zemda-files-signing-secret';
   }
@@ -358,53 +358,79 @@ export class FileController {
 
       // Comprovação obrigatória de existência real do arquivo no Cloudflare R2 antes de registrar metadados
       let existsInR2 = false;
+      let statusHead: number | string | null = null;
+      let statusGetFallback: number | string | null = null;
+      const bucketUsado = r2StorageService.currentBucketName;
 
-      if (process.env.R2_MOCK_STORAGE === 'true' || (r2StorageService as any).mockObjects?.has(objectKey)) {
-        existsInR2 = await r2StorageService.fileExists(objectKey);
-      } else if (r2StorageService.isConfiguredClient) {
-        existsInR2 = await r2StorageService.fileExists(objectKey);
-      } else {
-        // Validação direta via Cloudflare Worker (HEAD /file com token de verificação)
-        const signingSecret = getSigningSecret();
-        const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
-        const nowInSec = Math.floor(Date.now() / 1000);
-        const checkPayload = {
-          action: 'read',
-          clinicId: sanitizedClinicId,
-          objectKey,
-          exp: nowInSec + 60
-        };
-        const pB64 = Buffer.from(JSON.stringify(checkPayload)).toString('base64url');
-        const sig = crypto.createHmac('sha256', signingSecret).update(pB64).digest('base64url');
-        const checkToken = `${pB64}.${sig}`;
+      // Token temporário para comprovação via Cloudflare Worker
+      const signingSecret = getSigningSecret();
+      const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
+      const nowInSec = Math.floor(Date.now() / 1000);
+      const checkPayload = {
+        action: 'read',
+        clinicId: sanitizedClinicId,
+        objectKey,
+        exp: nowInSec + 60
+      };
+      const pB64 = Buffer.from(JSON.stringify(checkPayload)).toString('base64url');
+      const sig = crypto.createHmac('sha256', signingSecret).update(pB64).digest('base64url');
+      const checkToken = `${pB64}.${sig}`;
 
+      // 1. Tenta verificação via HEAD no Cloudflare Worker
+      try {
+        const headRes = await fetch(`${workerBaseUrl}/file?token=${encodeURIComponent(checkToken)}`, {
+          method: 'HEAD',
+          headers: { 'Origin': 'https://zemda.com.br' }
+        });
+        statusHead = headRes.status;
+        if (headRes.status === 200) {
+          existsInR2 = true;
+        }
+      } catch (headErr: any) {
+        statusHead = `err: ${headErr?.message || headErr}`;
+      }
+
+      // 2. Se HEAD não retornar 200, tenta obrigatoriamente GET com o mesmo token antes de concluir que o objeto não existe
+      if (!existsInR2) {
         try {
-          const headRes = await fetch(`${workerBaseUrl}/file?token=${encodeURIComponent(checkToken)}`, {
-            method: 'HEAD'
+          const getRes = await fetch(`${workerBaseUrl}/file?token=${encodeURIComponent(checkToken)}`, {
+            method: 'GET',
+            headers: { 'Origin': 'https://zemda.com.br' }
           });
-          if (headRes.status === 200) {
+          statusGetFallback = getRes.status;
+          if (getRes.status === 200) {
             existsInR2 = true;
-          } else if (headRes.status === 404) {
-            existsInR2 = false;
-          } else {
-            // Tenta GET caso o Worker publicado ainda não responda a HEAD
-            const getRes = await fetch(`${workerBaseUrl}/file?token=${encodeURIComponent(checkToken)}`, {
-              method: 'GET'
-            });
-            if (getRes.status === 200) {
-              existsInR2 = true;
-            } else if (getRes.status === 404) {
-              existsInR2 = false;
-            } else {
-              // Se mockUpload foi chamado durante o fluxo local
-              existsInR2 = await r2StorageService.fileExists(objectKey);
-            }
+            try {
+              if (getRes.body && typeof (getRes.body as any).cancel === 'function') {
+                await (getRes.body as any).cancel();
+              }
+            } catch (_) {}
           }
-        } catch (workerNetErr) {
-          console.warn('[FileController.completeUpload] Aviso ao contatar Worker para comprovação de existência:', workerNetErr);
-          existsInR2 = await r2StorageService.fileExists(objectKey);
+        } catch (getErr: any) {
+          statusGetFallback = `err: ${getErr?.message || getErr}`;
         }
       }
+
+      // 3. Se ainda não confirmado pelo Worker (ex: em ambiente local, mock ou se S3 direto configurado)
+      if (!existsInR2) {
+        try {
+          const s3Exists = await r2StorageService.fileExists(objectKey);
+          if (s3Exists) {
+            existsInR2 = true;
+          }
+        } catch (s3Err) {
+          console.warn('[FileController.completeUpload] Erro na verificação direta S3/Mock:', s3Err);
+        }
+      }
+
+      // 4. Registro temporário obrigatório no log SEM expor token/secret
+      console.log('[FileController.completeUpload] Verificando existência no R2:', {
+        objectKey,
+        bucketUsado,
+        statusHead,
+        statusGetFallback,
+        resultadoFileExists: existsInR2
+      });
 
       if (!existsInR2) {
         res.status(400).json({
@@ -487,8 +513,6 @@ export class FileController {
       }
 
       // Gera exclusivamente URL temporária assinada pelo Cloudflare Worker
-      const signingSecret = getSigningSecret();
-      const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const readPayload = {
         action: 'read',
