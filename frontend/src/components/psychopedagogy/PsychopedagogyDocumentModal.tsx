@@ -18,8 +18,10 @@ import { useToast } from '../../context/ToastContext';
 import {
   useClinicDocumentData,
   ClinicDocumentHeader,
-  ClinicDocumentFooter
+  ClinicDocumentFooter,
+  DigitalStampInfo
 } from '../common/ClinicDocumentHeader';
+import { SignatureChoiceModal } from '../common/SignatureChoiceModal';
 
 export type PsychopedagogyDocType = 'relatorio' | 'parecer' | 'encaminhamento' | 'orientacoes';
 
@@ -57,6 +59,8 @@ export const PsychopedagogyDocumentModal: React.FC<PsychopedagogyDocumentModalPr
   const [documentContent, setDocumentContent] = useState<string>('');
   const [recipient, setRecipient] = useState<string>('À Escola / Equipe Pedagógica');
   const [purpose, setPurpose] = useState<string>('Acompanhamento da Aprendizagem e Adaptações Curriculares');
+  const [showSignatureChoice, setShowSignatureChoice] = useState<boolean>(false);
+  const [digitalStamp, setDigitalStamp] = useState<DigitalStampInfo | null>(null);
 
   const printSheetRef = useRef<HTMLDivElement>(null);
 
@@ -401,17 +405,19 @@ Data: ${todayStr}
                 {documentContent}
               </div>
 
-              {/* Bloco de Assinatura */}
-              <div className="pt-10 border-t border-slate-300 text-center space-y-2 page-break-inside-avoid">
-                <div className="inline-block border-t-2 border-slate-800 w-72 pt-2">
-                  <p className="font-bold text-xs text-slate-900">{professionalName}</p>
-                  <p className="text-[11px] text-slate-600">{professionalReg}</p>
-                  <p className="text-[10px] text-slate-400">Psicopedagogo(a) Responsável</p>
+              {/* Bloco de Assinatura (Manual ou Carimbo Digital ICP-Brasil) */}
+              {!digitalStamp && (
+                <div className="pt-10 border-t border-slate-300 text-center space-y-2 page-break-inside-avoid">
+                  <div className="inline-block border-t-2 border-slate-800 w-72 pt-2">
+                    <p className="font-bold text-xs text-slate-900">{professionalName}</p>
+                    <p className="text-[11px] text-slate-600">{professionalReg}</p>
+                    <p className="text-[10px] text-slate-400">Psicopedagogo(a) Responsável</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Rodapé Oficial da Plataforma */}
-              <ClinicDocumentFooter />
+              {/* Rodapé Oficial da Plataforma (com Selo ICP-Brasil quando assinado) */}
+              <ClinicDocumentFooter digitalStamp={digitalStamp} />
             </div>
           </div>
 
@@ -430,20 +436,56 @@ Data: ${todayStr}
           <button
             type="button"
             disabled={!canIssue}
-            onClick={handlePrint}
+            onClick={() => setShowSignatureChoice(true)}
             className={`inline-flex items-center gap-2 px-6 py-2.5 font-bold text-xs rounded-xl shadow-md transition-all ${
               canIssue
                 ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
             }`}
-            title={!canIssue ? 'Dados da clínica não carregados' : 'Imprimir Documento Oficial'}
+            title={!canIssue ? 'Dados da clínica não carregados' : 'Emitir Documento (Manual ou ICP-Brasil)'}
           >
             <Printer className="w-4 h-4" />
-            <span>Imprimir Documento Oficial (A4)</span>
+            <span>Emitir Documento Oficial (A4)</span>
           </button>
         </div>
 
       </div>
+
+      {/* Modal Universal de Escolha de Assinatura */}
+      <SignatureChoiceModal
+        isOpen={showSignatureChoice}
+        onClose={() => setShowSignatureChoice(false)}
+        documentTitle={documentTitle}
+        documentType="psychopedagogy_report"
+        patientName={patientName}
+        professionalName={professionalName}
+        professionalCouncil={professionalReg}
+        rawContent={documentContent}
+        onSelectManualPrint={() => {
+          setDigitalStamp(null);
+          setTimeout(() => {
+            handlePrint();
+          }, 150);
+        }}
+        onSignSuccess={(sigResult) => {
+          setDigitalStamp({
+            format: 'PAdES',
+            isIcpBrasil: true,
+            signerName: professionalName,
+            signerRegistration: professionalReg,
+            issuer: sigResult.validationResult?.issuer || 'AC SOLUTI Multipla v5 (ICP-Brasil)',
+            serialNumber: sigResult.validationResult?.serialNumber,
+            signedAt: sigResult.signedAt,
+            sha256Hash: sigResult.sha256Hash,
+            verificationUrl: sigResult.verificationUrl,
+            qrCodeSvg: sigResult.qrCodeSvg,
+            qrCodeDataUrl: sigResult.qrCodeDataUrl
+          });
+          setTimeout(() => {
+            handlePrint();
+          }, 300);
+        }}
+      />
 
       {/* Regras CSS globais de impressão para encaixe perfeito em A4 */}
       <style>{`

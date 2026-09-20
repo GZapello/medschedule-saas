@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { X, Printer, Download, Eye, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Printer, Download, Eye, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
+import { SignatureChoiceModal } from '../common/SignatureChoiceModal';
 
 export interface PrintableDocumentModalProps {
   documentType: 'certificate' | 'prescription' | 'exam_request' | 'pending_exam';
@@ -21,6 +22,7 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<any>(null);
   const [digitalSignature, setDigitalSignature] = useState<any>(null);
+  const [showSignatureChoice, setShowSignatureChoice] = useState<boolean>(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const triggeredActionRef = useRef<boolean>(false);
 
@@ -247,6 +249,18 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
               <Download className="w-3.5 h-3.5" />
               Baixar PDF
             </button>
+
+            {/* 4. Opções de Assinatura ICP-Brasil */}
+            {!parsedStamp && (
+              <button
+                onClick={() => setShowSignatureChoice(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+                title="Assinar digitalmente com Certificado ICP-Brasil"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Assinar ICP-Brasil
+              </button>
+            )}
 
             <button
               onClick={onClose}
@@ -480,6 +494,30 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
           }
         }
       `}</style>
+      {showSignatureChoice && (
+        <SignatureChoiceModal
+          isOpen={showSignatureChoice}
+          onClose={() => setShowSignatureChoice(false)}
+          documentType={documentType === 'pending_exam' ? 'exam_request' : documentType}
+          documentId={documentId}
+          documentTitle={
+            documentType === 'certificate' ? 'Atestado Médico' :
+            documentType === 'prescription' ? 'Receituário Clínico' : 'Solicitação de Exames'
+          }
+          patientName={doc?.patient_name}
+          onSelectManualPrint={() => {
+            setShowSignatureChoice(false);
+            handlePrint();
+          }}
+          onSignSuccess={(res) => {
+            if (res?.signature) {
+              setDigitalSignature(res.signature);
+            }
+            setShowSignatureChoice(false);
+            showToast('Documento assinado com sucesso com ICP-Brasil!', 'success');
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -592,8 +592,10 @@ api.get('/v1/psychology/audit-logs/:patientId', requireTenant, requireRole('clin
 // CENTRAL DE CERTIFICADOS DIGITAIS ICP-BRASIL & ASSINATURA PAdES
 // ==========================================
 api.get('/v1/digital-certificates/status', authMiddleware, DigitalCertificateController.getProviderStatus);
+api.get('/v1/digital-certificates/my-certificate', requireTenant, DigitalCertificateController.getMyCertificate);
 api.get('/v1/digital-certificates', requireTenant, DigitalCertificateController.listCertificates);
 api.post('/v1/digital-certificates/connect', requireTenant, DigitalCertificateController.connectCertificate);
+api.post('/v1/digital-certificates/:id/validate', requireTenant, DigitalCertificateController.validateCertificate);
 api.delete('/v1/digital-certificates/:id', requireTenant, DigitalCertificateController.deleteCertificate);
 api.post('/v1/digital-signatures/sign', requireTenant, DigitalCertificateController.signDocument);
 api.post('/v1/digital-signatures/validate', requireTenant, DigitalCertificateController.validateSignature);

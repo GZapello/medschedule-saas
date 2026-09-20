@@ -19,8 +19,10 @@ import {
 import {
   ClinicDocumentHeader,
   ClinicDocumentFooter,
-  useClinicDocumentData
+  useClinicDocumentData,
+  DigitalStampInfo
 } from '../common/ClinicDocumentHeader';
+import { SignatureChoiceModal } from '../common/SignatureChoiceModal';
 
 export interface PatientFollowUpDocumentModalProps {
   isOpen: boolean;
@@ -70,6 +72,8 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
   const [homeExercises, setHomeExercises] = useState<string>(homeExercisesText);
   const [homeActivities, setHomeActivities] = useState<string>(homeActivitiesText);
   const [nextAppointmentNote, setNextAppointmentNote] = useState<string>('');
+  const [showSignatureChoice, setShowSignatureChoice] = useState<boolean>(false);
+  const [digitalStamp, setDigitalStamp] = useState<DigitalStampInfo | null>(null);
 
   useEffect(() => {
     async function loadPatient() {
@@ -435,13 +439,15 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
 
               {/* Footer and Signature */}
               <div className="pt-8 mt-8 border-t border-slate-200 text-center space-y-4">
-                <div className="inline-block border-t border-slate-400 w-64 pt-2">
-                  <p className={`font-bold text-xs ${hasProfessional ? 'text-slate-900' : 'text-rose-600 italic'}`}>
-                    {hasProfessional ? professionalName : 'Profissional responsável não identificado'}
-                  </p>
-                  {professionalCouncil && <p className="text-[11px] text-slate-500">{professionalCouncil}</p>}
-                </div>
-                <ClinicDocumentFooter />
+                {!digitalStamp && (
+                  <div className="inline-block border-t border-slate-400 w-64 pt-2">
+                    <p className={`font-bold text-xs ${hasProfessional ? 'text-slate-900' : 'text-rose-600 italic'}`}>
+                      {hasProfessional ? professionalName : 'Profissional responsável não identificado'}
+                    </p>
+                    {professionalCouncil && <p className="text-[11px] text-slate-500">{professionalCouncil}</p>}
+                  </div>
+                )}
+                <ClinicDocumentFooter digitalStamp={digitalStamp} />
               </div>
 
             </div>
@@ -462,7 +468,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
           <button
             type="button"
             disabled={!canPrint}
-            onClick={handlePrint}
+            onClick={() => setShowSignatureChoice(true)}
             className={`inline-flex items-center gap-2 px-6 py-2.5 font-bold text-xs rounded-xl shadow-md transition-all ${
               canPrint
                 ? 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer'
@@ -473,15 +479,51 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                 ? 'Não foi possível carregar os dados da clínica emissora'
                 : !hasProfessional
                 ? 'Profissional responsável não identificado'
-                : 'Imprimir Acompanhamento (A4)'
+                : 'Emitir Acompanhamento (Manual ou ICP-Brasil)'
             }
           >
             <Printer className="w-4 h-4" />
-            <span>Imprimir Acompanhamento (A4)</span>
+            <span>Emitir Acompanhamento (A4)</span>
           </button>
         </div>
 
       </div>
+
+      {/* Modal Universal de Escolha de Assinatura */}
+      <SignatureChoiceModal
+        isOpen={showSignatureChoice}
+        onClose={() => setShowSignatureChoice(false)}
+        documentTitle="Plano de Orientações e Cuidados Domiciliares"
+        documentType="clinical_record"
+        patientName={patientName}
+        professionalName={professionalName}
+        professionalCouncil={professionalCouncil}
+        rawContent={`${generalGuidelines}\n${mealPlan}\n${homeExercises}\n${homeActivities}`}
+        onSelectManualPrint={() => {
+          setDigitalStamp(null);
+          setTimeout(() => {
+            handlePrint();
+          }, 150);
+        }}
+        onSignSuccess={(sigResult) => {
+          setDigitalStamp({
+            format: 'PAdES',
+            isIcpBrasil: true,
+            signerName: professionalName,
+            signerRegistration: professionalCouncil,
+            issuer: sigResult.validationResult?.issuer || 'AC SOLUTI Multipla v5 (ICP-Brasil)',
+            serialNumber: sigResult.validationResult?.serialNumber,
+            signedAt: sigResult.signedAt,
+            sha256Hash: sigResult.sha256Hash,
+            verificationUrl: sigResult.verificationUrl,
+            qrCodeSvg: sigResult.qrCodeSvg,
+            qrCodeDataUrl: sigResult.qrCodeDataUrl
+          });
+          setTimeout(() => {
+            handlePrint();
+          }, 300);
+        }}
+      />
     </div>
   );
 };

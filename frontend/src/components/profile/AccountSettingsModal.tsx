@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { DigitalCertificateSection } from './DigitalCertificateSection';
 import {
   X,
   User,
@@ -11,19 +12,25 @@ import {
   Shield,
   Key,
   Building2,
-  AlertCircle
+  AlertCircle,
+  ShieldCheck
 } from 'lucide-react';
 
 interface AccountSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: 'email' | 'password' | 'certificate';
 }
 
-export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({ isOpen, onClose }) => {
+export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
+  isOpen,
+  onClose,
+  initialTab = 'email'
+}) => {
   const { currentUser, currentTenant, reloadSession } = useAuth();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'email' | 'password'>('email');
+  const [activeTab, setActiveTab] = useState<'email' | 'password' | 'certificate'>(initialTab);
 
   // Estado para alteração de e-mail
   const [newEmail, setNewEmail] = useState('');
@@ -36,13 +43,24 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({ isOp
   const [loadingPassword, setLoadingPassword] = useState(false);
 
   useEffect(() => {
-    if (isOpen && currentUser) {
-      setNewEmail(currentUser.email || '');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+    if (isOpen) {
+      if (initialTab) setActiveTab(initialTab);
+      if (currentUser) {
+        setNewEmail(currentUser.email || '');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
     }
-  }, [isOpen, currentUser]);
+  }, [isOpen, initialTab, currentUser]);
+
+  useEffect(() => {
+    const handleOpenCert = () => {
+      setActiveTab('certificate');
+    };
+    window.addEventListener('open-certificate-settings', handleOpenCert);
+    return () => window.removeEventListener('open-certificate-settings', handleOpenCert);
+  }, []);
 
   if (!isOpen || !currentUser) return null;
 
@@ -119,7 +137,7 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({ isOp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -187,6 +205,19 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({ isOp
           >
             <Key className="w-4 h-4" />
             Alterar Senha
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('certificate')}
+            className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === 'certificate'
+                ? 'bg-teal-50 text-teal-800 shadow-2xs border border-teal-200'
+                : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-teal-600" />
+            Certificado Digital
           </button>
         </div>
 
@@ -315,6 +346,10 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({ isOp
                 </button>
               </div>
             </form>
+          )}
+
+          {activeTab === 'certificate' && (
+            <DigitalCertificateSection />
           )}
         </div>
       </div>

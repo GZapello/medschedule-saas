@@ -281,46 +281,129 @@ export const ClinicDocumentHeader: React.FC<ClinicDocumentHeaderProps> = ({
     </div>
   );
 };
+export interface DigitalStampInfo {
+  format?: 'PAdES' | 'electronic';
+  isIcpBrasil?: boolean;
+  signerName?: string;
+  signerRegistration?: string;
+  signerCpfMasked?: string;
+  issuer?: string;
+  serialNumber?: string;
+  signedAt?: string;
+  sha256Hash?: string;
+  verificationUrl?: string;
+  qrCodeSvg?: string;
+  qrCodeDataUrl?: string;
+}
 
 export interface ClinicDocumentFooterProps {
   signatureHash?: string;
   signedByName?: string;
   signedByRegistration?: string;
   signedAt?: string;
+  digitalStamp?: DigitalStampInfo | null;
   className?: string;
 }
 
 /**
  * Componente canônico de rodapé.
- * O nome "Zemda" aparece estritamente como sistema/software de emissão tecnológica, nunca como clínica emissora.
+ * Distingue com precisão estrita:
+ * 1. Carimbo Digital ICP-Brasil (PAdES) com QR Code e link oficial de validação
+ * 2. Selo Eletrônico Interno Avançado do Zemda (SHA-256)
+ * 3. Rodapé limpo para assinatura manual (sem selos falsos)
  */
 export const ClinicDocumentFooter: React.FC<ClinicDocumentFooterProps> = ({
   signatureHash,
   signedByName,
   signedByRegistration,
   signedAt,
+  digitalStamp,
   className = ''
 }) => {
   const todayStr = new Date().toLocaleDateString('pt-BR');
 
+  // Caso 1: Documento assinado digitalmente com Certificado ICP-Brasil (PAdES)
+  if (digitalStamp && (digitalStamp.isIcpBrasil || digitalStamp.format === 'PAdES')) {
+    return (
+      <div className={`mt-8 pt-4 space-y-2 ${className}`}>
+        <div className="border-2 border-slate-900 p-3.5 rounded-xl bg-white flex flex-col sm:flex-row items-center justify-between gap-4 text-left font-sans text-xs">
+          <div className="space-y-1 flex-1">
+            <div className="flex items-center gap-1.5 font-extrabold text-slate-900 text-xs uppercase tracking-wide">
+              <span>DOCUMENTO ASSINADO DIGITALMENTE • ICP-BRASIL (PAdES)</span>
+            </div>
+            <div className="text-slate-800">
+              <strong>Titular:</strong> {digitalStamp.signerName || signedByName || 'Profissional Titular'}
+              {(digitalStamp.signerRegistration || signedByRegistration) && (
+                <span> ({digitalStamp.signerRegistration || signedByRegistration})</span>
+              )}
+            </div>
+            {digitalStamp.issuer && (
+              <div className="text-slate-600 text-[11px]">
+                <strong>Emissor:</strong> {digitalStamp.issuer}
+                {digitalStamp.serialNumber && <span> | <strong>Série:</strong> {digitalStamp.serialNumber}</span>}
+              </div>
+            )}
+            <div className="text-slate-600 text-[11px]">
+              <strong>Data e Hora:</strong> {digitalStamp.signedAt ? new Date(digitalStamp.signedAt).toLocaleString('pt-BR') : todayStr}
+            </div>
+            {(digitalStamp.sha256Hash || signatureHash) && (
+              <div className="font-mono text-[9px] text-slate-500 break-all">
+                Hash SHA-256: {digitalStamp.sha256Hash || signatureHash}
+              </div>
+            )}
+            {digitalStamp.verificationUrl && (
+              <div className="text-[10px] text-teal-800 font-bold mt-1">
+                Verificação online: <a href={digitalStamp.verificationUrl} target="_blank" rel="noopener noreferrer" className="underline">{digitalStamp.verificationUrl}</a>
+              </div>
+            )}
+          </div>
+
+          {(digitalStamp.qrCodeSvg || digitalStamp.qrCodeDataUrl) && (
+            <div className="w-24 h-24 shrink-0 flex items-center justify-center border border-slate-200 p-1 rounded-lg bg-white">
+              {digitalStamp.qrCodeDataUrl ? (
+                <img src={digitalStamp.qrCodeDataUrl} alt="QR Code de Verificação" className="w-full h-full object-contain" />
+              ) : digitalStamp.qrCodeSvg ? (
+                <div dangerouslySetInnerHTML={{ __html: digitalStamp.qrCodeSvg }} className="w-full h-full flex items-center justify-center" />
+              ) : null}
+            </div>
+          )}
+        </div>
+        <p className="text-[10px] text-slate-400 text-center">
+          Conformidade com a Medida Provisória nº 2.200-2/2001 e Padrão ITI PAdES • Sistema Zemda
+        </p>
+      </div>
+    );
+  }
+
+  // Caso 2: Documento finalizado eletronicamente no sistema (Selo interno SHA-256 sem ICP-Brasil)
+  if (signedByName || signatureHash) {
+    const formattedDate = signedAt ? new Date(signedAt).toLocaleDateString('pt-BR') : todayStr;
+    const formattedTime = signedAt ? new Date(signedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+
+    return (
+      <div className={`mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-500 space-y-1 ${className}`}>
+        <p className="font-medium text-slate-700">
+          Documento finalizado eletronicamente no sistema Zemda em {formattedDate} {formattedTime ? `às ${formattedTime}` : ''} por{' '}
+          <strong>{signedByName || 'Profissional Responsável'}</strong>
+          {signedByRegistration ? ` (${signedByRegistration})` : ''}.
+        </p>
+        {signatureHash && (
+          <p className="font-mono text-[9px] text-slate-500 break-all">
+            Hash de integridade: {signatureHash}
+          </p>
+        )}
+        <p className="text-[9.5px] text-slate-400">
+          Assinatura Eletrônica Avançada conforme Lei Federal nº 14.063/2020 (Art. 5º, § 1º, II)
+        </p>
+      </div>
+    );
+  }
+
+  // Caso 3: Impressão limpa para assinatura física manual (sem carimbos digitais falsos)
   return (
     <div className={`mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-400 space-y-1 ${className}`}>
-      {signedByName && (
-        <p className="text-slate-600 font-medium">
-          Assinado eletronicamente por <strong>{signedByName}</strong>
-          {signedByRegistration ? ` (${signedByRegistration})` : ''}
-          {signedAt ? ` em ${new Date(signedAt).toLocaleString('pt-BR')}` : ''}
-        </p>
-      )}
-
-      {signatureHash && (
-        <p className="font-mono text-[9px] text-slate-500 break-all">
-          Hash de integridade: {signatureHash}
-        </p>
-      )}
-
-      <p className="text-[10px] text-slate-400">
-        Documento emitido eletronicamente pelo Sistema Zemda • {todayStr}
+      <p>
+        Documento emitido eletronicamente através do Sistema Zemda • Válido mediante assinatura física do profissional responsável.
       </p>
     </div>
   );
@@ -391,20 +474,55 @@ export function generateClinicFooterHtml(options?: {
   signedByName?: string;
   signedByRegistration?: string;
   signedAt?: string;
+  digitalStamp?: DigitalStampInfo | null;
 }): string {
   const todayStr = new Date().toLocaleDateString('pt-BR');
-  const sigHtml = options?.signedByName
-    ? `<div style="color: #334155; font-weight: 600; margin-bottom: 4px;">Assinado eletronicamente por ${options.signedByName}${options.signedByRegistration ? ` (${options.signedByRegistration})` : ''}${options.signedAt ? ` em ${new Date(options.signedAt).toLocaleString('pt-BR')}` : ''}</div>`
-    : '';
-  const hashHtml = options?.signatureHash
-    ? `<div style="font-family: monospace; font-size: 9px; color: #64748b; word-break: break-all; margin-bottom: 4px;">Hash de integridade: ${options.signatureHash}</div>`
-    : '';
 
+  // Caso ICP-Brasil
+  if (options?.digitalStamp && (options.digitalStamp.isIcpBrasil || options.digitalStamp.format === 'PAdES')) {
+    const s = options.digitalStamp;
+    const qrPart = s.qrCodeSvg
+      ? `<div style="width: 90px; height: 90px; margin-left: 12px; display: flex; align-items: center; justify-content: center;">${s.qrCodeSvg}</div>`
+      : s.qrCodeDataUrl
+      ? `<div style="width: 90px; height: 90px; margin-left: 12px;"><img src="${s.qrCodeDataUrl}" style="width: 100%; height: 100%; object-fit: contain;" /></div>`
+      : '';
+
+    return `
+      <div style="margin-top: 28px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        <div style="border: 2px solid #0f172a; border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; background: #ffffff;">
+          <div style="flex: 1; font-size: 11px; color: #1e293b; line-height: 1.4;">
+            <div style="font-weight: 900; font-size: 11.5px; color: #0f172a; margin-bottom: 3px;">DOCUMENTO ASSINADO DIGITALMENTE • ICP-BRASIL (PAdES)</div>
+            <div><strong>Titular:</strong> ${s.signerName || options.signedByName || ''} ${s.signerRegistration || options.signedByRegistration ? `(${s.signerRegistration || options.signedByRegistration})` : ''}</div>
+            ${s.issuer ? `<div style="font-size: 10.5px; color: #475569;"><strong>Emissor:</strong> ${s.issuer} ${s.serialNumber ? `| <strong>Série:</strong> ${s.serialNumber}` : ''}</div>` : ''}
+            <div style="font-size: 10.5px; color: #475569;"><strong>Data e Hora:</strong> ${s.signedAt ? new Date(s.signedAt).toLocaleString('pt-BR') : todayStr}</div>
+            ${s.sha256Hash || options.signatureHash ? `<div style="font-family: monospace; font-size: 9px; color: #64748b; word-break: break-all; margin-top: 2px;">Hash SHA-256: ${s.sha256Hash || options.signatureHash}</div>` : ''}
+            ${s.verificationUrl ? `<div style="font-size: 9.5px; color: #0f766e; font-weight: bold; margin-top: 3px;">Validação online: ${s.verificationUrl}</div>` : ''}
+          </div>
+          ${qrPart}
+        </div>
+        <div style="font-size: 9.5px; color: #94a3b8; text-align: center; margin-top: 6px;">Conformidade com a MP nº 2.200-2/2001 e Padrão ITI PAdES • Sistema Zemda</div>
+      </div>
+    `;
+  }
+
+  // Caso Selo Eletrônico Interno
+  if (options?.signedByName || options?.signatureHash) {
+    const formattedDate = options.signedAt ? new Date(options.signedAt).toLocaleDateString('pt-BR') : todayStr;
+    const formattedTime = options.signedAt ? new Date(options.signedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+
+    return `
+      <div style="margin-top: 28px; padding-top: 14px; border-top: 1px solid #cbd5e1; text-align: center; font-size: 10px; color: #475569; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.5;">
+        <div>Documento finalizado eletronicamente no sistema Zemda em ${formattedDate} ${formattedTime ? `às ${formattedTime}` : ''} por <strong>${options.signedByName || 'Profissional'}</strong>${options.signedByRegistration ? ` (${options.signedByRegistration})` : ''}.</div>
+        ${options.signatureHash ? `<div style="font-family: monospace; font-size: 9px; color: #64748b; word-break: break-all;">Hash de integridade: ${options.signatureHash}</div>` : ''}
+        <div style="font-size: 9px; color: #94a3b8; margin-top: 2px;">Assinatura Eletrônica Avançada conforme Lei Federal nº 14.063/2020</div>
+      </div>
+    `;
+  }
+
+  // Impressão limpa manual
   return `
-    <div style="margin-top: 32px; padding-top: 14px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-      ${sigHtml}
-      ${hashHtml}
-      <div>Documento emitido eletronicamente pelo Sistema Zemda • ${todayStr}</div>
+    <div style="margin-top: 28px; padding-top: 14px; border-top: 1px solid #cbd5e1; text-align: center; font-size: 10px; color: #94a3b8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <div>Documento emitido eletronicamente através do Sistema Zemda • Válido com assinatura física ou assinatura eletrônica.</div>
     </div>
   `;
 }

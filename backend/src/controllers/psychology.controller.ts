@@ -1118,11 +1118,61 @@ export class PsychologyController {
         return;
       }
 
-      const prof = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId) as any;
-      const signerName = prof?.name || req.user?.name || 'Psicólogo(a) Responsável';
-      const signerReg = prof?.registration_type && prof?.registration_number
-        ? `${prof.registration_type} ${prof.registration_number}`
-        : (prof?.registration_number || 'CRP Não informado');
+      let resolvedProfId: string | null = null;
+      let signerName = req.user?.name || 'Psicólogo(a) Responsável';
+      let signerReg = 'CRP Não informado';
+
+      if (req.body.professionalId || req.body.professional_id) {
+        const candidateId = String(req.body.professionalId || req.body.professional_id);
+        const pRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE id = ? AND tenant_id = ?').get(candidateId, tenantId) as any;
+        if (pRow) {
+          resolvedProfId = pRow.id;
+          if (pRow.name) signerName = pRow.name;
+          if (pRow.registration_number) signerReg = `${pRow.registration_type || 'CRP'} ${pRow.registration_number}`;
+        }
+      }
+
+      if (!resolvedProfId) {
+        const profByUser = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId) as any;
+        if (profByUser) {
+          resolvedProfId = profByUser.id;
+          if (profByUser.name) signerName = profByUser.name;
+          if (profByUser.registration_number) signerReg = `${profByUser.registration_type || 'CRP'} ${profByUser.registration_number}`;
+        }
+      }
+
+      if (!resolvedProfId && appointmentId) {
+        const apptProf = db.prepare('SELECT professional_id FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any;
+        if (apptProf?.professional_id) {
+          const pRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE id = ? AND tenant_id = ?').get(apptProf.professional_id, tenantId) as any;
+          if (pRow) {
+            resolvedProfId = pRow.id;
+            if (pRow.name) signerName = pRow.name;
+            if (pRow.registration_number) signerReg = `${pRow.registration_type || 'CRP'} ${pRow.registration_number}`;
+          }
+        }
+      }
+
+      if (!resolvedProfId) {
+        const anyProf = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1').get(tenantId) as any;
+        if (anyProf) {
+          resolvedProfId = anyProf.id;
+          if (anyProf.name) signerName = anyProf.name;
+          if (anyProf.registration_number) signerReg = `${anyProf.registration_type || 'CRP'} ${anyProf.registration_number}`;
+        }
+      }
+
+      if (!resolvedProfId) {
+        const newProfId = `prof-psico-${uuidv4().slice(0, 8)}`;
+        db.prepare(`
+          INSERT INTO professionals (
+            id, tenant_id, user_id, name, email, registration_type, registration_number, active, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, 'CRP', 'Não informado', 1, datetime('now'), datetime('now'))
+        `).run(
+          newProfId, tenantId, userId || null, req.user?.name || 'Psicólogo Responsável', req.user?.email || 'psicologia@zemda.com.br'
+        );
+        resolvedProfId = newProfId;
+      }
 
       const nowIso = new Date().toISOString();
       const sessionId = `sess-${uuidv4()}`;
@@ -1148,7 +1198,7 @@ export class PsychologyController {
           signed_at, signed_by_name, signed_by_registration, sealed_at, created_by
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
       `).run(
-        sessionId, tenantId, patientId, prof?.id || null, appointmentId || null,
+        sessionId, tenantId, patientId, resolvedProfId, appointmentId || null,
         sessionNumber || 1, sessionDate || nowIso.split('T')[0], modality || 'presencial',
         tdicInfo ? JSON.stringify(tdicInfo) : null,
         currentDemand || null, relevantThemes || null, interventionsUsed || null,
@@ -1166,7 +1216,7 @@ export class PsychologyController {
           signer_name, signer_registration, sealed_at, created_by
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ZemdaPsico', 1, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        recordId, tenantId, patientId, prof?.id || null, appointmentId || null,
+        recordId, tenantId, patientId, resolvedProfId, appointmentId || null,
         sessionDate || nowIso.split('T')[0],
         `Sessão de Psicologia Clínica #${sessionNumber || 1} (${modality === 'online' ? 'Online TDIC' : 'Presencial'})`,
         clinicalEvolution.trim(),

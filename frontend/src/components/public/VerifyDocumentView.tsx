@@ -67,6 +67,8 @@ export const VerifyDocumentView: React.FC<VerifyDocumentViewProps> = ({
   }, [token]);
 
   const getDocTypeLabel = (type: string) => {
+    if (!type) return 'Documento Clínico Oficial';
+    if (type.length > 15 || type.includes(' ')) return type;
     switch (type) {
       case 'certificate':
         return 'Atestado Médico / Clínico';
@@ -77,11 +79,16 @@ export const VerifyDocumentView: React.FC<VerifyDocumentViewProps> = ({
       case 'psychopedagogy_session':
         return 'Evolução Psicopedagógica (ZemdaPP)';
       case 'psychopedagogy_report':
-        return 'Relatório Psicopedagógico (ZemdaPP)';
+        return 'Relatório Psicopedagógico Oficial (ZemdaPP)';
+      case 'psychology_document':
+        return 'Documento Psicológico Oficial (CFP 06/2019)';
+      case 'psychology_session':
+        return 'Registro Documental de Sessão de Psicologia (CFP 01/2009)';
       case 'clinical_evolution':
-        return 'Evolução de Prontuário';
+      case 'clinical_record':
+        return 'Evolução de Prontuário Clínico';
       default:
-        return 'Documento Clínico';
+        return 'Documento Clínico Oficial';
     }
   };
 

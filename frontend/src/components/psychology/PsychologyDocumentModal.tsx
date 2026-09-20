@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Info
 } from 'lucide-react';
+import { SignatureChoiceModal } from '../common/SignatureChoiceModal';
 
 interface PsychologyDocumentModalProps {
   isOpen: boolean;
@@ -56,6 +57,7 @@ export const PsychologyDocumentModal: React.FC<PsychologyDocumentModalProps> = (
 
   const [submitting, setSubmitting] = useState(false);
   const [issuedDoc, setIssuedDoc] = useState<any | null>(null);
+  const [showSignatureChoice, setShowSignatureChoice] = useState(false);
 
   // Registro de Entrega
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
@@ -235,10 +237,10 @@ export const PsychologyDocumentModal: React.FC<PsychologyDocumentModalProps> = (
               <div className="pt-2 flex flex-wrap justify-center gap-3">
                 <button
                   type="button"
-                  onClick={() => handlePrint(issuedDoc.documentId)}
+                  onClick={() => setShowSignatureChoice(true)}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer"
                 >
-                  <Printer className="w-4 h-4" /> Visualizar / Imprimir PDF Oficial
+                  <Printer className="w-4 h-4" /> Opções de Assinatura & Impressão (A4)
                 </button>
                 {!deliveryRegistered && !showDeliveryForm && (
                   <button
@@ -588,6 +590,24 @@ export const PsychologyDocumentModal: React.FC<PsychologyDocumentModalProps> = (
           </form>
         )}
       </div>
+
+      {showSignatureChoice && issuedDoc && (
+        <SignatureChoiceModal
+          isOpen={showSignatureChoice}
+          onClose={() => setShowSignatureChoice(false)}
+          documentTitle={documentType === 'atestado' ? 'Atestado Psicológico' : 'Documento Psicológico Oficial'}
+          documentType="psychology_document"
+          documentId={issuedDoc.documentId}
+          patientName={patientName}
+          rawContent={issuedDoc.renderedText || issuedDoc.signatureHash || `Doc-${issuedDoc.documentNumber}`}
+          onSelectManualPrint={() => {
+            handlePrint(issuedDoc.documentId);
+          }}
+          onSignSuccess={() => {
+            handlePrint(issuedDoc.documentId);
+          }}
+        />
+      )}
     </div>
   );
 };

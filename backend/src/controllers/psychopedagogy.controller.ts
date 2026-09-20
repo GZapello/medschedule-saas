@@ -467,17 +467,73 @@ export class PsychopedagogyController {
         return;
       }
 
-      const prof = db.prepare(`
-        SELECT p.id, p.registration_type, p.registration_number, u.name as user_name
-        FROM professionals p
-        JOIN users u ON u.id = p.user_id
-        WHERE p.user_id = ? AND p.tenant_id = ?
-      `).get(req.user?.userId, tenantId) as any;
+      let resolvedProfessionalId: string | null = null;
+      let signerName = req.user?.name || 'Psicopedagogo(a) Responsável';
+      let signerReg = 'CBO 2394-25';
 
-      const signerName = prof?.user_name || req.user?.name || 'Psicopedagogo';
-      const signerReg = prof?.registration_number
-        ? `${prof.registration_type || 'ABPp'} ${prof.registration_number}`
-        : 'CBO 2394-25';
+      // 1. Tentar obter pelo professionalId fornecido na requisição
+      if (req.body.professionalId || req.body.professional_id) {
+        const candidateId = String(req.body.professionalId || req.body.professional_id);
+        const pRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE id = ? AND tenant_id = ?').get(candidateId, tenantId) as any;
+        if (pRow) {
+          resolvedProfessionalId = pRow.id;
+          if (pRow.name) signerName = pRow.name;
+          if (pRow.registration_number) signerReg = `${pRow.registration_type || 'ABPp'} ${pRow.registration_number}`;
+        }
+      }
+
+      // 2. Se não encontrado, buscar profissional vinculado ao user_id logado
+      if (!resolvedProfessionalId) {
+        const profByUser = db.prepare(`
+          SELECT p.id, p.name, p.registration_type, p.registration_number, u.name as user_name
+          FROM professionals p
+          JOIN users u ON u.id = p.user_id
+          WHERE p.user_id = ? AND p.tenant_id = ?
+        `).get(req.user?.userId, tenantId) as any;
+        if (profByUser) {
+          resolvedProfessionalId = profByUser.id;
+          signerName = profByUser.user_name || profByUser.name || signerName;
+          if (profByUser.registration_number) {
+            signerReg = `${profByUser.registration_type || 'ABPp'} ${profByUser.registration_number}`;
+          }
+        }
+      }
+
+      // 3. Se houver appointmentId, verificar o profissional do agendamento
+      if (!resolvedProfessionalId && appointmentId) {
+        const apptProf = db.prepare('SELECT professional_id FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as any;
+        if (apptProf?.professional_id) {
+          const pRow = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE id = ? AND tenant_id = ?').get(apptProf.professional_id, tenantId) as any;
+          if (pRow) {
+            resolvedProfessionalId = pRow.id;
+            if (pRow.name) signerName = pRow.name;
+            if (pRow.registration_number) signerReg = `${pRow.registration_type || 'ABPp'} ${pRow.registration_number}`;
+          }
+        }
+      }
+
+      // 4. Se ainda não encontrado, buscar qualquer profissional ativo do tenant
+      if (!resolvedProfessionalId) {
+        const anyProf = db.prepare('SELECT id, name, registration_type, registration_number FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1').get(tenantId) as any;
+        if (anyProf) {
+          resolvedProfessionalId = anyProf.id;
+          if (!signerName || signerName === 'Psicopedagogo(a) Responsável') signerName = anyProf.name;
+          if (anyProf.registration_number) signerReg = `${anyProf.registration_type || 'ABPp'} ${anyProf.registration_number}`;
+        }
+      }
+
+      // 5. Se não existir nenhum profissional na clínica, criar o profissional para o usuário autenticado
+      if (!resolvedProfessionalId) {
+        const newProfId = `prof-pp-${uuidv4().slice(0, 8)}`;
+        db.prepare(`
+          INSERT INTO professionals (
+            id, tenant_id, user_id, name, email, registration_type, registration_number, active, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, 'ABPp', 'CBO 2394-25', 1, datetime('now'), datetime('now'))
+        `).run(
+          newProfId, tenantId, req.user?.userId || null, req.user?.name || 'Psicopedagogo Responsável', req.user?.email || 'psicopedagogia@zemda.com.br'
+        );
+        resolvedProfessionalId = newProfId;
+      }
 
       const signedAt = new Date().toISOString();
       const sessionData = req.body.sessionData || {};
@@ -517,7 +573,7 @@ export class PsychopedagogyController {
           ?, ?, datetime('now'), datetime('now')
         )
       `).run(
-        recordId, tenantId, patientId, appointmentId || null, prof?.id || req.user?.userId, sessionDate || null,
+        recordId, tenantId, patientId, appointmentId || null, resolvedProfessionalId, sessionDate || null,
         title || 'Atendimento Psicopedagógico (ZemdaPP)', evolutionContent, technicalNotes || null,
         signatureHash, signedAt, req.user?.userId, signerName, signerReg, signedAt,
         req.user?.userId, req.user?.userId

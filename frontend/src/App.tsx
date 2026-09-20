@@ -512,6 +512,11 @@ const AppContent: React.FC = () => {
         e.preventDefault();
         window.history.pushState(null, '', '/privacidade');
         setActiveLegalPage('privacy');
+      } else if (href && href.startsWith('/verificar-documento/')) {
+        e.preventDefault();
+        const token = href.replace('/verificar-documento/', '');
+        window.history.pushState(null, '', href);
+        setActiveVerificationToken(token);
       }
     };
 

@@ -26,6 +26,8 @@ export interface SignatureRequest {
   documentId: string;
   documentType: 'certificate' | 'prescription' | 'exam_request' | 'clinical_record' | 'psychopedagogy_report' | 'psychology_document' | 'psychology_session' | 'other';
   certificateId?: string;
+  holderId?: string;
+  userId?: string;
   fileId?: string | null;
   rawContent: string | Buffer;
   signerName: string;
@@ -147,6 +149,13 @@ export class CloudPSCProvider implements DigitalSignatureProvider {
 
     if (req.certificateId) {
       cert = db.prepare('SELECT * FROM digital_certificates WHERE id = ? AND tenant_id = ?').get(req.certificateId, req.tenantId) as any;
+    } else if (req.holderId || req.userId) {
+      // Busca certificado ativo específico do titular profissional
+      cert = db.prepare(`
+        SELECT * FROM digital_certificates 
+        WHERE tenant_id = ? AND (holder_id = ? OR holder_id = ?) AND status = 'valid' 
+        ORDER BY created_at DESC LIMIT 1
+      `).get(req.tenantId, req.holderId || req.userId, req.userId || req.holderId) as any;
     } else {
       // Busca primeiro certificado válido do titular
       cert = db.prepare(`
@@ -156,12 +165,17 @@ export class CloudPSCProvider implements DigitalSignatureProvider {
       `).get(req.tenantId) as any;
     }
 
-    // Se nenhum certificado estiver conectado ou PSC não configurado
+    // Verifica se expirou
+    if (cert && new Date(cert.valid_until) < new Date()) {
+      try {
+        db.prepare("UPDATE digital_certificates SET status = 'expired' WHERE id = ?").run(cert.id);
+      } catch (_) {}
+      throw new Error(`O Certificado ICP-Brasil (${cert.subject_name}) expirou em ${new Date(cert.valid_until).toLocaleDateString('pt-BR')}. Atualize ou conecte um novo certificado em Minha Conta.`);
+    }
+
+    // Se nenhum certificado estiver conectado
     if (!cert) {
-      if (!this.isConfigured()) {
-        throw new Error('Provedor de Certificação Digital em Nuvem (PSC) não configurado. Conecte um certificado na Central de Certificados ou use a Assinatura Eletrônica Interna SHA-256.');
-      }
-      throw new Error('Nenhum certificado digital ICP-Brasil válido encontrado para o profissional.');
+      throw new Error('Certificado ICP-Brasil não configurado ou inativo. Acesse Minha Conta -> Certificado Digital para conectar seu certificado.');
     }
 
     const verificationToken = uuidv4().replace(/-/g, '');
@@ -244,7 +258,7 @@ export class CloudPSCProvider implements DigitalSignatureProvider {
   }
 
   /**
-   * Validação pública estrita (RETORNA APENAS METADADOS — SEM DADOS CLÍNICOS)
+   * Validação pública estrita (RETORNA APENAS METADADOS — SEM DADOS CLÍNICOS NEM SENSÍVEIS CONFORME LGPD)
    */
   async verifySignature(token: string): Promise<any> {
     if (!token || typeof token !== 'string') {
@@ -253,31 +267,41 @@ export class CloudPSCProvider implements DigitalSignatureProvider {
 
     const cleanToken = token.trim();
     const sig = db.prepare(`
-      SELECT s.*, c.subject_name, c.subject_cpf_cnpj, c.issuer, c.certificate_type, c.serial_number, c.status as cert_status
+      SELECT s.*, c.subject_name, c.subject_cpf_cnpj, c.issuer, c.certificate_type, c.serial_number, c.status as cert_status, c.provider as cert_provider,
+             t.trade_name, t.name as tenant_name
       FROM digital_signatures s
       LEFT JOIN digital_certificates c ON c.id = s.certificate_id
+      LEFT JOIN tenants t ON t.id = s.tenant_id
       WHERE s.verification_token = ?
     `).get(cleanToken) as any;
 
     if (!sig) {
-      // Tenta verificar também se é um hash de assinatura eletrônica tradicional
+      // Tenta verificar também se é um hash de assinatura eletrônica tradicional em records
       const rec = db.prepare(`
-        SELECT id, tenant_id, session_date, title, signer_name, signer_registration, signed_at, signature_hash
-        FROM records
-        WHERE signature_hash = ?
+        SELECT r.id, r.tenant_id, r.session_date, r.title, r.signer_name, r.signer_registration, r.signed_at, r.signature_hash,
+               t.trade_name, t.name as tenant_name
+        FROM records r
+        LEFT JOIN tenants t ON t.id = r.tenant_id
+        WHERE r.signature_hash = ?
       `).get(cleanToken) as any;
 
       if (rec) {
         return {
           valid: true,
           type: 'Assinatura Eletrônica Avançada Zemda (SHA-256)',
+          signatureType: 'advanced_electronic',
           legislation: 'Lei Federal nº 14.063/2020 (Art. 5º, § 1º, II)',
-          signerName: rec.signer_name || 'Profissional de Saúde',
+          signerName: rec.signer_name || 'Profissional de Atendimento',
           signerRegistration: rec.signer_registration || 'Conselho Profissional',
           signedAt: rec.signed_at,
-          documentTitle: rec.title || 'Evolução Clínica em Prontuário',
+          documentType: rec.title || 'Evolução Clínica em Prontuário',
           sha256Hash: rec.signature_hash,
-          integrityStatus: 'Íntegro e Válido'
+          signatureHash: rec.signature_hash,
+          certificateIssuer: 'Plataforma Zemda',
+          certificateProvider: 'Integridade Eletrônica Avançada (SHA-256)',
+          integrityStatus: 'Íntegro e Válido',
+          verificationToken: cleanToken,
+          clinicName: rec.trade_name || rec.tenant_name || undefined
         };
       }
 
@@ -295,18 +319,26 @@ export class CloudPSCProvider implements DigitalSignatureProvider {
     return {
       valid: true,
       type: 'Certificado Digital ICP-Brasil (PAdES)',
+      signatureType: 'pades',
       legislation: 'Medida Provisória nº 2.200-2/2001 e Padrão ITI PAdES',
       signatureId: sig.id,
       signedAt: sig.signed_at,
       documentType: formatDocumentType(sig.document_type),
+      rawDocumentType: sig.document_type,
       sha256Hash: sig.sha256_hash,
+      signatureHash: sig.sha256_hash,
       signerName: sig.subject_name || 'Titular do Certificado',
       signerCpf: sig.subject_cpf_cnpj,
+      signerCpfMasked: sig.subject_cpf_cnpj,
       issuer: sig.issuer || 'Autoridade Certificadora ICP-Brasil',
+      certificateIssuer: sig.issuer || 'Autoridade Certificadora ICP-Brasil',
+      certificateProvider: sig.cert_provider || 'PSC Conectado ICP-Brasil',
       serialNumber: sig.serial_number,
       certificateType: sig.certificate_type,
       certificateStatus: sig.cert_status === 'valid' ? 'Ativo e Válido' : 'Expirado / Revogado',
-      integrityStatus: 'Autêntico e Inalterado'
+      integrityStatus: 'Autêntico e Inalterado',
+      verificationToken: sig.verification_token || cleanToken,
+      clinicName: sig.trade_name || sig.tenant_name || undefined
     };
   }
 }
