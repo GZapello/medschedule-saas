@@ -42,6 +42,10 @@ export class R2StorageService {
     }
   }
 
+  get isConfiguredClient(): boolean {
+    return this.isConfigured;
+  }
+
   /**
    * Gera a chave de objeto padronizada e anônima no R2
    * Formato: clinics/{clinicId}/patients/{patientId}/{category}/{uuid}.{ext}

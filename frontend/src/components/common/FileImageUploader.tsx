@@ -330,6 +330,11 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
       const msg = err.message || 'Erro ao enviar o arquivo via Cloudflare Worker.';
       setErrorMessage(msg);
       onError?.(msg);
+      if (selectedPreview && selectedPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(selectedPreview);
+      }
+      setSelectedFile(null);
+      setSelectedPreview(null);
     } finally {
       setIsUploading(false);
     }

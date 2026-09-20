@@ -15,7 +15,7 @@
 function corsHeaders(origin = '*') {
   return {
     'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, HEAD, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     'Access-Control-Max-Age': '86400',
   };
@@ -107,8 +107,8 @@ export default {
       });
     }
 
-    // 2. GET /file?token=... (Visualização segura de imagem)
-    if (url.pathname === '/file' && request.method === 'GET') {
+    // 2. GET ou HEAD /file?token=... (Visualização segura ou verificação de existência)
+    if (url.pathname === '/file' && (request.method === 'GET' || request.method === 'HEAD')) {
       try {
         const token = url.searchParams.get('token') || (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
         if (!token) {
@@ -162,7 +162,26 @@ export default {
           });
         }
 
-        // Busca o objeto no bucket R2
+        // Busca o objeto no bucket R2 (usa head se for método HEAD para economia de banda)
+        if (request.method === 'HEAD') {
+          const headObject = env.FILES_BUCKET.head ? await env.FILES_BUCKET.head(objectKey) : await env.FILES_BUCKET.get(objectKey);
+          if (!headObject) {
+            return new Response(JSON.stringify({ error: 'Arquivo não encontrado' }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+            });
+          }
+          return new Response(null, {
+            status: 200,
+            headers: {
+              'Content-Type': headObject.httpMetadata?.contentType || 'application/octet-stream',
+              'Content-Length': String(headObject.size || 0),
+              'Cache-Control': 'private, max-age=300',
+              ...corsHeaders(origin),
+            },
+          });
+        }
+
         const object = await env.FILES_BUCKET.get(objectKey);
         if (!object) {
           return new Response(JSON.stringify({ error: 'Arquivo não encontrado' }), {

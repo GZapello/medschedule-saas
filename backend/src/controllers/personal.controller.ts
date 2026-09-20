@@ -237,11 +237,12 @@ function requireAttachmentId(fileId: any, tenantId: string): string | null {
   if (!fileId || typeof fileId !== 'string') return null;
   const id = fileId.trim();
   if (!id) return null;
+  const sanitizedClinicId = (tenantId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
   const attachment = db.prepare(`
     SELECT id FROM file_attachments
     WHERE id = ? AND storage_provider = 'cloudflare_r2'
-      AND (clinic_id = ? OR clinic_id = 'global')
-  `).get(id, tenantId) as any;
+      AND (clinic_id = ? OR clinic_id = ? OR clinic_id = 'global')
+  `).get(id, tenantId, sanitizedClinicId) as any;
   return attachment?.id || null;
 }
 

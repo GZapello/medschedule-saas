@@ -356,7 +356,65 @@ export class FileController {
         }
       }
 
-      // Persistência exclusiva de metadados no banco de dados relacional
+      // Comprovação obrigatória de existência real do arquivo no Cloudflare R2 antes de registrar metadados
+      let existsInR2 = false;
+
+      if (process.env.R2_MOCK_STORAGE === 'true' || (r2StorageService as any).mockObjects?.has(objectKey)) {
+        existsInR2 = await r2StorageService.fileExists(objectKey);
+      } else if (r2StorageService.isConfiguredClient) {
+        existsInR2 = await r2StorageService.fileExists(objectKey);
+      } else {
+        // Validação direta via Cloudflare Worker (HEAD /file com token de verificação)
+        const signingSecret = getSigningSecret();
+        const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
+        const nowInSec = Math.floor(Date.now() / 1000);
+        const checkPayload = {
+          action: 'read',
+          clinicId: sanitizedClinicId,
+          objectKey,
+          exp: nowInSec + 60
+        };
+        const pB64 = Buffer.from(JSON.stringify(checkPayload)).toString('base64url');
+        const sig = crypto.createHmac('sha256', signingSecret).update(pB64).digest('base64url');
+        const checkToken = `${pB64}.${sig}`;
+
+        try {
+          const headRes = await fetch(`${workerBaseUrl}/file?token=${encodeURIComponent(checkToken)}`, {
+            method: 'HEAD'
+          });
+          if (headRes.status === 200) {
+            existsInR2 = true;
+          } else if (headRes.status === 404) {
+            existsInR2 = false;
+          } else {
+            // Tenta GET caso o Worker publicado ainda não responda a HEAD
+            const getRes = await fetch(`${workerBaseUrl}/file?token=${encodeURIComponent(checkToken)}`, {
+              method: 'GET'
+            });
+            if (getRes.status === 200) {
+              existsInR2 = true;
+            } else if (getRes.status === 404) {
+              existsInR2 = false;
+            } else {
+              // Se mockUpload foi chamado durante o fluxo local
+              existsInR2 = await r2StorageService.fileExists(objectKey);
+            }
+          }
+        } catch (workerNetErr) {
+          console.warn('[FileController.completeUpload] Aviso ao contatar Worker para comprovação de existência:', workerNetErr);
+          existsInR2 = await r2StorageService.fileExists(objectKey);
+        }
+      }
+
+      if (!existsInR2) {
+        res.status(400).json({
+          error: 'O arquivo não foi localizado no Cloudflare R2. Conclua o upload direto antes de confirmar.',
+          objectKey
+        });
+        return;
+      }
+
+      // Persistência exclusiva de metadados no banco de dados relacional com clinic_id normalizado
       const attachmentId = 'att-' + uuidv4();
       const targetPatientId = isClinicOrExerciseAsset ? null : patientId;
       const targetAssessmentId = assessmentId || null;
@@ -371,7 +429,7 @@ export class FileController {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `).run(
           attachmentId,
-          tenantId,
+          sanitizedClinicId,
           targetPatientId,
           appointmentId || null,
           targetAssessmentId,
@@ -394,7 +452,7 @@ export class FileController {
             ) VALUES (?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
           `).run(
             attachmentId,
-            tenantId,
+            sanitizedClinicId,
             targetPatientId,
             appointmentId || null,
             userId,
@@ -413,7 +471,7 @@ export class FileController {
             ) VALUES (?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
           `).run(
             attachmentId,
-            tenantId,
+            sanitizedClinicId,
             'clinic',
             appointmentId || null,
             userId,
@@ -434,7 +492,7 @@ export class FileController {
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const readPayload = {
         action: 'read',
-        clinicId: tenantId,
+        clinicId: sanitizedClinicId,
         objectKey,
         exp: nowInSeconds + 300
       };
@@ -574,22 +632,23 @@ export class FileController {
       }
 
       const decodedParam = decodeURIComponent(id).trim();
+      const sanitizedClinicId = canonicalizeClinicId(tenantId);
 
       // Validação estrita: Clínica A NUNCA exclui arquivo da Clínica B
       let file = db
-        .prepare('SELECT * FROM file_attachments WHERE id = ? AND clinic_id = ?')
-        .get(decodedParam, tenantId) as any;
+        .prepare('SELECT * FROM file_attachments WHERE id = ? AND (clinic_id = ? OR clinic_id = ?)')
+        .get(decodedParam, tenantId, sanitizedClinicId) as any;
 
       if (!file) {
         // Tenta buscar por object_key
         file = db
-          .prepare('SELECT * FROM file_attachments WHERE object_key = ? AND clinic_id = ?')
-          .get(decodedParam, tenantId) as any;
+          .prepare('SELECT * FROM file_attachments WHERE object_key = ? AND (clinic_id = ? OR clinic_id = ?)')
+          .get(decodedParam, tenantId, sanitizedClinicId) as any;
       }
 
       let targetObjectKey = file?.object_key;
-      // Se não encontrou no banco mas o identificador começa estritamente com clinics/{tenantId}/
-      if (!targetObjectKey && decodedParam.startsWith(`clinics/${tenantId}/`)) {
+      // Se não encontrou no banco mas o identificador começa estritamente com clinics/{tenantId}/ ou clinics/{sanitizedClinicId}/
+      if (!targetObjectKey && (decodedParam.startsWith(`clinics/${tenantId}/`) || decodedParam.startsWith(`clinics/${sanitizedClinicId}/`))) {
         targetObjectKey = decodedParam;
       }
 
@@ -606,7 +665,7 @@ export class FileController {
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const deletePayload = {
         action: 'delete',
-        clinicId: tenantId,
+        clinicId: sanitizedClinicId,
         objectKey: targetObjectKey,
         exp: nowInSeconds + 300
       };
@@ -638,9 +697,9 @@ export class FileController {
 
       // 3. Exclusão do registro de metadados no banco
       if (file) {
-        db.prepare('DELETE FROM file_attachments WHERE id = ? AND clinic_id = ?').run(file.id, tenantId);
+        db.prepare('DELETE FROM file_attachments WHERE id = ? AND (clinic_id = ? OR clinic_id = ?)').run(file.id, tenantId, sanitizedClinicId);
       } else if (targetObjectKey) {
-        db.prepare('DELETE FROM file_attachments WHERE object_key = ? AND clinic_id = ?').run(targetObjectKey, tenantId);
+        db.prepare('DELETE FROM file_attachments WHERE object_key = ? AND (clinic_id = ? OR clinic_id = ?)').run(targetObjectKey, tenantId, sanitizedClinicId);
       }
 
       res.status(200).json({

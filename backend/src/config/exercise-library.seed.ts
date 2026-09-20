@@ -1801,24 +1801,6 @@ export function seedExerciseLibrary(rawDb: any): void {
       if (!attachCols.includes('exercise_id')) rawDb.exec('ALTER TABLE file_attachments ADD COLUMN exercise_id TEXT');
     } catch (_) {}
 
-    const insertAttachmentStmt = rawDb.prepare(`
-      INSERT INTO file_attachments (
-        id, clinic_id, patient_id, appointment_id, assessment_id, exercise_id,
-        uploaded_by, storage_provider, object_key, original_filename, mime_type,
-        file_size, category, created_at, updated_at
-      ) VALUES (
-        ?, 'global', NULL, NULL, NULL, ?,
-        'system', 'cloudflare_r2', ?, ?, 'image/webp',
-        2048, 'exercises', datetime('now'), datetime('now')
-      )
-      ON CONFLICT(id) DO UPDATE SET
-        object_key = excluded.object_key,
-        original_filename = excluded.original_filename,
-        category = 'exercises',
-        storage_provider = 'cloudflare_r2',
-        updated_at = datetime('now')
-    `);
-
     const stmt = rawDb.prepare(`
       INSERT INTO personal_exercises (
         id, tenant_id, name, muscle_group, secondary_muscles_json,
@@ -1852,17 +1834,22 @@ export function seedExerciseLibrary(rawDb: any): void {
 
     rawDb.exec('BEGIN IMMEDIATE;');
     try {
-      for (const ex of DEFAULT_EXERCISE_LIBRARY) {
-        const fileId = ex.exercise_file_id || `att-${ex.id}`;
-        const objectKey = `exercises/global/${ex.id}.webp`;
-        const filename = `${ex.id}.webp`;
+      // Limpeza de quaisquer anexos fake gerados anteriormente sem arquivo real no R2
+      rawDb.exec(`
+        DELETE FROM file_attachments 
+        WHERE id LIKE 'att-ex-%' OR object_key LIKE 'exercises/global/%'
+      `);
 
-        insertAttachmentStmt.run(
-          fileId,
-          ex.id,
-          objectKey,
-          filename
-        );
+      for (const ex of DEFAULT_EXERCISE_LIBRARY) {
+        // Preserva anexo real já cadastrado no banco para o exercício, se houver
+        const currentExercise = rawDb.prepare(`
+          SELECT pe.exercise_file_id, fa.id as verified_file_id
+          FROM personal_exercises pe
+          LEFT JOIN file_attachments fa ON fa.id = pe.exercise_file_id AND fa.storage_provider = 'cloudflare_r2'
+          WHERE pe.id = ?
+        `).get(ex.id) as any;
+
+        const validFileId = currentExercise?.verified_file_id || null;
 
         stmt.run(
           ex.id,
@@ -1877,7 +1864,7 @@ export function seedExerciseLibrary(rawDb: any): void {
           ex.level,
           ex.instructions,
           ex.technical_notes || null,
-          fileId
+          validFileId
         );
       }
       rawDb.exec('COMMIT;');
@@ -1885,7 +1872,7 @@ export function seedExerciseLibrary(rawDb: any): void {
       try { rawDb.exec('ROLLBACK;'); } catch (_) {}
       throw txErr;
     }
-    console.log(`[Database] Biblioteca expandida de exercícios semeada com sucesso: ${DEFAULT_EXERCISE_LIBRARY.length} exercícios com imagens R2 associadas.`);
+    console.log(`[Database] Biblioteca expandida de exercícios semeada com sucesso: ${DEFAULT_EXERCISE_LIBRARY.length} exercícios preservados com integridade estrita de anexos R2.`);
   } catch (err) {
     console.error('[Database] Erro ao semear biblioteca expandida de exercícios:', err);
   }
