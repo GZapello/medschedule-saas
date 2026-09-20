@@ -139,6 +139,64 @@ async function runTests() {
     assert(uploadUrl.includes('/upload'), 'uploadUrl aponta para rota /upload do Worker');
     assert(!!uploadToken, 'uploadToken assinado HMAC retornado');
 
+    // 2.1 Teste do Worker: PUT /upload -> FILES_BUCKET.put() -> FILES_BUCKET.head()
+    console.log('\n[2.1 Worker R2] PUT /upload -> FILES_BUCKET.put() -> FILES_BUCKET.head()');
+    const workerModule = await import('../cloudflare-worker.js');
+    const worker = workerModule.default;
+    const storageMap = new Map();
+    const testBucket = {
+      put: async (key, data, opts) => {
+        storageMap.set(key, { data, opts, size: data.byteLength });
+        return { key, size: data.byteLength };
+      },
+      head: async (key) => {
+        const item = storageMap.get(key);
+        if (!item) return null;
+        return { key, size: item.size, httpMetadata: { contentType: item.opts?.httpMetadata?.contentType } };
+      },
+      get: async (key) => {
+        const item = storageMap.get(key);
+        if (!item) return null;
+        return { key, body: item.data, size: item.size, httpMetadata: { contentType: item.opts?.httpMetadata?.contentType } };
+      }
+    };
+    const workerEnv = {
+      FILES_BUCKET: testBucket,
+      ZEMDA_FILES_SIGNING_SECRET: 'zemda-files-signing-secret'
+    };
+
+    // PUT válido
+    const putReq = new Request(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${uploadToken}`,
+        'Content-Type': 'image/webp'
+      },
+      body: Buffer.from('conteudo-da-imagem-webp-real')
+    });
+    const putRes = await worker.fetch(putReq, workerEnv);
+    assert(putRes.status === 200, 'PUT /upload no Worker retorna HTTP 200 após confirmação via head');
+    const putJson = await putRes.json();
+    assert(putJson.ok === true, 'Worker retorna ok: true');
+    assert(putJson.objectKey === objectKey, 'objectKey retornado pelo Worker é idêntico ao do ticket');
+    assert(putJson.verified === true, 'Worker confirma que o objeto existe no bucket via head()');
+
+    // PUT com falha no head (simula erro do R2)
+    const failingBucket = {
+      put: async () => {},
+      head: async () => null
+    };
+    const failReq = new Request(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${uploadToken}`,
+        'Content-Type': 'image/webp'
+      },
+      body: Buffer.from('conteudo-qualquer')
+    });
+    const failRes = await worker.fetch(failReq, { FILES_BUCKET: failingBucket, ZEMDA_FILES_SIGNING_SECRET: 'zemda-files-signing-secret' });
+    assert(failRes.status === 500, 'PUT /upload retorna HTTP 500 se FILES_BUCKET.head() não encontrar o objeto após put()');
+
     // 3. completeUpload REJEITA objeto que NÃO existe no R2
     console.log('\n[3. completeUpload] Comprovação Obrigatória de Existência no R2');
     const fakeObjectKey = `clinics/${sanitizedClinicId}/patients/${patientId}/personal-assessments/fake/front/fake.webp`;

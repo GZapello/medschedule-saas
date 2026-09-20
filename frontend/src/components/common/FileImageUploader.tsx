@@ -256,12 +256,23 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         body: optimizedFile
       });
 
+      // Lê resposta JSON do Worker antes de validar status
+      let workerResult: any = {};
+      try {
+        workerResult = await putResponse.json();
+      } catch (_) {}
+
+      // 1. Registro temporário no FileImageUploader SEM expor token
+      console.log('[FileImageUploader] Resultado do upload PUT:', {
+        uploadUrl,
+        objectKeyRecebidoTicket: objectKey,
+        statusHttpPut: putResponse.status,
+        respostaJsonWorker: workerResult,
+        objectKeyDevolvidoWorker: workerResult?.objectKey || null
+      });
+
       if (!putResponse.ok) {
-        let errorDetail = '';
-        try {
-          const errJson = await putResponse.json();
-          errorDetail = errJson.detail || errJson.error || '';
-        } catch (_) {}
+        const errorDetail = workerResult?.detail || workerResult?.error || '';
         throw new Error(
           errorDetail
             ? `Falha no upload para o Worker: ${errorDetail}`
@@ -269,11 +280,19 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         );
       }
 
-      // 3. Lê resposta JSON retornada pelo Worker
-      let workerResult: any = {};
-      try {
-        workerResult = await putResponse.json();
-      } catch (_) {}
+      // 5. NÃO considerar upload bem-sucedido apenas porque PUT respondeu 200
+      if (!workerResult || workerResult.ok !== true) {
+        throw new Error(
+          workerResult?.error || 'Worker não confirmou a gravação do arquivo no Cloudflare R2.'
+        );
+      }
+
+      if (workerResult.objectKey && workerResult.objectKey !== objectKey) {
+        throw new Error(
+          `Divergência de chave entre upload-ticket (${objectKey}) e Worker (${workerResult.objectKey}).`
+        );
+      }
+
       const finalObjectKey = workerResult.objectKey || objectKey;
 
       // 4. POST /api/files/complete

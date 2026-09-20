@@ -254,8 +254,43 @@ export default {
         const contentType = request.headers.get('Content-Type') || payload.mimeType || 'application/octet-stream';
         const fileData = await request.arrayBuffer();
 
+        // 2. Registro no Worker: objectKey recebido, clinicId, contentType, tamanho recebido
+        console.log('[Worker.upload] Dados recebidos:', {
+          objectKey,
+          clinicId,
+          contentType,
+          tamanhoRecebido: fileData.byteLength,
+        });
+
         await env.FILES_BUCKET.put(objectKey, fileData, {
           httpMetadata: { contentType },
+        });
+
+        // Confirmação após FILES_BUCKET.put()
+        console.log('[Worker.upload] FILES_BUCKET.put() concluído com sucesso para:', objectKey);
+
+        // Verificação imediata pós-put via head
+        const check = env.FILES_BUCKET.head
+          ? await env.FILES_BUCKET.head(objectKey)
+          : await env.FILES_BUCKET.get(objectKey);
+
+        if (!check) {
+          console.error('[Worker.upload] ERRO CRÍTICO: Objeto não encontrado no FILES_BUCKET após put():', objectKey);
+          return new Response(
+            JSON.stringify({
+              error: 'Objeto não encontrado no R2 após gravação via FILES_BUCKET.put()',
+              objectKey,
+            }),
+            {
+              status: 500,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+            }
+          );
+        }
+
+        console.log('[Worker.upload] Objeto confirmado via head no FILES_BUCKET:', {
+          objectKey,
+          size: check.size || fileData.byteLength,
         });
 
         return new Response(
@@ -264,6 +299,7 @@ export default {
             objectKey,
             size: fileData.byteLength,
             contentType,
+            verified: true,
           }),
           {
             status: 200,
