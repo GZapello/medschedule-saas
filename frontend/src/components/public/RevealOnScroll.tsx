@@ -1,83 +1,25 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-
-// Contexto para coordenar animações de elementos dentro de uma seção
-interface SectionRevealContextType {
-  isSectionRevealed: boolean;
-}
-
-const SectionRevealContext = createContext<SectionRevealContextType>({ isSectionRevealed: false });
+import React, { useEffect, useRef, useState } from 'react';
 
 export interface RevealSectionProps {
   children: React.ReactNode;
   id?: string;
   className?: string;
-  threshold?: number; // 0.15 - 0.25 (padrão 0.18)
-  rootMargin?: string; // padrão '0px 0px -60px 0px'
 }
 
 /**
  * RevealSection:
- * Observa quando aproximadamente 15–25% da seção entra no viewport.
- * Ao entrar, ativa em cascata/stagger os RevealItems pertencentes a essa seção.
+ * Renderiza um elemento <section> sem sincronizar todos os filhos.
+ * Cada RevealItem filho possui seu próprio IntersectionObserver independente.
  */
 export const RevealSection: React.FC<RevealSectionProps> = ({
   children,
   id,
-  className = '',
-  threshold = 0.18,
-  rootMargin = '0px 0px -60px 0px'
+  className = ''
 }) => {
-  const [isSectionRevealed, setIsSectionRevealed] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    // Respeitar preferência do usuário por movimento reduzido (WCAG)
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-      if (mediaQuery.matches) {
-        setIsSectionRevealed(true);
-        return;
-      }
-      const handleChange = (e: MediaQueryListEvent) => {
-        if (e.matches) setIsSectionRevealed(true);
-      };
-      mediaQuery.addEventListener?.('change', handleChange);
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        // Dispara somente quando a seção atinge entre 15% e 25% de visibilidade real na tela
-        if (entry.isIntersecting) {
-          setIsSectionRevealed(true);
-          if (sectionRef.current) {
-            observer.unobserve(sectionRef.current);
-          }
-        }
-      },
-      {
-        threshold,
-        rootMargin
-      }
-    );
-
-    const el = sectionRef.current;
-    if (el) {
-      observer.observe(el);
-    }
-
-    return () => {
-      if (el) {
-        observer.unobserve(el);
-      }
-    };
-  }, [threshold, rootMargin]);
-
   return (
-    <SectionRevealContext.Provider value={{ isSectionRevealed }}>
-      <section ref={sectionRef} id={id} className={className}>
-        {children}
-      </section>
-    </SectionRevealContext.Provider>
+    <section id={id} className={className}>
+      {children}
+    </section>
   );
 };
 
@@ -89,74 +31,84 @@ export interface RevealItemProps {
   direction?: 'up' | 'down' | 'left' | 'right' | 'none';
   distancePx?: number;
   scale?: boolean;
-  standalone?: boolean;
+  autoAnimate?: boolean; // Usado no Hero para animar logo no carregamento inicial da página
+  threshold?: number;
+  rootMargin?: string;
 }
 
 /**
- * RevealItem / RevealOnScroll:
- * Inicia aproximadamente 30–40px abaixo (padrão 36px) e opacity 0.
- * Quando a seção pai atinge o viewport (ou o próprio item atinge se for standalone),
- * sobe suavemente para a posição original + opacity 1, com suporte a stagger e scale.
+ * RevealItem:
+ * - No Hero (autoAnimate=true): anima automaticamente em cascata no carregamento da página.
+ * - Abaixo do Hero: cada RevealItem possui seu próprio IntersectionObserver.
+ *   Permanece invisível (opacity 0 + translateY 45px) até que entre nos últimos 15–20% do viewport
+ *   (threshold: 0.15, rootMargin: '0px 0px -12% 0px').
+ *   Após surgir, desconecta o observer e nunca mais re-anima.
  */
 export const RevealItem: React.FC<RevealItemProps> = ({
   children,
   className = '',
   delayMs = 0,
-  durationMs = 600,
+  durationMs = 650,
   direction = 'up',
-  distancePx = 36,
+  distancePx,
   scale = false,
-  standalone = false
+  autoAnimate = false,
+  threshold = 0.15,
+  rootMargin = '0px 0px -12% 0px'
 }) => {
-  const { isSectionRevealed } = useContext(SectionRevealContext);
-  const [selfRevealed, setSelfRevealed] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const itemRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    // Se a seção pai já ativou e não é standalone forçado, não precisa de observer individual
-    if (isSectionRevealed && !standalone) return;
+  const effectiveDistance = distancePx ?? (scale ? 40 : 45);
 
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-      if (mediaQuery.matches) {
-        setSelfRevealed(true);
-        return;
-      }
-      const handleChange = (e: MediaQueryListEvent) => {
-        if (e.matches) setSelfRevealed(true);
-      };
-      mediaQuery.addEventListener?.('change', handleChange);
+  useEffect(() => {
+    // Respeito estrito a prefers-reduced-motion (WCAG)
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setIsVisible(true);
+      return;
     }
 
-    // Observer individual (para itens standalone ou fora de RevealSection)
+    // Hero: animação automática no carregamento inicial
+    if (autoAnimate) {
+      const timer = setTimeout(() => {
+        setIsVisible(true);
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+
+    // Conteúdo abaixo do Hero: IntersectionObserver individual por elemento
+    const el = itemRef.current;
+    if (!el) return;
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setSelfRevealed(true);
-          if (itemRef.current) {
-            observer.unobserve(itemRef.current);
-          }
+          setIsVisible(true);
+          observer.unobserve(el);
+          observer.disconnect();
         }
       },
       {
-        threshold: 0.18,
-        rootMargin: '0px 0px -50px 0px'
+        threshold,
+        rootMargin
       }
     );
 
-    const el = itemRef.current;
-    if (el) {
-      observer.observe(el);
-    }
+    observer.observe(el);
 
     return () => {
-      if (el) {
-        observer.unobserve(el);
-      }
+      observer.disconnect();
     };
-  }, [isSectionRevealed, standalone]);
+  }, [autoAnimate, threshold, rootMargin]);
 
-  const isVisible = isSectionRevealed || selfRevealed;
+  // Se o usuário tiver preferência ativa por redução de movimento, renderiza estático sem animação
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return (
+      <div ref={itemRef} className={className}>
+        {children}
+      </div>
+    );
+  }
 
   const getTransform = () => {
     if (isVisible) {
@@ -165,13 +117,13 @@ export const RevealItem: React.FC<RevealItemProps> = ({
     const scaleStr = scale ? ' scale(0.96)' : '';
     switch (direction) {
       case 'up':
-        return `translate3d(0, ${distancePx}px, 0)${scaleStr}`;
+        return `translate3d(0, ${effectiveDistance}px, 0)${scaleStr}`;
       case 'down':
-        return `translate3d(0, -${distancePx}px, 0)${scaleStr}`;
+        return `translate3d(0, -${effectiveDistance}px, 0)${scaleStr}`;
       case 'left':
-        return `translate3d(${distancePx}px, 0, 0)${scaleStr}`;
+        return `translate3d(${effectiveDistance}px, 0, 0)${scaleStr}`;
       case 'right':
-        return `translate3d(-${distancePx}px, 0, 0)${scaleStr}`;
+        return `translate3d(-${effectiveDistance}px, 0, 0)${scaleStr}`;
       case 'none':
       default:
         return scale ? 'scale(0.96)' : 'none';
@@ -194,6 +146,5 @@ export const RevealItem: React.FC<RevealItemProps> = ({
   );
 };
 
-// Compatibilidade retroativa
+// Alias de retrocompatibilidade
 export const RevealOnScroll = RevealItem;
-

@@ -245,97 +245,109 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-4xl mx-auto text-center space-y-6">
             {/* Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-semibold shadow-xs">
-              <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-              <span>SaaS Especializado em Saúde • Web & Desktop</span>
-            </div>
+            <RevealItem autoAnimate delayMs={0}>
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-semibold shadow-xs">
+                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                <span>SaaS Especializado em Saúde • Web & Desktop</span>
+              </div>
+            </RevealItem>
 
             {/* Título Principal */}
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-950 leading-[1.15]">
-              Um sistema.{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600">
-                Toda a sua clínica.
-              </span>{' '}
-              <br className="hidden sm:inline" />
-              Uma experiência feita para a sua profissão.
-            </h1>
+            <RevealItem autoAnimate delayMs={90}>
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-950 leading-[1.15]">
+                Um sistema.{' '}
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600">
+                  Toda a sua clínica.
+                </span>{' '}
+                <br className="hidden sm:inline" />
+                Uma experiência feita para a sua profissão.
+              </h1>
+            </RevealItem>
 
             {/* Subtítulo */}
-            <p className="text-base sm:text-xl text-slate-600 font-normal leading-relaxed max-w-3xl mx-auto">
-              Gestão, prontuário, agenda, financeiro e ferramentas clínicas especializadas em uma única plataforma.
-            </p>
+            <RevealItem autoAnimate delayMs={180}>
+              <p className="text-base sm:text-xl text-slate-600 font-normal leading-relaxed max-w-3xl mx-auto">
+                Gestão, prontuário, agenda, financeiro e ferramentas clínicas especializadas em uma única plataforma.
+              </p>
+            </RevealItem>
 
             {/* Botões de Ação */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-              <button
-                type="button"
-                onClick={onRegisterClinic}
-                className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-lg shadow-teal-600/25 hover:shadow-xl hover:shadow-teal-600/35 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>Começar agora</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+            <RevealItem autoAnimate delayMs={270}>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
+                <button
+                  type="button"
+                  onClick={onRegisterClinic}
+                  className="w-full sm:w-auto px-8 py-4 text-sm font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-lg shadow-teal-600/25 hover:shadow-xl hover:shadow-teal-600/35 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>Começar agora</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
 
-              <button
-                type="button"
-                onClick={() => scrollToSection('funcionalidades')}
-                className="w-full sm:w-auto px-8 py-4 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl shadow-xs hover:border-slate-300 transition-all cursor-pointer"
-              >
-                Ver funcionalidades
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('funcionalidades')}
+                  className="w-full sm:w-auto px-8 py-4 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl shadow-xs hover:border-slate-300 transition-all cursor-pointer"
+                >
+                  Ver funcionalidades
+                </button>
+              </div>
+            </RevealItem>
 
             {/* Badges de Confiança */}
-            <div className="pt-6 flex flex-wrap items-center justify-center gap-y-2 gap-x-6 text-xs font-semibold text-slate-600">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                Fácil de usar
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                Seguro e confiável
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                Suporte humanizado
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                Mais tempo para seus pacientes
-              </span>
-            </div>
+            <RevealItem autoAnimate delayMs={360}>
+              <div className="pt-6 flex flex-wrap items-center justify-center gap-y-2 gap-x-6 text-xs font-semibold text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                  Fácil de usar
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                  Seguro e confiável
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                  Suporte humanizado
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                  Mais tempo para seus pacientes
+                </span>
+              </div>
+            </RevealItem>
           </div>
 
           {/* Realistic Desktop / Laptop Mockup Frame (NO mobile/cellphone!) */}
           <div className="mt-14 max-w-5xl mx-auto">
-            <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200/90 via-slate-100 to-slate-200/60 shadow-2xl shadow-slate-300/60 border border-slate-300/80">
-              {/* Laptop Screen Bezel */}
-              <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
-                {/* Top Camera Notch / Bar */}
-                <div className="h-6 bg-slate-900/95 flex items-center justify-center px-4 border-b border-slate-800 relative">
-                  <div className="flex items-center gap-1.5 absolute left-4">
-                    <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+            <RevealItem autoAnimate delayMs={220} scale distancePx={40}>
+              <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200/90 via-slate-100 to-slate-200/60 shadow-2xl shadow-slate-300/60 border border-slate-300/80">
+                {/* Laptop Screen Bezel */}
+                <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
+                  {/* Top Camera Notch / Bar */}
+                  <div className="h-6 bg-slate-900/95 flex items-center justify-center px-4 border-b border-slate-800 relative">
+                    <div className="flex items-center gap-1.5 absolute left-4">
+                      <div className="w-2.5 h-2.5 rounded-full bg-rose-500/80" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
+                    </div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700" />
                   </div>
-                  <div className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700" />
+
+                  {/* Dashboard Image Display */}
+                  <div className="relative bg-white aspect-[16/10] sm:aspect-[16/9.5] overflow-hidden">
+                    <img
+                      src="/landing/gestao-completa-mockup.jpg"
+                      alt="Zemda Dashboard Desktop"
+                      className="w-full h-full object-cover object-top"
+                    />
+                  </div>
                 </div>
 
-                {/* Dashboard Image Display */}
-                <div className="relative bg-white aspect-[16/10] sm:aspect-[16/9.5] overflow-hidden">
-                  <img
-                    src="/landing/gestao-completa-mockup.jpg"
-                    alt="Zemda Dashboard Desktop"
-                    className="w-full h-full object-cover object-top"
-                  />
+                {/* Laptop Base Stand / Hinge */}
+                <div className="h-3 sm:h-4 bg-gradient-to-b from-slate-300 to-slate-400 rounded-b-2xl mx-12 sm:mx-20 shadow-md flex items-center justify-center">
+                  <div className="w-16 sm:w-24 h-1 bg-slate-400/80 rounded-full" />
                 </div>
               </div>
-
-              {/* Laptop Base Stand / Hinge */}
-              <div className="h-3 sm:h-4 bg-gradient-to-b from-slate-300 to-slate-400 rounded-b-2xl mx-12 sm:mx-20 shadow-md flex items-center justify-center">
-                <div className="w-16 sm:w-24 h-1 bg-slate-400/80 rounded-full" />
-              </div>
-            </div>
+            </RevealItem>
           </div>
         </div>
       </section>
@@ -354,14 +366,14 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
               </h2>
             </RevealItem>
 
-            <RevealItem delayMs={80}>
+            <RevealItem delayMs={60}>
               <p className="text-base text-slate-600 leading-relaxed">
                 Soluções personalizadas para diferentes áreas da saúde, com as ferramentas que você realmente precisa.
               </p>
             </RevealItem>
 
             {/* Badges de Destaque */}
-            <RevealItem delayMs={140}>
+            <RevealItem delayMs={120}>
               <div className="pt-2 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
                 <span className="px-3.5 py-1.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/70 flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5 text-teal-600" />
@@ -387,7 +399,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
               return (
                 <RevealItem
                   key={area.id}
-                  delayMs={180 + idx * 80}
+                  delayMs={(idx % 4) * 80}
                   scale
                   className="h-full"
                 >
@@ -439,7 +451,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </div>
 
           {/* Destaque Obrigatório: Regra de Plano e Profissão */}
-          <RevealItem delayMs={840} scale>
+          <RevealItem delayMs={0} scale>
             <div className="max-w-3xl mx-auto rounded-2xl bg-gradient-to-r from-teal-50 via-emerald-50/50 to-teal-50 border border-teal-200/70 p-5 text-center shadow-xs">
               <p className="text-sm sm:text-base font-bold text-teal-950">
                 O plano define a quantidade de acessos e a profissão de cada usuário define o módulo liberado.
@@ -451,7 +463,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </RevealItem>
 
           {/* Slogan Inferior */}
-          <RevealItem delayMs={920}>
+          <RevealItem delayMs={0}>
             <div className="text-center pt-4">
               <p className="text-xs uppercase tracking-widest font-bold text-slate-400">
                 Diferentes profissões. A mesma essência. Mais saúde para todos.
@@ -497,7 +509,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 .map((feature, idx) => {
                   const IconComp = feature.icon;
                   return (
-                    <RevealItem key={idx} delayMs={180 + idx * 80}>
+                    <RevealItem key={idx} delayMs={idx * 80}>
                       <div
                         className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:border-teal-300 hover:shadow-md transition-all space-y-2 group"
                       >
@@ -520,7 +532,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
 
             {/* Centro: Laptop Mockup Desktop */}
             <div className="lg:col-span-6">
-              <RevealItem delayMs={240} scale>
+              <RevealItem delayMs={120} scale distancePx={40}>
                 <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200 via-slate-100 to-slate-200/80 shadow-2xl shadow-teal-900/10 border border-slate-300/80">
                   <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
                     {/* Top Laptop Bezel Bar */}
@@ -553,7 +565,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 .map((feature, idx) => {
                   const IconComp = feature.icon;
                   return (
-                    <RevealItem key={idx} delayMs={180 + idx * 80}>
+                    <RevealItem key={idx} delayMs={idx * 80}>
                       <div
                         className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:border-teal-300 hover:shadow-md transition-all space-y-2 group"
                       >
@@ -576,7 +588,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </div>
 
           {/* CTA & Badges da Seção */}
-          <RevealItem delayMs={540} scale>
+          <RevealItem delayMs={0} scale>
             <div className="text-center space-y-4 pt-4">
               <button
                 type="button"
@@ -634,7 +646,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 </h2>
               </RevealItem>
 
-              <RevealItem delayMs={80}>
+              <RevealItem delayMs={60}>
                 <p className="text-base text-slate-600 leading-relaxed">
                   Avaliação corporal completa, de forma simples e visual. Registre, acompanhe e mostre a evolução dos seus pacientes com o ZemdaBody.
                 </p>
@@ -642,7 +654,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
 
               <div className="space-y-4 pt-4">
                 {/* 1. Mapas corporais interativos */}
-                <RevealItem delayMs={160}>
+                <RevealItem delayMs={0}>
                   <div className="flex items-start gap-3.5">
                     <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
                       <Crosshair className="w-5 h-5" />
@@ -659,7 +671,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 </RevealItem>
 
                 {/* 2. Histórico e evolução */}
-                <RevealItem delayMs={240}>
+                <RevealItem delayMs={80}>
                   <div className="flex items-start gap-3.5">
                     <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
                       <Activity className="w-5 h-5" />
@@ -676,7 +688,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 </RevealItem>
 
                 {/* 3. Acompanhamento do paciente */}
-                <RevealItem delayMs={320}>
+                <RevealItem delayMs={160}>
                   <div className="flex items-start gap-3.5">
                     <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
                       <FileText className="w-5 h-5" />
@@ -693,7 +705,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 </RevealItem>
 
                 {/* 4. Recursos para diferentes áreas */}
-                <RevealItem delayMs={400}>
+                <RevealItem delayMs={240}>
                   <div className="flex items-start gap-3.5">
                     <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
                       <Award className="w-5 h-5" />
@@ -711,7 +723,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
               </div>
 
               {/* Botão & Badges */}
-              <RevealItem delayMs={480} scale>
+              <RevealItem delayMs={0} scale>
                 <div className="pt-6 space-y-4">
                   <button
                     type="button"
@@ -742,7 +754,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
 
             {/* Desktop Mockup do ZemdaBody (Notebook / Desktop) */}
             <div className="lg:col-span-7">
-              <RevealItem delayMs={240} scale>
+              <RevealItem delayMs={120} scale distancePx={40}>
                 <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200 via-slate-100 to-slate-200/80 shadow-2xl shadow-teal-950/10 border border-slate-300/80">
                   <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
                     {/* Top Bar */}
@@ -768,7 +780,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
               </RevealItem>
 
               {/* Card Destaque Inferior */}
-              <RevealItem delayMs={450} scale>
+              <RevealItem delayMs={0} scale>
                 <div className="mt-6 bg-white border border-teal-100 rounded-2xl p-4 shadow-sm flex items-center gap-4 max-w-lg mx-auto">
                   <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0 border border-teal-200/50">
                     <Heart className="w-5 h-5" />
@@ -810,7 +822,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </RevealItem>
 
           {/* Banner: Todos os planos incluem */}
-          <RevealItem delayMs={120} scale>
+          <RevealItem delayMs={0} scale>
             <div className="max-w-5xl mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-teal-200/80 shadow-xs space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -850,7 +862,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           {/* Cards dos 3 Planos */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto items-stretch">
             {/* PLANO 1: Zemda Solo */}
-            <RevealItem delayMs={200} scale className="h-full flex flex-col">
+            <RevealItem delayMs={0} scale className="h-full flex flex-col">
               <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-8 h-full">
                 <div className="space-y-6">
                   <div>
@@ -908,7 +920,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
             </RevealItem>
 
             {/* PLANO 2: Zemda Equipe (MAIS ESCOLHIDO) */}
-            <RevealItem delayMs={290} scale className="h-full flex flex-col z-10">
+            <RevealItem delayMs={80} scale className="h-full flex flex-col z-10">
               <div className="relative bg-white rounded-3xl p-8 border-2 border-teal-500 shadow-xl shadow-teal-600/10 hover:shadow-2xl hover:shadow-teal-600/15 transition-all flex flex-col justify-between space-y-8 h-full scale-[1.02] sm:scale-105">
                 {/* Badge Mais Escolhido */}
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[11px] font-black uppercase tracking-wider rounded-full shadow-md">
@@ -972,7 +984,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
             </RevealItem>
 
             {/* PLANO 3: Zemda Clínica */}
-            <RevealItem delayMs={380} scale className="h-full flex flex-col">
+            <RevealItem delayMs={160} scale className="h-full flex flex-col">
               <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-8 h-full">
                 <div className="space-y-6">
                   <div>
@@ -1031,7 +1043,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </div>
 
           {/* Destaque Obrigatório de Planos */}
-          <RevealItem delayMs={460} scale>
+          <RevealItem delayMs={0} scale>
             <div className="max-w-3xl mx-auto rounded-2xl bg-white border border-teal-200/70 p-5 text-center shadow-xs">
               <p className="text-sm sm:text-base font-bold text-teal-950">
                 O plano define a quantidade de acessos. A profissão de cada usuário define o módulo especializado liberado automaticamente.
@@ -1067,7 +1079,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           {/* 3 Passos Explicativos */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Passo 1 */}
-            <RevealItem delayMs={120} scale className="h-full">
+            <RevealItem delayMs={0} scale className="h-full">
               <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   1
@@ -1082,7 +1094,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
             </RevealItem>
 
             {/* Passo 2 */}
-            <RevealItem delayMs={210} scale className="h-full">
+            <RevealItem delayMs={80} scale className="h-full">
               <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   2
@@ -1097,7 +1109,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
             </RevealItem>
 
             {/* Passo 3 */}
-            <RevealItem delayMs={300} scale className="h-full">
+            <RevealItem delayMs={160} scale className="h-full">
               <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   3
@@ -1138,7 +1150,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
             {faqItems.map((item, index) => {
               const isOpen = openFaqIndex === index;
               return (
-                <RevealItem key={index} delayMs={100 + Math.min(index * 70, 350)}>
+                <RevealItem key={index} delayMs={(index % 4) * 70}>
                   <div
                     className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden transition-all"
                   >

@@ -7,6 +7,7 @@ import { hashPassword } from '../utils/password';
 import { logAudit } from '../middlewares/audit.middleware';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
+import { resolveProfessionModule, cleanPracticeAreasForNewProfession } from '../utils/profession-module';
 
 export class ProfessionalController {
   static list(req: Request, res: Response): void {
@@ -305,33 +306,60 @@ export class ProfessionalController {
         const newProfRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(professionId) as any;
         const newProfName = newProfRow?.name || '';
         const newProfSlug = newProfRow?.slug || '';
-        const combinedText = [professionId, newProfName, newProfSlug, practiceAreas || currentProf.practice_areas].filter(Boolean).join(' ').toLowerCase();
 
-        const isPhysio = combinedText.includes('fisio') || combinedText.includes('physio');
-        const isDentist = combinedText.includes('odonto') || combinedText.includes('dentis') || combinedText.includes('cro');
-        const isNutri = combinedText.includes('nutri') || combinedText.includes('crn') || combinedText.includes('diet');
-        const isTO = combinedText.includes('terapia ocupacional') || combinedText.includes('terapeuta ocupacional') || combinedText.includes('ocupacional');
-        const isFono = combinedText.includes('fono') || combinedText.includes('crfa');
-        const isPP = professionId === 'prof-psicopedagogo' || combinedText.includes('psicopedago') || combinedText.includes('abpp');
+        // Resolução centralizada com exclusividade mútua (apenas 1 módulo ativo, 7 inativos)
+        const { module: targetModule, flags } = resolveProfessionModule({
+          id: professionId,
+          name: newProfName,
+          slug: newProfSlug,
+          registrationType: registrationType || currentProf.registration_type
+        });
 
-        const fEnabled = isPhysio ? 1 : 0;
-        const oEnabled = isDentist ? 1 : 0;
-        const nEnabled = isNutri ? 1 : 0;
-        const toEnabled = isTO ? 1 : 0;
-        const foEnabled = isFono ? 1 : 0;
-        const ppEnabled = isPP ? 1 : 0;
+        // Limpa especialidade incompatível com a nova profissão
+        let finalSpecialtyId: string | null = null;
+        let finalCustomSpec: string | null = null;
+        if (specialtyId) {
+          const validSpec = db.prepare('SELECT id FROM specialties WHERE id = ? AND (profession_id = ? OR professionId = ?)').get(specialtyId, professionId, professionId);
+          if (validSpec) {
+            finalSpecialtyId = specialtyId;
+            finalCustomSpec = customSpec;
+          }
+        }
 
-        // Atualiza sinalizadores de módulo no registro do profissional
+        // Limpa practice_areas para não reter palavras-chave da profissão anterior
+        const rawAreas = practiceAreas !== undefined ? practiceAreas : currentProf.practice_areas;
+        const finalPracticeAreas = cleanPracticeAreasForNewProfession(professionId, rawAreas);
+
+        // Atualiza sinalizadores de módulo e dados higienizados no registro do profissional
         db.prepare(`
           UPDATE professionals SET
+            specialty_id = ?,
+            specialty_custom = ?,
+            practice_areas = ?,
             zemda_fisio_enabled = ?,
             zemda_odonto_enabled = ?,
             zemda_nutri_enabled = ?,
             zemda_to_enabled = ?,
             zemda_fono_enabled = ?,
-            zemda_pp_enabled = ?
+            zemda_pp_enabled = ?,
+            zemda_psico_enabled = ?,
+            zemda_personal_enabled = ?
           WHERE id = ? AND tenant_id = ?
-        `).run(fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, ppEnabled, id, tenantId);
+        `).run(
+          finalSpecialtyId,
+          finalCustomSpec,
+          finalPracticeAreas,
+          flags.zemda_fisio_enabled,
+          flags.zemda_odonto_enabled,
+          flags.zemda_nutri_enabled,
+          flags.zemda_to_enabled,
+          flags.zemda_fono_enabled,
+          flags.zemda_pp_enabled,
+          flags.zemda_psico_enabled,
+          flags.zemda_personal_enabled,
+          id,
+          tenantId
+        );
 
         if (currentProf.user_id) {
           // Atualiza usuário vinculado
@@ -339,29 +367,80 @@ export class ProfessionalController {
             UPDATE users SET
               profession_id = ?,
               profession_name = ?,
-              practice_areas = COALESCE(?, practice_areas),
+              practice_areas = ?,
               zemda_fisio_enabled = ?,
               zemda_odonto_enabled = ?,
               zemda_nutri_enabled = ?,
               zemda_to_enabled = ?,
               zemda_fono_enabled = ?,
               zemda_pp_enabled = ?,
+              zemda_psico_enabled = ?,
+              zemda_personal_enabled = ?,
               updated_at = datetime('now')
             WHERE id = ?
-          `).run(professionId, newProfName || null, practiceAreas || null, fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, ppEnabled, currentProf.user_id);
+          `).run(
+            professionId,
+            newProfName || null,
+            finalPracticeAreas,
+            flags.zemda_fisio_enabled,
+            flags.zemda_odonto_enabled,
+            flags.zemda_nutri_enabled,
+            flags.zemda_to_enabled,
+            flags.zemda_fono_enabled,
+            flags.zemda_pp_enabled,
+            flags.zemda_psico_enabled,
+            flags.zemda_personal_enabled,
+            currentProf.user_id
+          );
+
+          // Gerencia permissions_json do clinic_users para access_zemda_personal
+          const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(currentProf.user_id, tenantId) as any;
+          let currentPerms: string[] = [];
+          if (cuRow?.permissions_json) {
+            try { currentPerms = JSON.parse(cuRow.permissions_json); } catch {}
+          }
+          if (targetModule === 'ZemdaPersonal') {
+            if (!currentPerms.includes('access_zemda_personal')) {
+              currentPerms.push('access_zemda_personal');
+            }
+          } else {
+            currentPerms = currentPerms.filter((p: string) => p !== 'access_zemda_personal');
+          }
 
           // Atualiza clinic_users
           db.prepare(`
             UPDATE clinic_users SET
+              profession_id = ?,
+              profession_name = ?,
+              profession_custom = ?,
+              practice_areas = ?,
+              permissions_json = ?,
               zemda_fisio_enabled = ?,
               zemda_odonto_enabled = ?,
               zemda_nutri_enabled = ?,
               zemda_to_enabled = ?,
               zemda_fono_enabled = ?,
               zemda_pp_enabled = ?,
-              profession_custom = ?
+              zemda_psico_enabled = ?,
+              zemda_personal_enabled = ?
             WHERE user_id = ? AND tenant_id = ?
-          `).run(fEnabled, oEnabled, nEnabled, toEnabled, foEnabled, ppEnabled, newProfName || null, currentProf.user_id, tenantId);
+          `).run(
+            professionId,
+            newProfName || null,
+            newProfName || null,
+            finalPracticeAreas,
+            JSON.stringify(currentPerms),
+            flags.zemda_fisio_enabled,
+            flags.zemda_odonto_enabled,
+            flags.zemda_nutri_enabled,
+            flags.zemda_to_enabled,
+            flags.zemda_fono_enabled,
+            flags.zemda_pp_enabled,
+            flags.zemda_psico_enabled,
+            flags.zemda_personal_enabled,
+            currentProf.user_id,
+            tenantId
+          );
 
           // Se for gestor, sincroniza tenant
           const cu = db.prepare('SELECT is_manager FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(currentProf.user_id, tenantId) as any;
@@ -369,16 +448,17 @@ export class ProfessionalController {
             db.prepare(`
               UPDATE tenants SET
                 manager_profession = ?,
-                manager_practice_areas = COALESCE(?, manager_practice_areas)
+                manager_practice_areas = ?
               WHERE id = ?
-            `).run(newProfName || null, practiceAreas || null, tenantId);
+            `).run(newProfName || null, finalPracticeAreas, tenantId);
           }
         }
 
         logAudit(req, 'CHANGE_PROFESSION_ONCE', 'professionals', id, {
           oldProfessionId: currentProf.profession_id,
           newProfessionId: professionId,
-          newProfessionName: newProfName
+          newProfessionName: newProfName,
+          targetModule
         });
       }
 

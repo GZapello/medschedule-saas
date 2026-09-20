@@ -1,5 +1,6 @@
 import { completeProfessionalProfile } from './professional-profile';
 import { db } from '../config/database';
+import { resolveProfessionModule } from './profession-module';
 
 export const PRIMARY_CLINICAL_MODULES = [
   'ZemdaFono',
@@ -7,7 +8,9 @@ export const PRIMARY_CLINICAL_MODULES = [
   'ZemdaTO',
   'ZemdaFisio',
   'ZemdaNutri',
-  'ZemdaPP'
+  'ZemdaPsico',
+  'ZemdaPP',
+  'ZemdaPersonal'
 ];
 
 export const isPrimaryClinicalModule = (module?: string | null): boolean =>
@@ -23,21 +26,11 @@ export function resolveClinicalModule(appointment: any, tenantId: any): string |
     const prof = db.prepare(`SELECT p.user_id, p.practice_areas, pr.name, pr.slug, pr.id FROM professionals p
       LEFT JOIN professions pr ON pr.id=p.profession_id WHERE p.id=? AND p.tenant_id=?`)
       .get(appointment.professional_id, tenantId) as any;
-    const profile = prof?.user_id ? completeProfessionalProfile(prof.user_id, tenantId, { profession_name: prof.name, practice_areas: prof.practice_areas }) : null;
-    const text = [prof?.id, prof?.name, prof?.slug, prof?.practice_areas, profile?.profession_name, profile?.practice_areas].filter(Boolean).join(' ').toLowerCase();
-    if (
-      prof?.id === 'prof-psicopedagogo' ||
-      prof?.id === 'prof-psicopedagogia' ||
-      prof?.slug === 'psicopedagogo' ||
-      prof?.slug === 'psicopedagogia' ||
-      text.includes('psicopedag') ||
-      text.includes('abpp')
-    ) return 'ZemdaPP';
-    if (text.includes('fono') || text.includes('crfa')) return 'ZemdaFono';
-    if (text.includes('nutri') || text.includes('crn') || text.includes('diet')) return 'ZemdaNutri';
-    if (text.includes('ocupacional') || text.includes('terapia-ocupacional')) return 'ZemdaTO';
-    if (text.includes('odonto') || text.includes('dentis') || text.includes('cro')) return 'ZemdaOdonto';
-    if (text.includes('fisio') || text.includes('crefito') || text.includes('physio')) return 'ZemdaFisio';
+    
+    // Resolve via função central prioritária
+    const resolved = resolveProfessionModule({ id: prof?.id, name: prof?.name, slug: prof?.slug }).module;
+    if (resolved) return resolved;
+
     if (appointment.clinical_module === 'ZemdaBody') return 'general';
   }
   return appointment.clinical_module === 'ZemdaBody' ? 'general' : null;

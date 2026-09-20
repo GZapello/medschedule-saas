@@ -28,6 +28,8 @@ interface AuthContextType {
   isZemdaTO: boolean;
   isSpeechTherapist: boolean;
   isZemdaFono: boolean;
+  isPsychologist: boolean;
+  isZemdaPsico: boolean;
   isPsychopedagogue: boolean;
   isZemdaPP: boolean;
   isPersonalTrainer: boolean;
@@ -161,158 +163,154 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isProfessional = currentUser?.role === 'professional';
   const isReceptionist = currentUser?.role === 'receptionist';
   const isPatient = currentUser?.role === 'patient';
+  const isEligibleStaff = !isPatient && !isSuperAdmin && (isClinicAdmin || isProfessional);
 
   const profId = ((currentUser as any)?.professionId || '').toLowerCase();
   const profSlug = (currentUser?.professionSlug || '').toLowerCase();
   const profName = (currentUser?.professionName || '').toLowerCase();
-  const practiceAreas = [
-    (currentUser?.practiceAreas || ''),
-    currentUser?.role === 'clinic_admin' ? (currentTenant as any)?.manager_profession || '' : '',
-    currentUser?.role === 'clinic_admin' ? (currentTenant as any)?.manager_practice_areas || '' : ''
-  ].filter(Boolean).join(' ').toLowerCase();
+  const regType = ((currentUser as any)?.registrationType || '').toUpperCase();
 
-  const userPermissions = (currentUser as any)?.permissions || [];
+  const combinedProf = `${profId} ${profName} ${profSlug}`.toLowerCase();
 
-  // Regra Estrita de Acesso ao ZemdaFisio:
-  const hasPhysioArea =
-    profId === 'prof-fisioterapeuta' ||
-    profId === 'prof-fisioterapia' ||
-    profId.includes('fisio') ||
-    profSlug.includes('fisio') ||
-    profName.includes('fisio') ||
-    profSlug.includes('physio') ||
-    profName.includes('physio') ||
-    practiceAreas.includes('fisio') ||
-    practiceAreas.includes('physio');
+  // Dedução estrita do módulo primário ativo baseado na profissão atual
+  let activeModule:
+    | 'ZemdaFono'
+    | 'ZemdaTO'
+    | 'ZemdaNutri'
+    | 'ZemdaPsico'
+    | 'ZemdaPP'
+    | 'ZemdaFisio'
+    | 'ZemdaOdonto'
+    | 'ZemdaPersonal'
+    | null = null;
 
-  const isPhysiotherapist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
-    Boolean(currentUser?.zemdaFisioEnabled || hasPhysioArea);
-  const isZemdaFisio = isPhysiotherapist;
-
-  // Regra Estrita de Acesso ao ZemdaOdonto:
-  const hasOdontoArea =
-    profId === 'prof-dentista' ||
-    profId === 'prof-odontologia' ||
-    profId.includes('odonto') ||
-    profId.includes('dentis') ||
-    profSlug.includes('odonto') ||
-    profSlug.includes('dentis') ||
-    profName.includes('odonto') ||
-    profName.includes('dentis') ||
-    practiceAreas.includes('odonto') ||
-    practiceAreas.includes('dentis') ||
-    practiceAreas.includes('cro');
-
-  const isDentist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
-    Boolean(currentUser?.zemdaOdontoEnabled || hasOdontoArea);
-  const isZemdaOdonto = isDentist;
-
-  // Regra Estrita de Acesso ao ZemdaNutri:
-  const hasNutriArea =
-    profId === 'prof-nutricionista' ||
-    profId === 'prof-nutricao' ||
-    profId.includes('nutri') ||
-    profSlug.includes('nutri') ||
-    profName.includes('nutri') ||
-    practiceAreas.includes('nutri') ||
-    practiceAreas.includes('crn') ||
-    practiceAreas.includes('diet');
-
-  const isNutritionist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
-    Boolean(currentUser?.zemdaNutriEnabled || hasNutriArea);
-  const isZemdaNutri = isNutritionist;
-
-  // Regra Estrita de Acesso ao ZemdaTO (Terapia Ocupacional):
-  const hasTOArea =
-    profId === 'prof-terapeuta-ocupacional' ||
-    profId === 'prof-terapia-ocupacional' ||
-    profId.includes('terapia-ocupacional') ||
-    profId.includes('terapeuta-ocupacional') ||
-    profSlug.includes('ocupacional') ||
-    profSlug.includes('terapia_ocupacional') ||
-    profName.includes('ocupacional') ||
-    practiceAreas.includes('terapia ocupacional') ||
-    practiceAreas.includes('terapeuta ocupacional') ||
-    practiceAreas.includes('ocupacional') ||
-    practiceAreas.includes('terapia-ocupacional');
-
-  const isOccupationalTherapist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
-    Boolean(currentUser?.zemdaToEnabled || hasTOArea);
-  const isZemdaTO = isOccupationalTherapist;
-
-  // Regra Estrita de Acesso ao ZemdaFono (Fonoaudiologia):
-  const hasFonoArea =
-    profId === 'prof-fonoaudiologo' ||
-    profId === 'prof-fonoaudiologia' ||
-    profId.includes('fono') ||
-    profSlug.includes('fono') ||
-    profName.includes('fono') ||
-    practiceAreas.includes('fono') ||
-    practiceAreas.includes('crfa');
-
-  const isSpeechTherapist = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
-    Boolean(currentUser?.zemdaFonoEnabled || hasFonoArea);
-  const isZemdaFono = isSpeechTherapist;
-
-  // Regra Estrita de Acesso ao ZemdaPP (Psicopedagogia):
-  const hasPPArea =
+  if (
     profId === 'prof-psicopedagogo' ||
     profId === 'prof-psicopedagogia' ||
-    profId.includes('psicopedago') ||
-    profSlug.includes('psicopedago') ||
-    profName.includes('psicopedago') ||
-    practiceAreas.includes('psicopedago') ||
-    practiceAreas.includes('abpp');
-
-  const isPsychopedagogue = !isSuperAdmin && (isProfessional || currentUser?.role === 'clinic_admin') &&
-    Boolean(currentUser?.zemdaPPEnabled || hasPPArea);
-  const isZemdaPP = isPsychopedagogue;
-
-  // Regra Estrita de Acesso ao ZemdaPersonal (Exclusivo para Personal Trainer):
-  const isPersonalTrainerId =
+    profSlug === 'psicopedagogo' ||
+    profSlug === 'psicopedagogia' ||
+    combinedProf.includes('psicopedag') ||
+    regType === 'ABPP'
+  ) {
+    activeModule = 'ZemdaPP';
+  } else if (
+    profId === 'prof-psicologo' ||
+    profId === 'prof-psicologia' ||
+    profId === 'prof-neuropsicologo' ||
+    profId === 'prof-psicanalista' ||
+    profId === 'prof-terapeuta-familiar' ||
+    profSlug === 'psicologo' ||
+    profSlug === 'psicologia' ||
+    profSlug === 'neuropsicologo' ||
+    profSlug === 'psicanalista' ||
+    combinedProf.includes('psicólog') ||
+    combinedProf.includes('psicolog') ||
+    combinedProf.includes('neuropsicól') ||
+    combinedProf.includes('neuropsicol') ||
+    combinedProf.includes('psicanal') ||
+    regType === 'CRP'
+  ) {
+    activeModule = 'ZemdaPsico';
+  } else if (
+    profId === 'prof-fonoaudiologo' ||
+    profId === 'prof-fonoaudiologia' ||
+    profSlug === 'fonoaudiologo' ||
+    profSlug === 'fonoaudiologia' ||
+    combinedProf.includes('fono') ||
+    regType === 'CRFA'
+  ) {
+    activeModule = 'ZemdaFono';
+  } else if (
+    profId === 'prof-terapeuta-ocupacional' ||
+    profId === 'prof-terapia-ocupacional' ||
+    profSlug === 'terapeuta-ocupacional' ||
+    profSlug === 'terapia-ocupacional' ||
+    combinedProf.includes('ocupacional') ||
+    combinedProf.includes('terapia ocupacional') ||
+    combinedProf.includes('terapeuta ocupacional')
+  ) {
+    activeModule = 'ZemdaTO';
+  } else if (
+    profId === 'prof-nutricionista' ||
+    profId === 'prof-nutricao' ||
+    profSlug === 'nutricionista' ||
+    profSlug === 'nutricao' ||
+    combinedProf.includes('nutri') ||
+    regType === 'CRN'
+  ) {
+    activeModule = 'ZemdaNutri';
+  } else if (
+    profId === 'prof-fisioterapeuta' ||
+    profId === 'prof-fisioterapia' ||
+    profSlug === 'fisioterapeuta' ||
+    profSlug === 'fisioterapia' ||
+    combinedProf.includes('fisio') ||
+    combinedProf.includes('physio')
+  ) {
+    activeModule = 'ZemdaFisio';
+  } else if (
+    profId === 'prof-dentista' ||
+    profId === 'prof-odontologia' ||
+    profSlug === 'dentista' ||
+    profSlug === 'odontologia' ||
+    combinedProf.includes('odonto') ||
+    combinedProf.includes('dentis') ||
+    regType === 'CRO'
+  ) {
+    activeModule = 'ZemdaOdonto';
+  } else if (
     profId === 'prof-personal-trainer' ||
     profId === 'prof-educacao-fisica' ||
     profId === 'prof-educador-fisico' ||
     profId === 'personal_trainer' ||
-    profId.includes('personal') ||
-    (currentUser as any)?.registrationType === 'CREF';
+    profSlug === 'personal-trainer' ||
+    profSlug === 'educacao-fisica' ||
+    combinedProf.includes('personal') ||
+    combinedProf.includes('educação física') ||
+    combinedProf.includes('educacao fisica') ||
+    regType === 'CREF'
+  ) {
+    activeModule = 'ZemdaPersonal';
+  }
 
-  const hasPersonalArea =
-    isPersonalTrainerId ||
-    profSlug.includes('personal') ||
-    profName.includes('personal') ||
-    practiceAreas.includes('personal trainer') ||
-    practiceAreas.includes('educação física') ||
-    practiceAreas.includes('educacao fisica') ||
-    practiceAreas.includes('cref');
+  const userPermissions = (currentUser as any)?.permissions || [];
 
-  const hasConflictingProfession =
-    hasPhysioArea || hasOdontoArea || hasNutriArea || hasTOArea || hasFonoArea ||
-    profId === 'prof-medico' || profId === 'prof-psicologo' || profId === 'prof-psiquiatra' ||
-    profName.includes('médic') || profName.includes('psicól') ||
-    (profId && !isPersonalTrainerId && !profId.includes('personal') && !profId.includes('educa'));
+  // Módulos com exclusividade mútua (apenas o módulo correspondente à profissão atual fica ativo)
+  const isPhysiotherapist = isEligibleStaff && (activeModule === 'ZemdaFisio' || (activeModule === null && Boolean(currentUser?.zemdaFisioEnabled)));
+  const isZemdaFisio = isPhysiotherapist;
 
-  const isStrictPersonalTrainer = hasPersonalArea && !hasConflictingProfession;
+  const isDentist = isEligibleStaff && (activeModule === 'ZemdaOdonto' || (activeModule === null && Boolean(currentUser?.zemdaOdontoEnabled)));
+  const isZemdaOdonto = isDentist;
 
-  const hasPersonalPermission =
+  const isNutritionist = isEligibleStaff && (activeModule === 'ZemdaNutri' || (activeModule === null && Boolean(currentUser?.zemdaNutriEnabled)));
+  const isZemdaNutri = isNutritionist;
+
+  const isOccupationalTherapist = isEligibleStaff && (activeModule === 'ZemdaTO' || (activeModule === null && Boolean(currentUser?.zemdaToEnabled)));
+  const isZemdaTO = isOccupationalTherapist;
+
+  const isSpeechTherapist = isEligibleStaff && (activeModule === 'ZemdaFono' || (activeModule === null && Boolean(currentUser?.zemdaFonoEnabled)));
+  const isZemdaFono = isSpeechTherapist;
+
+  const isPsychologist = isEligibleStaff && (activeModule === 'ZemdaPsico' || (activeModule === null && Boolean((currentUser as any)?.zemdaPsicoEnabled)));
+  const isZemdaPsico = isPsychologist;
+
+  const isPsychopedagogue = isEligibleStaff && (activeModule === 'ZemdaPP' || (activeModule === null && Boolean(currentUser?.zemdaPPEnabled)));
+  const isZemdaPP = isPsychopedagogue;
+
+  const isPersonalTrainer = isEligibleStaff && activeModule === 'ZemdaPersonal' && (
+    currentUser?.role === 'clinic_admin' ||
     userPermissions.includes('access_zemda_personal') ||
-    Boolean((currentUser as any)?.zemdaPersonalEnabled);
+    Boolean((currentUser as any)?.zemdaPersonalEnabled)
+  );
+  const isZemdaPersonal = isPersonalTrainer;
 
-  const isPersonalTrainer = !isSuperAdmin && isStrictPersonalTrainer;
-
-  // ZemdaBody: módulo complementar universal para todos os profissionais clínicos e administradores de clínica
-  const isZemdaBody = !isPatient && !isSuperAdmin && (
+  // ZemdaBody: Módulo complementar universal para TODOS os profissionais clínicos e gestores
+  const isZemdaBody = isEligibleStaff && (
     isClinicAdmin ||
     isProfessional ||
     userPermissions.includes('access_zemda_body') ||
     Boolean((currentUser as any)?.zemdaBodyEnabled) ||
     Boolean((currentUser as any)?.zemda_body_enabled)
-  );
-
-  // ZemdaPersonal: Profissão = Personal Trainer + permissão ativa → liberar ZemdaPersonal. Outra profissão → não exibir e não permitir acesso
-  const isZemdaPersonal = !isSuperAdmin && (
-    (isStrictPersonalTrainer && (currentUser?.role === 'clinic_admin' || hasPersonalPermission)) ||
-    (currentUser?.role === 'clinic_admin' && !hasConflictingProfession && Boolean((currentUser as any)?.zemdaPersonalEnabled || hasPersonalPermission))
   );
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
@@ -345,6 +343,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaTO,
         isSpeechTherapist,
         isZemdaFono,
+        isPsychologist,
+        isZemdaPsico,
         isPsychopedagogue,
         isZemdaPP,
         isPersonalTrainer,

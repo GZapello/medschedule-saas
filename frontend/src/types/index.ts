@@ -32,6 +32,9 @@ export interface User {
   zemdaToEnabled?: boolean;
   zemdaFonoEnabled?: boolean;
   zemdaPPEnabled?: boolean;
+  zemdaPsicoEnabled?: boolean;
+  zemdaPersonalEnabled?: boolean;
+  zemdaBodyEnabled?: boolean;
   permissions?: string[];
 }
 

@@ -255,6 +255,20 @@ export function initializeDatabase(): void {
     addColIfMissing('clinic_users', 'zemda_pp_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('users', 'zemda_pp_enabled', 'INTEGER DEFAULT 0');
 
+    // Módulo ZemdaPsico (Psicologia Clínica)
+    addColIfMissing('professionals', 'zemda_psico_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_psico_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_psico_enabled', 'INTEGER DEFAULT 0');
+
+    // Módulo ZemdaPersonal (Personal Trainer / Educação Física)
+    addColIfMissing('professionals', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
+    addColIfMissing('clinic_users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
+
+    // Sincronização de profissão em clinic_users
+    addColIfMissing('clinic_users', 'profession_id', 'TEXT');
+    addColIfMissing('clinic_users', 'profession_name', 'TEXT');
+
     // Alteração de profissão única durante o ciclo de vida da conta
     addColIfMissing('professionals', 'profession_change_used', 'INTEGER DEFAULT 0');
     addColIfMissing('professionals', 'profession_changed_at', 'TEXT');
