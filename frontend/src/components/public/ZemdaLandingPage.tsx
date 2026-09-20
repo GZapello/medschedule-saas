@@ -243,15 +243,17 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[550px] bg-gradient-to-b from-teal-50/70 via-emerald-50/40 to-transparent blur-3xl -z-10 pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <RevealOnScroll>
-            <div className="max-w-4xl mx-auto text-center space-y-6">
-              {/* Pill Badge */}
+          <div className="max-w-4xl mx-auto text-center space-y-6">
+            {/* Pill Badge */}
+            <RevealOnScroll delayMs={50}>
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-semibold shadow-xs">
                 <Sparkles className="w-3.5 h-3.5 text-teal-600" />
                 <span>SaaS Especializado em Saúde • Web & Desktop</span>
               </div>
+            </RevealOnScroll>
 
-              {/* Título Principal */}
+            {/* Título Principal */}
+            <RevealOnScroll delayMs={120}>
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-950 leading-[1.15]">
                 Um sistema.{' '}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600">
@@ -260,13 +262,17 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 <br className="hidden sm:inline" />
                 Uma experiência feita para a sua profissão.
               </h1>
+            </RevealOnScroll>
 
-              {/* Subtítulo */}
+            {/* Subtítulo */}
+            <RevealOnScroll delayMs={180}>
               <p className="text-base sm:text-xl text-slate-600 font-normal leading-relaxed max-w-3xl mx-auto">
                 Gestão, prontuário, agenda, financeiro e ferramentas clínicas especializadas em uma única plataforma.
               </p>
+            </RevealOnScroll>
 
-              {/* Botões de Ação */}
+            {/* Botões de Ação */}
+            <RevealOnScroll delayMs={240} scale>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
                 <button
                   type="button"
@@ -285,8 +291,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Ver funcionalidades
                 </button>
               </div>
+            </RevealOnScroll>
 
-              {/* Badges de Confiança */}
+            {/* Badges de Confiança */}
+            <RevealOnScroll delayMs={300}>
               <div className="pt-6 flex flex-wrap items-center justify-center gap-y-2 gap-x-6 text-xs font-semibold text-slate-600">
                 <span className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-teal-600" />
@@ -305,11 +313,11 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Mais tempo para seus pacientes
                 </span>
               </div>
-            </div>
-          </RevealOnScroll>
+            </RevealOnScroll>
+          </div>
 
           {/* Realistic Desktop / Laptop Mockup Frame (NO mobile/cellphone!) */}
-          <RevealOnScroll delayMs={150}>
+          <RevealOnScroll delayMs={200} scale>
             <div className="mt-14 max-w-5xl mx-auto">
               <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200/90 via-slate-100 to-slate-200/60 shadow-2xl shadow-slate-300/60 border border-slate-300/80">
                 {/* Laptop Screen Bezel */}
@@ -379,62 +387,66 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </RevealOnScroll>
 
           {/* Grid de Cards das 8 Áreas Profissionais */}
-          <RevealOnScroll delayMs={100}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {professionalAreas.map(area => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {professionalAreas.map((area, idx) => {
               const IconComp = area.icon;
               const cardHref = area.id === 'body' ? '/#zemdabody' : `/${area.seoSlug}`;
               return (
-                <a
+                <RevealOnScroll
                   key={area.id}
-                  href={cardHref}
-                  onClick={(e) => {
-                    if (area.id === 'body') {
-                      e.preventDefault();
-                      scrollToSection('zemdabody');
-                    } else if (onNavigateSeoPage) {
-                      e.preventDefault();
-                      onNavigateSeoPage(area.seoSlug);
-                    }
-                  }}
-                  className="group relative bg-white border border-slate-200/80 hover:border-teal-400/80 rounded-3xl p-6 shadow-xs hover:shadow-xl hover:shadow-teal-600/5 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between"
+                  delayMs={Math.min(idx * 60, 450)}
+                  scale
+                  className="h-full"
                 >
-                  <div className="space-y-4">
-                    {/* Icon Box */}
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-transform group-hover:scale-110 ${area.color}`}>
-                      <IconComp className="w-6 h-6" />
-                    </div>
+                  <a
+                    href={cardHref}
+                    onClick={(e) => {
+                      if (area.id === 'body') {
+                        e.preventDefault();
+                        scrollToSection('zemdabody');
+                      } else if (onNavigateSeoPage) {
+                        e.preventDefault();
+                        onNavigateSeoPage(area.seoSlug);
+                      }
+                    }}
+                    className="group relative bg-white border border-slate-200/80 hover:border-teal-400/80 rounded-3xl p-6 shadow-xs hover:shadow-xl hover:shadow-teal-600/5 hover:-translate-y-1 transition-all duration-300 cursor-pointer flex flex-col justify-between h-full"
+                  >
+                    <div className="space-y-4">
+                      {/* Icon Box */}
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-transform group-hover:scale-110 ${area.color}`}>
+                        <IconComp className="w-6 h-6" />
+                      </div>
 
-                    <div>
-                      <h3 className="text-lg font-black text-slate-900 group-hover:text-teal-700 transition-colors">
-                        {area.brand}
-                      </h3>
-                      <p className="text-xs font-bold text-teal-700 mt-0.5">
-                        {area.area}
+                      <div>
+                        <h3 className="text-lg font-black text-slate-900 group-hover:text-teal-700 transition-colors">
+                          {area.brand}
+                        </h3>
+                        <p className="text-xs font-bold text-teal-700 mt-0.5">
+                          {area.area}
+                        </p>
+                      </div>
+
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        {area.desc}
                       </p>
                     </div>
 
-                    <p className="text-xs text-slate-500 leading-relaxed">
-                      {area.desc}
-                    </p>
-                  </div>
-
-                  <div className="pt-6 flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-slate-400 group-hover:text-teal-600 transition-colors">
-                      Ver recursos
-                    </span>
-                    <div className="w-8 h-8 rounded-full bg-slate-50 group-hover:bg-teal-600 text-slate-400 group-hover:text-white flex items-center justify-center transition-colors">
-                      <ChevronRight className="w-4 h-4" />
+                    <div className="pt-6 flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-400 group-hover:text-teal-600 transition-colors">
+                        Ver recursos
+                      </span>
+                      <div className="w-8 h-8 rounded-full bg-slate-50 group-hover:bg-teal-600 text-slate-400 group-hover:text-white flex items-center justify-center transition-colors">
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
                     </div>
-                  </div>
-                </a>
+                  </a>
+                </RevealOnScroll>
               );
             })}
-            </div>
-          </RevealOnScroll>
+          </div>
 
           {/* Destaque Obrigatório: Regra de Plano e Profissão */}
-          <RevealOnScroll delayMs={150}>
+          <RevealOnScroll delayMs={100} scale>
             <div className="max-w-3xl mx-auto rounded-2xl bg-gradient-to-r from-teal-50 via-emerald-50/50 to-teal-50 border border-teal-200/70 p-5 text-center shadow-xs">
               <p className="text-sm sm:text-base font-bold text-teal-950">
                 O plano define a quantidade de acessos e a profissão de cada usuário define o módulo liberado.
@@ -443,8 +455,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 Diferentes profissões na mesma clínica? Cada membro acessa os recursos específicos de sua área mantendo a gestão unificada.
               </p>
             </div>
+          </RevealOnScroll>
 
-            {/* Slogan Inferior */}
+          {/* Slogan Inferior */}
+          <RevealOnScroll delayMs={150}>
             <div className="text-center pt-4">
               <p className="text-xs uppercase tracking-widest font-bold text-slate-400">
                 Diferentes profissões. A mesma essência. Mais saúde para todos.
@@ -476,59 +490,61 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </RevealOnScroll>
 
           {/* Grid com Laptop Desktop no Centro e Features nas laterais (Como na imagem 1) */}
-          <RevealOnScroll delayMs={100}>
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-              {/* Coluna Esquerda: 4 Features */}
-              <div className="lg:col-span-3 space-y-4">
-                {managementFeatures
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            {/* Coluna Esquerda: 4 Features */}
+            <div className="lg:col-span-3 space-y-4">
+              {managementFeatures
                 .filter(f => f.side === 'left')
                 .map((feature, idx) => {
                   const IconComp = feature.icon;
                   return (
-                    <div
-                      key={idx}
-                      className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:border-teal-300 hover:shadow-md transition-all space-y-2 group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 group-hover:scale-105 transition-transform">
-                          <IconComp className="w-5 h-5" />
+                    <RevealOnScroll key={idx} delayMs={idx * 70}>
+                      <div
+                        className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:border-teal-300 hover:shadow-md transition-all space-y-2 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 group-hover:scale-105 transition-transform">
+                            <IconComp className="w-5 h-5" />
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-900">
+                            {feature.title}
+                          </h4>
                         </div>
-                        <h4 className="text-sm font-bold text-slate-900">
-                          {feature.title}
-                        </h4>
+                        <p className="text-xs text-slate-500 leading-relaxed pl-12">
+                          {feature.desc}
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 leading-relaxed pl-12">
-                        {feature.desc}
-                      </p>
-                    </div>
+                    </RevealOnScroll>
                   );
                 })}
             </div>
 
             {/* Centro: Laptop Mockup Desktop */}
             <div className="lg:col-span-6">
-              <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200 via-slate-100 to-slate-200/80 shadow-2xl shadow-teal-900/10 border border-slate-300/80">
-                <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
-                  {/* Top Laptop Bezel Bar */}
-                  <div className="h-5 bg-slate-900/90 flex items-center justify-center relative px-3">
-                    <div className="w-2 h-2 rounded-full bg-slate-800 border border-slate-700" />
+              <RevealOnScroll delayMs={150} scale>
+                <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200 via-slate-100 to-slate-200/80 shadow-2xl shadow-teal-900/10 border border-slate-300/80">
+                  <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
+                    {/* Top Laptop Bezel Bar */}
+                    <div className="h-5 bg-slate-900/90 flex items-center justify-center relative px-3">
+                      <div className="w-2 h-2 rounded-full bg-slate-800 border border-slate-700" />
+                    </div>
+
+                    {/* Desktop Interface */}
+                    <div className="relative bg-white aspect-[16/10] overflow-hidden">
+                      <img
+                        src="/landing/gestao-completa-mockup.jpg"
+                        alt="Zemda Gestão Completa Desktop"
+                        className="w-full h-full object-cover object-top"
+                      />
+                    </div>
                   </div>
 
-                  {/* Desktop Interface */}
-                  <div className="relative bg-white aspect-[16/10] overflow-hidden">
-                    <img
-                      src="/landing/gestao-completa-mockup.jpg"
-                      alt="Zemda Gestão Completa Desktop"
-                      className="w-full h-full object-cover object-top"
-                    />
+                  {/* Laptop Base Hinge */}
+                  <div className="h-3 bg-gradient-to-b from-slate-300 to-slate-400 rounded-b-2xl mx-16 shadow-md flex items-center justify-center">
+                    <div className="w-20 h-1 bg-slate-400/80 rounded-full" />
                   </div>
                 </div>
-
-                {/* Laptop Base Hinge */}
-                <div className="h-3 bg-gradient-to-b from-slate-300 to-slate-400 rounded-b-2xl mx-16 shadow-md flex items-center justify-center">
-                  <div className="w-20 h-1 bg-slate-400/80 rounded-full" />
-                </div>
-              </div>
+              </RevealOnScroll>
             </div>
 
             {/* Coluna Direita: 4 Features */}
@@ -538,30 +554,30 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 .map((feature, idx) => {
                   const IconComp = feature.icon;
                   return (
-                    <div
-                      key={idx}
-                      className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:border-teal-300 hover:shadow-md transition-all space-y-2 group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 group-hover:scale-105 transition-transform">
-                          <IconComp className="w-5 h-5" />
+                    <RevealOnScroll key={idx} delayMs={idx * 70}>
+                      <div
+                        className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:border-teal-300 hover:shadow-md transition-all space-y-2 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 group-hover:scale-105 transition-transform">
+                            <IconComp className="w-5 h-5" />
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-900">
+                            {feature.title}
+                          </h4>
                         </div>
-                        <h4 className="text-sm font-bold text-slate-900">
-                          {feature.title}
-                        </h4>
+                        <p className="text-xs text-slate-500 leading-relaxed pl-12">
+                          {feature.desc}
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 leading-relaxed pl-12">
-                        {feature.desc}
-                      </p>
-                    </div>
+                    </RevealOnScroll>
                   );
                 })}
-              </div>
             </div>
-          </RevealOnScroll>
+          </div>
 
           {/* CTA & Badges da Seção */}
-          <RevealOnScroll delayMs={150}>
+          <RevealOnScroll delayMs={120} scale>
             <div className="text-center space-y-4 pt-4">
               <button
                 type="button"
@@ -621,9 +637,11 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 <p className="text-base text-slate-600 leading-relaxed mt-2">
                   Avaliação corporal completa, de forma simples e visual. Registre, acompanhe e mostre a evolução dos seus pacientes com o ZemdaBody.
                 </p>
+              </RevealOnScroll>
 
-                <div className="space-y-4 pt-4">
-                  {/* 1. Mapas corporais interativos */}
+              <div className="space-y-4 pt-4">
+                {/* 1. Mapas corporais interativos */}
+                <RevealOnScroll delayMs={60}>
                   <div className="flex items-start gap-3.5">
                     <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
                       <Crosshair className="w-5 h-5" />
@@ -637,8 +655,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                       </p>
                     </div>
                   </div>
+                </RevealOnScroll>
 
-                  {/* 2. Histórico e evolução */}
+                {/* 2. Histórico e evolução */}
+                <RevealOnScroll delayMs={120}>
                   <div className="flex items-start gap-3.5">
                     <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
                       <Activity className="w-5 h-5" />
@@ -652,8 +672,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                       </p>
                     </div>
                   </div>
+                </RevealOnScroll>
 
-                  {/* 3. Acompanhamento do paciente */}
+                {/* 3. Acompanhamento do paciente */}
+                <RevealOnScroll delayMs={180}>
                   <div className="flex items-start gap-3.5">
                     <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
                       <FileText className="w-5 h-5" />
@@ -667,8 +689,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                       </p>
                     </div>
                   </div>
+                </RevealOnScroll>
 
-                  {/* 4. Recursos para diferentes áreas */}
+                {/* 4. Recursos para diferentes áreas */}
+                <RevealOnScroll delayMs={240}>
                   <div className="flex items-start gap-3.5">
                     <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 border border-teal-100 shadow-xs">
                       <Award className="w-5 h-5" />
@@ -682,9 +706,11 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                       </p>
                     </div>
                   </div>
-                </div>
+                </RevealOnScroll>
+              </div>
 
-                {/* Botão & Badges */}
+              {/* Botão & Badges */}
+              <RevealOnScroll delayMs={150} scale>
                 <div className="pt-6 space-y-4">
                   <button
                     type="button"
@@ -715,7 +741,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
 
             {/* Desktop Mockup do ZemdaBody (Notebook / Desktop) */}
             <div className="lg:col-span-7">
-              <RevealOnScroll delayMs={150}>
+              <RevealOnScroll delayMs={150} scale>
                 <div className="relative rounded-3xl p-2 sm:p-3 bg-gradient-to-b from-slate-200 via-slate-100 to-slate-200/80 shadow-2xl shadow-teal-950/10 border border-slate-300/80">
                   <div className="rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner">
                     {/* Top Bar */}
@@ -738,8 +764,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                     <div className="w-20 h-1 bg-slate-400/80 rounded-full" />
                   </div>
                 </div>
+              </RevealOnScroll>
 
-                {/* Card Destaque Inferior */}
+              {/* Card Destaque Inferior */}
+              <RevealOnScroll delayMs={220} scale>
                 <div className="mt-6 bg-white border border-teal-100 rounded-2xl p-4 shadow-sm flex items-center gap-4 max-w-lg mx-auto">
                   <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0 border border-teal-200/50">
                     <Heart className="w-5 h-5" />
@@ -766,240 +794,252 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-14">
           {/* Header da Seção de Planos */}
-          <div className="text-center max-w-3xl mx-auto space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
-              Valores e Assinaturas
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
-              Planos transparentes para cada momento
-            </h2>
-            <p className="text-base text-slate-600 leading-relaxed">
-              Sem taxas ocultas, sem contratos de fidelidade. Cancele quando quiser.
-            </p>
-          </div>
+          <RevealOnScroll>
+            <div className="text-center max-w-3xl mx-auto space-y-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
+                Valores e Assinaturas
+              </span>
+              <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
+                Planos transparentes para cada momento
+              </h2>
+              <p className="text-base text-slate-600 leading-relaxed">
+                Sem taxas ocultas, sem contratos de fidelidade. Cancele quando quiser.
+              </p>
+            </div>
+          </RevealOnScroll>
 
           {/* Banner: Todos os planos incluem */}
-          <div className="max-w-5xl mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-teal-200/80 shadow-xs space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <span className="text-[11px] font-black uppercase tracking-wider text-teal-700 block mb-0.5">
-                  Recursos Globais da Plataforma
+          <RevealOnScroll delayMs={80} scale>
+            <div className="max-w-5xl mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-teal-200/80 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <span className="text-[11px] font-black uppercase tracking-wider text-teal-700 block mb-0.5">
+                    Recursos Globais da Plataforma
+                  </span>
+                  <h3 className="text-base sm:text-xl font-black text-slate-900">
+                    Todos os planos do Zemda incluem:
+                  </h3>
+                </div>
+                <span className="px-3.5 py-1 rounded-xl bg-teal-50 text-teal-800 text-xs font-bold border border-teal-200/60">
+                  9 ferramentas essenciais inclusas
                 </span>
-                <h3 className="text-base sm:text-xl font-black text-slate-900">
-                  Todos os planos do Zemda incluem:
-                </h3>
               </div>
-              <span className="px-3.5 py-1 rounded-xl bg-teal-50 text-teal-800 text-xs font-bold border border-teal-200/60">
-                9 ferramentas essenciais inclusas
-              </span>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-700 font-semibold pt-1">
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agenda Interativa</span></div>
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Prontuário eletrônico</span></div>
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Financeiro</span></div>
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Documentos</span></div>
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Estoque</span></div>
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Equipe e permissões</span></div>
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agendamento online</span></div>
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Inteligência Artificial</span></div>
-              <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>ZemdaBody (Mapa Corporal)</span></div>
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-700 font-semibold pt-1">
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agenda Interativa</span></div>
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Prontuário eletrônico</span></div>
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Financeiro</span></div>
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Documentos</span></div>
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Estoque</span></div>
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Equipe e permissões</span></div>
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agendamento online</span></div>
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Inteligência Artificial</span></div>
+                <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>ZemdaBody (Mapa Corporal)</span></div>
+              </div>
 
-            <div className="p-4 bg-gradient-to-r from-teal-50 via-emerald-50/60 to-teal-50 rounded-2xl border border-teal-200/70 text-xs text-teal-950 flex items-start gap-2.5">
-              <Sparkles className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
-              <span className="leading-relaxed">
-                <strong>Módulo Especializado Automático:</strong> Cada profissional recebe automaticamente seu módulo específico (<strong>ZemdaFono</strong>, <strong>ZemdaPsico</strong>, <strong>ZemdaTO</strong>, <strong>ZemdaNutri</strong>, <strong>ZemdaFisio</strong>, <strong>ZemdaPersonal</strong> ou <strong>ZemdaOdonto</strong>) de acordo com sua profissão cadastrada.
-              </span>
+              <div className="p-4 bg-gradient-to-r from-teal-50 via-emerald-50/60 to-teal-50 rounded-2xl border border-teal-200/70 text-xs text-teal-950 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">
+                  <strong>Módulo Especializado Automático:</strong> Cada profissional recebe automaticamente seu módulo específico (<strong>ZemdaFono</strong>, <strong>ZemdaPsico</strong>, <strong>ZemdaTO</strong>, <strong>ZemdaNutri</strong>, <strong>ZemdaFisio</strong>, <strong>ZemdaPersonal</strong> ou <strong>ZemdaOdonto</strong>) de acordo com sua profissão cadastrada.
+                </span>
+              </div>
             </div>
-          </div>
+          </RevealOnScroll>
 
           {/* Cards dos 3 Planos */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto items-stretch">
             {/* PLANO 1: Zemda Solo */}
-            <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-8">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    Zemda Solo
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Ideal para profissionais autônomos e atendimentos individuais.
-                  </p>
+            <RevealOnScroll delayMs={80} scale className="h-full flex flex-col">
+              <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-8 h-full">
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">
+                      Zemda Solo
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Ideal para profissionais autônomos e atendimentos individuais.
+                    </p>
+                  </div>
+
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-xs font-bold text-slate-500">R$</span>
+                    <span className="text-4xl font-black text-slate-900">69,90</span>
+                    <span className="text-xs text-slate-500 font-medium">/mês</span>
+                  </div>
+
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-800 text-xs font-bold">
+                    <Users className="w-3.5 h-3.5 text-slate-600" />
+                    <span>1 acesso</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 space-y-3 text-xs text-slate-600">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>1 acesso completo ao sistema</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Módulo clínico específico incluso</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>ZemdaBody (Mapa Corporal) liberado</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Agenda Interativa e agendamento online</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Prontuário, Financeiro, Documentos e IA</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs font-bold text-slate-500">R$</span>
-                  <span className="text-4xl font-black text-slate-900">69,90</span>
-                  <span className="text-xs text-slate-500 font-medium">/mês</span>
-                </div>
-
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-800 text-xs font-bold">
-                  <Users className="w-3.5 h-3.5 text-slate-600" />
-                  <span>1 acesso</span>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100 space-y-3 text-xs text-slate-600">
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>1 acesso completo ao sistema</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Módulo clínico específico incluso</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>ZemdaBody (Mapa Corporal) liberado</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Agenda Interativa e agendamento online</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Prontuário, Financeiro, Documentos e IA</span>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={onRegisterClinic}
+                  className="w-full py-3.5 px-4 text-xs font-bold text-slate-700 hover:text-teal-700 bg-slate-100 hover:bg-slate-200/70 rounded-2xl transition-all cursor-pointer"
+                >
+                  Começar agora
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={onRegisterClinic}
-                className="w-full py-3.5 px-4 text-xs font-bold text-slate-700 hover:text-teal-700 bg-slate-100 hover:bg-slate-200/70 rounded-2xl transition-all cursor-pointer"
-              >
-                Começar agora
-              </button>
-            </div>
+            </RevealOnScroll>
 
             {/* PLANO 2: Zemda Equipe (MAIS ESCOLHIDO) */}
-            <div className="relative bg-white rounded-3xl p-8 border-2 border-teal-500 shadow-xl shadow-teal-600/10 hover:shadow-2xl hover:shadow-teal-600/15 transition-all flex flex-col justify-between space-y-8 scale-[1.02] sm:scale-105 z-10">
-              {/* Badge Mais Escolhido */}
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[11px] font-black uppercase tracking-wider rounded-full shadow-md">
-                Mais escolhido
+            <RevealOnScroll delayMs={160} scale className="h-full flex flex-col z-10">
+              <div className="relative bg-white rounded-3xl p-8 border-2 border-teal-500 shadow-xl shadow-teal-600/10 hover:shadow-2xl hover:shadow-teal-600/15 transition-all flex flex-col justify-between space-y-8 h-full scale-[1.02] sm:scale-105">
+                {/* Badge Mais Escolhido */}
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[11px] font-black uppercase tracking-wider rounded-full shadow-md">
+                  Mais escolhido
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">
+                      Zemda Equipe
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Para consultórios e pequenas clínicas em expansão.
+                    </p>
+                  </div>
+
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-xs font-bold text-slate-500">R$</span>
+                    <span className="text-4xl font-black text-teal-700">249,90</span>
+                    <span className="text-xs text-slate-500 font-medium">/mês</span>
+                  </div>
+
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-900 text-xs font-bold border border-teal-200/60">
+                    <Users className="w-3.5 h-3.5 text-teal-600" />
+                    <span>5 acessos</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 space-y-3 text-xs text-slate-600">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Até 5 acessos profissionais e colaboradores</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Módulos liberados pela profissão de cada usuário</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>ZemdaBody (Mapa Corporal) para toda a equipe</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Controle de permissões e gestão de equipe</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Inteligência artificial para resumos e evoluções</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onRegisterClinic}
+                  className="w-full py-4 px-4 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-md shadow-teal-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>Começar agora</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
-
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    Zemda Equipe
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Para consultórios e pequenas clínicas em expansão.
-                  </p>
-                </div>
-
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs font-bold text-slate-500">R$</span>
-                  <span className="text-4xl font-black text-teal-700">249,90</span>
-                  <span className="text-xs text-slate-500 font-medium">/mês</span>
-                </div>
-
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-900 text-xs font-bold border border-teal-200/60">
-                  <Users className="w-3.5 h-3.5 text-teal-600" />
-                  <span>5 acessos</span>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100 space-y-3 text-xs text-slate-600">
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Até 5 acessos profissionais e colaboradores</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Módulos liberados pela profissão de cada usuário</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>ZemdaBody (Mapa Corporal) para toda a equipe</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Controle de permissões e gestão de equipe</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Inteligência artificial para resumos e evoluções</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={onRegisterClinic}
-                className="w-full py-4 px-4 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-2xl shadow-md shadow-teal-600/30 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <span>Começar agora</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            </RevealOnScroll>
 
             {/* PLANO 3: Zemda Clínica */}
-            <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-8">
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-black text-slate-900">
-                    Zemda Clínica
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Para centros consolidados e equipes multidisciplinares.
-                  </p>
+            <RevealOnScroll delayMs={240} scale className="h-full flex flex-col">
+              <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-8 h-full">
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">
+                      Zemda Clínica
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Para centros consolidados e equipes multidisciplinares.
+                    </p>
+                  </div>
+
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-xs font-bold text-slate-500">R$</span>
+                    <span className="text-4xl font-black text-slate-900">619,90</span>
+                    <span className="text-xs text-slate-500 font-medium">/mês</span>
+                  </div>
+
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-800 text-xs font-bold">
+                    <Users className="w-3.5 h-3.5 text-slate-600" />
+                    <span>20 acessos</span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 space-y-3 text-xs text-slate-600">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Até 20 profissionais e colaboradores ativos</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Todos os módulos profissionais integrados</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>ZemdaBody (Mapa Corporal) para todos os profissionais</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Relatórios avançados e controle de estoque</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span>Treinamento e gerente de conta dedicado</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs font-bold text-slate-500">R$</span>
-                  <span className="text-4xl font-black text-slate-900">619,90</span>
-                  <span className="text-xs text-slate-500 font-medium">/mês</span>
-                </div>
-
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-800 text-xs font-bold">
-                  <Users className="w-3.5 h-3.5 text-slate-600" />
-                  <span>20 acessos</span>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100 space-y-3 text-xs text-slate-600">
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Até 20 profissionais e colaboradores ativos</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Todos os módulos profissionais integrados</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>ZemdaBody (Mapa Corporal) para todos os profissionais</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Relatórios avançados e controle de estoque</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" />
-                    <span>Treinamento e gerente de conta dedicado</span>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={onRegisterClinic}
+                  className="w-full py-3.5 px-4 text-xs font-bold text-slate-700 hover:text-teal-700 bg-slate-100 hover:bg-slate-200/70 rounded-2xl transition-all cursor-pointer"
+                >
+                  Começar agora
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={onRegisterClinic}
-                className="w-full py-3.5 px-4 text-xs font-bold text-slate-700 hover:text-teal-700 bg-slate-100 hover:bg-slate-200/70 rounded-2xl transition-all cursor-pointer"
-              >
-                Começar agora
-              </button>
-            </div>
+            </RevealOnScroll>
           </div>
 
           {/* Destaque Obrigatório de Planos */}
-          <div className="max-w-3xl mx-auto rounded-2xl bg-white border border-teal-200/70 p-5 text-center shadow-xs">
-            <p className="text-sm sm:text-base font-bold text-teal-950">
-              O plano define a quantidade de acessos. A profissão de cada usuário define o módulo especializado liberado automaticamente.
-            </p>
-            <p className="text-xs text-slate-500 mt-1">
-              Todos os planos contam com ZemdaBody, Agenda Interativa, Prontuário, Financeiro, Documentos, Estoque, Equipe, Agendamento online e IA.
-            </p>
-          </div>
+          <RevealOnScroll delayMs={120} scale>
+            <div className="max-w-3xl mx-auto rounded-2xl bg-white border border-teal-200/70 p-5 text-center shadow-xs">
+              <p className="text-sm sm:text-base font-bold text-teal-950">
+                O plano define a quantidade de acessos. A profissão de cada usuário define o módulo especializado liberado automaticamente.
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Todos os planos contam com ZemdaBody, Agenda Interativa, Prontuário, Financeiro, Documentos, Estoque, Equipe, Agendamento online e IA.
+              </p>
+            </div>
+          </RevealOnScroll>
         </div>
       </section>
 
@@ -1024,10 +1064,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
           </RevealOnScroll>
 
           {/* 3 Passos Explicativos */}
-          <RevealOnScroll delayMs={150}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-              {/* Passo 1 */}
-              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            {/* Passo 1 */}
+            <RevealOnScroll delayMs={80} scale className="h-full">
+              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   1
                 </div>
@@ -1038,9 +1078,11 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Ao criar a conta da clínica ou cadastrar um novo profissional, é informado o nicho de atuação (Psicologia, Fonoaudiologia, Nutrição, Fisioterapia, etc.).
                 </p>
               </div>
+            </RevealOnScroll>
 
-              {/* Passo 2 */}
-              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
+            {/* Passo 2 */}
+            <RevealOnScroll delayMs={160} scale className="h-full">
+              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   2
                 </div>
@@ -1051,9 +1093,11 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   A inteligência da plataforma ajusta automaticamente as fichas clínicas, termos de consentimento, histórico e ferramentas pertinentes.
                 </p>
               </div>
+            </RevealOnScroll>
 
-              {/* Passo 3 */}
-              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left">
+            {/* Passo 3 */}
+            <RevealOnScroll delayMs={240} scale className="h-full">
+              <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   3
                 </div>
@@ -1064,8 +1108,8 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Sem complicação ou chamados de suporte. O usuário já acessa sua experiência dedicada pronta para uso imediato.
                 </p>
               </div>
-            </div>
-          </RevealOnScroll>
+            </RevealOnScroll>
+          </div>
         </div>
       </section>
 
@@ -1089,13 +1133,12 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
             </div>
           </RevealOnScroll>
 
-          <RevealOnScroll delayMs={100}>
-            <div className="space-y-4">
-              {faqItems.map((item, index) => {
-                const isOpen = openFaqIndex === index;
-                return (
+          <div className="space-y-4">
+            {faqItems.map((item, index) => {
+              const isOpen = openFaqIndex === index;
+              return (
+                <RevealOnScroll key={index} delayMs={Math.min(index * 60, 300)}>
                   <div
-                    key={index}
                     className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden transition-all"
                   >
                     <button
@@ -1117,10 +1160,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          </RevealOnScroll>
+                </RevealOnScroll>
+              );
+            })}
+          </div>
         </div>
       </section>
 
@@ -1129,7 +1172,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
         <div className="absolute inset-0 bg-gradient-to-b from-teal-50/40 via-emerald-50/20 to-white -z-10 pointer-events-none" />
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
-          <RevealOnScroll>
+          <RevealOnScroll scale durationMs={650}>
             <div className="space-y-4 max-w-2xl mx-auto">
               <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
                 Sua rotina pode ser mais simples.
