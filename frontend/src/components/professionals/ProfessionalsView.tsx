@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -34,6 +34,7 @@ export const ProfessionalsView: React.FC = () => {
   // Controle de alteração única de profissão (Item 2)
   const [isProfessionUnlocked, setIsProfessionUnlocked] = useState<boolean>(false);
   const [showConfirmChangeModal, setShowConfirmChangeModal] = useState<boolean>(false);
+  const professionSelectRef = useRef<HTMLSelectElement>(null);
 
   // Modal Novo Profissional (Item 9: Sexo e Tratamento Dr./Dra.)
   const [showNewModal, setShowNewModal] = useState<boolean>(false);
@@ -192,12 +193,30 @@ export const ProfessionalsView: React.FC = () => {
 
       showToast('Profissional atualizado com sucesso!', 'success');
       setIsProfessionUnlocked(false);
+      setShowConfirmChangeModal(false);
       setEditingProf(null);
       await reloadSession();
       fetchData();
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar profissional', 'error');
     }
+  };
+
+  const handleConfirmUnlockProfession = () => {
+    setShowConfirmChangeModal(false);
+    setIsProfessionUnlocked(true);
+    setTimeout(() => {
+      if (professionSelectRef.current) {
+        professionSelectRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        professionSelectRef.current.focus();
+      }
+    }, 100);
+  };
+
+  const handleCloseEditModal = () => {
+    setEditingProf(null);
+    setIsProfessionUnlocked(false);
+    setShowConfirmChangeModal(false);
   };
 
   const handleCreateBlock = async () => {
@@ -650,7 +669,7 @@ export const ProfessionalsView: React.FC = () => {
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Editar Profissional: {editingProf.name}</h3>
-              <button onClick={() => setEditingProf(null)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button onClick={handleCloseEditModal} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -685,10 +704,13 @@ export const ProfessionalsView: React.FC = () => {
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-semibold text-slate-700">Profissão *</label>
                     {isProfessionUnlocked && (
-                      <span className="text-[10px] text-amber-700 font-bold bg-amber-100 px-1.5 py-0.5 rounded">Liberada</span>
+                      <span className="text-[10px] text-amber-800 font-bold bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                        🔓 Liberada para alteração
+                      </span>
                     )}
                   </div>
                   <select
+                    ref={professionSelectRef}
                     value={editProfessionId}
                     disabled={!isProfessionUnlocked}
                     onChange={e => {
@@ -697,9 +719,9 @@ export const ProfessionalsView: React.FC = () => {
                       const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
                       setEditSpecialtyId(matching.length > 0 ? matching[0].id : '');
                     }}
-                    className={`w-full border rounded-xl px-3 py-2 text-xs font-medium transition-all ${
+                    className={`w-full border rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                       isProfessionUnlocked
-                        ? 'border-amber-300 bg-amber-50/50 text-slate-900 ring-2 ring-amber-400/50'
+                        ? 'border-amber-400 bg-amber-50 text-slate-900 ring-2 ring-amber-400 shadow-xs focus:ring-amber-500 focus:border-amber-500'
                         : 'border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed opacity-85'
                     }`}
                   >
@@ -721,9 +743,12 @@ export const ProfessionalsView: React.FC = () => {
                   )}
 
                   {isProfessionUnlocked && (
-                    <p className="mt-1.5 text-[10px] text-amber-700 font-medium leading-tight">
-                      Atenção: A profissão será bloqueada permanentemente após salvar.
-                    </p>
+                    <div className="mt-1.5 p-2 bg-amber-50 border border-amber-300/80 rounded-lg text-[10px] text-amber-800 font-medium leading-tight space-y-0.5">
+                      <p className="font-bold flex items-center gap-1">
+                        ⚠️ Atenção: alteração única
+                      </p>
+                      <p>A nova profissão escolhida será bloqueada permanentemente assim que você clicar em "Salvar Alterações".</p>
+                    </div>
                   )}
 
                   {Boolean(editingProf.profession_change_used) && (
@@ -910,7 +935,7 @@ export const ProfessionalsView: React.FC = () => {
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setEditingProf(null)}
+                  onClick={handleCloseEditModal}
                   className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Cancelar
@@ -930,7 +955,7 @@ export const ProfessionalsView: React.FC = () => {
 
       {/* Modal de Confirmação: Alteração Única de Profissão (Item 2) */}
       {showConfirmChangeModal && (
-        <div className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 animate-in zoom-in-95 duration-200 space-y-4">
             <div className="flex items-center gap-3 text-amber-600">
               <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center flex-shrink-0">
@@ -961,10 +986,7 @@ export const ProfessionalsView: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setShowConfirmChangeModal(false);
-                  setIsProfessionUnlocked(true);
-                }}
+                onClick={handleConfirmUnlockProfession}
                 className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
               >
                 Sim, quero alterar
