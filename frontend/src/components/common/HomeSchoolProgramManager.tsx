@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Home, School, BookOpen, Plus, X, Trash2, CheckCircle2, Clock, Copy, Printer } from 'lucide-react';
 import { ApiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 export interface HomeProgramItem {
   id: string;
@@ -26,6 +27,7 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
   specialty,
   readOnly = false
 }) => {
+  const { currentTenant } = useAuth();
   const [programs, setPrograms] = useState<HomeProgramItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -92,14 +94,15 @@ export const HomeSchoolProgramManager: React.FC<HomeSchoolProgramManagerProps> =
   };
 
   const copyToClipboard = (prog: HomeProgramItem) => {
+    const clinicName = currentTenant?.trade_name || currentTenant?.name;
     const text = `*PROGRAMA DE ORIENTAÇÕES (${prog.setting === 'home' ? 'CASA / DOMICÍLIO' : 'ESCOLA / EDUCADORES'})*
-Título: ${prog.title}
+${clinicName ? `Instituição: ${clinicName}\n` : ''}Título: ${prog.title}
 Frequência recomendada: ${prog.frequency || 'Conforme rotina'}
 ${prog.materials_needed ? `Materiais sugeridos: ${prog.materials_needed}\n` : ''}
 Orientações:
 ${prog.instructions}
 
-(Emitido via Zemda Saúde)`;
+(Documento emitido eletronicamente pelo Sistema Zemda)`;
 
     navigator.clipboard.writeText(text);
     alert('Orientações copiadas para a área de transferência!');

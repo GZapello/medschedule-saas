@@ -22,6 +22,10 @@ import {
   X
 } from 'lucide-react';
 import { Budget, BudgetItem, Patient } from '../../types';
+import {
+  ClinicDocumentHeader,
+  ClinicDocumentFooter
+} from '../common/ClinicDocumentHeader';
 
 export const BudgetsView: React.FC = () => {
   const { showToast } = useToast();
@@ -627,14 +631,16 @@ export const BudgetsView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer"
+                  disabled={!printBudgetData.tenant?.name && !currentTenant?.name}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer"
+                  title={!printBudgetData.tenant?.name && !currentTenant?.name ? 'Dados da clínica emissora não carregados' : 'Imprimir / Salvar PDF'}
                 >
                   <Printer className="w-4 h-4" />
                   Imprimir / Salvar PDF
                 </button>
                 <button
                   onClick={() => setPrintBudgetData(null)}
-                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg"
+                  className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -643,32 +649,14 @@ export const BudgetsView: React.FC = () => {
 
             {/* Documento A4 Timbrado */}
             <div className="space-y-6 text-slate-800 text-xs font-sans">
-              {/* Cabeçalho da Clínica */}
-              <div className="flex items-center justify-between pb-6 border-b-2 border-slate-800">
-                <div>
-                  <h1 className="text-xl font-black tracking-tight text-slate-900 uppercase">
-                    {printBudgetData.tenant?.name || printBudgetData.tenant?.trade_name || 'Clínica Médica'}
-                  </h1>
-                  <p className="text-xs text-slate-600 mt-1">
-                    {printBudgetData.tenant?.corporate_name || ''}
-                  </p>
-                  {printBudgetData.tenant?.cnpj_cpf && (
-                    <p className="text-[11px] text-slate-500">CNPJ: {printBudgetData.tenant.cnpj_cpf}</p>
-                  )}
-                  <p className="text-[11px] text-slate-500">
-                    {printBudgetData.tenant?.city ? `${printBudgetData.tenant.city}/${printBudgetData.tenant.state || ''}` : ''} • Contato: {printBudgetData.tenant?.phone || ''}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="text-xs font-black px-3 py-1 bg-slate-100 rounded-lg uppercase tracking-wider text-slate-800 border border-slate-300">
-                    Orçamento
-                  </span>
-                  <p className="text-sm font-bold text-slate-900 mt-2">{printBudgetData.budget.budget_number}</p>
-                  <p className="text-[11px] text-slate-500">
-                    Emissão: {new Date(printBudgetData.budget.created_at).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-              </div>
+              {/* Cabeçalho Oficial da Clínica */}
+              <ClinicDocumentHeader
+                clinic={printBudgetData.tenant || currentTenant}
+                documentTitle="ORÇAMENTO"
+                documentNumber={printBudgetData.budget.budget_number}
+                documentDate={new Date(printBudgetData.budget.created_at).toLocaleDateString('pt-BR')}
+                documentSubtitle="Proposta Comercial e Orçamento de Tratamento"
+              />
 
               {/* Dados do Paciente */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 gap-2 text-xs">
@@ -751,7 +739,7 @@ export const BudgetsView: React.FC = () => {
               {/* Assinatura */}
               <div className="pt-12 grid grid-cols-2 gap-8 text-center">
                 <div className="border-t border-slate-400 pt-2">
-                  <p className="font-bold text-slate-800">{printBudgetData.tenant?.name || 'Responsável da Clínica'}</p>
+                  <p className="font-bold text-slate-800">{printBudgetData.tenant?.trade_name || printBudgetData.tenant?.name || currentTenant?.trade_name || currentTenant?.name || 'Responsável da Clínica'}</p>
                   <p className="text-[10px] text-slate-400">Assinatura / Carimbo</p>
                 </div>
                 <div className="border-t border-slate-400 pt-2">
@@ -759,6 +747,9 @@ export const BudgetsView: React.FC = () => {
                   <p className="text-[10px] text-slate-400">De acordo com o orçamento</p>
                 </div>
               </div>
+
+              {/* Rodapé Oficial do Sistema */}
+              <ClinicDocumentFooter />
             </div>
           </div>
         </div>

@@ -16,6 +16,11 @@ import {
 import { Student, Workout, Assessment, StrengthTestItem, EnduranceTestItem } from './types';
 import { useAuth } from '../../context/AuthContext';
 import { SecureFileImage } from '../common/SecureFileImage';
+import {
+  useClinicDocumentData,
+  ClinicDocumentHeader,
+  ClinicDocumentFooter
+} from '../common/ClinicDocumentHeader';
 
 interface PersonalPdfExportModalProps {
   isOpen: boolean;
@@ -33,6 +38,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
   latestAssessment
 }) => {
   const { currentTenant, currentUser } = useAuth();
+  const { clinic, loading: clinicLoading, error: clinicError, canIssue: canIssueClinic } = useClinicDocumentData();
   const [exportType, setExportType] = useState<'full_workout' | 'compact_workout' | 'assessment_report'>('full_workout');
 
   // Seleção Modular de Seções para o Relatório de Avaliação Física
@@ -53,6 +59,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
   if (!isOpen) return null;
 
   const handlePrint = () => {
+    if (!canIssueClinic) return;
     window.print();
   };
 
@@ -102,7 +109,13 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+              disabled={!canIssueClinic}
+              className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 shadow-sm transition-colors ${
+                canIssueClinic
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+              }`}
+              title={!canIssueClinic ? 'Não foi possível carregar os dados da clínica emissora' : 'Imprimir / Salvar em PDF'}
             >
               <Printer className="w-4 h-4" />
               Imprimir / Salvar em PDF
@@ -184,50 +197,42 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
         {/* Folha de Pré-visualização / Impressão */}
         <div className="p-8 overflow-y-auto flex-1 bg-slate-100/50 print:p-0 print:bg-white">
           <div className="max-w-3xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200 print:border-none print:shadow-none print:p-0 print:max-w-full space-y-6">
-            {/* Cabeçalho Oficial */}
-            <div className="flex items-center justify-between pb-4 border-b-2 border-slate-800">
-              <div>
-                <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                  {currentTenant?.name || 'Zemda Saúde & Treinamento'}
-                </h1>
-                <p className="text-xs text-slate-600">
-                  Módulo ZemdaPersonal • Prescrição Técnica & Avaliação Física Especializada
-                </p>
-                {currentTenant?.city && (
-                  <p className="text-[10px] text-slate-400">
-                    {currentTenant.city} - {currentTenant.state || 'Brasil'}
-                  </p>
-                )}
-              </div>
-              <div className="text-right text-xs text-slate-500">
-                <div>Data: {new Date().toLocaleDateString('pt-BR')}</div>
-                <div>Treinador: <strong>{currentUser?.name || 'Personal Trainer'}</strong></div>
-                <div className="text-[10px] text-slate-400">CREF / Registro: {currentUser?.registrationNumber || (currentUser as any)?.registration_number || 'CREF Ativo'}</div>
-              </div>
-            </div>
+            {/* Cabeçalho Institucional da Clínica */}
+            <ClinicDocumentHeader
+              clinic={clinic || currentTenant}
+              loading={clinicLoading}
+              error={clinicError}
+              documentTitle={exportType === 'assessment_report' ? 'AVALIAÇÃO FÍSICA' : 'FICHA DE TREINO'}
+              documentSubtitle="Prescrição Técnica & Avaliação Especializada"
+            />
 
-            {/* Ficha do Aluno */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div>
+            {/* Ficha do Aluno e Treinador */}
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+              <div className="col-span-2">
                 <span className="text-slate-400 block text-[10px] uppercase font-bold">Aluno</span>
-                <strong className="text-slate-800">{student.name}</strong>
+                <strong className="text-slate-800 text-sm block">{student.name}</strong>
               </div>
               <div>
                 <span className="text-slate-400 block text-[10px] uppercase font-bold">Idade / Gênero</span>
-                <strong className="text-slate-800">
+                <strong className="text-slate-800 block">
                   {age} anos • {student.gender === 'm' ? 'Masculino' : 'Feminino'}
                 </strong>
               </div>
               <div>
                 <span className="text-slate-400 block text-[10px] uppercase font-bold">Objetivo</span>
-                <strong className="text-slate-800">{student.goal || 'Hipertrofia / Saúde'}</strong>
+                <strong className="text-slate-800 block">{student.goal || 'Saúde e Treinamento'}</strong>
               </div>
               <div>
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Peso / Estatura</span>
-                <strong className="text-slate-800">
-                  {student.current_weight ? `${student.current_weight} kg` : '—'} /{' '}
-                  {student.height ? `${student.height} cm` : '—'}
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Treinador(a)</span>
+                <strong className={`block ${currentUser?.name ? 'text-slate-800' : 'text-rose-600 italic font-semibold'}`}>
+                  {currentUser?.name || 'Profissional não identificado'}
                 </strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">CREF / Registro</span>
+                <span className="text-slate-600 font-mono text-[11px] block">
+                  {currentUser?.registrationNumber || (currentUser as any)?.registration_number || 'Não informado'}
+                </span>
               </div>
             </div>
 
@@ -546,7 +551,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
             {/* Rodapé de Assinatura */}
             <div className="pt-12 flex items-center justify-between text-xs text-slate-500 border-t border-slate-200">
               <div className="text-center w-64 border-t border-slate-400 pt-1">
-                <strong>{currentUser?.name || 'Personal Trainer'}</strong>
+                <strong>{currentUser?.name || 'Profissional Responsável'}</strong>
                 <div className="text-[10px]">CREF / Responsável Técnico</div>
               </div>
               <div className="text-center w-64 border-t border-slate-400 pt-1">
@@ -554,6 +559,9 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                 <div className="text-[10px]">Assinatura do Aluno(a)</div>
               </div>
             </div>
+
+            {/* Rodapé Institucional com Atribuição Tecnológica */}
+            <ClinicDocumentFooter />
           </div>
         </div>
       </div>

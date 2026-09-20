@@ -873,9 +873,13 @@ export class ImportController {
       const tenantId = req.tenantId;
       const { title, headers, rows, subtitle } = req.body;
 
-      const clinic = db.prepare('SELECT name, document, phone, email, address_street, address_number, address_city, address_state FROM tenants WHERE id = ?').get(tenantId) as any;
-      const clinicName = clinic?.name || 'Zemda Saúde';
-      const clinicAddress = `${clinic?.address_street || ''}, ${clinic?.address_number || ''} - ${clinic?.address_city || ''}/${clinic?.address_state || ''} | Tel: ${clinic?.phone || ''}`;
+      const clinic = db.prepare('SELECT name, trade_name, cnpj_cpf, phone, email, street, number, neighborhood, city, state, address FROM tenants WHERE id = ?').get(tenantId) as any;
+      const clinicName = clinic?.trade_name || clinic?.name || 'Clínica Emissora';
+      const clinicAddress = clinic?.address || [
+        [clinic?.street, clinic?.number].filter(Boolean).join(', '),
+        clinic?.neighborhood,
+        (clinic?.city && clinic?.state) ? `${clinic.city}/${clinic.state}` : (clinic?.city || '')
+      ].filter(Boolean).join(' - ') + (clinic?.phone ? ` | Tel: ${clinic.phone}` : '');
 
       const docTitle = title || 'Relatório de Dados';
       const tableHeaders = (headers || []).map((h: string) => `<th>${h}</th>`).join('');
@@ -908,7 +912,7 @@ export class ImportController {
               <div class="clinic-sub">${clinicAddress}</div>
             </div>
             <h1>${docTitle}</h1>
-            <div class="sub-info">${subtitle || 'Exportação oficial gerada pelo sistema Zemda Saúde'} • Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</div>
+            <div class="sub-info">${subtitle || 'Exportação oficial gerada pelo Sistema Zemda'} • Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</div>
             <table>
               <thead><tr>${tableHeaders}</tr></thead>
               <tbody>${tableRows}</tbody>

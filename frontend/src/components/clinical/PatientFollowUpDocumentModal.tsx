@@ -13,8 +13,14 @@ import {
   CheckCircle2,
   ShieldCheck,
   User,
-  Heart
+  Heart,
+  AlertCircle
 } from 'lucide-react';
+import {
+  ClinicDocumentHeader,
+  ClinicDocumentFooter,
+  useClinicDocumentData
+} from '../common/ClinicDocumentHeader';
 
 export interface PatientFollowUpDocumentModalProps {
   isOpen: boolean;
@@ -50,8 +56,11 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
   const { showToast } = useToast();
   const printSheetRef = useRef<HTMLDivElement>(null);
 
-  const [clinicData, setClinicData] = useState<any>(null);
+  const { clinic: clinicData, loading: clinicLoading, error: clinicError, canIssue: canIssueClinic } = useClinicDocumentData();
   const [patientDetails, setPatientDetails] = useState<any>(null);
+
+  const hasProfessional = Boolean(professionalName && professionalName.trim().length > 0);
+  const canPrint = canIssueClinic && hasProfessional;
 
   // Editable sections for the handout
   const [generalGuidelines, setGeneralGuidelines] = useState<string>(
@@ -63,26 +72,32 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
   const [nextAppointmentNote, setNextAppointmentNote] = useState<string>('');
 
   useEffect(() => {
-    async function loadInfo() {
+    async function loadPatient() {
       try {
-        const [clinicRes, patRes] = await Promise.allSettled([
-          ApiClient.get<any>('/v1/clinics/current'),
-          ApiClient.get<any>(`/v1/patients/${patientId}`)
-        ]);
-        if (clinicRes.status === 'fulfilled') setClinicData(clinicRes.value);
-        if (patRes.status === 'fulfilled') setPatientDetails(patRes.value);
+        if (patientId) {
+          const pat = await ApiClient.get<any>(`/v1/patients/${patientId}`);
+          setPatientDetails(pat);
+        }
       } catch (err) {
-        console.warn('Erro ao carregar dados do cabeçalho do documento:', err);
+        console.warn('Erro ao carregar dados do paciente:', err);
       }
     }
-    if (isOpen) {
-      loadInfo();
+    if (isOpen && patientId) {
+      loadPatient();
     }
   }, [isOpen, patientId]);
 
   if (!isOpen) return null;
 
   const handlePrint = () => {
+    if (!canIssueClinic) {
+      showToast('Não foi possível carregar os dados da clínica emissora. Impressão bloqueada.', 'error');
+      return;
+    }
+    if (!hasProfessional) {
+      showToast('Profissional responsável não identificado. Impressão bloqueada.', 'error');
+      return;
+    }
     if (!printSheetRef.current) return;
     const printWindow = window.open('', '_blank', 'width=900,height=1000');
     if (!printWindow) {
@@ -178,8 +193,20 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
           <div className="flex items-center gap-2">
             <button
               type="button"
+              disabled={!canPrint}
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-teal-900 font-bold text-xs rounded-xl shadow-xs hover:bg-teal-50 transition-colors cursor-pointer"
+              className={`inline-flex items-center gap-1.5 px-4 py-2 font-bold text-xs rounded-xl shadow-xs transition-colors ${
+                canPrint
+                  ? 'bg-white text-teal-900 hover:bg-teal-50 cursor-pointer'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+              title={
+                !canIssueClinic
+                  ? 'Não foi possível carregar os dados da clínica emissora'
+                  : !hasProfessional
+                  ? 'Profissional responsável não identificado'
+                  : 'Imprimir / PDF A4'
+              }
             >
               <Printer className="w-4 h-4 text-teal-700" />
               <span>Imprimir / PDF A4</span>
@@ -201,6 +228,18 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
             <strong>Privacidade Clínica Garantida:</strong> Este documento omite anotações sigilosas, diagnósticos internos e testes psicológicos confidenciais, contendo exclusivamente instruções práticas e educativas para o paciente.
           </span>
         </div>
+
+        {/* Error Warning Banner if cannot issue */}
+        {!canPrint && (
+          <div className="bg-rose-50 px-6 py-2.5 border-b border-rose-200 flex items-center gap-2 text-xs text-rose-800">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>
+              {!canIssueClinic
+                ? 'Não foi possível carregar os dados da clínica emissora. A emissão do documento está temporariamente bloqueada.'
+                : 'Profissional responsável não identificado. Atribua o profissional responsável para liberar a impressão oficial.'}
+            </span>
+          </div>
+        )}
 
         {/* Content & Live Preview */}
         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-slate-50/50">
@@ -293,26 +332,14 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               ref={printSheetRef}
               className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm w-full max-w-[210mm] text-slate-800 font-sans space-y-6"
             >
-              {/* Branded Header */}
-              <div className="border-b-2 border-teal-700 pb-4 flex items-center justify-between">
-                <div>
-                  <h1 className="text-xl font-black text-slate-900 tracking-tight">
-                    {clinicData?.name || 'ZEMDA CLÍNICA'}
-                  </h1>
-                  <p className="text-xs text-slate-500">
-                    {clinicData?.address || clinicData?.city || 'Centro de Atendimento Clínico e Terapêutico'}
-                  </p>
-                  {clinicData?.phone && (
-                    <p className="text-[11px] text-slate-400">Contato: {clinicData.phone}</p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <span className="inline-block px-3 py-1 bg-teal-50 text-teal-800 border border-teal-200 rounded-lg font-bold text-xs uppercase tracking-wider">
-                    Guia do Paciente
-                  </span>
-                  <p className="text-[11px] text-slate-400 mt-1">{todayStr}</p>
-                </div>
-              </div>
+              {/* Institutional Clinic Header */}
+              <ClinicDocumentHeader
+                clinic={clinicData}
+                loading={clinicLoading}
+                error={clinicError}
+                documentTitle="GUIA DO PACIENTE"
+                documentSubtitle="Acompanhamento Terapêutico"
+              />
 
               {/* Patient and Professional Banner */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-2 gap-4 text-xs">
@@ -327,7 +354,9 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Profissional Responsável</span>
-                  <strong className="text-sm text-slate-900 block">{professionalName || 'Equipe Multidisciplinar'}</strong>
+                  <strong className={`text-sm block ${hasProfessional ? 'text-slate-900' : 'text-rose-600 italic font-semibold'}`}>
+                    {hasProfessional ? professionalName : 'Profissional responsável não identificado'}
+                  </strong>
                   <span className="text-slate-500 text-[11px]">
                     {professionalCouncil ? `Registro: ${professionalCouncil}` : (serviceName || 'Atendimento Clínico')}
                   </span>
@@ -407,12 +436,12 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
               {/* Footer and Signature */}
               <div className="pt-8 mt-8 border-t border-slate-200 text-center space-y-4">
                 <div className="inline-block border-t border-slate-400 w-64 pt-2">
-                  <p className="font-bold text-xs text-slate-900">{professionalName || 'Profissional Responsável'}</p>
+                  <p className={`font-bold text-xs ${hasProfessional ? 'text-slate-900' : 'text-rose-600 italic'}`}>
+                    {hasProfessional ? professionalName : 'Profissional responsável não identificado'}
+                  </p>
                   {professionalCouncil && <p className="text-[11px] text-slate-500">{professionalCouncil}</p>}
                 </div>
-                <p className="text-[10px] text-slate-400">
-                  Emitido eletronicamente via Sistema Zemda • {todayStr}
-                </p>
+                <ClinicDocumentFooter />
               </div>
 
             </div>
@@ -432,8 +461,20 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
 
           <button
             type="button"
+            disabled={!canPrint}
             onClick={handlePrint}
-            className="inline-flex items-center gap-2 px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer"
+            className={`inline-flex items-center gap-2 px-6 py-2.5 font-bold text-xs rounded-xl shadow-md transition-all ${
+              canPrint
+                ? 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+            }`}
+            title={
+              !canIssueClinic
+                ? 'Não foi possível carregar os dados da clínica emissora'
+                : !hasProfessional
+                ? 'Profissional responsável não identificado'
+                : 'Imprimir Acompanhamento (A4)'
+            }
           >
             <Printer className="w-4 h-4" />
             <span>Imprimir Acompanhamento (A4)</span>

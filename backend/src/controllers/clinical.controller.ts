@@ -599,7 +599,7 @@ export class ClinicalController {
       }
 
       const clinic = db.prepare('SELECT name, corporate_name, trade_name, cnpj_cpf, phone, email, address, city, state, logo_url FROM tenants WHERE id = ?').get(tenantId) as any;
-      const clinicName = clinic?.trade_name || clinic?.name || 'Zemda Saúde';
+      const clinicName = clinic?.trade_name || clinic?.name || 'Clínica Emissora';
       const clinicCity = clinic?.city || 'Brasil';
       const clinicCnpj = clinic?.cnpj_cpf ? `CNPJ: ${clinic.cnpj_cpf}` : '';
       const clinicAddress = clinic?.address || `${clinicCity}/${clinic?.state || ''}`;
@@ -821,7 +821,7 @@ export class ClinicalController {
                   Hash de integridade SHA-256: ${record.signature_hash}
                 </div>
               ` : `
-                Documento emitido eletronicamente pela Plataforma Zemda • Válido como prontuário clínico oficial • Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}
+                Documento emitido eletronicamente pelo Sistema Zemda • Válido como prontuário clínico oficial • Emitido em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}
               `}
             </div>
           </div>

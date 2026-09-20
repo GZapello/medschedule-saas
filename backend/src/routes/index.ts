@@ -244,6 +244,7 @@ api.use(subscriptionGate);
 
 // Tenants & Configurações da Clínica
 api.get('/v1/tenants/current', requireTenant, TenantController.getCurrent);
+api.get('/v1/clinics/current', requireTenant, TenantController.getCurrent);
 api.put('/v1/tenants/current', requireTenant, requireRole('clinic_admin'), TenantController.updateCurrent);
 api.get('/v1/tenants', requireRole('superadmin'), TenantController.listAll);
 

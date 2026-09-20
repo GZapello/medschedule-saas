@@ -1474,7 +1474,7 @@ export class PsychologyController {
 <body>
   <div class="header">
     <h1>${title}</h1>
-    <div class="sub">${doc.clinic_name || 'Zemda Saúde'} • Em conformidade com a Resolução CFP nº 06/2019</div>
+    <div class="sub">${doc.clinic_name ? `${doc.clinic_name} • ` : ''}Em conformidade com a Resolução CFP nº 06/2019</div>
   </div>
 
   <div class="doc-number">Registro Nº: ${doc.document_number} • Versão ${doc.version}.0</div>

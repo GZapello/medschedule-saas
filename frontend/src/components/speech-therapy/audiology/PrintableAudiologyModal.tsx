@@ -2,6 +2,11 @@ import React, { useRef } from 'react';
 import { X, Printer, Eye, Download, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { AudiologyRecordPayload } from './audiology.types';
 import { CONVENTIONAL_FREQUENCIES, CONVENTIONAL_INTENSITIES } from './audiology-calculations';
+import {
+  useClinicDocumentData,
+  ClinicDocumentHeader,
+  ClinicDocumentFooter
+} from '../../common/ClinicDocumentHeader';
 
 export interface PrintableAudiologyModalProps {
   isOpen: boolean;
@@ -37,15 +42,20 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
   professional
 }) => {
   const printSheetRef = useRef<HTMLDivElement>(null);
+  const { clinic: clinicData, loading: clinicLoading, error: clinicError, canIssue: canIssueClinic } = useClinicDocumentData(clinic);
+  const hasProfessional = Boolean(record?.classification?.professionalName || professional?.name);
+  const professionalDisplayName = record?.classification?.professionalName || professional?.name || 'Profissional responsável não identificado';
+  const canPrint = canIssueClinic && hasProfessional;
 
   if (!isOpen) return null;
 
   const handlePrint = () => {
+    if (!canPrint) return;
     window.print();
   };
 
   const handleOpenNewTab = () => {
-    if (!printSheetRef.current) return;
+    if (!canPrint || !printSheetRef.current) return;
     const printWin = window.open('', '_blank', 'width=950,height=1050');
     if (!printWin) {
       alert('Por favor, autorize pop-ups para visualizar a ficha de impressão.');
@@ -144,16 +154,28 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
           <div className="flex items-center gap-2">
             <button
               type="button"
+              disabled={!canPrint}
               onClick={handleOpenNewTab}
-              className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-100 flex items-center gap-1.5 cursor-pointer"
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 ${
+                canPrint
+                  ? 'text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 cursor-pointer'
+                  : 'text-slate-400 bg-slate-100 border border-slate-200 cursor-not-allowed'
+              }`}
+              title={!canIssueClinic ? 'Dados da clínica não carregados' : !hasProfessional ? 'Profissional não identificado' : 'Abrir em Nova Aba'}
             >
               <Eye className="w-4 h-4" />
               <span>Abrir em Nova Aba</span>
             </button>
             <button
               type="button"
+              disabled={!canPrint}
               onClick={handlePrint}
-              className="px-4 py-1.5 text-xs font-bold text-white bg-sky-600 rounded-xl hover:bg-sky-700 flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className={`px-4 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs ${
+                canPrint
+                  ? 'text-white bg-sky-600 hover:bg-sky-700 cursor-pointer'
+                  : 'text-slate-400 bg-slate-200 cursor-not-allowed shadow-none'
+              }`}
+              title={!canIssueClinic ? 'Dados da clínica não carregados' : !hasProfessional ? 'Profissional não identificado' : 'Imprimir / Salvar PDF'}
             >
               <Printer className="w-4 h-4" />
               <span>Imprimir / Salvar PDF</span>
@@ -174,31 +196,22 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
             ref={printSheetRef}
             className="bg-white w-full max-w-[210mm] min-h-[297mm] p-8 shadow-sm text-slate-800 border border-slate-200 space-y-6 text-xs"
           >
-            {/* 1. Cabeçalho Institucional da Clínica */}
-            <div className="flex justify-between items-start border-b border-slate-300 pb-4">
-              <div>
-                <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight">
-                  {clinic?.name || clinic?.trade_name || 'Clínica de Fonoaudiologia & Audiologia'}
-                </h1>
-                <p className="text-[11px] text-slate-600">
-                  {clinic?.address ? `${clinic.address} • ` : ''}
-                  {clinic?.phone ? `Tel: ${clinic.phone}` : ''}
-                  {clinic?.cnpj_cpf ? ` • CNPJ/CPF: ${clinic.cnpj_cpf}` : ''}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] font-bold px-2 py-1 bg-slate-100 rounded text-slate-700 border border-slate-200">
-                  {record.modality === 'pediatric'
-                    ? 'AUDIOLOGIA INFANTIL'
-                    : record.modality === 'occupational'
-                    ? 'AUDIOLOGIA OCUPACIONAL'
-                    : record.modality === 'high_frequency'
-                    ? 'ALTAS FREQUÊNCIAS'
-                    : 'AUDIOLOGIA CLÍNICA'}
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1">Data: {new Date().toLocaleDateString('pt-BR')}</p>
-              </div>
-            </div>
+            {/* 1. Cabeçalho Institucional da Clínica Emissora */}
+            <ClinicDocumentHeader
+              clinic={clinicData}
+              loading={clinicLoading}
+              error={clinicError}
+              documentTitle={
+                record.modality === 'pediatric'
+                  ? 'AUDIOLOGIA INFANTIL'
+                  : record.modality === 'occupational'
+                  ? 'AUDIOLOGIA OCUPACIONAL'
+                  : record.modality === 'high_frequency'
+                  ? 'ALTAS FREQUÊNCIAS'
+                  : 'AUDIOLOGIA CLÍNICA'
+              }
+              documentSubtitle="Laudo e Avaliação Audiológica"
+            />
 
             {/* 2. Identificação do Paciente e Profissional */}
             <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200 text-[11px]">
@@ -209,7 +222,12 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
                 {record.referredBy && <div><b>Encaminhado por:</b> {record.referredBy}</div>}
               </div>
               <div className="space-y-1 text-right">
-                <div><b>Fonoaudiólogo(a):</b> {record.classification.professionalName || professional?.name || 'Profissional Responsável'}</div>
+                <div>
+                  <b>Fonoaudiólogo(a):</b>{' '}
+                  <span className={hasProfessional ? 'text-slate-900 font-bold' : 'text-rose-600 italic font-semibold'}>
+                    {professionalDisplayName}
+                  </span>
+                </div>
                 <div>
                   <b>Registro Profissional:</b>{' '}
                   {record.classification.crfa ||
@@ -482,8 +500,8 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
               </div>
 
               <div className="text-center w-64 border-t border-slate-800 pt-1.5">
-                <p className="font-bold text-[11px] text-slate-900">
-                  {record.classification.professionalName || professional?.name || 'Fonoaudiólogo(a) Responsável'}
+                <p className={`font-bold text-[11px] ${hasProfessional ? 'text-slate-900' : 'text-rose-600 italic font-semibold'}`}>
+                  {professionalDisplayName}
                 </p>
                 <p className="text-[10px] text-slate-600">
                   {record.classification.crfa ||
@@ -493,6 +511,9 @@ export const PrintableAudiologyModal: React.FC<PrintableAudiologyModalProps> = (
                 </p>
               </div>
             </div>
+
+            {/* Rodapé Institucional com Atribuição Tecnológica */}
+            <ClinicDocumentFooter />
           </div>
         </div>
       </div>

@@ -183,9 +183,13 @@ export class ReportController {
       const tenantId = req.tenantId;
       const { type, patientId } = req.query; // 'patient_records' | 'attendance' | 'financial'
 
-      const clinic = db.prepare('SELECT name, document, phone, email, address_street, address_number, address_city, address_state, logo_url FROM tenants WHERE id = ?').get(tenantId) as any;
-      const clinicName = clinic?.name || 'Clínica Médica';
-      const clinicAddress = `${clinic?.address_street || ''}, ${clinic?.address_number || ''} - ${clinic?.address_city || ''}/${clinic?.address_state || ''} | Tel: ${clinic?.phone || ''}`;
+      const clinic = db.prepare('SELECT name, trade_name, cnpj_cpf, phone, email, street, number, neighborhood, city, state, address FROM tenants WHERE id = ?').get(tenantId) as any;
+      const clinicName = clinic?.trade_name || clinic?.name || 'Clínica Emissora';
+      const clinicAddress = clinic?.address || [
+        [clinic?.street, clinic?.number].filter(Boolean).join(', '),
+        clinic?.neighborhood,
+        (clinic?.city && clinic?.state) ? `${clinic.city}/${clinic.state}` : (clinic?.city || '')
+      ].filter(Boolean).join(' - ') + (clinic?.phone ? ` | Tel: ${clinic.phone}` : '');
 
       let title = 'Relatório';
       let contentHtml = '';
@@ -330,7 +334,7 @@ export class ReportController {
             <p style="color: #64748b; font-size: 9.5pt;">Documento emitido eletronicamente em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</p>
             ${contentHtml}
             <div class="footer-box">
-              <p>Zemda Saúde — Gestão Clínica e Atendimento Inteligente</p>
+              <p>Documento emitido eletronicamente pelo Sistema Zemda</p>
               <p>Documento de conferência e registro clínico oficial. Impresso sob responsabilidade do profissional emissor.</p>
             </div>
           </div>
