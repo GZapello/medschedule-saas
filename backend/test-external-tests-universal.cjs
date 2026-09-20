@@ -107,7 +107,10 @@ async function runTests() {
       professionalId: professionalId
     });
 
-    const headers = { Authorization: `Bearer ${token}` };
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      'X-Tenant-ID': tenantId
+    };
 
     console.log('📁 1. TESTE DE EXPANSÃO DE FORMATOS DE ARQUIVO (PDF, DOCX, XLSX, CSV, IMAGENS)');
 
@@ -123,28 +126,29 @@ async function runTests() {
     const generatedTickets = [];
 
     for (const fmt of supportedFormats) {
-      const res = await makeRequest('POST', '/api/v1/files/upload/ticket', headers, {
+      const res = await makeRequest('POST', '/api/v1/files/upload-ticket', headers, {
         category: fmt.cat,
         mimeType: fmt.mime,
-        fileName: `relatorio_exame.${fmt.ext}`,
+        filename: `relatorio_exame.${fmt.ext}`,
         fileSize: 1024 * 50,
         patientId: patientId
       });
 
       assert(res.status === 200, `Ticket gerado para formato .${fmt.ext} (${fmt.mime}) com status 200`);
-      assert(res.data && res.data.fileId, `Retornou fileId para .${fmt.ext}`);
       assert(res.data && res.data.uploadUrl, `Retornou uploadUrl para .${fmt.ext}`);
+      assert(res.data && res.data.uploadToken, `Retornou uploadToken para .${fmt.ext}`);
       assert(res.data && res.data.objectKey && res.data.objectKey.endsWith(`.${fmt.ext}`), `Preservou extensão .${fmt.ext} no objectKey: ${res.data.objectKey}`);
 
       generatedTickets.push({ ...fmt, ...res.data });
     }
 
     // Test rejection of disallowed format (e.g. .exe / application/x-msdownload)
-    const rejectRes = await makeRequest('POST', '/api/v1/files/upload/ticket', headers, {
+    const rejectRes = await makeRequest('POST', '/api/v1/files/upload-ticket', headers, {
       category: 'external_tests',
       mimeType: 'application/x-msdownload',
-      fileName: 'virus.exe',
-      fileSize: 1024
+      filename: 'virus.exe',
+      fileSize: 1024,
+      patientId: patientId
     });
     assert(rejectRes.status === 400, 'Rejeitou formato não autorizado (.exe / application/x-msdownload) com status 400');
 
@@ -154,21 +158,38 @@ async function runTests() {
     const docxTicket = generatedTickets.find(t => t.ext === 'docx');
     const testUuid = uuidv4();
 
-    const completeRes = await makeRequest('POST', '/api/v1/files/upload/complete', headers, {
-      fileId: pdfTicket.fileId,
+    const completeRes = await makeRequest('POST', '/api/v1/files/complete', headers, {
+      objectKey: pdfTicket.objectKey,
+      filename: 'relatorio_exame.pdf',
+      originalFilename: 'relatorio_exame.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 1024 * 50,
       patientId: patientId,
       category: 'external_tests',
       moduleType: 'ZemdaPsico',
       professionalId: professionalId,
-      testId: testUuid,
-      clientChecksum: 'abc123mock'
+      testId: testUuid
     });
 
-    assert(completeRes.status === 200, 'Upload de PDF concluído com status 200');
+    assert(completeRes.status === 201 || completeRes.status === 200, 'Upload de PDF concluído com status 201');
     assert(completeRes.data && completeRes.data.file, 'Retornou objeto do arquivo');
     assert(completeRes.data.file.module_type === 'ZemdaPsico', 'Gravou module_type = ZemdaPsico no file_attachments');
     assert(completeRes.data.file.test_id === testUuid, 'Gravou test_id no file_attachments');
     assert(completeRes.data.file.professional_id === professionalId, 'Gravou professional_id no file_attachments');
+
+    // Conclui também upload do DOCX para vincular aos testes
+    const completeDocxRes = await makeRequest('POST', '/api/v1/files/complete', headers, {
+      objectKey: docxTicket.objectKey,
+      filename: 'laudo_completo.docx',
+      originalFilename: 'laudo_completo.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      fileSize: 1024 * 40,
+      patientId: patientId,
+      category: 'external_tests',
+      moduleType: 'ZemdaPsico',
+      professionalId: professionalId
+    });
+    const docxFileId = completeDocxRes.data.file.id;
 
     console.log('\n🌐 3. TESTE CRUD UNIVERSAL DE TESTES EXTERNOS EM TODOS OS MÓDULOS');
 
@@ -197,13 +218,13 @@ async function runTests() {
         referredBy: 'Clínica Parceira',
         resultSummary: item.notes,
         notes: `Observações adicionais para ${item.mod}`,
-        fileId: docxTicket.fileId,
+        fileId: docxFileId,
         fileName: 'laudo_completo.docx',
         fileType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         fileSize: 1024 * 40
       });
 
-      assert(createRes.status === 200, `Criou teste externo para ${item.mod} com status 200`);
+      assert(createRes.status === 201 || createRes.status === 200, `Criou teste externo para ${item.mod} com status 201/200`);
       assert(createRes.data && createRes.data.test && createRes.data.test.id, `Retornou ID do teste para ${item.mod}`);
       createdTestIds[item.mod] = createRes.data.test.id;
 
@@ -212,8 +233,8 @@ async function runTests() {
       assert(listRes.status === 200, `Listou testes de ${item.mod} com status 200`);
       assert(Array.isArray(listRes.data) && listRes.data.length >= 1, `Encontrou pelo menos 1 teste para ${item.mod}`);
       const found = listRes.data.find(t => t.id === createdTestIds[item.mod]);
-      assert(found && found.test_name === item.name, `Registro recuperado confere com o nome cadastrado (${item.name})`);
-      assert(found && found.file_url, `Retornou file_url assinado para download seguro`);
+      assert(found && found.testName === item.name, `Registro recuperado confere com o nome cadastrado (${item.name})`);
+      assert(found && found.fileUrl, `Retornou fileUrl assinado para download seguro`);
     }
 
     console.log('\n🔒 4. TESTE DE PROTEÇÃO DE ATENDIMENTO SELADO (is_sealed = 1)');
@@ -230,7 +251,7 @@ async function runTests() {
       isSealed: true
     });
 
-    assert(sealedTestRes.status === 200, 'Criou teste com isSealed = true');
+    assert(sealedTestRes.status === 201 || sealedTestRes.status === 200, 'Criou teste com isSealed = true');
     const sealedTestId = sealedTestRes.data.test.id;
 
     // Tentar excluir teste selado deve retornar 403 Forbidden

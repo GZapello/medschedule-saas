@@ -2517,6 +2517,9 @@ export function initializeDatabase(): void {
       appointment_id TEXT,
       assessment_id TEXT,
       exercise_id TEXT,
+      professional_id TEXT,
+      module_type TEXT,
+      test_id TEXT,
       uploaded_by TEXT NOT NULL,
       storage_provider TEXT NOT NULL DEFAULT 'cloudflare_r2',
       object_key TEXT NOT NULL,
@@ -2532,6 +2535,7 @@ export function initializeDatabase(): void {
     CREATE INDEX IF NOT EXISTS idx_file_attachments_clinic_patient ON file_attachments(clinic_id, patient_id);
     CREATE INDEX IF NOT EXISTS idx_file_attachments_clinic_id ON file_attachments(clinic_id, id);
     CREATE INDEX IF NOT EXISTS idx_file_attachments_category ON file_attachments(category);
+    CREATE INDEX IF NOT EXISTS idx_file_attachments_test_id ON file_attachments(test_id);
   `);
 
   try {
@@ -2541,6 +2545,15 @@ export function initializeDatabase(): void {
     }
     if (!attachCols.includes('exercise_id')) {
       rawDb.exec('ALTER TABLE file_attachments ADD COLUMN exercise_id TEXT');
+    }
+    if (!attachCols.includes('professional_id')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN professional_id TEXT');
+    }
+    if (!attachCols.includes('module_type')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN module_type TEXT');
+    }
+    if (!attachCols.includes('test_id')) {
+      rawDb.exec('ALTER TABLE file_attachments ADD COLUMN test_id TEXT');
     }
   } catch (_) {}
 

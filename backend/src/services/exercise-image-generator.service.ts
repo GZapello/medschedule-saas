@@ -586,6 +586,9 @@ export async function syncAllExerciseLibraryImages(rawDb: any): Promise<{
       appointment_id TEXT,
       assessment_id TEXT,
       exercise_id TEXT,
+      professional_id TEXT,
+      module_type TEXT,
+      test_id TEXT,
       uploaded_by TEXT NOT NULL,
       storage_provider TEXT NOT NULL DEFAULT 'cloudflare_r2',
       object_key TEXT NOT NULL,
@@ -597,6 +600,14 @@ export async function syncAllExerciseLibraryImages(rawDb: any): Promise<{
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  try {
+    const attachCols = rawDb.prepare('PRAGMA table_info(file_attachments)').all().map((c: any) => c.name);
+    if (!attachCols.includes('exercise_id')) rawDb.exec('ALTER TABLE file_attachments ADD COLUMN exercise_id TEXT');
+    if (!attachCols.includes('professional_id')) rawDb.exec('ALTER TABLE file_attachments ADD COLUMN professional_id TEXT');
+    if (!attachCols.includes('module_type')) rawDb.exec('ALTER TABLE file_attachments ADD COLUMN module_type TEXT');
+    if (!attachCols.includes('test_id')) rawDb.exec('ALTER TABLE file_attachments ADD COLUMN test_id TEXT');
+  } catch (_) {}
 
   let createdCount = 0;
   let reusedCount = 0;
