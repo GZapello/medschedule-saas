@@ -89,6 +89,10 @@ export const FreeTrialsAdminView: React.FC = () => {
   const [revokingTrial, setRevokingTrial] = useState<FreeTrialItem | null>(null);
   const [revoking, setRevoking] = useState(false);
 
+  // Modal de Exclusão Definitiva
+  const [deletingTrial, setDeletingTrial] = useState<FreeTrialItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const loadTrials = async () => {
     try {
       setLoading(true);
@@ -173,6 +177,22 @@ export const FreeTrialsAdminView: React.FC = () => {
       showToast(err.message || 'Erro ao revogar link de teste grátis', 'error');
     } finally {
       setRevoking(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingTrial) return;
+
+    try {
+      setDeleting(true);
+      await ApiClient.delete(`/v1/admin/free-trials/${deletingTrial.id}`);
+      showToast('Teste grátis excluído com sucesso!', 'success');
+      setDeletingTrial(null);
+      await loadTrials();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao excluir teste grátis', 'error');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -567,6 +587,14 @@ export const FreeTrialsAdminView: React.FC = () => {
                               <Copy className="w-3.5 h-3.5" />
                             </button>
                           )}
+
+                          <button
+                            onClick={() => setDeletingTrial(trial)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-lg transition-all cursor-pointer"
+                            title="Excluir teste grátis definitivamente"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -828,6 +856,48 @@ export const FreeTrialsAdminView: React.FC = () => {
                 className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
               >
                 {revoking ? 'Revogando...' : 'Confirmar Revogação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CONFIRMAR EXCLUSÃO DEFINITIVA */}
+      {/* ========================================================================= */}
+      {deletingTrial && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 rounded-2xl">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Excluir teste grátis?</h3>
+                <p className="text-xs text-slate-500">Ação irreversível</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Esta ação removerá definitivamente este registro da lista de testes grátis.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingTrial(null)}
+                disabled={deleting}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+              >
+                {deleting ? 'Excluindo...' : 'Excluir definitivamente'}
               </button>
             </div>
           </div>

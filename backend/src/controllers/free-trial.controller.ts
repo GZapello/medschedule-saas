@@ -232,6 +232,47 @@ export class FreeTrialController {
   }
 
   /**
+   * Exclusão definitiva de registro de teste grátis (Exclusivo SuperAdmin)
+   */
+  static async deletePermanent(req: Request, res: Response): Promise<void> {
+    try {
+      if (req.user?.role !== 'superadmin') {
+        res.status(403).json({ error: 'Acesso negado. Recurso exclusivo do Administrador da Plataforma.' });
+        return;
+      }
+
+      const { id } = req.params;
+      const trial = db.prepare('SELECT * FROM free_trials WHERE id = ?').get(id) as any;
+
+      if (!trial) {
+        res.status(404).json({ error: 'Registro de teste grátis não encontrado.' });
+        return;
+      }
+
+      // Excluir SOMENTE o registro de free_trials.
+      // NÃO excluir tenant, usuário, clínica, assinatura, prontuários ou qualquer outro dado vinculado.
+      db.prepare('DELETE FROM free_trials WHERE id = ?').run(id);
+
+      logAudit(req, 'DELETE_FREE_TRIAL', 'free_trials', id, {
+        targetName: trial.target_name,
+        targetEmail: trial.target_email,
+        status: trial.status,
+        token: trial.token,
+        tenantId: trial.tenant_id,
+        userId: trial.user_id
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Registro de teste grátis excluído definitivamente com sucesso.'
+      });
+    } catch (err: any) {
+      console.error('[FreeTrialController.deletePermanent] Erro ao excluir teste grátis:', err);
+      res.status(500).json({ error: 'Erro ao excluir registro de teste grátis.' });
+    }
+  }
+
+  /**
    * Validação pública de token de teste grátis antes da exibição do formulário
    */
   static async validateToken(req: Request, res: Response): Promise<void> {

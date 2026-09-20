@@ -262,6 +262,7 @@ api.post('/v1/admin/tenants/:id/delete-permanently', requireRole('superadmin'), 
 api.post('/v1/admin/free-trials', requireRole('superadmin'), FreeTrialController.create);
 api.get('/v1/admin/free-trials', requireRole('superadmin'), FreeTrialController.listAll);
 api.delete('/v1/admin/free-trials/:id/revoke', requireRole('superadmin'), FreeTrialController.revoke);
+api.delete('/v1/admin/free-trials/:id', requireRole('superadmin'), FreeTrialController.deletePermanent);
 
 // Onboarding e Assistente de Configuração da Clínica (Gestor)
 api.get('/v1/onboarding/status', requireTenant, OnboardingController.getStatus);
