@@ -230,6 +230,44 @@ function extractFileIdFromPhotoInput(p: any, tenantId: string): string | null {
 }
 
 /**
+ * ZemdaPersonal never persists a preview URL. File references must point to an
+ * attachment that belongs to the current clinic (or to the global library).
+ */
+function requireAttachmentId(fileId: any, tenantId: string): string | null {
+  if (!fileId || typeof fileId !== 'string') return null;
+  const id = fileId.trim();
+  if (!id) return null;
+  const attachment = db.prepare(`
+    SELECT id FROM file_attachments
+    WHERE id = ? AND storage_provider = 'cloudflare_r2'
+      AND (clinic_id = ? OR clinic_id = 'global')
+  `).get(id, tenantId) as any;
+  return attachment?.id || null;
+}
+
+function saveAssessmentPhotos(
+  assessmentId: string,
+  patientId: string,
+  tenantId: string,
+  assessmentDate: string,
+  photos: any[]
+): void {
+  for (const photo of photos) {
+    if (!photo?.photo_type) continue;
+    const fileId = requireAttachmentId(photo.file_id || photo.fileId, tenantId);
+    if (!fileId) continue;
+    db.prepare(`
+      INSERT INTO personal_assessment_photos
+        (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+      VALUES (?, ?, ?, ?, ?, '', ?, ?, ?)
+    `).run(
+      'paph-' + uuidv4().slice(0, 8), tenantId, assessmentId, patientId,
+      photo.photo_type, assessmentDate, photo.notes || null, fileId
+    );
+  }
+}
+
+/**
  * Classificação rigorosa de TAV (Tecido Adiposo Visceral):
  * - Cada equipamento ou protocolo possui sua tabela e faixas específicas.
  * - Se nenhum protocolo estiver cadastrado para o método/equipamento:
@@ -1203,25 +1241,10 @@ export class PersonalController {
           updated_at = datetime('now')
       `).run('psp-' + uuidv4().slice(0, 8), tenantId, b.patient_id, height || null, weight || null);
 
-      // Salva fotos anexadas se fornecidas
+      // Only the permanent R2 attachment ID is persisted. The frontend requests
+      // a fresh signed URL from /v1/files/:id/url when it needs to render it.
       if (Array.isArray(b.photos)) {
-        for (const p of b.photos) {
-          const effectiveFileId = extractFileIdFromPhotoInput(p, tenantId);
-          const effectivePhotoUrl = sanitizePhotoUrl(p.photo_url) || '';
-          if ((effectiveFileId || effectivePhotoUrl) && p.photo_type) {
-            try {
-              db.prepare(`
-                INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-              `).run('paph-' + uuidv4().slice(0, 8), tenantId, assessmentId, b.patient_id, p.photo_type, effectivePhotoUrl, assessmentDate, p.notes || null, effectiveFileId);
-            } catch (_) {
-              db.prepare(`
-                INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-              `).run('paph-' + uuidv4().slice(0, 8), tenantId, assessmentId, b.patient_id, p.photo_type, effectivePhotoUrl, assessmentDate, p.notes || null);
-            }
-          }
-        }
+        saveAssessmentPhotos(assessmentId, b.patient_id, tenantId, assessmentDate, b.photos);
       }
 
       logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
@@ -1283,23 +1306,10 @@ export class PersonalController {
       if (Array.isArray(b.photos)) {
         db.prepare('DELETE FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').run(id, tenantId);
         
-        for (const p of b.photos) {
-          const effectiveFileId = extractFileIdFromPhotoInput(p, tenantId);
-          const effectivePhotoUrl = sanitizePhotoUrl(p.photo_url) || '';
-          if ((effectiveFileId || effectivePhotoUrl) && p.photo_type) {
-            try {
-              db.prepare(`
-                INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-              `).run('paph-' + uuidv4().slice(0, 8), tenantId, id, existing.patient_id, p.photo_type, effectivePhotoUrl, b.assessment_date || new Date().toISOString().split('T')[0], p.notes || null, effectiveFileId);
-            } catch (_) {
-              db.prepare(`
-                INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-              `).run('paph-' + uuidv4().slice(0, 8), tenantId, id, existing.patient_id, p.photo_type, effectivePhotoUrl, b.assessment_date || new Date().toISOString().split('T')[0], p.notes || null);
-            }
-          }
-        }
+        const assessmentDate: string = typeof b.assessment_date === 'string'
+          ? b.assessment_date
+          : (new Date().toISOString().split('T')[0] || '');
+        saveAssessmentPhotos(String(id), String(existing.patient_id), tenantId, assessmentDate, b.photos);
       }
 
       logAudit(req, 'UPDATE_ASSESSMENT', 'personal_assessments', id, { photosCount: Array.isArray(b.photos) ? b.photos.length : undefined });
@@ -1540,28 +1550,19 @@ export class PersonalController {
         return;
       }
       const tenantId = req.tenantId!;
-      const { patient_id, assessment_id, photo_type, photo_url, photo_date, notes, file_id, fileId } = req.body;
+      const { patient_id, assessment_id, photo_type, photo_date, notes, file_id, fileId } = req.body;
+      const effectiveFileId = requireAttachmentId(file_id || fileId, tenantId);
 
-      const effectiveFileId = extractFileIdFromPhotoInput({ file_id, fileId, photo_url }, tenantId);
-      const effectivePhotoUrl = sanitizePhotoUrl(photo_url) || '';
-
-      if (!patient_id || !photo_type || (!effectiveFileId && !effectivePhotoUrl)) {
+      if (!patient_id || !photo_type || !effectiveFileId) {
         res.status(400).json({ error: 'Campos patient_id, photo_type e foto (file_id) são obrigatórios' });
         return;
       }
 
       const id = 'paph-' + uuidv4().slice(0, 8);
-      try {
-        db.prepare(`
-          INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, tenantId, assessment_id || null, patient_id, photo_type, effectivePhotoUrl, photo_date || new Date().toISOString().split('T')[0], notes || null, effectiveFileId);
-      } catch (_) {
-        db.prepare(`
-          INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, tenantId, assessment_id || null, patient_id, photo_type, effectivePhotoUrl, photo_date || new Date().toISOString().split('T')[0], notes || null);
-      }
+      db.prepare(`
+        INSERT INTO personal_assessment_photos (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
+        VALUES (?, ?, ?, ?, ?, '', ?, ?, ?)
+      `).run(id, tenantId, assessment_id || null, patient_id, photo_type, photo_date || new Date().toISOString().split('T')[0], notes || null, effectiveFileId);
 
       res.status(201).json({ id, message: 'Foto registrada com sucesso' });
     } catch (err: any) {
@@ -1684,8 +1685,7 @@ export class PersonalController {
       }
 
       const id = 'pex-' + uuidv4().slice(0, 8);
-      const effectiveExerciseFileId = extractFileIdFromPhotoInput({ file_id: exercise_file_id, photo_url }, tenantId);
-      const sanitizedPhoto = sanitizePhotoUrl(photo_url);
+      const effectiveExerciseFileId = requireAttachmentId(exercise_file_id, tenantId);
 
       db.prepare(`
         INSERT INTO personal_exercises (
@@ -1698,7 +1698,7 @@ export class PersonalController {
         secondary_muscles_json ? (typeof secondary_muscles_json === 'string' ? secondary_muscles_json : JSON.stringify(secondary_muscles_json)) : null,
         body_region || null, equipment || null, category || 'Musculação',
         execution_type || 'bilateral', mechanics || null, level || 'todos',
-        instructions || null, technical_notes || null, sanitizedPhoto || null, effectiveExerciseFileId || null,
+        instructions || null, technical_notes || null, null, effectiveExerciseFileId || null,
         is_active !== undefined ? (is_active ? 1 : 0) : 1,
         req.user?.userId || null
       );
@@ -1733,9 +1733,8 @@ export class PersonalController {
       }
 
       const effectiveExerciseFileId = exercise_file_id !== undefined
-        ? extractFileIdFromPhotoInput({ file_id: exercise_file_id, photo_url }, tenantId)
-        : (photo_url !== undefined ? extractFileIdFromPhotoInput({ photo_url }, tenantId) : undefined);
-      const sanitizedPhoto = photo_url !== undefined ? sanitizePhotoUrl(photo_url) : undefined;
+        ? requireAttachmentId(exercise_file_id, tenantId)
+        : undefined;
 
       let targetId = id;
       if (existing.tenant_id === tenantId) {
@@ -1770,8 +1769,8 @@ export class PersonalController {
           level !== undefined ? level : null,
           instructions !== undefined ? instructions : null,
           technical_notes !== undefined ? technical_notes : null,
-          photo_url !== undefined ? 1 : 0,
-          sanitizedPhoto || null,
+          exercise_file_id !== undefined ? 1 : 0,
+          null,
           effectiveExerciseFileId !== undefined ? 1 : 0,
           effectiveExerciseFileId || null,
           is_active !== undefined ? (is_active ? 1 : 0) : null,
@@ -1799,7 +1798,7 @@ export class PersonalController {
           level !== undefined ? level : existing.level,
           instructions !== undefined ? instructions : existing.instructions,
           technical_notes !== undefined ? technical_notes : existing.technical_notes,
-          photo_url !== undefined ? (sanitizedPhoto || null) : existing.photo_url,
+          exercise_file_id !== undefined ? null : existing.photo_url,
           effectiveExerciseFileId !== undefined ? (effectiveExerciseFileId || null) : existing.exercise_file_id,
           is_active !== undefined ? (is_active ? 1 : 0) : 1,
           req.user?.userId || null
@@ -1991,7 +1990,7 @@ export class PersonalController {
                 Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
                 ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
                 ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null,
+                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, '',
                 effectiveFileId
               );
             } else {
@@ -2001,7 +2000,7 @@ export class PersonalController {
                 Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
                 ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
                 ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null
+                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ''
               );
             }
           });
@@ -2087,7 +2086,7 @@ export class PersonalController {
                 Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
                 ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
                 ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null,
+                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, '',
                 effectiveFileId
               );
             } else {
@@ -2097,7 +2096,7 @@ export class PersonalController {
                 Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
                 ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
                 ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null
+                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ''
               );
             }
           });
@@ -2146,20 +2145,45 @@ export class PersonalController {
           newWorkoutId, tenantId, destPatientId, professionalId, destTitle, destDivision, original.structure_type, original.notes
         );
 
-        const insertEx = db.prepare(`
-          INSERT INTO personal_workout_exercises (
-            id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
-            sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
+        let hasFileIdCol = false;
+        try {
+          const cols = db.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
+          hasFileIdCol = cols.includes('exercise_file_id');
+        } catch (_) {}
 
-        origExercises.forEach((ex: any) => {
-          insertEx.run(
-            'pwe-' + uuidv4().slice(0, 8), tenantId, newWorkoutId, ex.exercise_id, ex.order_index,
-            ex.name, ex.muscle_group, ex.sets, ex.reps, ex.load_kg, ex.tempo, ex.rest_seconds,
-            ex.cadence, ex.rpe, ex.rir, ex.technique, ex.technique_custom, ex.notes, ex.photo_url
-          );
-        });
+        if (hasFileIdCol) {
+          const insertExWithFileId = db.prepare(`
+            INSERT INTO personal_workout_exercises (
+              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
+              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url, exercise_file_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?)
+          `);
+
+          origExercises.forEach((ex: any) => {
+            const effectiveFileId = ex.exercise_file_id || (ex.exercise_id ? (db.prepare('SELECT exercise_file_id FROM personal_exercises WHERE id = ?').get(ex.exercise_id) as any)?.exercise_file_id : null) || null;
+            insertExWithFileId.run(
+              'pwe-' + uuidv4().slice(0, 8), tenantId, newWorkoutId, ex.exercise_id || null, ex.order_index,
+              ex.name, ex.muscle_group, ex.sets, ex.reps, ex.load_kg, ex.tempo, ex.rest_seconds,
+              ex.cadence, ex.rpe, ex.rir, ex.technique, ex.technique_custom, ex.notes,
+              effectiveFileId
+            );
+          });
+        } else {
+          const insertEx = db.prepare(`
+            INSERT INTO personal_workout_exercises (
+              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
+              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')
+          `);
+
+          origExercises.forEach((ex: any) => {
+            insertEx.run(
+              'pwe-' + uuidv4().slice(0, 8), tenantId, newWorkoutId, ex.exercise_id || null, ex.order_index,
+              ex.name, ex.muscle_group, ex.sets, ex.reps, ex.load_kg, ex.tempo, ex.rest_seconds,
+              ex.cadence, ex.rpe, ex.rir, ex.technique, ex.technique_custom, ex.notes
+            );
+          });
+        }
       });
 
       transaction();

@@ -499,7 +499,7 @@ export class FileController {
 
       // Validação estrita por clínica: busca por ID ou por object_key (inclui arquivos globais de biblioteca)
       let file = db
-        .prepare('SELECT * FROM file_attachments WHERE (id = ? OR object_key = ?) AND (clinic_id = ? OR clinic_id = ? OR clinic_id = "global")')
+        .prepare("SELECT * FROM file_attachments WHERE (id = ? OR object_key = ?) AND (clinic_id = ? OR clinic_id = ? OR clinic_id = 'global')")
         .get(decodedId, decodedId, tenantId, sanitizedClinicId) as any;
 
       if (!file) {

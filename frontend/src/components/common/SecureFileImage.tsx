@@ -17,6 +17,17 @@ export interface SecureFileImageProps {
 const urlCache = new Map<string, { url: string; expiresAt: number }>();
 
 /**
+ * Registra ou atualiza no cache em memória uma URL temporária válida já conhecida
+ */
+export function cacheFileUrl(fileId: string, url: string, expiresInSeconds: number = 240): void {
+  if (!fileId || !url || typeof fileId !== 'string' || typeof url !== 'string') return;
+  urlCache.set(fileId, {
+    url,
+    expiresAt: Date.now() + Math.max(30, expiresInSeconds) * 1000
+  });
+}
+
+/**
  * Validação de segurança para URLs de fallback:
  * NUNCA permite URLs blob: locais expiradas, URLs do Cloudflare Worker expiradas,
  * nem URLs diretas *.r2.cloudflarestorage.com (o bucket é estritamente privado).

@@ -12,6 +12,7 @@ export interface SeedExercise {
   instructions: string;
   technical_notes?: string;
   photo_url?: string;
+  exercise_file_id?: string;
 }
 
 export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
@@ -1754,6 +1755,13 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
   }
 ];
 
+// Garante identificador persistente e único de anexo R2 para cada um dos 119 exercícios do catálogo global
+for (const ex of DEFAULT_EXERCISE_LIBRARY) {
+  if (!ex.exercise_file_id) {
+    ex.exercise_file_id = `att-${ex.id}`;
+  }
+}
+
 export function seedExerciseLibrary(rawDb: any): void {
   try {
     // Garante que todas as colunas necessárias existam
@@ -1768,6 +1776,49 @@ export function seedExerciseLibrary(rawDb: any): void {
     if (!pExCols.includes('exercise_file_id')) rawDb.exec('ALTER TABLE personal_exercises ADD COLUMN exercise_file_id TEXT');
     if (!pExCols.includes('is_active')) rawDb.exec('ALTER TABLE personal_exercises ADD COLUMN is_active INTEGER DEFAULT 1');
 
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS file_attachments (
+        id TEXT PRIMARY KEY,
+        clinic_id TEXT NOT NULL,
+        patient_id TEXT,
+        appointment_id TEXT,
+        assessment_id TEXT,
+        exercise_id TEXT,
+        uploaded_by TEXT NOT NULL,
+        storage_provider TEXT NOT NULL DEFAULT 'cloudflare_r2',
+        object_key TEXT NOT NULL,
+        original_filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        category TEXT NOT NULL DEFAULT 'general',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+
+    try {
+      const attachCols = rawDb.prepare('PRAGMA table_info(file_attachments)').all().map((c: any) => c.name);
+      if (!attachCols.includes('exercise_id')) rawDb.exec('ALTER TABLE file_attachments ADD COLUMN exercise_id TEXT');
+    } catch (_) {}
+
+    const insertAttachmentStmt = rawDb.prepare(`
+      INSERT INTO file_attachments (
+        id, clinic_id, patient_id, appointment_id, assessment_id, exercise_id,
+        uploaded_by, storage_provider, object_key, original_filename, mime_type,
+        file_size, category, created_at, updated_at
+      ) VALUES (
+        ?, 'global', NULL, NULL, NULL, ?,
+        'system', 'cloudflare_r2', ?, ?, 'image/webp',
+        2048, 'exercises', datetime('now'), datetime('now')
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        object_key = excluded.object_key,
+        original_filename = excluded.original_filename,
+        category = 'exercises',
+        storage_provider = 'cloudflare_r2',
+        updated_at = datetime('now')
+    `);
+
     const stmt = rawDb.prepare(`
       INSERT INTO personal_exercises (
         id, tenant_id, name, muscle_group, secondary_muscles_json,
@@ -1777,7 +1828,7 @@ export function seedExerciseLibrary(rawDb: any): void {
       ) VALUES (
         ?, 'global', ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, null, 0, 1,
+        ?, ?, null, ?, 0, 1,
         datetime('now'), datetime('now')
       )
       ON CONFLICT(id) DO UPDATE SET
@@ -1792,6 +1843,8 @@ export function seedExerciseLibrary(rawDb: any): void {
         level = excluded.level,
         instructions = excluded.instructions,
         technical_notes = excluded.technical_notes,
+        photo_url = null,
+        exercise_file_id = excluded.exercise_file_id,
         is_active = 1,
         updated_at = datetime('now')
       WHERE personal_exercises.is_custom = 0
@@ -1800,6 +1853,17 @@ export function seedExerciseLibrary(rawDb: any): void {
     rawDb.exec('BEGIN IMMEDIATE;');
     try {
       for (const ex of DEFAULT_EXERCISE_LIBRARY) {
+        const fileId = ex.exercise_file_id || `att-${ex.id}`;
+        const objectKey = `exercises/global/${ex.id}.webp`;
+        const filename = `${ex.id}.webp`;
+
+        insertAttachmentStmt.run(
+          fileId,
+          ex.id,
+          objectKey,
+          filename
+        );
+
         stmt.run(
           ex.id,
           ex.name,
@@ -1813,7 +1877,7 @@ export function seedExerciseLibrary(rawDb: any): void {
           ex.level,
           ex.instructions,
           ex.technical_notes || null,
-          ex.photo_url || null
+          fileId
         );
       }
       rawDb.exec('COMMIT;');
@@ -1821,7 +1885,7 @@ export function seedExerciseLibrary(rawDb: any): void {
       try { rawDb.exec('ROLLBACK;'); } catch (_) {}
       throw txErr;
     }
-    console.log(`[Database] Biblioteca expandida de exercícios semeada com sucesso: ${DEFAULT_EXERCISE_LIBRARY.length} exercícios.`);
+    console.log(`[Database] Biblioteca expandida de exercícios semeada com sucesso: ${DEFAULT_EXERCISE_LIBRARY.length} exercícios com imagens R2 associadas.`);
   } catch (err) {
     console.error('[Database] Erro ao semear biblioteca expandida de exercícios:', err);
   }

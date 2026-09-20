@@ -375,7 +375,12 @@ async function runTests() {
     assert(evoRes.status === 200, 'Consulta de dados de evolução para gráficos retorna HTTP 200');
     assert(evoRes.data.history.length === 2, 'Histórico contém as avaliações cadastradas');
 
-    // 3.4 Registra foto antes/depois
+    // 3.4 Registra foto antes/depois com a referência persistente do R2
+    const assessmentFileId = 'att-personal-assessment-photo';
+    db.prepare(`INSERT INTO file_attachments
+      (id, clinic_id, patient_id, uploaded_by, storage_provider, object_key, original_filename, mime_type, file_size, category)
+      VALUES (?, ?, ?, ?, 'cloudflare_r2', ?, 'assessment.webp', 'image/webp', 1024, 'personal_assessment_front')`
+    ).run(assessmentFileId, tenantAId, studentAId, managerAId, `clinics/${tenantAId}/patients/${studentAId}/personal_assessment_front/assessment.webp`);
     const photoRes = await makeRequest('POST', '/api/v1/personal/photos', {
       Authorization: `Bearer ${managerTokenA}`,
       'x-tenant-id': tenantAId
@@ -383,7 +388,7 @@ async function runTests() {
       patient_id: studentAId,
       assessment_id: assessmentId,
       photo_type: 'front',
-      photo_url: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=500',
+      file_id: assessmentFileId,
       photo_date: '2026-09-10'
     });
     assert(photoRes.status === 201, 'Foto de avaliação física registrada com sucesso (HTTP 201)');
@@ -393,6 +398,21 @@ async function runTests() {
       'x-tenant-id': tenantAId
     });
     assert(listPhotosRes.data.photos.length === 1, 'Lista de fotos do aluno retorna 1 foto registrada');
+    assert(listPhotosRes.data.photos[0].file_id === assessmentFileId && !listPhotosRes.data.photos[0].photo_url, 'Foto persiste somente file_id, sem URL temporária');
+    const signedAssessmentImage = await makeRequest('GET', `/api/v1/files/${assessmentFileId}/url`, {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(signedAssessmentImage.status === 200 && signedAssessmentImage.data.url.includes('token='), 'Após recarregar, file_id gera uma nova URL assinada pelo Worker');
+
+    // 3.8 Carrega a avaliação completa e valida que as fotos usam exclusivamente file_id
+    const getAssessmentRes = await makeRequest('GET', `/api/v1/personal/assessments/${assessmentId}`, {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(getAssessmentRes.status === 200, 'Consulta de detalhes da avaliação física retorna HTTP 200');
+    assert(Array.isArray(getAssessmentRes.data.photos) && getAssessmentRes.data.photos.length === 1, 'Avaliação física retorna lista de fotos persistidas');
+    assert(getAssessmentRes.data.photos[0].file_id === assessmentFileId && !getAssessmentRes.data.photos[0].photo_url, 'Foto na avaliação possui file_id e nenhuma URL efêmera gravada');
 
     // ====================================================
     // 4. ZEMDAPERSONAL — BIBLIOTECA DE EXERCÍCIOS & PRESCRIÇÃO
@@ -405,9 +425,22 @@ async function runTests() {
       'x-tenant-id': tenantAId
     });
     assert(exListRes.status === 200, 'Listagem da biblioteca de exercícios retorna HTTP 200');
-    assert(exListRes.data.exercises.length >= 10, `Biblioteca possui ${exListRes.data.exercises.length} exercícios pré-carregados com fotos`);
+    assert(exListRes.data.exercises.length === 119, `Biblioteca possui todos os 119 exercícios do catálogo global`);
+    assert(exListRes.data.exercises.every(e => Boolean(e.exercise_file_id) && String(e.exercise_file_id).startsWith('att-')), 'Todos os 119 exercícios possuem exercise_file_id vinculado');
 
-    // 4.2 Cria exercício customizado
+    // 4.1b Valida que a imagem de um exercício padrão da biblioteca gera URL assinada do R2
+    const globalExSignedUrl = await makeRequest('GET', '/api/v1/files/att-ex-supino-reto-barra/url', {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(globalExSignedUrl.status === 200 && globalExSignedUrl.data.url.includes('token='), 'Imagem do exercício padrão gera URL assinada pelo Cloudflare Worker para a clínica');
+
+    // 4.2 Cria exercício customizado com imagem já registrada no R2
+    const exerciseFileId = 'att-personal-exercise-photo';
+    db.prepare(`INSERT INTO file_attachments
+      (id, clinic_id, patient_id, uploaded_by, storage_provider, object_key, original_filename, mime_type, file_size, category)
+      VALUES (?, ?, NULL, ?, 'cloudflare_r2', ?, 'supino.webp', 'image/webp', 1024, 'exercises')`
+    ).run(exerciseFileId, tenantAId, managerAId, `clinics/${tenantAId}/exercises/exercises/supino.webp`);
     const newExRes = await makeRequest('POST', '/api/v1/personal/exercises', {
       Authorization: `Bearer ${managerTokenA}`,
       'x-tenant-id': tenantAId
@@ -415,11 +448,17 @@ async function runTests() {
       name: 'Supino Reto com Halteres',
       muscle_group: 'peito',
       instructions: 'Adução escapular no banco, cotovelos em ângulo de 45 a 70 graus.',
-      photo_url: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=500'
+      exercise_file_id: exerciseFileId
     });
     assert(newExRes.status === 201, 'Exercício customizado criado com sucesso (HTTP 201)');
+    assert(newExRes.data.exercise.exercise_file_id === exerciseFileId && !newExRes.data.exercise.photo_url, 'Exercício persiste somente exercise_file_id');
+    const signedExerciseImage = await makeRequest('GET', `/api/v1/files/${exerciseFileId}/url`, {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(signedExerciseImage.status === 200 && signedExerciseImage.data.url.includes('token='), 'Imagem do exercício é resolvida pelo mesmo fluxo seguro do R2');
 
-    // 4.3 Prescreve treino Divisão A (Peito, Ombros e Tríceps)
+    // 4.3 Prescreve treino Divisão A vinculando exercícios da biblioteca
     const workoutRes = await makeRequest('POST', '/api/v1/personal/workouts', {
       Authorization: `Bearer ${managerTokenA}`,
       'x-tenant-id': tenantAId
@@ -431,6 +470,8 @@ async function runTests() {
       notes: 'Descanso rigoroso de 60s entre séries. Cadência 2-0-2.',
       exercises: [
         {
+          exercise_id: 'ex-supino-reto-barra',
+          exercise_file_id: 'att-ex-supino-reto-barra',
           name: 'Supino Reto com Barra',
           muscle_group: 'peito',
           sets: 4,
@@ -465,15 +506,33 @@ async function runTests() {
     assert(workoutRes.status === 201, 'Treino prescrito com exercícios e divisões com sucesso (HTTP 201)');
     const workoutId = workoutRes.data.id;
 
-    // 4.4 Carrega detalhes do treino
+    // 4.4 Carrega detalhes do treino para montagem / execução
     const getWkRes = await makeRequest('GET', `/api/v1/personal/workouts/${workoutId}`, {
       Authorization: `Bearer ${managerTokenA}`,
       'x-tenant-id': tenantAId
     });
     assert(getWkRes.status === 200, 'Consulta de detalhes do treino retorna HTTP 200');
     assert(getWkRes.data.exercises.length === 3, 'Treino possui os 3 exercícios salvos');
+    assert(getWkRes.data.exercises[0].exercise_file_id === 'att-ex-supino-reto-barra', 'Exercício no treino preserva exercise_file_id para exibição no card e na execução');
+    assert(!getWkRes.data.exercises[0].photo_url, 'Exercício no treino não persiste photo_url efêmera');
     assert(getWkRes.data.muscleVolume.peito === 7, 'Cálculo de volume semanal por grupo muscular: 7 séries de peito');
     assert(getWkRes.data.muscleVolume.ombros === 4, 'Cálculo de volume semanal por grupo muscular: 4 séries de ombros');
+
+    // 4.5 Duplica o treino e valida preservação de exercise_file_id
+    const dupRes = await makeRequest('POST', `/api/v1/personal/workouts/${workoutId}/duplicate`, {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    }, {
+      new_title: 'Peito e Ombros (Cópia)'
+    });
+    assert(dupRes.status === 200 || dupRes.status === 201, 'Treino duplicado com sucesso');
+    const dupWorkouts = db.prepare('SELECT id FROM personal_workouts WHERE title = ? AND tenant_id = ?').all('Peito e Ombros (Cópia)', tenantAId);
+    assert(dupWorkouts.length >= 1, 'Registro de treino duplicado encontrado no banco');
+    const dupDetails = await makeRequest('GET', `/api/v1/personal/workouts/${dupWorkouts[0].id}`, {
+      Authorization: `Bearer ${managerTokenA}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(dupDetails.status === 200 && dupDetails.data.exercises[0].exercise_file_id === 'att-ex-supino-reto-barra', 'Treino duplicado preserva exercise_file_id dos exercícios sem duplicar arquivos');
 
     // ====================================================
     // 5. ZEMDAPERSONAL — EXECUÇÃO DE TREINO & RECORDES PESSOAIS (PRS)

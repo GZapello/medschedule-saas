@@ -379,27 +379,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     }
 
     try {
-      const sanitizeCandidate = (url: string) => {
-        if (!url) return '';
-        if (url.startsWith('blob:') || url.includes('workers.dev') || url.includes('r2.cloudflarestorage.com')) {
-          return '';
-        }
-        return url.trim();
-      };
-
-      const photos: Array<{ photo_type: string; photo_url: string; file_id?: string }> = [];
-      if (photoFrontFileId || photoFront.trim()) {
-        photos.push({ photo_type: 'front', photo_url: sanitizeCandidate(photoFront), file_id: photoFrontFileId || undefined });
-      }
-      if (photoBackFileId || photoBack.trim()) {
-        photos.push({ photo_type: 'back', photo_url: sanitizeCandidate(photoBack), file_id: photoBackFileId || undefined });
-      }
-      if (photoRightFileId || photoRight.trim()) {
-        photos.push({ photo_type: 'right', photo_url: sanitizeCandidate(photoRight), file_id: photoRightFileId || undefined });
-      }
-      if (photoLeftFileId || photoLeft.trim()) {
-        photos.push({ photo_type: 'left', photo_url: sanitizeCandidate(photoLeft), file_id: photoLeftFileId || undefined });
-      }
+      // Signed URLs expire. Persist only the R2 attachment identifier.
+      const photos: Array<{ photo_type: string; file_id: string }> = [];
+      if (photoFrontFileId) photos.push({ photo_type: 'front', file_id: photoFrontFileId });
+      if (photoBackFileId) photos.push({ photo_type: 'back', file_id: photoBackFileId });
+      if (photoRightFileId) photos.push({ photo_type: 'right', file_id: photoRightFileId });
+      if (photoLeftFileId) photos.push({ photo_type: 'left', file_id: photoLeftFileId });
 
       // Agrupar testes de resistência muscular
       const enduranceTests: EnduranceTestItem[] = [];
@@ -1642,7 +1627,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       disabled={!selectedStudentId}
                       onUploaded={(info) => {
                         setPhotoFrontFileId(info.id);
-                        setPhotoFront(info.url || '');
+                        setPhotoFront('');
                       }}
                       onRemoved={() => {
                         setPhotoFrontFileId('');
@@ -1664,7 +1649,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       disabled={!selectedStudentId}
                       onUploaded={(info) => {
                         setPhotoBackFileId(info.id);
-                        setPhotoBack(info.url || '');
+                        setPhotoBack('');
                       }}
                       onRemoved={() => {
                         setPhotoBackFileId('');
@@ -1686,7 +1671,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       disabled={!selectedStudentId}
                       onUploaded={(info) => {
                         setPhotoRightFileId(info.id);
-                        setPhotoRight(info.url || '');
+                        setPhotoRight('');
                       }}
                       onRemoved={() => {
                         setPhotoRightFileId('');
@@ -1708,7 +1693,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       disabled={!selectedStudentId}
                       onUploaded={(info) => {
                         setPhotoLeftFileId(info.id);
-                        setPhotoLeft(info.url || '');
+                        setPhotoLeft('');
                       }}
                       onRemoved={() => {
                         setPhotoLeftFileId('');

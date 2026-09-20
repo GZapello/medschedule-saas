@@ -2608,6 +2608,13 @@ function repairLegacyPhotoUrls(rawDb: any): void {
         `).run(recoveredFileId || null, isUnsafeUrl ? 1 : 0, ex.id);
       }
     }
+
+    // ZemdaPersonal persists durable attachment IDs only. URLs (including old
+    // signed Worker URLs and external addresses) are presentation data and
+    // must never remain in personal assessment or exercise records.
+    rawDb.prepare("UPDATE personal_assessment_photos SET photo_url = '' WHERE photo_url IS NOT NULL").run();
+    rawDb.prepare('UPDATE personal_exercises SET photo_url = NULL WHERE photo_url IS NOT NULL').run();
+    rawDb.prepare("UPDATE personal_workout_exercises SET photo_url = '' WHERE photo_url IS NOT NULL").run();
   } catch (repairErr) {
     console.warn('[Database] Aviso ao executar repairLegacyPhotoUrls:', repairErr);
   }

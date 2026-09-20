@@ -198,7 +198,6 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
         level: formLevel,
         instructions: formInstructions,
         technical_notes: formTechnicalNotes,
-        photo_url: formFileId ? (formPhotoUrl && !formPhotoUrl.includes('workers.dev') && !formPhotoUrl.includes('r2.cloudflarestorage.com') ? formPhotoUrl : '') : formPhotoUrl,
         exercise_file_id: formFileId || null,
         is_active: formIsActive
       };
@@ -729,10 +728,10 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   category="exercises"
                   patientId="exercises"
                   exerciseId={editingExerciseId || undefined}
-                  initialUrl={formPhotoUrl}
                   initialFileId={formFileId}
                   onUploaded={(info) => {
                     setFormFileId(info.id);
+                    setFormPhotoUrl('');
                   }}
                   onRemoved={() => {
                     setFormFileId('');

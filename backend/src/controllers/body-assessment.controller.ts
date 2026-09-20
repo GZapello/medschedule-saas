@@ -16,7 +16,7 @@ import { logAudit } from '../middlewares/audit.middleware';
 export function hasZemdaBodyAccess(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
   if (req.user.role === 'superadmin') return false;
-  if (req.user.role === 'clinic_admin' || req.user.role === 'professional') return true;
+  if (req.user.role === 'clinic_admin') return true;
 
   try {
     const cu = db.prepare('SELECT permissions_json, zemda_body_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;

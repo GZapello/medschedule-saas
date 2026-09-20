@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
-import { SecureFileImage, fetchFreshFileUrl, isSafeFallbackUrl } from './SecureFileImage';
+import { SecureFileImage, fetchFreshFileUrl, isSafeFallbackUrl, cacheFileUrl } from './SecureFileImage';
 import { optimizeImageFile } from '../../utils/imageOptimizer';
 import {
   Upload,
@@ -108,6 +108,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
       ApiClient.get<{ url: string; originalFilename?: string; filename?: string; fileSize?: number }>(`/files/${encodeURIComponent(currentFileId)}/url`)
         .then((res) => {
           if (isMounted && res.url) {
+            cacheFileUrl(currentFileId, res.url, 240);
             setCurrentUrl(res.url);
             if (res.originalFilename || res.filename) {
               setCurrentFilename(res.originalFilename || res.filename || null);
@@ -306,6 +307,9 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
       }
 
       // Atualiza estados
+      if (savedFile.id && savedFile.url) {
+        cacheFileUrl(savedFile.id, savedFile.url, 240);
+      }
       setCurrentFileId(savedFile.id);
       setCurrentFilename(savedFile.originalFilename || savedFile.filename || optimizedFile.name);
       setCurrentFileSize(savedFile.fileSize || optimizedFile.size);
@@ -352,22 +356,27 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     setIsViewerOpen(true);
     setErrorMessage(null);
 
-    // Prioridade absoluta para currentFileId: busca sempre URL fresca do Worker via backend
+    // Prioridade absoluta para currentFileId: exibe imediatamente URL conhecida e renova conforme necessário
     if (currentFileId) {
-      try {
+      if (currentUrl) {
+        setViewerUrl(currentUrl);
+      } else {
         setIsLoadingViewUrl(true);
-        const freshUrl = await fetchFreshFileUrl(currentFileId, true);
+      }
+      try {
+        const freshUrl = await fetchFreshFileUrl(currentFileId, false);
         setViewerUrl(freshUrl);
         setCurrentUrl(freshUrl);
       } catch (err: any) {
-        console.warn('[FileImageUploader] Falha na 1ª tentativa ao carregar visualização, tentando novamente...', err);
-        try {
-          const retryUrl = await fetchFreshFileUrl(currentFileId, true);
-          setViewerUrl(retryUrl);
-          setCurrentUrl(retryUrl);
-        } catch (retryErr: any) {
-          console.error('[FileImageUploader] Falha ao carregar visualização por fileId:', retryErr);
-          setErrorMessage('Não foi possível carregar a imagem para visualização.');
+        if (!currentUrl) {
+          try {
+            const retryUrl = await fetchFreshFileUrl(currentFileId, true);
+            setViewerUrl(retryUrl);
+            setCurrentUrl(retryUrl);
+          } catch (retryErr: any) {
+            console.error('[FileImageUploader] Falha ao carregar visualização por fileId:', retryErr);
+            setErrorMessage('Não foi possível carregar a imagem para visualização.');
+          }
         }
       } finally {
         setIsLoadingViewUrl(false);
