@@ -16,6 +16,7 @@ import { DentistryWorkspace } from './components/dentistry/DentistryWorkspace';
 import { NutritionWorkspace } from './components/nutrition/NutritionWorkspace';
 import { OccupationalTherapyWorkspace } from './components/occupational-therapy/OccupationalTherapyWorkspace';
 import { SpeechTherapyWorkspace } from './components/speech-therapy/SpeechTherapyWorkspace';
+import { PsychologyWorkspace } from './components/psychology/PsychologyWorkspace';
 import { PsychopedagogyWorkspace } from './components/psychopedagogy/PsychopedagogyWorkspace';
 import { VerifyDocumentView } from './components/public/VerifyDocumentView';
 import { ProfessionalsView } from './components/professionals/ProfessionalsView';
@@ -117,6 +118,8 @@ const AppContent: React.FC = () => {
     isZemdaTO,
     isSpeechTherapist,
     isZemdaFono,
+    isPsychologist,
+    isZemdaPsico,
     isPsychopedagogue,
     isZemdaPP,
     isZemdaPersonal
@@ -320,6 +323,7 @@ const AppContent: React.FC = () => {
         'nutrition-workspace': 'ZemdaNutri',
         'occupational-therapy-workspace': 'ZemdaTO',
         'speech-therapy-workspace': 'ZemdaFono',
+        'zemda-psico': 'ZemdaPsico',
         professionals: 'Profissionais',
         services: 'Catálogo de Serviços',
         financial: 'Financeiro',
@@ -971,6 +975,22 @@ const AppContent: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaFono</h2>
                 <p className="text-sm text-slate-600 mb-4">
                   Este módulo clínico é de uso exclusivo para fonoaudiólogos e profissionais com área de atuação em <strong>Fonoaudiologia</strong>.
+                </p>
+              </div>
+            )
+          )}
+
+          {currentView === 'zemda-psico' && (
+            (isPsychologist || isZemdaPsico) ? (
+              <PsychologyWorkspace />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaPsico</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Este módulo clínico é de uso exclusivo para psicólogos e profissionais com área de atuação em <strong>Psicologia Clínica</strong> (CRP).
                 </p>
               </div>
             )

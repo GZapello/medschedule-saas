@@ -265,7 +265,8 @@ export function initializeDatabase(): void {
     addColIfMissing('users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('clinic_users', 'zemda_personal_enabled', 'INTEGER DEFAULT 0');
 
-    // Sincronização de profissão em clinic_users
+    // Sincronização de profissão em clinic_users e professionals
+    addColIfMissing('professionals', 'profession_name', 'TEXT');
     addColIfMissing('clinic_users', 'profession_id', 'TEXT');
     addColIfMissing('clinic_users', 'profession_name', 'TEXT');
 

@@ -716,6 +716,7 @@ export const ProfessionalsView: React.FC = () => {
                     onChange={e => {
                       const newPId = e.target.value;
                       setEditProfessionId(newPId);
+                      setEditSpecialtyName('');
                       const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
                       setEditSpecialtyId(matching.length > 0 ? matching[0].id : '');
                     }}

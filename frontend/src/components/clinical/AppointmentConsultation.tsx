@@ -6,6 +6,7 @@ import { NutritionWorkspace } from '../nutrition/NutritionWorkspace';
 import { OccupationalTherapyWorkspace } from '../occupational-therapy/OccupationalTherapyWorkspace';
 import { SpeechTherapyWorkspace } from '../speech-therapy/SpeechTherapyWorkspace';
 import { DentistryWorkspace } from '../dentistry/DentistryWorkspace';
+import { PsychologyWorkspace } from '../psychology/PsychologyWorkspace';
 import { PsychopedagogyWorkspace } from '../psychopedagogy/PsychopedagogyWorkspace';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
@@ -27,6 +28,8 @@ export function AppointmentConsultation({
     isOccupationalTherapist,
     isSpeechTherapist,
     isDentist,
+    isPsychologist,
+    isZemdaPsico,
     isPsychopedagogue,
     isZemdaPP,
     isZemdaBody,
@@ -37,6 +40,7 @@ export function AppointmentConsultation({
 
   const deducedModuleFromProfession =
     (isPsychopedagogue || isZemdaPP || (currentUser?.professionName || '').toLowerCase().includes('psicopedag') || (appointment.service_name || '').toLowerCase().includes('psicopedag')) ? 'ZemdaPP' :
+    (isPsychologist || isZemdaPsico || (currentUser?.professionName || '').toLowerCase().includes('psicolog')) ? 'ZemdaPsico' :
     (isSpeechTherapist || (currentUser?.professionName || '').toLowerCase().includes('fono')) ? 'ZemdaFono' :
     (isDentist || (currentUser?.professionName || '').toLowerCase().includes('odonto') || (currentUser?.professionName || '').toLowerCase().includes('dentis')) ? 'ZemdaOdonto' :
     (isOccupationalTherapist || (currentUser?.professionName || '').toLowerCase().includes('ocupacional')) ? 'ZemdaTO' :
@@ -101,6 +105,7 @@ export function AppointmentConsultation({
     effectiveModuleType === 'ZemdaNutri' ? NutritionWorkspace :
     effectiveModuleType === 'ZemdaTO' ? OccupationalTherapyWorkspace :
     effectiveModuleType === 'ZemdaFono' ? SpeechTherapyWorkspace :
+    effectiveModuleType === 'ZemdaPsico' ? PsychologyWorkspace :
     effectiveModuleType === 'ZemdaPP' ? PsychopedagogyWorkspace :
     null;
 

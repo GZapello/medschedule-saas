@@ -31,6 +31,7 @@ import {
   Apple,
   Hand,
   Mic,
+  Brain,
   Dumbbell,
   GraduationCap
 } from 'lucide-react';
@@ -74,6 +75,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isZemdaTO,
     isSpeechTherapist,
     isZemdaFono,
+    isPsychologist,
+    isZemdaPsico,
     isPsychopedagogue,
     isZemdaPP,
     isZemdaPersonal,
@@ -130,6 +133,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'ZemdaFono (Fonoaudiologia)',
           icon: Mic,
           visible: isSpeechTherapist || isZemdaFono
+        },
+        {
+          id: 'zemda-psico',
+          label: 'ZemdaPsico (Psicologia)',
+          icon: Brain,
+          visible: isPsychologist || isZemdaPsico
         },
         {
           id: 'zemda-pp',

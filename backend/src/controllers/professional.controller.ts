@@ -150,13 +150,32 @@ export class ProfessionalController {
         finalSlug = `${base}-${profId.slice(-4)}`;
       }
 
+      let profName = '';
+      let profSlug = '';
+      if (professionId) {
+        const pRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(professionId) as any;
+        if (pRow) {
+          profName = pRow.name || '';
+          profSlug = pRow.slug || '';
+        }
+      }
+
+      const { module: targetModule, flags } = resolveProfessionModule({
+        id: professionId,
+        name: profName,
+        slug: profSlug,
+        registrationType
+      });
+
       const insertProf = db.prepare(`
         INSERT INTO professionals (
-          id, tenant_id, user_id, name, slug, public_booking_enabled, photo_url, profession_id, specialty_id, specialty_custom,
+          id, tenant_id, user_id, name, slug, public_booking_enabled, photo_url, profession_id, profession_name, specialty_id, specialty_custom,
           registration_type, registration_number, bio, practice_areas, buffer_minutes, gender,
-          remuneration_type, commission_percentage, fixed_salary, payment_day, active
+          remuneration_type, commission_percentage, fixed_salary, payment_day, active,
+          zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertProf.run(
@@ -168,6 +187,7 @@ export class ProfessionalController {
         publicBookingEnabled !== undefined ? (publicBookingEnabled ? 1 : 0) : 1,
         photoUrl || null,
         professionId || null,
+        profName || null,
         specialtyId || null,
         customSpec,
         registrationType || null,
@@ -179,21 +199,102 @@ export class ProfessionalController {
         remunerationType || 'commission',
         commissionPercentage !== undefined ? Number(commissionPercentage) : 0,
         fixedSalary !== undefined ? Number(fixedSalary) : 0,
-        paymentDay !== undefined ? Number(paymentDay) : 5
+        paymentDay !== undefined ? Number(paymentDay) : 5,
+        flags.zemda_fisio_enabled,
+        flags.zemda_odonto_enabled,
+        flags.zemda_nutri_enabled,
+        flags.zemda_to_enabled,
+        flags.zemda_fono_enabled,
+        flags.zemda_pp_enabled,
+        flags.zemda_psico_enabled,
+        flags.zemda_personal_enabled
+      );
+
+      // Atualiza usuário vinculado com profissão e flags
+      db.prepare(`
+        UPDATE users SET
+          profession_id = ?,
+          profession_name = ?,
+          registration_type = ?,
+          registration_number = ?,
+          practice_areas = ?,
+          zemda_fisio_enabled = ?,
+          zemda_odonto_enabled = ?,
+          zemda_nutri_enabled = ?,
+          zemda_to_enabled = ?,
+          zemda_fono_enabled = ?,
+          zemda_pp_enabled = ?,
+          zemda_psico_enabled = ?,
+          zemda_personal_enabled = ?
+        WHERE id = ?
+      `).run(
+        professionId || null,
+        profName || null,
+        registrationType || null,
+        registrationNumber || null,
+        practiceAreas || null,
+        flags.zemda_fisio_enabled,
+        flags.zemda_odonto_enabled,
+        flags.zemda_nutri_enabled,
+        flags.zemda_to_enabled,
+        flags.zemda_fono_enabled,
+        flags.zemda_pp_enabled,
+        flags.zemda_psico_enabled,
+        flags.zemda_personal_enabled,
+        userId
       );
 
       // Cria grade de horários padrão de segunda a sexta (ativo) e fim de semana (inativo)
       createDefaultSchedules(db, tenantId, profId);
 
-      // Garante vínculo ativo na clínica com permissões padrão
+      let permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'access_zemda_body'];
+      if (targetModule === 'ZemdaPersonal') {
+        permissions.push('access_zemda_personal');
+      }
+
+      // Garante vínculo ativo na clínica com permissões e flags
       db.prepare(`
-        INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, practice_areas)
-        VALUES (?, ?, ?, 'professional', 'active', 0, ?, ?)
+        INSERT INTO clinic_users (
+          id, tenant_id, user_id, role, status, is_manager, permissions_json, practice_areas,
+          profession_id, profession_name, profession_custom,
+          zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled
+        )
+        VALUES (?, ?, ?, 'professional', 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(tenant_id, user_id) DO UPDATE SET
           role = 'professional',
           status = 'active',
-          practice_areas = COALESCE(excluded.practice_areas, clinic_users.practice_areas)
-      `).run('cu-' + uuidv4().slice(0, 8), tenantId, userId, JSON.stringify(['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient']), practiceAreas || null);
+          profession_id = excluded.profession_id,
+          profession_name = excluded.profession_name,
+          profession_custom = excluded.profession_custom,
+          permissions_json = excluded.permissions_json,
+          practice_areas = COALESCE(excluded.practice_areas, clinic_users.practice_areas),
+          zemda_fisio_enabled = excluded.zemda_fisio_enabled,
+          zemda_odonto_enabled = excluded.zemda_odonto_enabled,
+          zemda_nutri_enabled = excluded.zemda_nutri_enabled,
+          zemda_to_enabled = excluded.zemda_to_enabled,
+          zemda_fono_enabled = excluded.zemda_fono_enabled,
+          zemda_pp_enabled = excluded.zemda_pp_enabled,
+          zemda_psico_enabled = excluded.zemda_psico_enabled,
+          zemda_personal_enabled = excluded.zemda_personal_enabled
+      `).run(
+        'cu-' + uuidv4().slice(0, 8),
+        tenantId,
+        userId,
+        JSON.stringify(permissions),
+        practiceAreas || null,
+        professionId || null,
+        profName || null,
+        profName || null,
+        flags.zemda_fisio_enabled,
+        flags.zemda_odonto_enabled,
+        flags.zemda_nutri_enabled,
+        flags.zemda_to_enabled,
+        flags.zemda_fono_enabled,
+        flags.zemda_pp_enabled,
+        flags.zemda_psico_enabled,
+        flags.zemda_personal_enabled
+      );
 
       logAudit(req, 'CREATE_PROFESSIONAL', 'professionals', profId, { name, email, slug: finalSlug });
       res.status(201).json({ id: profId, name, slug: finalSlug, message: 'Profissional cadastrado com sucesso' });
@@ -333,6 +434,7 @@ export class ProfessionalController {
         // Atualiza sinalizadores de módulo e dados higienizados no registro do profissional
         db.prepare(`
           UPDATE professionals SET
+            profession_name = ?,
             specialty_id = ?,
             specialty_custom = ?,
             practice_areas = ?,
@@ -346,6 +448,7 @@ export class ProfessionalController {
             zemda_personal_enabled = ?
           WHERE id = ? AND tenant_id = ?
         `).run(
+          newProfName || null,
           finalSpecialtyId,
           finalCustomSpec,
           finalPracticeAreas,
