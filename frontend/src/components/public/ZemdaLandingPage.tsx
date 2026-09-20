@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PublicHeader } from './PublicHeader';
 import { PublicFooter } from './PublicFooter';
-import { RevealSection, RevealItem, RevealOnScroll } from './RevealOnScroll';
+import { RevealSection, RevealItem } from './RevealOnScroll';
 import {
   CheckCircle2,
   ArrowRight,
@@ -789,13 +789,13 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
       </RevealSection>
 
       {/* 6. PLANOS */}
-      <section
+      <RevealSection
         id="planos"
         className="py-20 sm:py-28 bg-[#fafbfc] relative overflow-hidden"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-14">
           {/* Header da Seção de Planos */}
-          <RevealOnScroll>
+          <RevealItem delayMs={0}>
             <div className="text-center max-w-3xl mx-auto space-y-4">
               <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
                 Valores e Assinaturas
@@ -807,10 +807,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 Sem taxas ocultas, sem contratos de fidelidade. Cancele quando quiser.
               </p>
             </div>
-          </RevealOnScroll>
+          </RevealItem>
 
           {/* Banner: Todos os planos incluem */}
-          <RevealOnScroll delayMs={80} scale>
+          <RevealItem delayMs={120} scale>
             <div className="max-w-5xl mx-auto bg-white rounded-3xl p-6 sm:p-8 border border-teal-200/80 shadow-xs space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -845,12 +845,12 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 </span>
               </div>
             </div>
-          </RevealOnScroll>
+          </RevealItem>
 
           {/* Cards dos 3 Planos */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto items-stretch">
             {/* PLANO 1: Zemda Solo */}
-            <RevealOnScroll delayMs={80} scale className="h-full flex flex-col">
+            <RevealItem delayMs={200} scale className="h-full flex flex-col">
               <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-8 h-full">
                 <div className="space-y-6">
                   <div>
@@ -905,10 +905,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Começar agora
                 </button>
               </div>
-            </RevealOnScroll>
+            </RevealItem>
 
             {/* PLANO 2: Zemda Equipe (MAIS ESCOLHIDO) */}
-            <RevealOnScroll delayMs={160} scale className="h-full flex flex-col z-10">
+            <RevealItem delayMs={290} scale className="h-full flex flex-col z-10">
               <div className="relative bg-white rounded-3xl p-8 border-2 border-teal-500 shadow-xl shadow-teal-600/10 hover:shadow-2xl hover:shadow-teal-600/15 transition-all flex flex-col justify-between space-y-8 h-full scale-[1.02] sm:scale-105">
                 {/* Badge Mais Escolhido */}
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[11px] font-black uppercase tracking-wider rounded-full shadow-md">
@@ -969,10 +969,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </RevealOnScroll>
+            </RevealItem>
 
             {/* PLANO 3: Zemda Clínica */}
-            <RevealOnScroll delayMs={240} scale className="h-full flex flex-col">
+            <RevealItem delayMs={380} scale className="h-full flex flex-col">
               <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between space-y-8 h-full">
                 <div className="space-y-6">
                   <div>
@@ -1027,11 +1027,11 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Começar agora
                 </button>
               </div>
-            </RevealOnScroll>
+            </RevealItem>
           </div>
 
           {/* Destaque Obrigatório de Planos */}
-          <RevealOnScroll delayMs={120} scale>
+          <RevealItem delayMs={460} scale>
             <div className="max-w-3xl mx-auto rounded-2xl bg-white border border-teal-200/70 p-5 text-center shadow-xs">
               <p className="text-sm sm:text-base font-bold text-teal-950">
                 O plano define a quantidade de acessos. A profissão de cada usuário define o módulo especializado liberado automaticamente.
@@ -1040,17 +1040,17 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 Todos os planos contam com ZemdaBody, Agenda Interativa, Prontuário, Financeiro, Documentos, Estoque, Equipe, Agendamento online e IA.
               </p>
             </div>
-          </RevealOnScroll>
+          </RevealItem>
         </div>
-      </section>
+      </RevealSection>
 
       {/* 7. COMO FUNCIONA */}
-      <section
+      <RevealSection
         id="como-funciona"
         className="py-20 sm:py-28 bg-white border-y border-slate-100 relative"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
-          <RevealOnScroll>
+          <RevealItem delayMs={0}>
             <div className="text-center max-w-3xl mx-auto space-y-4">
               <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
                 Simplicidade em 3 Passos
@@ -1062,12 +1062,12 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 O Zemda foi construído para se adaptar ao jeito que você e seus profissionais atendem.
               </p>
             </div>
-          </RevealOnScroll>
+          </RevealItem>
 
           {/* 3 Passos Explicativos */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {/* Passo 1 */}
-            <RevealOnScroll delayMs={80} scale className="h-full">
+            <RevealItem delayMs={120} scale className="h-full">
               <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   1
@@ -1079,10 +1079,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Ao criar a conta da clínica ou cadastrar um novo profissional, é informado o nicho de atuação (Psicologia, Fonoaudiologia, Nutrição, Fisioterapia, etc.).
                 </p>
               </div>
-            </RevealOnScroll>
+            </RevealItem>
 
             {/* Passo 2 */}
-            <RevealOnScroll delayMs={160} scale className="h-full">
+            <RevealItem delayMs={210} scale className="h-full">
               <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   2
@@ -1094,10 +1094,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   A inteligência da plataforma ajusta automaticamente as fichas clínicas, termos de consentimento, histórico e ferramentas pertinentes.
                 </p>
               </div>
-            </RevealOnScroll>
+            </RevealItem>
 
             {/* Passo 3 */}
-            <RevealOnScroll delayMs={240} scale className="h-full">
+            <RevealItem delayMs={300} scale className="h-full">
               <div className="bg-[#fafbfc] border border-slate-200/80 rounded-3xl p-8 space-y-4 shadow-xs hover:border-teal-300 transition-all text-center sm:text-left h-full">
                 <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center font-black text-lg border border-teal-200/60">
                   3
@@ -1109,18 +1109,18 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                   Sem complicação ou chamados de suporte. O usuário já acessa sua experiência dedicada pronta para uso imediato.
                 </p>
               </div>
-            </RevealOnScroll>
+            </RevealItem>
           </div>
         </div>
-      </section>
+      </RevealSection>
 
       {/* 8. FAQ */}
-      <section
+      <RevealSection
         id="faq"
         className="py-20 sm:py-28 bg-[#fafbfc] relative"
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <RevealOnScroll>
+          <RevealItem delayMs={0}>
             <div className="text-center space-y-4">
               <span className="text-xs font-bold uppercase tracking-wider text-teal-600">
                 Dúvidas Frequentes
@@ -1132,13 +1132,13 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 Tudo o que você precisa saber sobre o funcionamento do Zemda.
               </p>
             </div>
-          </RevealOnScroll>
+          </RevealItem>
 
           <div className="space-y-4">
             {faqItems.map((item, index) => {
               const isOpen = openFaqIndex === index;
               return (
-                <RevealOnScroll key={index} delayMs={Math.min(index * 60, 300)}>
+                <RevealItem key={index} delayMs={100 + Math.min(index * 70, 350)}>
                   <div
                     className="bg-white border border-slate-200/80 rounded-2xl shadow-xs overflow-hidden transition-all"
                   >
@@ -1161,19 +1161,19 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                       </div>
                     )}
                   </div>
-                </RevealOnScroll>
+                </RevealItem>
               );
             })}
           </div>
         </div>
-      </section>
+      </RevealSection>
 
       {/* 9. CTA FINAL */}
-      <section className="py-20 sm:py-28 bg-white border-t border-slate-100 relative overflow-hidden">
+      <RevealSection className="py-20 sm:py-28 bg-white border-t border-slate-100 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-teal-50/40 via-emerald-50/20 to-white -z-10 pointer-events-none" />
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
-          <RevealOnScroll scale durationMs={650}>
+          <RevealItem delayMs={0} scale durationMs={650}>
             <div className="space-y-4 max-w-2xl mx-auto">
               <h2 className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight">
                 Sua rotina pode ser mais simples.
@@ -1201,9 +1201,9 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({
                 Já tenho uma conta
               </button>
             </div>
-          </RevealOnScroll>
+          </RevealItem>
         </div>
-      </section>
+      </RevealSection>
 
       {/* 10. FOOTER */}
       <PublicFooter
