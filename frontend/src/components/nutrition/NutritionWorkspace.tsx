@@ -32,6 +32,7 @@ import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
+import { ExternalTestsManager } from '../common/ExternalTestsManager';
 
 interface NutritionWorkspaceProps {
   initialPatientId?: string;
@@ -57,7 +58,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
   // Abas do Módulo
   const [activeTab, setActiveTab] = useState<
-    'anthropometry' | 'bioimpedance' | 'calculations' | 'recalls' | 'meal_plans' | 'goals' | 'anamnesis' | 'finish'
+    'anthropometry' | 'bioimpedance' | 'calculations' | 'recalls' | 'meal_plans' | 'goals' | 'anamnesis' | 'tests' | 'finish'
   >('anthropometry');
 
   const [loading, setLoading] = useState<boolean>(false);
@@ -656,6 +657,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           { id: 'meal_plans', label: 'Plano Alimentar (TACO)', icon: Utensils },
           { id: 'goals', label: 'Metas Nutricionais', icon: Target },
           { id: 'anamnesis', label: 'Anamnese Nutricional', icon: BookOpen },
+          { id: 'tests', label: 'Testes & Exames Externos', icon: FileText },
           { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
         ].map(tab => {
           const Icon = tab.icon;
@@ -1545,6 +1547,17 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* ABA: TESTES, EXAMES & AVALIAÇÕES EXTERNAS */}
+            {activeTab === 'tests' && selectedPatientId && (
+              <ExternalTestsManager
+                patientId={selectedPatientId}
+                moduleType="ZemdaNutri"
+                appointmentId={initialAppointmentId}
+                accentColor="emerald"
+                title="Testes, Exames Laboratoriais & Avaliações Externas (ZemdaNutri)"
+              />
             )}
 
             {/* ABA 8: FINALIZAR ATENDIMENTO */}

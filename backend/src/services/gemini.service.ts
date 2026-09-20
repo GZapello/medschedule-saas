@@ -294,6 +294,20 @@ export class GeminiService {
     return !!getApiKey();
   }
 
+  static isConfigured(): boolean {
+    return !!getApiKey();
+  }
+
+  static async generateText(prompt: string, systemInstruction: string = CLINICAL_SYSTEM_PROMPT): Promise<string | null> {
+    const result = await generateWithCascade(
+      systemInstruction,
+      [{ role: 'user', parts: [{ text: prompt }] }],
+      { temperature: 0.3, topP: 0.85, maxOutputTokens: 4096 },
+      15000
+    );
+    return result ? result.text : null;
+  }
+
   /**
    * Retorna os modelos candidatos configurados
    */

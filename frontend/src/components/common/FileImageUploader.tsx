@@ -46,7 +46,20 @@ export interface FileImageUploaderProps {
   disabled?: boolean;
 }
 
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+  'text/plain',
+  'application/csv'
+];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
@@ -174,10 +187,10 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
     // Validate mime type
     const isAllowedMime = ALLOWED_MIME_TYPES.includes(file.type);
     const fileExt = file.name.split('.').pop()?.toLowerCase();
-    const isAllowedExt = ['jpg', 'jpeg', 'png', 'webp'].includes(fileExt || '');
+    const isAllowedExt = ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv'].includes(fileExt || '');
 
     if (!isAllowedMime && !isAllowedExt) {
-      const err = 'Formato de arquivo não suportado. Apenas imagens JPG, PNG e WebP são permitidas.';
+      const err = 'Formato de arquivo não suportado. Formatos aceitos: JPG, PNG, WebP, PDF, DOC, DOCX, XLS, XLSX, CSV.';
       setErrorMessage(err);
       onError?.(err);
       return;

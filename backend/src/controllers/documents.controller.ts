@@ -11,6 +11,7 @@ import { isSpeechTherapistOrClinicManager } from './speech-therapy.controller';
 import { isDentistOrClinicManager } from './dentistry.controller';
 import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 import { hasPsychopedagogyAccess } from './psychopedagogy.controller';
+import { hasPsychologyAccess } from './psychology.controller';
 
 export class DocumentsController {
   static consultationStatus(req: Request, res: Response): void {
@@ -53,6 +54,7 @@ export class DocumentsController {
       else if (text.includes('ocupacional') || text.includes('terapia-ocupacional')) moduleType = 'ZemdaTO';
       else if (text.includes('odonto') || text.includes('dentis') || text.includes('cro')) moduleType = 'ZemdaOdonto';
       else if (text.includes('fisio') || text.includes('crefito') || text.includes('physio')) moduleType = 'ZemdaFisio';
+      else if (text.includes('psicolog') || text.includes('psicólog') || text.includes('crp') || Number(prof?.zemda_psico_enabled) === 1) moduleType = 'ZemdaPsico';
       else moduleType = 'general';
     }
 
@@ -548,7 +550,8 @@ export class DocumentsController {
       const moduleAccess: Record<string, (request: Request) => boolean> = {
         ZemdaNutri: isNutritionistOrClinicManager, ZemdaTO: isOccupationalTherapistOrClinicManager,
         ZemdaFono: isSpeechTherapistOrClinicManager, ZemdaOdonto: isDentistOrClinicManager, ZemdaFisio: isPhysiotherapistOrClinicManager,
-        ZemdaPP: (request: Request) => hasPsychopedagogyAccess(request, appt.patient_id)
+        ZemdaPP: (request: Request) => hasPsychopedagogyAccess(request, appt.patient_id),
+        ZemdaPsico: (request: Request) => hasPsychologyAccess(request, appt.patient_id)
       };
       if (evolution?.moduleType && evolution.moduleType !== 'general' && (!moduleAccess[evolution.moduleType] || !moduleAccess[evolution.moduleType](req))) {
         res.status(403).json({ error: 'Sem permissão para este módulo clínico.' }); return;

@@ -35,6 +35,7 @@ import { PersonalBodyMapIntegration } from './PersonalBodyMapIntegration';
 import { PersonalWorkoutExecutionModal } from './PersonalWorkoutExecutionModal';
 import { PersonalPdfExportModal } from './PersonalPdfExportModal';
 import { PersonalAssessmentComparisonModal } from './PersonalAssessmentComparisonModal';
+import { ExternalTestsManager } from '../common/ExternalTestsManager';
 
 interface PersonalStudentProfileProps {
   studentId: string;
@@ -642,6 +643,18 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Testes, Protocolos & Avaliações Externas Universais */}
+            {studentId && (
+              <div className="pt-6 border-t border-slate-100">
+                <ExternalTestsManager
+                  patientId={studentId}
+                  moduleType="ZemdaPersonal"
+                  accentColor="purple"
+                  title="Testes, Protocolos & Avaliações Externas (ZemdaPersonal)"
+                />
               </div>
             )}
           </div>

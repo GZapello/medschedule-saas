@@ -5,7 +5,33 @@ import path from 'path';
 import { db } from '../config/database';
 import { r2StorageService } from '../services/r2-storage.service';
 
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+  'text/plain',
+  'application/csv',
+  'application/x-csv'
+];
+const ALLOWED_EXTENSIONS = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.csv'
+];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export function getSigningSecret(): string {
@@ -67,7 +93,7 @@ export class FileController {
       const normalizedMime = String(mimeType).toLowerCase().trim();
       if (!ALLOWED_MIME_TYPES.includes(normalizedMime)) {
         res.status(400).json({
-          error: 'Tipo de arquivo não permitido. Apenas imagens JPEG, PNG ou WebP são aceitas.',
+          error: 'Tipo de arquivo não permitido. Formatos aceitos: JPG, PNG, WebP, PDF, DOC, DOCX, XLS, XLSX, CSV.',
           allowedTypes: ALLOWED_MIME_TYPES
         });
         return;
@@ -113,8 +139,15 @@ export class FileController {
       // Geração de chave de objeto anônima e segura
       const sanitizedClinicId = tenantId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
       let ext = path.extname(String(filename)).toLowerCase();
-      if (!ext || ext === '.') ext = '.webp';
-      if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) ext = '.webp';
+      if (!ext || ext === '.' || !ALLOWED_EXTENSIONS.includes(ext)) {
+        if (normalizedMime.includes('pdf')) ext = '.pdf';
+        else if (normalizedMime.includes('word') || normalizedMime.includes('document')) ext = '.docx';
+        else if (normalizedMime.includes('excel') || normalizedMime.includes('spreadsheet')) ext = '.xlsx';
+        else if (normalizedMime.includes('csv')) ext = '.csv';
+        else if (normalizedMime.includes('jpeg') || normalizedMime.includes('jpg')) ext = '.jpg';
+        else if (normalizedMime.includes('png')) ext = '.png';
+        else ext = '.webp';
+      }
       const uniqueId = uuidv4();
 
       let objectKey = '';
@@ -303,6 +336,9 @@ export class FileController {
         appointmentId,
         assessmentId,
         exerciseId,
+        professionalId,
+        moduleType,
+        testId,
         category
       } = req.body;
 
@@ -451,8 +487,8 @@ export class FileController {
           INSERT INTO file_attachments (
             id, clinic_id, patient_id, appointment_id, assessment_id, exercise_id,
             uploaded_by, storage_provider, object_key, original_filename, mime_type,
-            file_size, category, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            file_size, category, professional_id, module_type, test_id, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'cloudflare_r2', ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `).run(
           attachmentId,
           sanitizedClinicId,
@@ -465,7 +501,10 @@ export class FileController {
           String(filename),
           String(mimeType),
           Number(fileSize),
-          safeCategory
+          safeCategory,
+          professionalId || null,
+          moduleType || null,
+          testId || null
         );
       } catch (insertErr: any) {
         // Fallback caso colunas assessment_id ou exercise_id ainda não existam no banco local
@@ -549,6 +588,12 @@ export class FileController {
           assessment_id: targetAssessmentId || undefined,
           exerciseId: targetExerciseId || undefined,
           exercise_id: targetExerciseId || undefined,
+          professionalId: professionalId || undefined,
+          professional_id: professionalId || undefined,
+          moduleType: moduleType || undefined,
+          module_type: moduleType || undefined,
+          testId: testId || undefined,
+          test_id: testId || undefined,
           url: workerFileUrl
         }
       });

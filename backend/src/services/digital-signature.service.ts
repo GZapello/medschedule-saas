@@ -24,7 +24,7 @@ export interface CertificateMetadata {
 export interface SignatureRequest {
   tenantId: string;
   documentId: string;
-  documentType: 'certificate' | 'prescription' | 'exam_request' | 'clinical_record' | 'psychopedagogy_report' | 'other';
+  documentType: 'certificate' | 'prescription' | 'exam_request' | 'clinical_record' | 'psychopedagogy_report' | 'psychology_document' | 'psychology_session' | 'other';
   certificateId?: string;
   fileId?: string | null;
   rawContent: string | Buffer;
@@ -340,6 +340,8 @@ function formatDocumentType(t: string): string {
     case 'exam_request': return 'Solicitação de Exames';
     case 'clinical_record': return 'Prontuário Eletrônico / Evolução';
     case 'psychopedagogy_report': return 'Relatório Psicopedagógico Oficial';
+    case 'psychology_document': return 'Documento Psicológico Oficial (CFP 06/2019)';
+    case 'psychology_session': return 'Registro Documental de Sessão de Psicologia (CFP 01/2009)';
     default: return 'Documento Clínico';
   }
 }

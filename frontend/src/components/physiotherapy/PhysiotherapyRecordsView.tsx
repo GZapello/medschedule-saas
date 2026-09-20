@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { BodyPainMapCanvas } from './BodyPainMapCanvas';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
+import { ExternalTestsManager } from '../common/ExternalTestsManager';
 
 export const PhysiotherapyRecordsView: React.FC = () => {
   const { clientTermLabel, currentTenant, currentUser } = useAuth();
@@ -35,8 +36,8 @@ export const PhysiotherapyRecordsView: React.FC = () => {
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
 
-  // Aba ativa: Avaliação Funcional ou Evoluções de Sessão
-  const [activeTab, setActiveTab] = useState<'assessments' | 'evolutions'>('assessments');
+  // Aba ativa: Avaliação Funcional, Evoluções de Sessão ou Testes Externos
+  const [activeTab, setActiveTab] = useState<'assessments' | 'evolutions' | 'external_tests'>('assessments');
 
   // Estados de dados
   const [assessments, setAssessments] = useState<PhysiotherapyAssessment[]>([]);
@@ -337,6 +338,16 @@ export const PhysiotherapyRecordsView: React.FC = () => {
           >
             Evoluções de Sessão ({evolutions.length})
           </button>
+          <button
+            onClick={() => setActiveTab('external_tests')}
+            className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              activeTab === 'external_tests'
+                ? 'bg-white text-teal-800 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Testes Externos & Exames
+          </button>
         </div>
       </div>
 
@@ -431,7 +442,7 @@ export const PhysiotherapyRecordsView: React.FC = () => {
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'evolutions' ? (
         /* Aba de Evoluções */
         <div className="space-y-4">
           {evolutions.length === 0 ? (
@@ -519,6 +530,20 @@ export const PhysiotherapyRecordsView: React.FC = () => {
             </div>
           )}
         </div>
+      ) : (
+        /* Aba de Testes Externos */
+        selectedPatientId ? (
+          <ExternalTestsManager
+            patientId={selectedPatientId}
+            moduleType="ZemdaFisio"
+            accentColor="teal"
+            title="Testes, Exames & Avaliações Funcionais Externas (ZemdaFisio)"
+          />
+        ) : (
+          <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
+            Selecione um paciente para gerenciar testes externos.
+          </div>
+        )
       )}
 
       {/* ========================================================================= */}

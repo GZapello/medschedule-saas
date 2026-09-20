@@ -46,6 +46,8 @@ import { ClinicalReassessmentController } from '../controllers/clinical-reassess
 import { ClinicalGoalsController } from '../controllers/clinical-goals.controller';
 import { DigitalCertificateController } from '../controllers/digital-certificate.controller';
 import { PsychopedagogyController } from '../controllers/psychopedagogy.controller';
+import { PsychologyController } from '../controllers/psychology.controller';
+import { ExternalTestsController } from '../controllers/external-tests.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -549,6 +551,41 @@ api.get('/v1/psychopedagogy/retention-policy', requireTenant, requireRole('clini
 api.post('/v1/psychopedagogy/retention-policy', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveRetentionPolicy);
 
 // ==========================================
+// MÓDULO ZEMDAPSICO (Psicologia Clínica - CFP)
+// ==========================================
+api.get('/v1/psychology/profile/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getProfile);
+api.get('/v1/psychology/anamnesis/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getAnamnesis);
+api.post('/v1/psychology/anamnesis', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveAnamnesis);
+api.get('/v1/psychology/mental-state/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getMentalState);
+api.post('/v1/psychology/mental-state', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveMentalState);
+api.get('/v1/psychology/risk/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getRisk);
+api.post('/v1/psychology/risk', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveRisk);
+api.get('/v1/psychology/assessments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getAssessments);
+api.post('/v1/psychology/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveAssessment);
+api.get('/v1/psychology/instruments/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getInstruments);
+api.post('/v1/psychology/instruments', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveInstrument);
+api.delete('/v1/psychology/instruments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.deleteInstrument);
+api.get('/v1/psychology/screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getScreenings);
+api.post('/v1/psychology/screenings', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveScreening);
+api.delete('/v1/psychology/screenings/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.deleteScreening);
+api.get('/v1/psychology/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getSessions);
+api.post('/v1/psychology/sessions', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveSession);
+api.post('/v1/psychology/sessions/:id/seal', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.sealSession);
+api.post('/v1/psychology/sessions/:id/amendments', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.addSessionAmendment);
+api.post('/v1/psychology/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.finishConsultation);
+api.get('/v1/psychology/goals/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getGoals);
+api.post('/v1/psychology/goals', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveGoal);
+api.put('/v1/psychology/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.updateGoal);
+api.delete('/v1/psychology/goals/:id', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.deleteGoal);
+api.get('/v1/psychology/documents/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getDocuments);
+api.post('/v1/psychology/documents', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.createDocument);
+api.post('/v1/psychology/documents/:id/delivery', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.registerDocumentDelivery);
+api.get('/v1/psychology/documents/:id/print', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.printDocumentPdf);
+api.post('/v1/psychology/ai-assist', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.aiAssist);
+api.get('/v1/psychology/history/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getHistory);
+api.get('/v1/psychology/audit-logs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getAuditLogs);
+
+// ==========================================
 // CENTRAL DE CERTIFICADOS DIGITAIS ICP-BRASIL & ASSINATURA PAdES
 // ==========================================
 api.get('/v1/digital-certificates/status', authMiddleware, DigitalCertificateController.getProviderStatus);
@@ -818,5 +855,10 @@ api.delete('/v1/files/:id', requireTenant, FileController.deleteFile);
 api.delete('/files/:id', requireTenant, FileController.deleteFile);
 api.get('/v1/files/patient/:patientId', requireTenant, FileController.listPatientFiles);
 api.get('/files/patient/:patientId', requireTenant, FileController.listPatientFiles);
+
+// Testes Externos e Anexos Universais (ZemdaPsico, ZemdaFono, ZemdaTO, ZemdaNutri, ZemdaFisio, ZemdaOdonto, ZemdaPP, ZemdaPersonal)
+api.get('/v1/external-tests', requireTenant, ExternalTestsController.list);
+api.post('/v1/external-tests', requireTenant, ExternalTestsController.save);
+api.delete('/v1/external-tests/:id', requireTenant, ExternalTestsController.delete);
 
 export default api;

@@ -274,9 +274,12 @@ export function initializeDatabase(): void {
     addColIfMissing('professionals', 'profession_change_used', 'INTEGER DEFAULT 0');
     addColIfMissing('professionals', 'profession_changed_at', 'TEXT');
 
-    // Vínculos específicos de anexos para avaliações e exercícios
+    // Vínculos específicos de anexos para avaliações, exercícios e testes externos
     addColIfMissing('file_attachments', 'assessment_id', 'TEXT');
     addColIfMissing('file_attachments', 'exercise_id', 'TEXT');
+    addColIfMissing('file_attachments', 'professional_id', 'TEXT');
+    addColIfMissing('file_attachments', 'module_type', 'TEXT');
+    addColIfMissing('file_attachments', 'test_id', 'TEXT');
 
     // Assinatura eletrônica e selamento imutável de prontuários e documentos
     addColIfMissing('records', 'signature_hash', 'TEXT');
@@ -345,6 +348,42 @@ export function initializeDatabase(): void {
       `);
     } catch (e) {
       console.warn('[Migration] Erro ao criar fono_complementary_tests:', e);
+    }
+
+    // Tabela Universal de Testes Externos e Instrumentos Avaliativos (ZemdaPsico, ZemdaFono, ZemdaTO, etc.)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS clinical_external_tests (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          professional_id TEXT,
+          appointment_id TEXT,
+          module_type TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'Teste/Instrumento Externo',
+          test_name TEXT NOT NULL,
+          test_date TEXT NOT NULL,
+          professional_name TEXT,
+          referred_by TEXT,
+          result_summary TEXT,
+          notes TEXT,
+          file_id TEXT,
+          file_url TEXT,
+          file_name TEXT,
+          file_type TEXT,
+          file_size INTEGER,
+          is_sealed INTEGER NOT NULL DEFAULT 0,
+          created_by TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_clinical_ext_tests_pat_mod ON clinical_external_tests (tenant_id, patient_id, module_type);
+        CREATE INDEX IF NOT EXISTS idx_clinical_ext_tests_file ON clinical_external_tests (file_id);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar clinical_external_tests:', e);
     }
 
 
@@ -2902,6 +2941,300 @@ function repairLegacyPhotoUrls(rawDb: any): void {
       retention_years INTEGER NOT NULL DEFAULT 5,
       auto_archive INTEGER NOT NULL DEFAULT 1,
       notify_before_archive_days INTEGER NOT NULL DEFAULT 30,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+
+    -- ============================================================================
+    -- MÓDULO ZEMDAPSICO (Psicologia Clínica - CFP)
+    -- ============================================================================
+
+    CREATE TABLE IF NOT EXISTS psychology_anamnesis (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      identification_demand TEXT,
+      main_complaint TEXT,
+      demand_history TEXT,
+      psych_psychiatric_history TEXT,
+      medical_history TEXT,
+      current_medications TEXT,
+      sleep_patterns TEXT,
+      eating_habits TEXT,
+      physical_activity TEXT,
+      substance_use TEXT,
+      family_context TEXT,
+      developmental_history TEXT,
+      marital_relationship_context TEXT,
+      academic_educational_context TEXT,
+      professional_work_context TEXT,
+      social_context TEXT,
+      support_network TEXT,
+      protective_factors TEXT,
+      vulnerability_factors TEXT,
+      significant_life_events TEXT,
+      previous_treatments TEXT,
+      treatment_goals TEXT,
+      theoretical_approach TEXT,
+      clinical_observations TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      sealed_at TEXT,
+      signature_hash TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_anamnesis_patient ON psychology_anamnesis(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_mental_state_exams (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      exam_date TEXT NOT NULL DEFAULT (date('now')),
+      appearance TEXT,
+      attitude_behavior TEXT,
+      consciousness_level TEXT,
+      orientation TEXT,
+      attention TEXT,
+      memory TEXT,
+      language_speech TEXT,
+      psychomotor TEXT,
+      mood TEXT,
+      affect TEXT,
+      thought_process TEXT,
+      sensory_perception TEXT,
+      cognitive_functions TEXT,
+      critical_judgment TEXT,
+      insight TEXT,
+      impulse_control TEXT,
+      current_risk TEXT,
+      observations TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      sealed_at TEXT,
+      signature_hash TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_eem_patient ON psychology_mental_state_exams(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_risk_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      assessment_date TEXT NOT NULL DEFAULT (date('now')),
+      suicidal_ideation TEXT,
+      self_harm TEXT,
+      planning TEXT,
+      intent_level TEXT,
+      means_access TEXT,
+      history_previous_attempts TEXT,
+      precipitating_factors TEXT,
+      protective_factors TEXT,
+      support_network_actionable TEXT,
+      conduct_adopted TEXT,
+      referral_destination TEXT,
+      safety_plan TEXT,
+      reassessment_schedule TEXT,
+      clinician_summary TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      sealed_at TEXT,
+      signature_hash TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_risk_patient ON psychology_risk_assessments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      assessment_title TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      demand_description TEXT,
+      start_date TEXT NOT NULL DEFAULT (date('now')),
+      completion_date TEXT,
+      status TEXT NOT NULL DEFAULT 'in_progress' CHECK(status IN ('in_progress', 'completed', 'suspended')),
+      fundamental_sources_json TEXT,
+      complementary_sources_json TEXT,
+      clinical_integration_analysis TEXT,
+      conclusion_synthesis TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      sealed_at TEXT,
+      signature_hash TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_assessments_patient ON psychology_assessments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_instruments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      assessment_id TEXT,
+      instrument_name TEXT NOT NULL,
+      version TEXT,
+      publisher TEXT,
+      purpose TEXT,
+      application_date TEXT NOT NULL DEFAULT (date('now')),
+      modality TEXT NOT NULL DEFAULT 'presencial',
+      satepsi_status TEXT NOT NULL DEFAULT 'pendente',
+      satepsi_verified_at TEXT,
+      professional_synthesis TEXT,
+      observations TEXT,
+      responsible_psychologist TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_instruments_patient ON psychology_instruments(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_screenings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      screening_name TEXT NOT NULL,
+      version TEXT,
+      bibliographic_reference TEXT,
+      target_population TEXT,
+      purpose TEXT,
+      license_notes TEXT,
+      application_date TEXT NOT NULL DEFAULT (date('now')),
+      score_raw TEXT,
+      classification TEXT,
+      clinical_notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_screenings_patient ON psychology_screenings(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_sessions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      session_number INTEGER,
+      session_date TEXT NOT NULL DEFAULT (date('now')),
+      modality TEXT NOT NULL DEFAULT 'presencial',
+      tdic_info_json TEXT,
+      current_demand TEXT,
+      relevant_themes TEXT,
+      interventions_used TEXT,
+      patient_response TEXT,
+      clinical_evolution TEXT NOT NULL,
+      conduct_plan TEXT,
+      referrals TEXT,
+      next_session_plan TEXT,
+      session_risk_notes TEXT,
+      is_sealed INTEGER NOT NULL DEFAULT 0,
+      signature_hash TEXT,
+      signed_at TEXT,
+      signed_by_name TEXT,
+      signed_by_registration TEXT,
+      sealed_at TEXT,
+      amendments_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_sessions_patient ON psychology_sessions(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_goals (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      title TEXT NOT NULL,
+      indicator TEXT,
+      target_period TEXT,
+      strategy TEXT,
+      status TEXT NOT NULL DEFAULT 'a_iniciar' CHECK(status IN ('a_iniciar', 'em_andamento', 'alcancado', 'revisado', 'cancelado')),
+      review_date TEXT,
+      completion_reason TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_goals_patient ON psychology_goals(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_documents (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT NOT NULL,
+      appointment_id TEXT,
+      document_type TEXT NOT NULL,
+      document_number TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      requester_name TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      rendered_text TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      is_sealed INTEGER NOT NULL DEFAULT 1,
+      sealed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      signature_hash TEXT NOT NULL,
+      signed_by_name TEXT NOT NULL,
+      signed_by_registration TEXT NOT NULL,
+      delivery_receipt_json TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_by TEXT,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_docs_patient ON psychology_documents(tenant_id, patient_id);
+
+    CREATE TABLE IF NOT EXISTS psychology_audit_logs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      action TEXT NOT NULL,
+      target_entity TEXT NOT NULL,
+      target_id TEXT,
+      details TEXT,
+      ip_address TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_psico_audit ON psychology_audit_logs(tenant_id, patient_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS psychology_retention_policies (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL UNIQUE,
+      retention_years INTEGER NOT NULL DEFAULT 5,
+      health_record_retention_years INTEGER NOT NULL DEFAULT 20,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE

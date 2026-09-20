@@ -3,6 +3,7 @@ import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
+import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import {
   GraduationCap,
   BookOpen,
@@ -1326,6 +1327,19 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
                     </div>
                   ))}
                 </div>
+
+                {/* Testes e Anexos Externos Universais */}
+                {selectedPatientId && (
+                  <div className="pt-6 border-t border-slate-100">
+                    <ExternalTestsManager
+                      patientId={selectedPatientId}
+                      moduleType="ZemdaPP"
+                      appointmentId={initialAppointmentId}
+                      accentColor="indigo"
+                      title="Testes, Protocolos & Documentos Externos (ZemdaPP)"
+                    />
+                  </div>
+                )}
               </div>
             )}
 

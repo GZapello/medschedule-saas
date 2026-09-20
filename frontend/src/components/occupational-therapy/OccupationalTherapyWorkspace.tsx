@@ -43,6 +43,7 @@ import { HomeSchoolProgramManager } from '../common/HomeSchoolProgramManager';
 import { EvolutionComparisonModal } from '../common/EvolutionComparisonModal';
 import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
+import { ExternalTestsManager } from '../common/ExternalTestsManager';
 
 interface OccupationalTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -89,6 +90,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
     | 'adl'
     | 'sensory'
     | 'motor_cognitive'
+    | 'tests'
     | 'goals'
     | 'treatment_plans'
     | 'home_program'
@@ -574,6 +576,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             { id: 'adl', label: 'AVDs & AIVDs (6 Níveis)', icon: Activity },
             { id: 'sensory', label: 'Perfil Sensorial (8 Sistemas)', icon: Eye },
             { id: 'motor_cognitive', label: 'Motor & Cognitivo', icon: Brain },
+            { id: 'tests', label: 'Testes & Protocolos Externos', icon: FileText },
             { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
             { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
             { id: 'treatment_plans', label: 'Plano Singular', icon: Layers },
@@ -1012,6 +1015,17 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* ABA: TESTES, PROTOCOLOS & AVALIAÇÕES EXTERNAS */}
+            {activeTab === 'tests' && selectedPatientId && (
+              <ExternalTestsManager
+                patientId={selectedPatientId}
+                moduleType="ZemdaTO"
+                appointmentId={initialAppointmentId}
+                accentColor="teal"
+                title="Testes, Protocolos & Avaliações Externas (ZemdaTO)"
+              />
             )}
 
             {/* ABA 5: PLANO TERAPÊUTICO SINGULAR */}

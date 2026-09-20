@@ -41,6 +41,7 @@ import { DentalImplantsManager } from './DentalImplantsManager';
 import { DentalProstheticsKanban } from './DentalProstheticsKanban';
 import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
+import { ExternalTestsManager } from '../common/ExternalTestsManager';
 
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
@@ -1651,6 +1652,16 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                 photos={clinicalPhotos}
                 onChangePhotos={setClinicalPhotos}
               />
+
+              {selectedPatientId && (
+                <ExternalTestsManager
+                  patientId={selectedPatientId}
+                  moduleType="ZemdaOdonto"
+                  appointmentId={initialAppointmentId}
+                  accentColor="sky"
+                  title="Testes, Laudos e Documentos Externos (ZemdaOdonto)"
+                />
+              )}
             </div>
           )}
         </div>

@@ -231,13 +231,14 @@ export function AppointmentConsultation({
       onOpenZemdaBody={isZemdaBody ? () => setActiveTab('zemda_body') : undefined}
       onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
       specializedModuleName={
+        effectiveModuleType === 'ZemdaPsico' ? 'ZemdaPsico' :
         effectiveModuleType === 'ZemdaPP' ? 'ZemdaPP' :
         effectiveModuleType === 'ZemdaFono' ? 'ZemdaFono' :
         effectiveModuleType === 'ZemdaOdonto' ? 'ZemdaOdonto' :
         effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
         effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
         effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
-        (isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
+        (isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
       }
     />
   );

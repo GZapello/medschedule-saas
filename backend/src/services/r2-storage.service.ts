@@ -71,7 +71,8 @@ export class R2StorageService {
     if (!ext || ext === '.') {
       ext = '.webp';
     }
-    if (!['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+    const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv'];
+    if (!ALLOWED_EXTS.includes(ext)) {
       ext = '.webp';
     }
 
