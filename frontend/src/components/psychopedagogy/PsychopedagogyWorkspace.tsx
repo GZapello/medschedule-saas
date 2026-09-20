@@ -6,7 +6,6 @@ import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsM
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PsychopedagogyDocumentModal, PsychopedagogyDocType } from './PsychopedagogyDocumentModal';
-import { useProfessionalCertificate } from '../../hooks/useProfessionalCertificate';
 import {
   GraduationCap,
   BookOpen,
@@ -66,7 +65,6 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 }) => {
   const { currentUser, isClinicAdmin, clientTermLabel } = useAuth();
   const { showToast } = useToast();
-  const { hasValidCertificate } = useProfessionalCertificate();
 
   // Pacientes e Seleção
   const [patients, setPatients] = useState<any[]>([]);
@@ -689,11 +687,6 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
       return;
     }
 
-    if (finishForm.signature_mode === 'pades' && !hasValidCertificate) {
-      showToast('Certificado ICP-Brasil não configurado. Configure em Minha Conta ou selecione Assinatura Eletrônica.', 'error');
-      return;
-    }
-
     try {
       setSaving(true);
       let effectiveAppointmentId = initialAppointmentId;
@@ -720,7 +713,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
         clinicalEvolution: finishForm.evolution_text,
         technicalNotes: finishForm.next_steps || '',
         isSealed: true,
-        useDigitalSignature: finishForm.signature_mode === 'pades',
+        useDigitalSignature: false,
         sessionData: {
           session_date: new Date().toISOString().split('T')[0],
           objectives: currentSession.objectives || 'Atendimento psicopedagógico finalizado.',
@@ -2515,65 +2508,22 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
                     </div>
                   </div>
 
-                  {/* Tipo de Assinatura */}
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                    <label className="font-bold text-slate-800 block">Tipo de Assinatura Desejada:</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setFinishForm({ ...finishForm, signature_mode: 'sha256' })}
-                        className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                          finishForm.signature_mode === 'sha256'
-                            ? 'border-indigo-600 bg-indigo-50/50 text-indigo-950 ring-2 ring-indigo-500/20'
-                            : 'border-slate-200 bg-white hover:border-slate-300'
-                        }`}
-                      >
-                        <strong className="block text-xs font-bold text-indigo-900">Eletrônica (Hash SHA-256)</strong>
-                        <span className="text-[11px] text-slate-500">Validação imediata de integridade no prontuário</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!hasValidCertificate) {
-                            showToast('Configure seu certificado ICP-Brasil em Minha Conta para assinar.', 'info');
-                            return;
-                          }
-                          setFinishForm({ ...finishForm, signature_mode: 'pades' });
-                        }}
-                        className={`p-3 rounded-xl border text-left transition-all ${
-                          finishForm.signature_mode === 'pades'
-                            ? 'border-indigo-600 bg-indigo-50/50 text-indigo-950 ring-2 ring-indigo-500/20'
-                            : !hasValidCertificate
-                            ? 'border-slate-200 bg-slate-100/70 cursor-not-allowed opacity-80'
-                            : 'border-slate-200 bg-white hover:border-slate-300 cursor-pointer'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <strong className="block text-xs font-bold text-indigo-900">Digital ICP-Brasil (PAdES)</strong>
-                          {hasValidCertificate ? (
-                            <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full">Pronto</span>
-                          ) : (
-                            <span className="text-[9px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">Não configurado</span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-slate-500 block mt-0.5">Com carimbo criptográfico e QR Code de verificação</span>
-                        {!hasValidCertificate && (
-                          <div className="mt-1.5 text-[10px] text-amber-700 flex items-center justify-between">
-                            <span>Certificado não configurado</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.dispatchEvent(new CustomEvent('open-certificate-settings'));
-                              }}
-                              className="font-bold underline text-amber-800 hover:text-amber-900 cursor-pointer"
-                            >
-                              [ Configurar em Minha Conta ]
-                            </button>
-                          </div>
-                        )}
-                      </button>
+                  {/* Selamento de Integridade do Prontuário */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+                    <label className="font-bold text-slate-800 block">Selamento & Integridade do Prontuário:</label>
+                    <div className="p-3 bg-white rounded-xl border border-indigo-100 flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <div className="space-y-1">
+                        <strong className="text-slate-900 font-bold block text-xs">Selo Interno de Integridade Zemda (SHA-256)</strong>
+                        <p className="text-slate-500 text-[11px] leading-relaxed">
+                          Ao finalizar, o atendimento será selado de forma imutável com carimbo de tempo, autoria autenticada e hash criptográfico SHA-256 no prontuário do aprendente.
+                        </p>
+                        <p className="text-slate-400 text-[10.5px]">
+                          Para emissão de relatórios, laudos e pareceres, utilize as opções pós-atendimento para impressão com assinatura manual física.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

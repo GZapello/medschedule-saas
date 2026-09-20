@@ -296,12 +296,21 @@ export interface DigitalStampInfo {
   qrCodeDataUrl?: string;
 }
 
+// ============================================================================
+// REGRA ARQUITETURAL FUNDAMENTAL:
+// internal_integrity_signature !== icp_brasil_signature
+// O selo de integridade interno (SHA-256) serve para autoria e imutabilidade no prontuário.
+// Nunca deve ser apresentado como assinatura qualificada ICP-Brasil.
+// ============================================================================
+export const INTERNAL_INTEGRITY_SIGNATURE_DIFFERS_FROM_ICP_BRASIL = true;
+
 export interface ClinicDocumentFooterProps {
   signatureHash?: string;
   signedByName?: string;
   signedByRegistration?: string;
   signedAt?: string;
   digitalStamp?: DigitalStampInfo | null;
+  manualOnly?: boolean;
   className?: string;
 }
 
@@ -318,9 +327,21 @@ export const ClinicDocumentFooter: React.FC<ClinicDocumentFooterProps> = ({
   signedByRegistration,
   signedAt,
   digitalStamp,
+  manualOnly = false,
   className = ''
 }) => {
   const todayStr = new Date().toLocaleDateString('pt-BR');
+
+  // Caso Assinatura Manual Limpa (Prioritário quando indicado)
+  if (manualOnly) {
+    return (
+      <div className={`mt-8 pt-4 border-t border-slate-200 text-center text-[10px] text-slate-500 space-y-1 ${className}`}>
+        <p>
+          Documento emitido através do Sistema Zemda • Válido mediante assinatura física do profissional responsável.
+        </p>
+      </div>
+    );
+  }
 
   // Caso 1: Documento assinado digitalmente com Certificado ICP-Brasil (PAdES)
   if (digitalStamp && (digitalStamp.isIcpBrasil || digitalStamp.format === 'PAdES')) {
@@ -475,8 +496,18 @@ export function generateClinicFooterHtml(options?: {
   signedByRegistration?: string;
   signedAt?: string;
   digitalStamp?: DigitalStampInfo | null;
+  manualOnly?: boolean;
 }): string {
   const todayStr = new Date().toLocaleDateString('pt-BR');
+
+  // Impressão limpa manual direta
+  if (options?.manualOnly) {
+    return `
+      <div style="margin-top: 28px; padding-top: 14px; border-top: 1px solid #cbd5e1; text-align: center; font-size: 10px; color: #64748b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        <div>Documento emitido através do Sistema Zemda • Válido mediante assinatura física do profissional responsável.</div>
+      </div>
+    `;
+  }
 
   // Caso ICP-Brasil
   if (options?.digitalStamp && (options.digitalStamp.isIcpBrasil || options.digitalStamp.format === 'PAdES')) {
@@ -521,8 +552,8 @@ export function generateClinicFooterHtml(options?: {
 
   // Impressão limpa manual
   return `
-    <div style="margin-top: 28px; padding-top: 14px; border-top: 1px solid #cbd5e1; text-align: center; font-size: 10px; color: #94a3b8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-      <div>Documento emitido eletronicamente através do Sistema Zemda • Válido com assinatura física ou assinatura eletrônica.</div>
+    <div style="margin-top: 28px; padding-top: 14px; border-top: 1px solid #cbd5e1; text-align: center; font-size: 10px; color: #64748b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <div>Documento emitido através do Sistema Zemda • Válido mediante assinatura física do profissional responsável.</div>
     </div>
   `;
 }

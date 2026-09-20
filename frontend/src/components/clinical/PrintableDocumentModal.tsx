@@ -250,17 +250,15 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
               Baixar PDF
             </button>
 
-            {/* 4. Opções de Assinatura ICP-Brasil */}
-            {!parsedStamp && (
-              <button
-                onClick={() => setShowSignatureChoice(true)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
-                title="Assinar digitalmente com Certificado ICP-Brasil"
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Assinar ICP-Brasil
-              </button>
-            )}
+            {/* 4. Opções de Assinatura */}
+            <button
+              onClick={() => setShowSignatureChoice(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+              title="Opções de Assinatura e Impressão"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Assinatura
+            </button>
 
             <button
               onClick={onClose}
@@ -429,25 +427,9 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
                   </div>
                 </div>
               </div>
-            ) : doc.signature_hash ? (
-              <>
-                <div className="font-medium text-slate-700">
-                  Documento assinado eletronicamente por{' '}
-                  <span className="font-semibold">{doc.signed_by_name || doc.professional_name}</span>
-                  {(doc.signed_by_registration || doc.registration_number) && (
-                    <span> — {doc.signed_by_registration || `${doc.registration_type || 'Conselho'} ${doc.registration_number}`}</span>
-                  )}
-                  {doc.signed_at && (
-                    <span> em {new Date(doc.signed_at).toLocaleString('pt-BR')}</span>
-                  )}
-                </div>
-                <div className="font-mono text-[9px] text-slate-500 break-all">
-                  Hash de integridade SHA-256: {doc.signature_hash}
-                </div>
-              </>
             ) : (
               <div>
-                Documento emitido eletronicamente através da Plataforma Zemda • Válido com assinatura física ou assinatura eletrônica.
+                Documento emitido através da Plataforma Zemda • Válido mediante assinatura física do profissional responsável.
               </div>
             )}
           </div>

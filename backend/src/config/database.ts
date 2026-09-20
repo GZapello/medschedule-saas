@@ -2752,6 +2752,11 @@ function repairLegacyPhotoUrls(rawDb: any): void {
     CREATE INDEX IF NOT EXISTS idx_digital_signatures_token ON digital_signatures(verification_token);
   `);
 
+  // Migrações seguras para campos explícitos de certificados e assinaturas
+  try { rawDb.exec("ALTER TABLE digital_certificates ADD COLUMN professional_id TEXT;"); } catch (_) {}
+  try { rawDb.exec("ALTER TABLE digital_certificates ADD COLUMN certificate_serial TEXT;"); } catch (_) {}
+  try { rawDb.exec("ALTER TABLE digital_signatures ADD COLUMN professional_id TEXT;"); } catch (_) {}
+
   // ============================================================================
   // TABELAS: MÓDULO ZEMDAPP (PSICOPEDAGOGIA CLÍNICA E INSTITUCIONAL - CBO 2394-25)
   // ============================================================================
