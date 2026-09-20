@@ -107,6 +107,27 @@ export class R2StorageService {
   }
 
   /**
+   * Faz upload direto de buffer para o Cloudflare R2 (ou mock)
+   */
+  async uploadFile(
+    objectKey: string,
+    fileBuffer: Buffer,
+    contentType: string = 'image/webp'
+  ): Promise<{ objectKey: string; size: number }> {
+    if (this.client && this.isConfigured && process.env.R2_MOCK_STORAGE !== 'true') {
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: objectKey,
+        Body: fileBuffer,
+        ContentType: contentType
+      });
+      await this.client.send(command);
+    }
+    this.mockObjects.add(objectKey);
+    return { objectKey, size: fileBuffer.length };
+  }
+
+  /**
    * Gera URL assinada temporária para visualização/download do objeto (GET)
    * Expiração padrão: 300 segundos (5 minutos)
    */

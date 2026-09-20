@@ -53,6 +53,9 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
   // PR Celebration Modal/Banner
   const [achievedPRs, setAchievedPRs] = useState<any[]>([]);
 
+  // Zoom de Foto/Ilustração do Exercício
+  const [zoomedPhoto, setZoomedPhoto] = useState<{ fileId?: string; url?: string; name?: string } | null>(null);
+
   useEffect(() => {
     if (workout && workout.exercises) {
       setExercises(workout.exercises);
@@ -223,11 +226,15 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
                 <div className="flex items-center gap-2.5">
                   <span className="text-xs font-black text-slate-400">#{exIdx + 1}</span>
                   {(ex.exercise_file_id || ex.photo_url) && (
-                    <div className="w-10 h-10 rounded-xl bg-slate-200 border border-slate-300 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    <div
+                      onClick={() => setZoomedPhoto({ fileId: ex.exercise_file_id, url: ex.photo_url, name: ex.name })}
+                      title="Clique para ampliar ilustração"
+                      className="w-10 h-10 rounded-xl bg-slate-200 border border-slate-300 overflow-hidden flex-shrink-0 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                    >
                       <SecureFileImage
                         fileId={ex.exercise_file_id}
                         fallbackUrl={ex.photo_url}
-                        alt=""
+                        alt={ex.name || ''}
                         className="w-full h-full object-cover"
                         placeholderText=""
                       />
@@ -389,6 +396,30 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
               >
                 Continuar e Salvar Histórico
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Zoom de Foto / Ilustração do Exercício */}
+        {zoomedPhoto && (
+          <div
+            onClick={() => setZoomedPhoto(null)}
+            className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn cursor-pointer"
+          >
+            <div className="max-w-md w-full bg-white rounded-3xl overflow-hidden p-4 shadow-2xl space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <h4 className="font-bold text-slate-800 text-sm">{zoomedPhoto.name || 'Ilustração do Movimento'}</h4>
+                <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">Clique para fechar</span>
+              </div>
+              <div className="w-full h-72 bg-slate-100 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-200">
+                <SecureFileImage
+                  fileId={zoomedPhoto.fileId}
+                  fallbackUrl={zoomedPhoto.url}
+                  alt={zoomedPhoto.name || ''}
+                  className="w-full h-full object-contain"
+                  placeholderText="Imagem não disponível"
+                />
+              </div>
             </div>
           </div>
         )}

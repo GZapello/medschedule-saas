@@ -2323,6 +2323,22 @@ export function initializeDatabase(): void {
   // Pre-seed biblioteca expandida de exercícios padrão (80+ exercícios categorizados)
   seedExerciseLibrary(rawDb);
 
+  // Garante tenant global para integridade referencial de anexos de biblioteca
+  try {
+    rawDb.exec(`
+      INSERT OR IGNORE INTO tenants (id, slug, name, trade_name, email, status)
+      VALUES ('global', 'global', 'Zemda Sistema Global', 'Zemda Global', 'sistema@zemda.com.br', 'active');
+    `);
+  } catch (_) {}
+
+  // Sincroniza em background as ilustrações reais de exercícios com o Cloudflare R2
+  try {
+    const { syncAllExerciseLibraryImages } = require('../services/exercise-image-generator.service');
+    syncAllExerciseLibraryImages(rawDb).catch((syncErr: any) => {
+      console.warn('[Database] Aviso ao sincronizar imagens de exercícios em background:', syncErr);
+    });
+  } catch (_) {}
+
   // Pre-seed protocolos e faixas de TAV (Tecido Adiposo Visceral) padrão
   try {
     const totalTav = rawDb.prepare("SELECT COUNT(*) as count FROM personal_tav_protocols WHERE tenant_id = 'global'").get() as any;

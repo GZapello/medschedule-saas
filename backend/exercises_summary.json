@@ -1,0 +1,835 @@
+[
+  {
+    "id": "ex-supino-reto-barra",
+    "name": "Supino Reto com Barra",
+    "muscle_group": "Peitoral",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-supino-reto-halteres",
+    "name": "Supino Reto com Halteres",
+    "muscle_group": "Peitoral",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-supino-inclinado-barra",
+    "name": "Supino Inclinado com Barra",
+    "muscle_group": "Peitoral",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-supino-inclinado-halteres",
+    "name": "Supino Inclinado com Halteres",
+    "muscle_group": "Peitoral",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-supino-declinado-barra",
+    "name": "Supino Declinado com Barra",
+    "muscle_group": "Peitoral",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-crucifixo-reto",
+    "name": "Crucifixo Reto com Halteres",
+    "muscle_group": "Peitoral",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-crucifixo-inclinado",
+    "name": "Crucifixo Inclinado com Halteres",
+    "muscle_group": "Peitoral",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-peck-deck-voador",
+    "name": "Voador / Peck Deck na Máquina",
+    "muscle_group": "Peitoral",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-crossover-alta",
+    "name": "Crossover na Polia Alta",
+    "muscle_group": "Peitoral",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-crossover-media",
+    "name": "Crossover na Polia Média",
+    "muscle_group": "Peitoral",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-crossover-baixa",
+    "name": "Crossover na Polia Baixa",
+    "muscle_group": "Peitoral",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-flexao-solo",
+    "name": "Flexão de Braços no Solo (Push-up)",
+    "muscle_group": "Peitoral",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-paralelas-peito",
+    "name": "Mergulho nas Barras Paralelas (Foco Peitoral)",
+    "muscle_group": "Peitoral",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-puxada-frontal-aberta",
+    "name": "Puxada Frontal com Pegada Aberta no Pulley",
+    "muscle_group": "Costas",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-puxada-supinada",
+    "name": "Puxada Frontal com Pegada Supinada",
+    "muscle_group": "Costas",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-puxada-triangulo",
+    "name": "Puxada Frontal com Triângulo (Pegada Neutra)",
+    "muscle_group": "Costas",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-remada-curvada-barra",
+    "name": "Remada Curvada com Barra Pronada",
+    "muscle_group": "Costas",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-remada-curvada-supinada",
+    "name": "Remada Curvada com Barra Supinada (Yates Row)",
+    "muscle_group": "Costas",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-remada-serrote-halteres",
+    "name": "Remada Unilateral com Halter (Serrote)",
+    "muscle_group": "Costas",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-remada-baixa-triangulo",
+    "name": "Remada Baixa na Polia com Triângulo",
+    "muscle_group": "Costas",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-remada-cavalinho",
+    "name": "Remada Cavalinho (Barra T)",
+    "muscle_group": "Costas",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-remada-articulada",
+    "name": "Remada Máquina Articulada",
+    "muscle_group": "Costas",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-pulldown-corda",
+    "name": "Pulldown na Polia Alta com Corda / Barra",
+    "muscle_group": "Costas",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-barra-fixa-pronada",
+    "name": "Barra Fixa (Pull-up) Pegada Pronada",
+    "muscle_group": "Costas",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-barra-fixa-supinada",
+    "name": "Barra Fixa (Chin-up) Pegada Supinada",
+    "muscle_group": "Costas",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-desenvolvimento-halteres",
+    "name": "Desenvolvimento com Halteres Sentado",
+    "muscle_group": "Ombros",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-desenvolvimento-militar",
+    "name": "Desenvolvimento Militar com Barra em Pé (Overhead Press)",
+    "muscle_group": "Ombros",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-desenvolvimento-smith",
+    "name": "Desenvolvimento no Smith Machine",
+    "muscle_group": "Ombros",
+    "equipment": "Smith",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-desenvolvimento-articulado",
+    "name": "Desenvolvimento na Máquina Articulada",
+    "muscle_group": "Ombros",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-elevacao-lateral-halteres",
+    "name": "Elevação Lateral com Halteres",
+    "muscle_group": "Ombros",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-elevacao-lateral-polia",
+    "name": "Elevação Lateral Unilateral na Polia",
+    "muscle_group": "Ombros",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-elevacao-lateral-inclinado",
+    "name": "Elevação Lateral no Banco 45°",
+    "muscle_group": "Ombros",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-elevacao-frontal-halteres",
+    "name": "Elevação Frontal Alternada com Halteres",
+    "muscle_group": "Ombros",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-crucifixo-inverso-halteres",
+    "name": "Crucifixo Inverso com Halteres (Deltoide Posterior)",
+    "muscle_group": "Ombros",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-crucifixo-inverso-peckdeck",
+    "name": "Crucifixo Inverso no Peck Deck / Voador Inverso",
+    "muscle_group": "Ombros",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-face-pull",
+    "name": "Face Pull na Polia Alta com Corda",
+    "muscle_group": "Ombros",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-remada-alta-barra",
+    "name": "Remada Alta com Barra W",
+    "muscle_group": "Ombros",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rosca-direta-barra",
+    "name": "Rosca Direta com Barra Reta / W",
+    "muscle_group": "Bíceps",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rosca-alternada-halteres",
+    "name": "Rosca Alternada com Halteres com Supinação",
+    "muscle_group": "Bíceps",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rosca-martelo-halteres",
+    "name": "Rosca Martelo com Halteres",
+    "muscle_group": "Bíceps",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rosca-martelo-corda",
+    "name": "Rosca Martelo na Polia Baixa com Corda",
+    "muscle_group": "Bíceps",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-rosca-scott-barra",
+    "name": "Rosca Scott com Barra W",
+    "muscle_group": "Bíceps",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rosca-concentrada",
+    "name": "Rosca Concentrada Unilateral com Halter",
+    "muscle_group": "Bíceps",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rosca-inclinada-45",
+    "name": "Rosca Inclinada no Banco 45° com Halteres",
+    "muscle_group": "Bíceps",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rosca-spider",
+    "name": "Rosca Spider no Banco Inclinado com Barra W",
+    "muscle_group": "Bíceps",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-triceps-corda",
+    "name": "Tríceps na Polia com Corda",
+    "muscle_group": "Tríceps",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-triceps-pulley-barra",
+    "name": "Tríceps na Polia com Barra Reta / V",
+    "muscle_group": "Tríceps",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-triceps-testa-barra",
+    "name": "Tríceps Testa Deitado com Barra W",
+    "muscle_group": "Tríceps",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-triceps-frances-halter",
+    "name": "Tríceps Francês Sentado com Halter",
+    "muscle_group": "Tríceps",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-triceps-coice-halteres",
+    "name": "Tríceps Coice (Kickback) com Halteres",
+    "muscle_group": "Tríceps",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-triceps-banco",
+    "name": "Mergulho no Banco (Tríceps Dips)",
+    "muscle_group": "Tríceps",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-flexao-diamante",
+    "name": "Flexão Fechada no Solo (Diamante)",
+    "muscle_group": "Tríceps",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-rosca-punho-barra",
+    "name": "Rosca Punho (Flexão de Punho) com Barra",
+    "muscle_group": "Antebraços",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rosca-punho-invertida",
+    "name": "Rosca Punho Inversa (Extensão de Punho) com Barra",
+    "muscle_group": "Antebraços",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-farmers-walk",
+    "name": "Caminhada do Fazendeiro (Farmer's Walk)",
+    "muscle_group": "Antebraços",
+    "equipment": "Halteres",
+    "mechanics": "composto"
+  },
+  {
+    "id": "ex-crunch-solo",
+    "name": "Abdominal Tradicional (Crunch) no Solo",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-abdominal-infra-solo",
+    "name": "Abdominal Infra no Solo com Elevação de Pernas",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-abdominal-infra-barra",
+    "name": "Abdominal Infra Pendurado na Barra Fixa (Hanging Leg Raise)",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-abdominal-obliquo-solo",
+    "name": "Abdominal Oblíquo Cruzado no Solo",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-prancha-isometrica",
+    "name": "Prancha Ventral Isométrica no Solo",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Peso Corporal",
+    "mechanics": "isométrico"
+  },
+  {
+    "id": "ex-prancha-lateral",
+    "name": "Prancha Lateral Isométrica",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Peso Corporal",
+    "mechanics": "isométrico"
+  },
+  {
+    "id": "ex-roda-abdominal",
+    "name": "Abdominal com Roda / Rolinho (Ab Wheel Rollout)",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-abdominal-polia-corda",
+    "name": "Abdominal na Polia Alta com Corda (Cable Crunch)",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-dead-bug",
+    "name": "Deadbug (Inseto Morto) para Ativação de Core",
+    "muscle_group": "Abdômen/Core",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-hiperextensao-lombar",
+    "name": "Hiperextensão Lombar no Banco Romano 45°",
+    "muscle_group": "Lombar",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-bom-dia-barra",
+    "name": "Bom Dia (Good Morning) com Barra",
+    "muscle_group": "Lombar",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-superman-solo",
+    "name": "Superman Isométrico no Solo",
+    "muscle_group": "Lombar",
+    "equipment": "Peso Corporal",
+    "mechanics": "isométrico"
+  },
+  {
+    "id": "ex-agachamento-livre-barra",
+    "name": "Agachamento Livre com Barra Costas (Back Squat)",
+    "muscle_group": "Quadríceps",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-agachamento-frontal-barra",
+    "name": "Agachamento Frontal com Barra (Front Squat)",
+    "muscle_group": "Quadríceps",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-agachamento-smith",
+    "name": "Agachamento no Smith Machine",
+    "muscle_group": "Quadríceps",
+    "equipment": "Smith",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-leg-press-45",
+    "name": "Leg Press 45°",
+    "muscle_group": "Quadríceps",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-leg-press-horizontal",
+    "name": "Leg Press Horizontal",
+    "muscle_group": "Quadríceps",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-hack-machine",
+    "name": "Agachamento Hack Machine",
+    "muscle_group": "Quadríceps",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-cadeira-extensora",
+    "name": "Cadeira Extensora",
+    "muscle_group": "Quadríceps",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-agachamento-bulgaro",
+    "name": "Agachamento Búlgaro com Halteres",
+    "muscle_group": "Quadríceps",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-avanco-passada",
+    "name": "Avanço / Passada Caminhando com Halteres",
+    "muscle_group": "Quadríceps",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-agachamento-sissy",
+    "name": "Agachamento Sissy (Sissy Squat) no Banco",
+    "muscle_group": "Quadríceps",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-mesa-flexora",
+    "name": "Mesa Flexora Deitada",
+    "muscle_group": "Posteriores de coxa",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-cadeira-flexora",
+    "name": "Cadeira Flexora Sentada",
+    "muscle_group": "Posteriores de coxa",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-flexora-em-pe",
+    "name": "Flexora em Pé Unilateral na Máquina / Cabo",
+    "muscle_group": "Posteriores de coxa",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-stiff-barra",
+    "name": "Stiff com Barra Reta",
+    "muscle_group": "Posteriores de coxa",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-stiff-halteres",
+    "name": "Stiff com Halteres",
+    "muscle_group": "Posteriores de coxa",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-rdl-halteres",
+    "name": "Levantamento Terra Romeno (RDL) com Halteres",
+    "muscle_group": "Posteriores de coxa",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-nordic-hamstring",
+    "name": "Flexão Nórdica Excêntrica (Nordic Hamstring Curl)",
+    "muscle_group": "Posteriores de coxa",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-elevacao-pelvica-barra",
+    "name": "Elevação Pélvica com Barra no Banco (Hip Thrust)",
+    "muscle_group": "Glúteos",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-elevacao-pelvica-unilateral",
+    "name": "Elevação Pélvica Unilateral no Solo / Banco",
+    "muscle_group": "Glúteos",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-cadeira-abdutora",
+    "name": "Cadeira Abdutora na Máquina",
+    "muscle_group": "Glúteos",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-gluteo-cabo-coice",
+    "name": "Glúteo Coice na Polia Baixa (Cable Kickback)",
+    "muscle_group": "Glúteos",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-gluteo-caneleira-4-apoios",
+    "name": "Glúteo 4 Apoios com Caneleira no Solo",
+    "muscle_group": "Glúteos",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-cadeira-adutora",
+    "name": "Cadeira Adutora na Máquina",
+    "muscle_group": "Adutores",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-aducao-polia-caneleira",
+    "name": "Adução de Quadril na Polia Baixa com Caneleira",
+    "muscle_group": "Adutores",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-agachamento-sumo",
+    "name": "Agachamento Sumô com Halter no Step",
+    "muscle_group": "Adutores",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-abducao-polia-baixa",
+    "name": "Abdução de Quadril na Polia Baixa",
+    "muscle_group": "Abdutores",
+    "equipment": "Cabo / Polia",
+    "mechanics": "cabo/polia"
+  },
+  {
+    "id": "ex-abducao-solo-elastico",
+    "name": "Abdução de Quadril no Solo com Mini-Band (Clamshell / Ostra)",
+    "muscle_group": "Abdutores",
+    "equipment": "Elástico",
+    "mechanics": "elástico"
+  },
+  {
+    "id": "ex-gemeos-smith",
+    "name": "Gêmeos em Pé no Smith Machine sobre Degrau",
+    "muscle_group": "Panturrilhas",
+    "equipment": "Smith",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-gemeos-sentado-soleo",
+    "name": "Gêmeos Sentado na Máquina (Foco no Sóleo)",
+    "muscle_group": "Panturrilhas",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-panturrilha-legpress",
+    "name": "Panturrilha no Leg Press 45°",
+    "muscle_group": "Panturrilhas",
+    "equipment": "Máquina",
+    "mechanics": "máquina"
+  },
+  {
+    "id": "ex-panturrilha-unilateral-halter",
+    "name": "Panturrilha Unilateral em Pé com Halter",
+    "muscle_group": "Panturrilhas",
+    "equipment": "Halteres",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-levantamento-terra-convencional",
+    "name": "Levantamento Terra Convencional com Barra",
+    "muscle_group": "Corpo inteiro",
+    "equipment": "Barra",
+    "mechanics": "peso livre"
+  },
+  {
+    "id": "ex-kettlebell-swing",
+    "name": "Kettlebell Swing (Balanço de Quadril)",
+    "muscle_group": "Corpo inteiro",
+    "equipment": "Kettlebell",
+    "mechanics": "composto"
+  },
+  {
+    "id": "ex-burpee",
+    "name": "Burpee Completo com Salto",
+    "muscle_group": "Corpo inteiro",
+    "equipment": "Peso Corporal",
+    "mechanics": "peso corporal"
+  },
+  {
+    "id": "ex-thruster-halteres",
+    "name": "Thruster (Agachamento + Desenvolvimento) com Halteres",
+    "muscle_group": "Corpo inteiro",
+    "equipment": "Halteres",
+    "mechanics": "composto"
+  },
+  {
+    "id": "ex-esteira-hiit",
+    "name": "Corrida / Caminhada Inclinada na Esteira",
+    "muscle_group": "Cardiorrespiratórios",
+    "equipment": "Máquina",
+    "mechanics": "aeróbico"
+  },
+  {
+    "id": "ex-bike-spinning",
+    "name": "Bicicleta Ergométrica / Spinning",
+    "muscle_group": "Cardiorrespiratórios",
+    "equipment": "Máquina",
+    "mechanics": "aeróbico"
+  },
+  {
+    "id": "ex-eliptico",
+    "name": "Elíptico / Transport",
+    "muscle_group": "Cardiorrespiratórios",
+    "equipment": "Máquina",
+    "mechanics": "aeróbico"
+  },
+  {
+    "id": "ex-simulador-escada",
+    "name": "Simulador de Escada (Stairmaster)",
+    "muscle_group": "Cardiorrespiratórios",
+    "equipment": "Máquina",
+    "mechanics": "aeróbico"
+  },
+  {
+    "id": "ex-corda-naval",
+    "name": "Corda Naval (Battle Rope) Ondulações",
+    "muscle_group": "Cardiorrespiratórios",
+    "equipment": "Peso Corporal",
+    "mechanics": "aeróbico"
+  },
+  {
+    "id": "ex-pular-corda",
+    "name": "Pular Corda (Jump Rope)",
+    "muscle_group": "Cardiorrespiratórios",
+    "equipment": "Peso Corporal",
+    "mechanics": "aeróbico"
+  },
+  {
+    "id": "ex-remo-indoor",
+    "name": "Remo Indoor (Ergômetro)",
+    "muscle_group": "Cardiorrespiratórios",
+    "equipment": "Máquina",
+    "mechanics": "aeróbico"
+  },
+  {
+    "id": "ex-mobilidade-quadril-9090",
+    "name": "Mobilidade de Quadril 90/90",
+    "muscle_group": "Mobilidade",
+    "equipment": "Peso Corporal",
+    "mechanics": "mobilidade"
+  },
+  {
+    "id": "ex-mobilidade-tornozelo-parede",
+    "name": "Mobilidade de Tornozelo contra a Parede (Dorsiflexão)",
+    "muscle_group": "Mobilidade",
+    "equipment": "Peso Corporal",
+    "mechanics": "mobilidade"
+  },
+  {
+    "id": "ex-mobilidade-toracica-4apoios",
+    "name": "Rotação Torácica em 4 Apoios",
+    "muscle_group": "Mobilidade",
+    "equipment": "Peso Corporal",
+    "mechanics": "mobilidade"
+  },
+  {
+    "id": "ex-gato-camelo",
+    "name": "Gato-Camelo (Cat-Cow) Mobilidade da Coluna",
+    "muscle_group": "Mobilidade",
+    "equipment": "Peso Corporal",
+    "mechanics": "mobilidade"
+  },
+  {
+    "id": "ex-passagem-bacao-elastico",
+    "name": "Passagem de Bastão / Elástico para Ombros (Dislocates)",
+    "muscle_group": "Mobilidade",
+    "equipment": "Elástico",
+    "mechanics": "mobilidade"
+  },
+  {
+    "id": "ex-alongamento-isquiotibiais",
+    "name": "Alongamento Estático de Isquiotibiais (Posteriores)",
+    "muscle_group": "Alongamentos",
+    "equipment": "Peso Corporal",
+    "mechanics": "flexibilidade"
+  },
+  {
+    "id": "ex-alongamento-quadriceps",
+    "name": "Alongamento em Pé de Quadríceps",
+    "muscle_group": "Alongamentos",
+    "equipment": "Peso Corporal",
+    "mechanics": "flexibilidade"
+  },
+  {
+    "id": "ex-alongamento-peitoral-parede",
+    "name": "Alongamento de Peitoral no Batente / Parede",
+    "muscle_group": "Alongamentos",
+    "equipment": "Peso Corporal",
+    "mechanics": "flexibilidade"
+  },
+  {
+    "id": "ex-alongamento-gluteo-piriforme",
+    "name": "Alongamento de Glúteo e Piriforme Deitado (Figura 4)",
+    "muscle_group": "Alongamentos",
+    "equipment": "Peso Corporal",
+    "mechanics": "flexibilidade"
+  },
+  {
+    "id": "ex-alongamento-dorsal-barra",
+    "name": "Alongamento Suspenso de Grande Dorsal na Barra",
+    "muscle_group": "Alongamentos",
+    "equipment": "Peso Corporal",
+    "mechanics": "flexibilidade"
+  }
+]
