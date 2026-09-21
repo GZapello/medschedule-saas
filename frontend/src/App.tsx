@@ -30,7 +30,6 @@ import { ImportDataView } from './components/import/ImportDataView';
 import { AuditView } from './components/audit/AuditView';
 import { SettingsView } from './components/settings/SettingsView';
 import { SuperAdminView } from './components/superadmin/SuperAdminView';
-import { OnboardingWizardView } from './components/onboarding/OnboardingWizardView';
 import { PublicBookingView } from './components/public-booking/PublicBookingView';
 import { PublicProfessionalBookingView } from './components/public-booking/PublicProfessionalBookingView';
 import { InviteRegisterView } from './components/auth/InviteRegisterView';
@@ -836,20 +835,6 @@ const AppContent: React.FC = () => {
 
   if (currentUser.role !== 'superadmin' && billingSummary && !billingSummary.canOperate) return <BillingView />;
   if (currentView === 'subscription' || window.location.pathname === '/assinatura') return <BillingView />;
-  // Se o gestor precisa concluir o Onboarding obrigatório da clínica
-  if (currentUser.needsOnboarding) {
-    return (
-      <div className="min-h-screen bg-[#fafbfc] py-10 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          <OnboardingWizardView
-            onComplete={async () => {
-              await reloadSession();
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#fafbfc] flex flex-col">

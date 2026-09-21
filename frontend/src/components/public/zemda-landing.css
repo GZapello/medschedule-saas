@@ -88,7 +88,7 @@
 .zl-module .zl-bullets li { font-size:11px; }
 .zl-module .zl-bullets svg { width:13px; }
 .zl-module-link { display:flex; justify-content:space-between; align-items:center; padding-top:16px; border-top:1px solid #edf1ee; font-size:11px; color:var(--zl-teal); font-weight:650; }
-.zl-body { display:grid; grid-template-columns:auto 1fr auto; gap:30px; align-items:center; border:1px solid #ccdfd5; border-radius:17px; padding:30px; margin-top:24px; background:#eaf4ef; }
+.zl-body { display:grid; grid-template-columns:auto 1fr auto; gap:30px; align-items:center; border:1px solid #ccdfd5; border-radius:17px; padding:30px; margin-bottom:24px; background:#eaf4ef; }
 .zl-body-symbol { width:100px; height:100px; display:grid; place-items:center; border:1px solid #c5ded2; border-radius:50%; color:#4d8d7a; background:#f8fcfa; }
 .zl-body h3 { font-size:28px; font-weight:600; letter-spacing:-.03em; margin:7px 0 10px; }
 .zl-body p { font-size:13px; line-height:1.8; color:var(--zl-muted); max-width:610px; }
@@ -99,7 +99,6 @@
 .zl-layers > * + * { border-left:1px solid var(--zl-line); }
 .zl-layers article { height:100%; padding:32px; background:#fcfdfc; box-sizing:border-box; }
 .zl-layers > *:last-child > article { background:#eef6f1; }
-.zl-layer-number { font-size:11px; color:#7f9f92; }
 .zl-layers h3 { font-size:24px; font-weight:600; margin:18px 0 10px; }
 .zl-layers p { font-size:12px; line-height:1.7; color:var(--zl-muted); margin-bottom:22px; }
 .zl-tags { display:flex; flex-wrap:wrap; gap:7px; }
@@ -229,3 +228,13 @@
   .zl-product-content:has(.zl-module-focus) { min-height:492px; }
   .zl-product-copy .zl-icon { display:inline-flex; width:40px; height:40px; margin-bottom:12px; }
 }
+
+/* Short explanations expand in place without navigating away from the demo. */
+.zl-resource-map>.zl-feature-item { display:block; padding:0; }
+.zl-feature-trigger { width:100%; display:flex; align-items:center; gap:13px; padding:18px; text-align:left; border-radius:12px; cursor:pointer; transition:background .2s; }
+.zl-feature-trigger:hover, .zl-feature-trigger[aria-expanded=true] { background:#edf6f1; }
+.zl-feature-trigger strong { flex:1; }
+.zl-feature-trigger svg { transition:transform .2s; }
+.zl-feature-trigger[aria-expanded=true] svg { transform:rotate(180deg); }
+.zl-resource-map .zl-feature-explanation { padding:14px 18px 18px; color:var(--zl-muted); font-size:12px; line-height:1.8; border-top:1px solid var(--zl-line); }
+@media (max-width:540px) { .zl-feature-trigger { padding:13px; } .zl-resource-map .zl-feature-explanation { padding:12px 13px 15px; } }

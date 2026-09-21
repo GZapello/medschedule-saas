@@ -201,7 +201,7 @@ export class AuthController {
         }
       }
 
-      const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
+      const needsOnboarding = false;
 
       let userPermissions: string[] = [];
       let cuRow: any = null;
@@ -396,7 +396,7 @@ export class AuthController {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
       }
-      const needsOnboarding = user.role === 'clinic_admin' && tenantData?.onboarding_completed !== 1;
+      const needsOnboarding = false;
 
       if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = completeProfessionalProfile(user.id, user.tenant_id, profDetails);

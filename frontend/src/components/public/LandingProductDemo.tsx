@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
-  Activity, Apple, ArrowRight, Brain, CalendarDays, CircleDot, Crosshair,
+  Activity, Apple, ArrowRight, Brain, CalendarDays, ChevronDown, CircleDot, Crosshair,
   DollarSign, Dumbbell, FileText, GraduationCap, Heart, LayoutDashboard,
   Layers3, Mic, Network, Smile, Users, type LucideIcon
 } from 'lucide-react';
-import { LANDING_MODULE_PREVIEWS } from './landingModulePreviews';
+import { LANDING_MODULE_PREVIEWS, type LandingModulePreview } from './landingModulePreviews';
 
 const moduleIcons: Record<string, LucideIcon> = {
   fono: Mic, psico: Brain, odonto: Smile, nutri: Apple, fisio: Activity,
@@ -40,6 +40,34 @@ const views = [
     items: ['Receitas e despesas', 'Controle de caixa', 'Comissões', 'Relatórios']
   }
 ];
+
+const ModuleFeatureList = ({ module }: { module: LandingModulePreview }) => {
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+
+  return (
+    <ul className="zl-resource-map" aria-label="Funcionalidades em destaque">
+      {module.features.map((feature, index) => {
+        const isExpanded = expandedIndex === index;
+        const buttonId = `feature-${module.id}-${index}`;
+        const panelId = `${buttonId}-description`;
+        return (
+          <li key={feature} className="zl-feature-item">
+            <button type="button" id={buttonId} className="zl-feature-trigger"
+              aria-expanded={isExpanded} aria-controls={panelId}
+              onClick={() => setExpandedIndex(isExpanded ? null : index)}>
+              <span aria-hidden="true">0{index + 1}</span>
+              <strong>{feature}</strong>
+              <ChevronDown size={18} aria-hidden="true" />
+            </button>
+            <p id={panelId} hidden={!isExpanded} className="zl-feature-explanation">
+              {module.featureDescriptions[index]}
+            </p>
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
 
 /** Local-only product exploration: never loads patient data or clinical modules. */
 export const LandingProductDemo: React.FC = () => {
@@ -131,11 +159,13 @@ export const LandingProductDemo: React.FC = () => {
               <h2>{isSpecialty ? module.name : view.heading}</h2>
               <p>{isSpecialty ? module.description : view.description}</p>
             </div>
-            <ul className="zl-resource-map" aria-label="Funcionalidades em destaque">
-              {features.map((item, index) => (
-                <li key={item}><span>0{index + 1}</span><strong>{item}</strong><CircleDot size={18} aria-hidden="true" /></li>
-              ))}
-            </ul>
+            {isSpecialty ? <ModuleFeatureList key={module.id} module={module} /> : (
+              <ul className="zl-resource-map" aria-label="Funcionalidades em destaque">
+                {features.map((item, index) => (
+                  <li key={item}><span>0{index + 1}</span><strong>{item}</strong><CircleDot size={18} aria-hidden="true" /></li>
+                ))}
+              </ul>
+            )}
             {isSpecialty && <p className="zl-module-focus">{module.focus}</p>}
           </div>
         </div>

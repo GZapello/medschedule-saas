@@ -244,14 +244,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <span>Entrar com Convite</span>
               </button>
 
-              {/* Botão de Criação de Nova Clínica */}
+              {/* Botão de Criação de Conta */}
               <button
                 type="button"
                 onClick={() => setIsCreateClinicOpen(true)}
                 className="w-full py-2.5 px-3 bg-teal-50 hover:bg-teal-100/80 text-teal-800 font-bold text-xs rounded-xl border border-teal-200/70 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <Building2 className="w-3.5 h-3.5 text-teal-600" />
-                <span>Criar Nova Clínica</span>
+                <span>Criar Minha Conta</span>
               </button>
             </div>
           </div>

@@ -269,6 +269,28 @@ export const PrintableDocumentModal: React.FC<PrintableDocumentModalProps> = ({
           </div>
         </div>
 
+        {/* Aviso não-impeditivo caso o registro profissional não esteja cadastrado */}
+        {!doc.registration_number && (
+          <div className="bg-amber-50 border-b border-amber-200 px-5 py-2.5 flex items-center justify-between text-xs text-amber-900 print:hidden">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Aviso:</strong> O número de registro profissional (ex.: CRM, CREFITO, CRP) não foi cadastrado. O documento pode ser emitido normalmente, mas o carimbo ficará sem o número do conselho.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'settings' } }));
+              }}
+              className="text-teal-700 hover:text-teal-900 font-bold underline whitespace-nowrap ml-3 cursor-pointer shrink-0"
+            >
+              Completar Registro →
+            </button>
+          </div>
+        )}
+
         {/* Printable Sheet (Simulated A4 Paper) */}
         <div
           id="printable-doc-sheet"

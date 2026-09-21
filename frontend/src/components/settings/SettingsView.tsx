@@ -27,7 +27,12 @@ import {
   Scale,
   ExternalLink,
   Cookie,
-  ShieldCheck
+  ShieldCheck,
+  Search,
+  Award,
+  Briefcase,
+  MapPin,
+  Info
 } from 'lucide-react';
 
 export const COMMON_INSURANCE_PRESETS = [
@@ -64,6 +69,15 @@ export const SettingsView: React.FC = () => {
   const [cnpjCpf, setCnpjCpf] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
+  const [whatsapp, setWhatsapp] = useState<string>('');
+  const [personType, setPersonType] = useState<'pj' | 'pf'>('pj');
+  const [municipalRegistration, setMunicipalRegistration] = useState<string>('');
+  const [stateRegistration, setStateRegistration] = useState<string>('');
+  const [professionalBoard, setProfessionalBoard] = useState<string>('');
+  const [professionalRegistry, setProfessionalRegistry] = useState<string>('');
+  const [managerProfession, setManagerProfession] = useState<string>('');
+  const [managerPracticeAreas, setManagerPracticeAreas] = useState<string>('');
+  const [searchingCep, setSearchingCep] = useState<boolean>(false);
   const [address, setAddress] = useState<string>('');
   const [street, setStreet] = useState<string>('');
   const [number, setNumber] = useState<string>('');
@@ -207,6 +221,22 @@ export const SettingsView: React.FC = () => {
     return result === parseInt(digits.charAt(1), 10);
   };
 
+  const validateCPF = (cpf: string): boolean => {
+    const clean = cpf.replace(/\D/g, '');
+    if (clean.length !== 11 || /^(\d)\1+$/.test(clean)) return false;
+    let sum = 0;
+    let rest;
+    for (let i = 1; i <= 9; i++) sum += parseInt(clean.substring(i - 1, i), 10) * (11 - i);
+    rest = (sum * 10) % 11;
+    if (rest === 10 || rest === 11) rest = 0;
+    if (rest !== parseInt(clean.substring(9, 10), 10)) return false;
+    sum = 0;
+    for (let i = 1; i <= 10; i++) sum += parseInt(clean.substring(i - 1, i), 10) * (12 - i);
+    rest = (sum * 10) % 11;
+    if (rest === 10 || rest === 11) rest = 0;
+    return rest === parseInt(clean.substring(10, 11), 10);
+  };
+
   const formatCNPJ = (val: string): string => {
     const digits = val.replace(/\D/g, '').slice(0, 14);
     if (digits.length <= 2) return digits;
@@ -216,10 +246,47 @@ export const SettingsView: React.FC = () => {
     return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d)/, '$1.$2.$3/$4-$5');
   };
 
+  const formatDocument = (val: string): string => {
+    const digits = val.replace(/\D/g, '').slice(0, 14);
+    if (digits.length <= 11) {
+      if (digits.length <= 3) return digits;
+      if (digits.length <= 6) return digits.replace(/^(\d{3})(\d)/, '$1.$2');
+      if (digits.length <= 9) return digits.replace(/^(\d{3})(\d{3})(\d)/, '$1.$2.$3');
+      return digits.replace(/^(\d{3})(\d{3})(\d{3})(\d)/, '$1.$2.$3-$4');
+    }
+    return formatCNPJ(digits);
+  };
+
   const formatCEP = (val: string): string => {
     const digits = val.replace(/\D/g, '').slice(0, 8);
     if (digits.length <= 5) return digits;
     return digits.replace(/^(\d{5})(\d)/, '$1-$2');
+  };
+
+  const handleCepSearch = async () => {
+    const cleanCep = zipCode.replace(/\D/g, '');
+    if (cleanCep.length !== 8) {
+      showToast('Digite um CEP válido com 8 dígitos', 'error');
+      return;
+    }
+    try {
+      setSearchingCep(true);
+      const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        showToast('CEP não encontrado na base dos Correios', 'error');
+        return;
+      }
+      if (data.logradouro) setStreet(data.logradouro);
+      if (data.bairro) setNeighborhood(data.bairro);
+      if (data.localidade) setCity(data.localidade);
+      if (data.uf) setState(data.uf);
+      showToast(`Localizado: ${data.localidade}/${data.uf}`, 'success');
+    } catch {
+      showToast('Erro ao consultar CEP. Preencha manualmente.', 'error');
+    } finally {
+      setSearchingCep(false);
+    }
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -268,9 +335,17 @@ export const SettingsView: React.FC = () => {
       setName(currentTenant.name || '');
       setCorporateName((currentTenant as any).corporate_name || currentTenant.name || '');
       setTradeName(currentTenant.trade_name || '');
-      setCnpjCpf(currentTenant.cnpj_cpf ? formatCNPJ(currentTenant.cnpj_cpf) : '');
+      setCnpjCpf(currentTenant.cnpj_cpf ? formatDocument(currentTenant.cnpj_cpf) : '');
       setEmail(currentTenant.email || '');
       setPhone(currentTenant.phone || '');
+      setWhatsapp((currentTenant as any).whatsapp || currentTenant.phone || '');
+      setPersonType((currentTenant as any).person_type || 'pj');
+      setMunicipalRegistration((currentTenant as any).municipal_registration || '');
+      setStateRegistration((currentTenant as any).state_registration || '');
+      setProfessionalBoard((currentTenant as any).professional_board || (currentUser as any)?.registrationType || '');
+      setProfessionalRegistry((currentTenant as any).professional_registry || (currentUser as any)?.registrationNumber || '');
+      setManagerProfession((currentTenant as any).manager_profession || (currentUser as any)?.professionName || '');
+      setManagerPracticeAreas((currentTenant as any).manager_practice_areas || (currentUser as any)?.practiceAreas || '');
       setAddress(currentTenant.address || '');
       setStreet((currentTenant as any).street || '');
       setNumber((currentTenant as any).number || '');
@@ -300,7 +375,12 @@ export const SettingsView: React.FC = () => {
 
   const handleSaveClinic = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (cnpjCpf.trim() && cnpjCpf.replace(/\D/g, '').length === 14 && !validateCNPJ(cnpjCpf)) {
+    const cleanDoc = cnpjCpf.replace(/\D/g, '');
+    if (cleanDoc.length === 11 && !validateCPF(cnpjCpf)) {
+      showToast('O CPF informado possui dígitos verificadores inválidos', 'error');
+      return;
+    }
+    if (cleanDoc.length === 14 && !validateCNPJ(cnpjCpf)) {
       showToast('O CNPJ informado possui dígitos verificadores inválidos', 'error');
       return;
     }
@@ -311,9 +391,17 @@ export const SettingsView: React.FC = () => {
         name,
         corporateName,
         tradeName,
-        cnpjCpf,
+        personType,
+        cnpjCpf: cleanDoc ? cnpjCpf : null,
+        municipalRegistration: municipalRegistration.trim() || null,
+        stateRegistration: stateRegistration.trim() || null,
+        professionalBoard: professionalBoard.trim() || null,
+        professionalRegistry: professionalRegistry.trim() || null,
+        managerProfession: managerProfession.trim() || null,
+        managerPracticeAreas: managerPracticeAreas.trim() || null,
         email,
         phone,
+        whatsapp,
         address,
         street,
         number,
@@ -327,10 +415,11 @@ export const SettingsView: React.FC = () => {
         primaryColor,
         businessHoursJson: JSON.stringify(businessHours)
       });
-      showToast('Configurações da clínica e horários de funcionamento salvos com sucesso!', 'success');
+      showToast('Dados da conta e estabelecimento salvos com sucesso!', 'success');
       refreshTenant();
+      await reloadSession();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao salvar configurações da clínica', 'error');
+      showToast(err.message || 'Erro ao salvar dados da conta', 'error');
     } finally {
       setLoadingClinic(false);
     }
@@ -419,7 +508,7 @@ export const SettingsView: React.FC = () => {
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5" />
-                Clínica
+                Dados da Conta / Estabelecimento
               </button>
               <button
                 type="button"
@@ -558,36 +647,57 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Dados Gerais */}
+          {/* BLOCO 1 - DADOS BÁSICOS */}
           <div className="space-y-4 text-xs">
-            <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Identificação Cadastral</h3>
+            <div className="border-b border-slate-100 pb-2">
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-indigo-600" />
+                Bloco 1 — Dados Básicos
+              </h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Identificação do estabelecimento ou profissional e canais de contato com clientes.
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Razão Social / Nome Oficial</label>
+                <label className="block font-semibold text-slate-700 mb-1">Razão Social / Nome da Conta *</label>
                 <input
                   type="text"
+                  required
                   value={corporateName || name}
                   onChange={e => {
                     setCorporateName(e.target.value);
                     setName(e.target.value);
                   }}
-                  placeholder="Ex: Clínica Médica e Saúde Integrada LTDA"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="Ex: Consultório Dra. Mariana ou Clínica Prime LTDA"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome Fantasia (Exibido aos Pacientes)</label>
+                <label className="block font-semibold text-slate-700 mb-1">Nome Fantasia</label>
                 <input
                   type="text"
                   value={tradeName}
                   onChange={e => setTradeName(e.target.value)}
-                  placeholder="Ex: Clínica Bem-Estar"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="Ex: Espaço Bem-Estar"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-700">CNPJ (com validação)</label>
+                  <label className="block font-semibold text-slate-700">CPF ou CNPJ</label>
+                  {cnpjCpf.replace(/\D/g, '').length === 11 && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      validateCPF(cnpjCpf)
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    }`}>
+                      {validateCPF(cnpjCpf) ? '✓ CPF Válido' : '✕ CPF Inválido'}
+                    </span>
+                  )}
                   {cnpjCpf.replace(/\D/g, '').length === 14 && (
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       validateCNPJ(cnpjCpf)
@@ -602,43 +712,83 @@ export const SettingsView: React.FC = () => {
                   type="text"
                   value={cnpjCpf}
                   maxLength={18}
-                  onChange={e => setCnpjCpf(formatCNPJ(e.target.value))}
-                  placeholder="00.000.000/0000-00"
-                  className={`w-full border rounded-xl px-3 py-2 text-xs ${
-                    cnpjCpf.replace(/\D/g, '').length === 14 && !validateCNPJ(cnpjCpf)
-                      ? 'border-rose-300 focus:ring-rose-500'
-                      : 'border-slate-200'
-                  }`}
+                  onChange={e => setCnpjCpf(formatDocument(e.target.value))}
+                  placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">E-mail Principal da Clínica</label>
+                <label className="block font-semibold text-slate-700 mb-1">E-mail Principal</label>
                 <input
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="contato@clinica.com"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Telefone Fixo / Comercial</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="(11) 3333-4444"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">WhatsApp / Celular de Atendimento</label>
+                <input
+                  type="tel"
+                  value={whatsapp}
+                  onChange={e => setWhatsapp(e.target.value)}
+                  placeholder="(11) 99999-8888"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
             </div>
           </div>
 
-          {/* Contato e Endereço Completo */}
+          {/* BLOCO 2 - ENDEREÇO */}
           <div className="space-y-4 text-xs pt-4 border-t border-slate-100">
-            <h3 className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Endereço Completo & Atendimento</h3>
-            
+            <div className="border-b border-slate-100 pb-2">
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-indigo-600" />
+                Bloco 2 — Endereço
+              </h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Localização do estabelecimento para agendamento online, receitas e recibos.
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">CEP</label>
-                <input
-                  type="text"
-                  value={zipCode}
-                  maxLength={9}
-                  onChange={e => setZipCode(formatCEP(e.target.value))}
-                  placeholder="00000-000"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={zipCode}
+                    maxLength={9}
+                    onChange={e => setZipCode(formatCEP(e.target.value))}
+                    placeholder="00000-000"
+                    className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCepSearch}
+                    disabled={searchingCep}
+                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    {searchingCep ? '...' : 'Buscar'}
+                  </button>
+                </div>
               </div>
+
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-slate-700 mb-1">Logradouro / Rua</label>
                 <input
@@ -648,50 +798,55 @@ export const SettingsView: React.FC = () => {
                     setStreet(e.target.value);
                     setAddress(e.target.value);
                   }}
-                  placeholder="Ex: Avenida Brasil"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="Ex: Avenida Paulista"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Número</label>
                 <input
                   type="text"
                   value={number}
                   onChange={e => setNumber(e.target.value)}
-                  placeholder="123"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="1200"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Complemento / Sala</label>
                 <input
                   type="text"
                   value={complement}
                   onChange={e => setComplement(e.target.value)}
-                  placeholder="Sala 402"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="Conjunto 42"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Bairro</label>
                 <input
                   type="text"
                   value={neighborhood}
                   onChange={e => setNeighborhood(e.target.value)}
-                  placeholder="Centro"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="Bela Vista"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Cidade *</label>
+                <label className="block font-semibold text-slate-700 mb-1">Cidade</label>
                 <input
                   type="text"
                   value={city}
                   onChange={e => setCity(e.target.value)}
-                  placeholder="Ex: Erechim"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="São Paulo"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Estado (UF)</label>
                 <input
@@ -699,36 +854,168 @@ export const SettingsView: React.FC = () => {
                   value={state}
                   maxLength={2}
                   onChange={e => setState(e.target.value.toUpperCase())}
-                  placeholder="RS"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  placeholder="SP"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* BLOCO 3 - DADOS PROFISSIONAIS */}
+          <div className="space-y-4 text-xs pt-4 border-t border-slate-100">
+            <div className="border-b border-slate-100 pb-2">
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-indigo-600" />
+                Bloco 3 — Dados Profissionais
+              </h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Utilizado para assinatura de laudos, emissão de atestados, receituários e prontuários clínicos.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Profissão Principal
+                </label>
+                <input
+                  type="text"
+                  value={managerProfession}
+                  onChange={e => setManagerProfession(e.target.value)}
+                  placeholder="Ex: Fisioterapia, Psicologia, Odontologia, Medicina, Nutrição..."
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Conselho / Associação de Classe
+                </label>
+                <input
+                  type="text"
+                  value={professionalBoard}
+                  onChange={e => setProfessionalBoard(e.target.value)}
+                  placeholder="Ex: CREFITO, CRP, CRO, CRM, CRN, CRFa, CREF, ABPp"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Número de Registro no Conselho
+                </label>
+                <div className="relative">
+                  <Award className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={professionalRegistry}
+                    onChange={e => setProfessionalRegistry(e.target.value)}
+                    placeholder="Ex: 12345-F / SP"
+                    className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Especialidades / Áreas de Atuação
+                </label>
+                <input
+                  type="text"
+                  value={managerPracticeAreas}
+                  onChange={e => setManagerPracticeAreas(e.target.value)}
+                  placeholder="Ex: Traumato-Ortopedia, TCC, Neurofuncional..."
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl text-xs text-amber-900 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed">
+                <strong>Assinatura de Documentos:</strong> O número do registro profissional e o conselho são inseridos automaticamente no carimbo de atestados, declarações e receitas.
+              </p>
+            </div>
+          </div>
+
+          {/* BLOCO 4 - DADOS FISCAIS */}
+          <div className="space-y-4 text-xs pt-4 border-t border-slate-100">
+            <div className="border-b border-slate-100 pb-2">
+              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <FileText className="w-4 h-4 text-indigo-600" />
+                Bloco 4 — Dados Fiscais (para Emissão & Faturamento)
+              </h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Dados necessários para faturamento, emissão de notas fiscais e recebimento via gateway de pagamentos.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">WhatsApp / Telefone de Contato</label>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Tipo de Pessoa
+                </label>
+                <select
+                  value={personType}
+                  onChange={e => setPersonType(e.target.value as 'pj' | 'pf')}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white font-semibold"
+                >
+                  <option value="pj">Pessoa Jurídica (PJ)</option>
+                  <option value="pf">Pessoa Física / Autônomo (PF)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Inscrição Municipal (IM)
+                </label>
                 <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  placeholder="(54) 99999-9999"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                  type="text"
+                  value={municipalRegistration}
+                  onChange={e => setMunicipalRegistration(e.target.value)}
+                  placeholder="Ex: 12345678"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
                 />
               </div>
+
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Cor Primária da Marca</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={primaryColor}
-                    onChange={e => setPrimaryColor(e.target.value)}
-                    className="w-9 h-9 rounded-xl border border-slate-200 cursor-pointer p-0.5"
-                  />
-                  <span className="text-slate-500 font-mono text-xs">{primaryColor}</span>
-                </div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Inscrição Estadual (IE)
+                </label>
+                <input
+                  type="text"
+                  value={stateRegistration}
+                  onChange={e => setStateRegistration(e.target.value)}
+                  placeholder="Ex: Isento ou 123.456.789.000"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
+                />
               </div>
             </div>
+
+            <div className="p-3.5 bg-blue-50/80 border border-blue-200/80 rounded-2xl text-xs text-blue-950 flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div className="text-[11px] leading-relaxed">
+                <strong className="block text-blue-900 mb-0.5">Aviso sobre Emissão de NFS-e e Faturamento Asaas:</strong>
+                A Inscrição Municipal e o CNPJ/CPF são necessários para emissão automática de Notas Fiscais de Serviço (NFS-e) e para ativação do faturamento com emissão de cobranças automáticas no Asaas. Você pode preenchê-los agora ou quando for ativar o faturamento da clínica.
+              </div>
+            </div>
+          </div>
+
+          {/* Personalização Visual */}
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Cor Primária da Marca</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={primaryColor}
+                  onChange={e => setPrimaryColor(e.target.value)}
+                  className="w-9 h-9 rounded-xl border border-slate-200 cursor-pointer p-0.5"
+                />
+                <span className="text-slate-500 font-mono text-xs">{primaryColor}</span>
+              </div>
+            </div>
+          </div>
 
             {/* Horários de Funcionamento da Clínica (Item 3) */}
             <div className="pt-4 border-t border-slate-100">
@@ -839,7 +1126,6 @@ export const SettingsView: React.FC = () => {
                 </table>
               </div>
             </div>
-          </div>
 
           <div className="flex justify-end pt-4 border-t border-slate-100">
             <button

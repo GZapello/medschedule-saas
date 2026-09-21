@@ -35,11 +35,11 @@ export class TenantController {
   // 1. Cadastro Público de Nova Clínica ("Criar Minha Clínica" - status inicial 'pending')
   static async registerPublic(req: Request, res: Response): Promise<void> {
     try {
-      const responsibleName = (req.body.responsibleName || req.body.adminName || '').trim();
+      const responsibleName = (req.body.responsibleName || req.body.adminName || req.body.name || '').trim();
       const email = (req.body.email || req.body.adminEmail || '').trim();
       const phone = req.body.phone;
       const password = req.body.password;
-      const clinicName = (req.body.clinicName || '').trim();
+      const clinicName = (req.body.clinicName || (responsibleName ? `Consultório ${responsibleName}` : 'Meu Consultório')).trim();
       const tradeName = req.body.tradeName;
       const cnpjCpf = req.body.cnpjCpf;
       const city = req.body.city;
@@ -55,8 +55,8 @@ export class TenantController {
       const managerRegistrationNumber = req.body.managerRegistrationNumber || req.body.registrationNumber || null;
       const zemdaBodyEnabled = req.body.zemdaBodyEnabled;
 
-      if (!responsibleName || !email || !password || !clinicName) {
-        res.status(400).json({ error: 'Nome do responsável, e-mail, senha e nome da clínica são obrigatórios' });
+      if (!responsibleName || !email || !password) {
+        res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios' });
         return;
       }
 
@@ -190,7 +190,7 @@ export class TenantController {
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?,
-            ?, 0, 1, 0,
+            ?, 1, 5, 1,
             1, datetime('now'), 1, datetime('now'),
             ?, ?, ?, ?, 1,
             datetime('now'), datetime('now')
@@ -381,7 +381,7 @@ export class TenantController {
         phone: phone || null,
         avatarUrl: null,
         tenantId: tenantId,
-        needsOnboarding: true,
+        needsOnboarding: false,
         needsLegalAcceptance: false,
         professionName: managerProfession || null,
         practiceAreas: managerPracticeAreas || '',
@@ -787,6 +787,7 @@ export class TenantController {
         SELECT 
           t.id, t.slug, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
           t.municipal_registration, t.state_registration, t.professional_board, t.professional_registry,
+          t.manager_profession, t.manager_practice_areas,
           t.email, t.phone, t.mobile, t.whatsapp, t.website, t.description,
           t.address, t.street, t.number, t.complement, t.neighborhood, t.city, t.state, t.zip_code, t.country,
           t.responsible_name, t.responsible_cpf, t.responsible_email, t.responsible_phone, t.responsible_role,
@@ -841,7 +842,8 @@ export class TenantController {
         professionalBoard, professionalRegistry, email, phone, mobile, whatsapp, website, description,
         street, number, complement, neighborhood, city, state, zipCode, country,
         responsibleName, responsibleCpf, responsibleEmail, responsiblePhone, responsibleRole,
-        logoUrl, primaryColor, clientTermLabel, businessHoursJson, businessHours, settings
+        logoUrl, primaryColor, clientTermLabel, businessHoursJson, businessHours, settings,
+        managerProfession, managerPracticeAreas
       } = req.body;
 
       const rawBusinessHours = businessHoursJson 
@@ -861,6 +863,8 @@ export class TenantController {
           state_registration = COALESCE(?, state_registration),
           professional_board = COALESCE(?, professional_board),
           professional_registry = COALESCE(?, professional_registry),
+          manager_profession = COALESCE(?, manager_profession),
+          manager_practice_areas = COALESCE(?, manager_practice_areas),
           email = COALESCE(?, email),
           phone = COALESCE(?, phone),
           mobile = COALESCE(?, mobile),
@@ -899,6 +903,8 @@ export class TenantController {
         stateRegistration || null,
         professionalBoard || null,
         professionalRegistry || null,
+        managerProfession || null,
+        managerPracticeAreas || null,
         email || null,
         phone || null,
         mobile || null,
@@ -925,6 +931,25 @@ export class TenantController {
         rawBusinessHours,
         req.tenantId
       );
+
+      if (req.user?.userId) {
+        db.prepare(`
+          UPDATE users SET
+            profession_name = COALESCE(?, profession_name),
+            practice_areas = COALESCE(?, practice_areas),
+            registration_type = COALESCE(?, registration_type),
+            registration_number = COALESCE(?, registration_number),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(
+          managerProfession || null,
+          managerPracticeAreas || null,
+          professionalBoard || null,
+          professionalRegistry || null,
+          req.user.userId,
+          req.tenantId
+        );
+      }
 
       // Atualiza configurações se enviadas
       if (settings && typeof settings === 'object') {

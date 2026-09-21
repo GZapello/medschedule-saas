@@ -78,7 +78,10 @@ async function main() {
     }
     await page.getByRole('link',{name:'Conhecer módulo ZemdaFono',exact:true}).click();
     assert.equal(await page.locator('html').getAttribute('data-test-action'),'sistema-para-fonoaudiologos');
-    await page.locator('.zl-hero').getByRole('button',{name:'Começar agora',exact:true}).click();
+    const heroText = await page.locator('.zl-hero').innerText();
+    assert.ok(heroText.includes('7 dias grátis no Zemda Solo. Sem compromisso.'));
+    assert.ok(heroText.includes('suporte@zemda.com.br'));
+    await page.locator('.zl-hero').getByRole('button',{name:'Testar grátis por 7 dias',exact:true}).click();
     assert.equal(await page.locator('html').getAttribute('data-test-action'),'register');
     await page.locator('.zl-final').getByRole('button',{name:'Entrar no Zemda',exact:true}).click();
     assert.equal(await page.locator('html').getAttribute('data-test-action'),'login');
