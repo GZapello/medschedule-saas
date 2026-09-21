@@ -1,20 +1,49 @@
 import React from 'react';
-import { AlertCircle, History, CloudCheck, HardDrive, ArrowRight, X } from 'lucide-react';
+import { AlertCircle, History, Cloud, HardDrive, ArrowRight, X } from 'lucide-react';
 
-interface ClinicalDraftRecoveryModalProps {
+export interface ClinicalDraftRecoveryModalProps {
   isOpen: boolean;
   moduleName?: string;
-  onSelectVersion: (choice: 'server' | 'local') => void;
+  serverDraftTime?: string | null;
+  localDraftTime?: string | null;
+  onRecoverServer?: () => void;
+  onKeepCurrent?: () => void;
+  onSelectVersion?: (choice: 'server' | 'local') => void;
   onClose: () => void;
 }
 
 export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProps> = ({
   isOpen,
   moduleName = 'este atendimento',
+  serverDraftTime,
+  localDraftTime,
+  onRecoverServer,
+  onKeepCurrent,
   onSelectVersion,
   onClose
 }) => {
   if (!isOpen) return null;
+
+  const handleChooseServer = () => {
+    if (onRecoverServer) onRecoverServer();
+    if (onSelectVersion) onSelectVersion('server');
+    onClose();
+  };
+
+  const handleChooseLocal = () => {
+    if (onKeepCurrent) onKeepCurrent();
+    if (onSelectVersion) onSelectVersion('local');
+    onClose();
+  };
+
+  const formatTime = (ts?: string | null) => {
+    if (!ts) return null;
+    try {
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return ts;
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -46,12 +75,12 @@ export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProp
           {/* Opção Servidor (Mais Recente na Nuvem) */}
           <button
             type="button"
-            onClick={() => onSelectVersion('server')}
+            onClick={handleChooseServer}
             className="text-left p-4 rounded-2xl border-2 border-emerald-500 bg-emerald-50/40 hover:bg-emerald-50 transition-all cursor-pointer group space-y-2"
           >
             <div className="flex items-center justify-between">
               <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
-                <CloudCheck className="w-4 h-4" />
+                <Cloud className="w-4 h-4" />
               </div>
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 uppercase">
                 Recomendado
@@ -60,6 +89,11 @@ export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProp
             <div>
               <div className="text-xs font-bold text-slate-900">Versão da Nuvem / Servidor</div>
               <p className="text-[11px] text-slate-500 mt-0.5">Sincronizada no banco de dados central da clínica.</p>
+              {serverDraftTime && (
+                <p className="text-[10px] text-emerald-700 font-semibold mt-1">
+                  Horário: {formatTime(serverDraftTime)}
+                </p>
+              )}
             </div>
             <div className="text-xs font-bold text-emerald-700 pt-1 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
               <span>Recuperar versão mais recente</span>
@@ -70,7 +104,7 @@ export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProp
           {/* Opção Memória Local (Fallback Deste Navegador) */}
           <button
             type="button"
-            onClick={() => onSelectVersion('local')}
+            onClick={handleChooseLocal}
             className="text-left p-4 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-white hover:border-slate-300 transition-all cursor-pointer group space-y-2"
           >
             <div className="flex items-center justify-between">
@@ -82,6 +116,11 @@ export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProp
             <div>
               <div className="text-xs font-bold text-slate-900">Versão Deste Navegador</div>
               <p className="text-[11px] text-slate-500 mt-0.5">Salva localmente neste computador durante a última digitação.</p>
+              {localDraftTime && (
+                <p className="text-[10px] text-slate-600 font-semibold mt-1">
+                  Horário: {formatTime(localDraftTime)}
+                </p>
+              )}
             </div>
             <div className="text-xs font-bold text-slate-700 pt-1 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
               <span>Manter versão atual local</span>

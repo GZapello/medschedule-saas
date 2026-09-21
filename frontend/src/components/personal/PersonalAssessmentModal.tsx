@@ -190,7 +190,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     vo2Max,
     flexibilityWellsCm,
     strengthTests,
-    enduranceTests,
+    endurancePushups,
+    enduranceSitups,
+    enduranceSquats,
+    endurancePlankSeconds,
     notes
   }), [
     weight,
@@ -239,7 +242,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     vo2Max,
     flexibilityWellsCm,
     strengthTests,
-    enduranceTests,
+    endurancePushups,
+    enduranceSitups,
+    enduranceSquats,
+    endurancePlankSeconds,
     notes
   ]);
 
@@ -291,7 +297,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     if (data.vo2Max !== undefined) setVo2Max(data.vo2Max);
     if (data.flexibilityWellsCm !== undefined) setFlexibilityWellsCm(data.flexibilityWellsCm);
     if (Array.isArray(data.strengthTests)) setStrengthTests(data.strengthTests);
-    if (Array.isArray(data.enduranceTests)) setEnduranceTests(data.enduranceTests);
+    if (data.endurancePushups !== undefined) setEndurancePushups(data.endurancePushups);
+    if (data.enduranceSitups !== undefined) setEnduranceSitups(data.enduranceSitups);
+    if (data.enduranceSquats !== undefined) setEnduranceSquats(data.enduranceSquats);
+    if (data.endurancePlankSeconds !== undefined) setEndurancePlankSeconds(data.endurancePlankSeconds);
     if (data.notes !== undefined) setNotes(data.notes);
   };
 
