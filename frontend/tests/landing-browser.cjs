@@ -85,6 +85,10 @@ async function main() {
     const faq=page.locator('.zl-faq details').first(); await faq.locator('summary').click();
     assert.ok(await faq.evaluate(el=>el.open)); await faq.locator('summary').press('Enter');
     assert.equal(await faq.evaluate(el=>el.open),false);
+    const layerHeights = await page.locator('.zl-layers article').evaluateAll(els => els.map(e => e.offsetHeight));
+    assert.equal(layerHeights[0], layerHeights[1]);
+    assert.equal(layerHeights[1], layerHeights[2]);
+    assert.ok(layerHeights[0] > 0);
     const broken=await page.locator('a[href*="#"]').evaluateAll(links=>links.filter(a=>a.hash&&(!a.pathname||a.pathname==='/')).filter(a=>!document.getElementById(a.hash.slice(1))).map(a=>a.href));
     assert.deepEqual(broken,[]);
     const text=await page.locator('body').innerText();
