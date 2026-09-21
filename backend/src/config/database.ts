@@ -169,6 +169,30 @@ export function initializeDatabase(): void {
     }
     addColIfMissing('legal_acceptances', 'marketing_opt_in', 'INTEGER DEFAULT 0');
 
+    // Tabela e índices de Verificação de E-mail Obrigatória (OTP de 6 dígitos)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS email_verifications (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL,
+          purpose TEXT NOT NULL,
+          code_hash TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          resend_count INTEGER NOT NULL DEFAULT 0,
+          expires_at TEXT NOT NULL,
+          verified_at TEXT,
+          consumed_at TEXT,
+          last_sent_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_email_verif_email_purpose ON email_verifications(email, purpose);
+        CREATE INDEX IF NOT EXISTS idx_email_verif_status ON email_verifications(status);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabela email_verifications:', e);
+    }
+
     // Controle Administrativo Global (Banimento e Bloqueio de Cadastros)
     addColIfMissing('tenants', 'registrations_blocked', 'INTEGER DEFAULT 0');
     addColIfMissing('tenants', 'banned_at', 'TEXT');

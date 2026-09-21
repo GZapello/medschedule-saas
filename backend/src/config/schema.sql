@@ -630,3 +630,23 @@ CREATE TABLE IF NOT EXISTS legal_acceptances (
 CREATE INDEX IF NOT EXISTS idx_legal_acceptances_user ON legal_acceptances (user_id);
 CREATE INDEX IF NOT EXISTS idx_legal_acceptances_clinic ON legal_acceptances (clinic_id);
 
+-- 28. Verificação de E-mail Obrigatória (OTP de 6 dígitos)
+CREATE TABLE IF NOT EXISTS email_verifications (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  resend_count INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  verified_at TEXT,
+  consumed_at TEXT,
+  last_sent_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_verif_email_purpose ON email_verifications(email, purpose);
+CREATE INDEX IF NOT EXISTS idx_email_verif_status ON email_verifications(status);
+
+

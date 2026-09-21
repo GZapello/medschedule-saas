@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -17,7 +17,11 @@ import {
   Award,
   Briefcase,
   ExternalLink,
-  Activity
+  Activity,
+  ArrowLeft,
+  RefreshCw,
+  KeyRound,
+  AlertCircle
 } from 'lucide-react';
 
 interface CreateClinicModalProps {
@@ -29,7 +33,14 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
   const { showToast } = useToast();
   const { loginWithToken } = useAuth();
 
+  const [step, setStep] = useState<'form' | 'verify_email'>('form');
   const [loading, setLoading] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   const [searchingCep, setSearchingCep] = useState(false);
   const [successData, setSuccessData] = useState<{ clinicId: string; slug: string; message: string } | null>(null);
   const [marketingAccepted, setMarketingAccepted] = useState(false);
@@ -212,6 +223,38 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
     }));
   };
 
+  const maskEmail = (emailStr: string): string => {
+    if (!emailStr || !emailStr.includes('@')) return emailStr;
+    const [local, domain] = emailStr.split('@');
+    if (local.length <= 2) {
+      return `${local[0]}***@${domain}`;
+    }
+    return `${local[0]}***${local[local.length - 1]}@${domain}`;
+  };
+
+  const handleModalClose = () => {
+    setStep('form');
+    setOtpDigits(['', '', '', '', '', '']);
+    setCooldownSeconds(0);
+    setSuccessData(null);
+    onClose();
+  };
+
+  useEffect(() => {
+    if (step === 'verify_email' && cooldownSeconds > 0) {
+      const timer = setInterval(() => {
+        setCooldownSeconds(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [step, cooldownSeconds]);
+
   if (!isOpen) return null;
 
   const handleCepSearch = async () => {
@@ -244,11 +287,63 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleOtpChange = (index: number, val: string) => {
+    const clean = val.replace(/\D/g, '');
+    if (!clean) {
+      const updated = [...otpDigits];
+      updated[index] = '';
+      setOtpDigits(updated);
+      return;
+    }
+
+    const char = clean.slice(-1);
+    const updated = [...otpDigits];
+    updated[index] = char;
+    setOtpDigits(updated);
+
+    if (index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace') {
+      if (!otpDigits[index] && index > 0) {
+        otpInputRefs.current[index - 1]?.focus();
+      }
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+
+    const updated = [...otpDigits];
+    for (let i = 0; i < 6; i++) {
+      updated[i] = pasted[i] || '';
+    }
+    setOtpDigits(updated);
+
+    const nextIndex = Math.min(pasted.length, 5);
+    otpInputRefs.current[nextIndex]?.focus();
+  };
+
+  const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.responsibleName || !formData.email || !formData.password || !formData.clinicName) {
       showToast('Preencha os campos obrigatórios marcados com *', 'error');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email.trim())) {
+      showToast('Informe um e-mail válido', 'error');
       return;
     }
 
@@ -269,9 +364,80 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
 
     try {
       setLoading(true);
+      const res = await ApiClient.post<{ success: boolean; message: string; cooldownSeconds?: number }>(
+        '/v1/public/email/request-code',
+        {
+          email: formData.email.trim().toLowerCase(),
+          purpose: 'clinic_registration'
+        }
+      );
+
+      setStep('verify_email');
+      setOtpDigits(['', '', '', '', '', '']);
+      setCooldownSeconds(res.cooldownSeconds || 60);
+      showToast('Código de 6 dígitos enviado para seu e-mail!', 'info');
+      setTimeout(() => {
+        otpInputRefs.current[0]?.focus();
+      }, 150);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao enviar código de verificação', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (cooldownSeconds > 0 || isResending) return;
+    try {
+      setIsResending(true);
+      const res = await ApiClient.post<{ success: boolean; message: string; cooldownSeconds?: number }>(
+        '/v1/public/email/request-code',
+        {
+          email: formData.email.trim().toLowerCase(),
+          purpose: 'clinic_registration'
+        }
+      );
+      setOtpDigits(['', '', '', '', '', '']);
+      setCooldownSeconds(res.cooldownSeconds || 60);
+      showToast('Novo código enviado com sucesso!', 'success');
+      setTimeout(() => {
+        otpInputRefs.current[0]?.focus();
+      }, 100);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao reenviar código', 'error');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  const handleVerifyAndRegister = async () => {
+    const code = otpDigits.join('').trim();
+    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+      showToast('Por favor, digite o código completo de 6 dígitos numéricos.', 'error');
+      return;
+    }
+
+    try {
+      setIsVerifying(true);
+
+      // 1. Validar código de 6 dígitos
+      const verifyRes = await ApiClient.post<{ success: boolean; emailVerificationToken: string; message: string }>(
+        '/v1/public/email/verify-code',
+        {
+          email: formData.email.trim().toLowerCase(),
+          code,
+          purpose: 'clinic_registration'
+        }
+      );
+
+      if (!verifyRes.emailVerificationToken) {
+        throw new Error('Falha ao autenticar verificação de e-mail.');
+      }
+
+      // 2. Realizar cadastro definitivo da clínica com o emailVerificationToken
       const data = await ApiClient.post<any>('/v1/public/tenants/register', {
         responsibleName: formData.responsibleName,
-        email: formData.email,
+        email: formData.email.trim().toLowerCase(),
         phone: formData.phone,
         password: formData.password,
         clinicName: formData.clinicName,
@@ -286,14 +452,15 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         managerPracticeAreas: formData.managerPracticeAreas || undefined,
         managerRegistrationType: formData.managerProfession !== 'Apenas Gestão / Administrativo' ? formData.managerRegistrationType : undefined,
         managerRegistrationNumber: formData.managerProfession !== 'Apenas Gestão / Administrativo' ? formData.managerRegistrationNumber : undefined,
-        zemdaBodyEnabled: formData.zemdaBodyEnabled
+        zemdaBodyEnabled: formData.zemdaBodyEnabled,
+        emailVerificationToken: verifyRes.emailVerificationToken
       });
 
       if (data.token && data.user) {
         // Autenticação automática segura através do token de sessão retornado
         loginWithToken(data.token, data.user, data.tenant);
-        showToast('Cadastro realizado com sucesso! Redirecionando para escolha do plano...', 'success');
-        onClose();
+        showToast('E-mail verificado e clínica cadastrada com sucesso! Redirecionando para escolha do plano...', 'success');
+        handleModalClose();
         // Redireciona diretamente para /assinatura
         window.history.pushState(null, '', '/assinatura');
         window.dispatchEvent(new PopStateEvent('popstate'));
@@ -305,9 +472,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
       setSuccessData(data);
       showToast('Cadastro realizado com sucesso! Faça login para continuar.', 'info');
     } catch (err: any) {
-      showToast(err.message || 'Erro ao cadastrar clínica', 'error');
+      showToast(err.message || 'Código incorreto ou erro ao validar e-mail.', 'error');
     } finally {
-      setLoading(false);
+      setIsVerifying(false);
     }
   };
 
@@ -319,15 +486,19 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[11px] font-bold tracking-wider uppercase mb-1">
               <Building2 className="w-3.5 h-3.5 text-teal-400" />
-              Plataforma Multi-Clínicas Zemda
+              {step === 'verify_email' ? 'Etapa 2: Validação de Segurança' : 'Plataforma Multi-Clínicas Zemda'}
             </div>
-            <h2 className="text-xl font-extrabold tracking-tight">Criar Minha Clínica</h2>
+            <h2 className="text-xl font-extrabold tracking-tight">
+              {step === 'verify_email' ? 'Confirmar E-mail do Gestor' : 'Criar Minha Clínica'}
+            </h2>
             <p className="text-xs text-teal-200/90">
-              Cadastre seu estabelecimento para ter seu próprio ambiente exclusivo na plataforma.
+              {step === 'verify_email'
+                ? 'Insira o código de 6 dígitos enviado para validar seu e-mail antes de criar a clínica.'
+                : 'Cadastre seu estabelecimento para ter seu próprio ambiente exclusivo na plataforma.'}
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleModalClose}
             className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -370,8 +541,139 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                 Entrar e escolher o plano
               </button>
             </div>
+          ) : step === 'verify_email' ? (
+            <div className="py-2 space-y-6">
+              {/* Stepper info */}
+              <div className="flex items-center justify-between p-3.5 bg-teal-50/80 border border-teal-100 rounded-2xl">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
+                    2/2
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800">Confirmação de Titularidade</h4>
+                    <p className="text-[11px] text-slate-500">Validação obrigatória de segurança por e-mail</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStep('form')}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-900 bg-white border border-teal-200/80 hover:border-teal-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Editar dados
+                </button>
+              </div>
+
+              {/* Center visual card */}
+              <div className="text-center space-y-3 py-2">
+                <div className="w-14 h-14 bg-gradient-to-tr from-teal-500 to-emerald-400 text-white rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-teal-500/20">
+                  <KeyRound className="w-7 h-7" />
+                </div>
+                <h3 className="text-lg font-extrabold text-slate-900">
+                  Código de Verificação
+                </h3>
+                <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+                  Digite o código de 6 dígitos que enviamos para o e-mail:
+                </p>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs">
+                  <Mail className="w-3.5 h-3.5 text-teal-600" />
+                  <span>{maskEmail(formData.email)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setStep('form')}
+                    className="text-[11px] text-teal-600 hover:text-teal-800 underline font-semibold ml-1 cursor-pointer"
+                  >
+                    (Alterar)
+                  </button>
+                </div>
+              </div>
+
+              {/* 6-Digit Segmented Inputs */}
+              <div className="space-y-3">
+                <div className="flex justify-center items-center gap-2 sm:gap-3">
+                  {otpDigits.map((digit, idx) => (
+                    <input
+                      key={idx}
+                      ref={el => { otpInputRefs.current[idx] = el; }}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={1}
+                      value={digit}
+                      onChange={e => handleOtpChange(idx, e.target.value)}
+                      onKeyDown={e => handleOtpKeyDown(idx, e)}
+                      onPaste={handleOtpPaste}
+                      className={`w-11 h-14 sm:w-13 sm:h-16 text-center text-2xl font-extrabold rounded-2xl border-2 transition-all outline-none ${
+                        digit
+                          ? 'border-teal-500 bg-teal-50/40 text-teal-950 ring-2 ring-teal-500/20 shadow-xs'
+                          : 'border-slate-200 bg-slate-50 text-slate-800 focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-500/10'
+                      }`}
+                      autoFocus={idx === 0}
+                    />
+                  ))}
+                </div>
+
+                <div className="text-center space-y-1">
+                  <p className="text-[11px] text-slate-500">
+                    O código é válido por <strong>10 minutos</strong>. Caso não o localize, verifique também sua caixa de spam ou promoções.
+                  </p>
+                </div>
+              </div>
+
+              {/* Resend button / cooldown */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between text-xs">
+                <span className="text-slate-600 font-medium">Não recebeu o código?</span>
+                {cooldownSeconds > 0 ? (
+                  <span className="font-semibold text-slate-400 flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                    Reenviar em {cooldownSeconds}s
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    disabled={isResending}
+                    className="font-bold text-teal-600 hover:text-teal-700 flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isResending ? 'animate-spin' : ''}`} />
+                    {isResending ? 'Enviando...' : 'Reenviar código'}
+                  </button>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setStep('form')}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 cursor-pointer flex items-center gap-1.5"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Voltar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleVerifyAndRegister}
+                  disabled={isVerifying || otpDigits.join('').length !== 6}
+                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isVerifying ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Validando e criando conta...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      Confirmar e Criar Conta
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleRequestOtp} className="space-y-6">
               {/* Informação sobre aprovação */}
               <div className="p-3.5 bg-teal-50/80 border border-teal-100 rounded-2xl text-xs text-teal-950 flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
@@ -797,7 +1099,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleModalClose}
                   className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 cursor-pointer"
                 >
                   Cancelar
@@ -805,9 +1107,19 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
                 >
-                  {loading ? 'Cadastrando...' : 'Finalizar Solicitação de Cadastro'}
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Enviando código...
+                    </>
+                  ) : (
+                    <>
+                      <span>Continuar para Validação de E-mail</span>
+                      <ShieldCheck className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </form>

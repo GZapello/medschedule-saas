@@ -48,6 +48,7 @@ import { DigitalCertificateController } from '../controllers/digital-certificate
 import { PsychopedagogyController } from '../controllers/psychopedagogy.controller';
 import { PsychologyController } from '../controllers/psychology.controller';
 import { ExternalTestsController } from '../controllers/external-tests.controller';
+import { EmailVerificationController } from '../controllers/email-verification.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -69,6 +70,10 @@ api.get('/v1/health', (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.status(200).json({ status: 'ok', service: 'Zemda-API-Core', version: '1.1.2' });
 });
+
+// Validação de E-mail Obrigatória (OTP de 6 dígitos)
+api.post('/v1/public/email/request-code', EmailVerificationController.requestCode);
+api.post('/v1/public/email/verify-code', EmailVerificationController.verifyCode);
 
 // Autenticação e Registro Público
 api.post('/v1/auth/login', AuthController.login);

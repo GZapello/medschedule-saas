@@ -8,6 +8,8 @@ import { generateToken } from '../utils/jwt';
 import { v4 as uuidv4 } from 'uuid';
 import { globalAudit, purgeClinic } from '../services/clinic-control.service';
 import { ensureDefaultClinicService } from '../services/default-service.service';
+import { EmailService } from '../services/email.service';
+
 
 
 export class TenantController {
@@ -63,6 +65,24 @@ export class TenantController {
       }
 
       const cleanEmail = email.toLowerCase();
+
+      // Validação obrigatória do token de verificação de e-mail por código de 6 dígitos
+      const emailVerificationToken = req.body.emailVerificationToken;
+      if (!emailVerificationToken) {
+        res.status(400).json({ error: 'É obrigatório validar o e-mail com o código de 6 dígitos antes de concluir o cadastro' });
+        return;
+      }
+
+      const tokenValidation = EmailService.verifyVerificationToken(
+        emailVerificationToken,
+        cleanEmail,
+        'clinic_registration'
+      );
+
+      if (!tokenValidation.valid) {
+        res.status(400).json({ error: tokenValidation.error || 'Token de verificação de e-mail inválido ou expirado' });
+        return;
+      }
 
       // Verifica se o e-mail já existe
       const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
@@ -231,6 +251,11 @@ export class TenantController {
         termsVersion: CURRENT_TERMS_VERSION,
         privacyVersion: CURRENT_PRIVACY_VERSION
       });
+
+      // Marca a verificação de e-mail como consumida
+      if (tokenValidation.payload?.verificationId) {
+        EmailService.markVerificationConsumed(tokenValidation.payload.verificationId);
+      }
 
       // Criação automática de sessão autenticada segura
       const token = generateToken({
