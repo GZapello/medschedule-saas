@@ -301,6 +301,17 @@ api.put('/v1/staff/:id/permissions', requireTenant, requireRole('clinic_admin'),
 api.put('/v1/staff/:id/toggle-status', requireTenant, requireRole('clinic_admin'), StaffController.toggleStatus);
 api.put('/v1/staff/:id/role-profession', requireTenant, requireRole('clinic_admin'), StaffController.updateRoleProfession);
 
+// Onboarding Inicial da Clínica & Gestor Responsável
+api.get('/v1/onboarding/status', requireTenant, OnboardingController.getStatus);
+api.post('/v1/onboarding/confirm-manager', requireTenant, OnboardingController.confirmManager);
+api.post('/v1/onboarding/step', requireTenant, OnboardingController.saveStep);
+api.post('/v1/onboarding/complete', requireTenant, OnboardingController.complete);
+
+// Onboarding Interativo & Guia Prático por Usuário (Todas as Roles & Módulos)
+api.get('/v1/user-onboarding', authMiddleware, OnboardingController.getUserOnboarding);
+api.post('/v1/user-onboarding', authMiddleware, OnboardingController.saveUserOnboarding);
+api.post('/v1/user-onboarding/reset', authMiddleware, OnboardingController.resetUserOnboarding);
+
 // Taxonomia Global: Profissões e Tipos de Serviço (Exclusivo SuperAdmin SaaS)
 api.post('/v1/taxonomy/categories', requireRole('superadmin'), TaxonomyController.createCategory);
 api.put('/v1/taxonomy/categories/:id', requireRole('superadmin'), TaxonomyController.updateCategory);

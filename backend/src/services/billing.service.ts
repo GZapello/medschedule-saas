@@ -1,6 +1,7 @@
 import { db } from '../config/database';
 import { randomUUID } from 'crypto';
 import { AsaasService, AsaasError } from './asaas.service';
+import { TrialNotificationService } from './trial-notification.service';
 
 export class BillingError extends Error {
   constructor(public code: string, message: string, public httpStatus = 409) { super(message); }
@@ -36,6 +37,7 @@ export function canOperate(clinic: string): boolean {
   if (!tenant || tenant.status !== 'active') return false;
   if (!tenant.billing_required) return true;
   const s=currentSubscription(clinic); if (!s?.managed) return false;
+  if (s.status==='TRIAL') return !!s.trial_ends_at && new Date(s.trial_ends_at).getTime() > Date.now();
   if (s.status==='ACTIVE') return !!s.current_period_end && s.current_period_end > today();
   if (s.status==='PAST_DUE') return !!s.current_period_end && !!s.grace_period_until && s.grace_period_until > today();
   return s.status==='CANCELED' && !!s.current_period_end && s.current_period_end > today();
@@ -97,21 +99,36 @@ export class BillingService {
   static plans() { return db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE code IS NOT NULL AND active=1 ORDER BY monthly_price').all(); }
   static summary(clinic: string) {
     this.expireGrace();
+    this.expireTrials();
     const s=currentSubscription(clinic);
+    const tenant=db.prepare('SELECT name, trial_used FROM tenants WHERE id=?').get(clinic);
     const plan=s?.managed ? db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE id=?').get(s.plan_id) : null;
     const pending=s?.pending_plan_id ? db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE id=?').get(s.pending_plan_id) : null;
-    return {clinicName:db.prepare('SELECT name FROM tenants WHERE id=?').get(clinic)?.name,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:plan?.max_users || null,
+    const isTrial = s?.managed && s.status === 'TRIAL';
+    let trialDaysRemaining: number | null = null;
+    if (isTrial && s.trial_ends_at) {
+      const diffMs = new Date(s.trial_ends_at).getTime() - Date.now();
+      trialDaysRemaining = Math.max(0, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+    }
+    return {clinicName:tenant?.name,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:plan?.max_users || null,
       nextDueDate:s?.next_due_date || null,gracePeriodUntil:s?.grace_period_until || null,currentPeriodEnd:s?.current_period_end || null,
       pendingPlan:pending,changeEffectiveOn:s?.pending_plan_effective_on || null,canOperate:canOperate(clinic),
       environment:s?.gateway_environment || AsaasService.getEnvironment(),managed:!!s?.managed,
+      isTrial,trialStartedAt:s?.trial_started_at || null,trialEndsAt:s?.trial_ends_at || null,trialDaysRemaining,trialUsed:!!tenant?.trial_used,
       payments:db.prepare('SELECT id,amount,billing_type,status,due_date,confirmed_at,received_at,invoice_url FROM subscription_payments WHERE clinic_id=? ORDER BY due_date DESC LIMIT 100').all(clinic)};
   }
   static async checkout(clinic:string,code:unknown,user:string):Promise<{url:string}> {
+    const plan=chosenPlan(code);
+    let s=currentSubscription(clinic);
+    if (s?.managed && s.status==='TRIAL' && plan.code!=='SOLO') {
+      throw new BillingError('TRIAL_UPGRADE_CONTACT_REQUIRED','Para migrar seu teste para os planos Equipe ou Clínica, entre em contato com suporte@zemda.com.br.',400);
+    }
     AsaasService.config(); const app=AsaasService.appUrl();
     if ((process.env.ASAAS_WEBHOOK_TOKEN || '').length<32) throw new BillingError('WEBHOOK_NOT_CONFIGURED','Configure a autenticação do webhook antes de iniciar assinaturas.',503);
     return withOperation(clinic,async()=> {
-      const t=clinicForBilling(clinic),plan=chosenPlan(code);checkPlanSize(clinic,plan);
-      const environment=AsaasService.getEnvironment(); let s=currentSubscription(clinic);
+      const t=clinicForBilling(clinic);checkPlanSize(clinic,plan);
+      const environment=AsaasService.getEnvironment();
+      s=currentSubscription(clinic);
       if (s?.managed && s.gateway_environment!==environment) throw new BillingError('ENVIRONMENT_MISMATCH','Esta assinatura pertence a outro ambiente. A migração exige uma nova contratação controlada.');
       if (s?.managed && s.status==='CANCELED' && s.current_period_end>today()) throw new BillingError('PAID_PERIOD_REMAINS',`Seu acesso pago permanece até ${s.current_period_end}. Inicie uma nova assinatura após esse período.`);
       if (s?.managed && s.asaas_subscription_id && s.status!=='CANCELED') throw new BillingError('SUBSCRIPTION_EXISTS','Use Alterar plano ou regularize a cobrança atual, sem criar uma assinatura duplicada.');
@@ -254,5 +271,178 @@ export class BillingService {
       }
     }
     return { synced, skipped, errors };
+  }
+  static expireTrials(): number {
+    return db.transaction(() => {
+      const expired = db.prepare(`
+        SELECT s.*, t.responsible_email, t.email, t.responsible_name, t.name as clinic_name
+        FROM subscriptions s
+        JOIN tenants t ON t.id = s.clinic_id
+        WHERE s.managed = 1 AND s.is_current = 1 AND s.status = 'TRIAL'
+          AND s.trial_ends_at IS NOT NULL AND datetime(s.trial_ends_at) <= datetime('now')
+      `).all() as any[];
+
+      for (const sub of expired) {
+        db.prepare("UPDATE subscriptions SET status = 'TRIAL_EXPIRED', updated_at = datetime('now') WHERE id = ?").run(sub.id);
+        db.prepare("UPDATE trial_history SET status = 'EXPIRED', updated_at = datetime('now') WHERE subscription_id = ?").run(sub.id);
+        billingAudit(sub, 'TRIAL_EXPIRED', 'TRIAL', 'TRIAL_EXPIRED', null, {
+          trialStartedAt: sub.trial_started_at,
+          trialEndsAt: sub.trial_ends_at
+        });
+        const recipientEmail = sub.responsible_email || sub.email;
+        const recipientName = sub.responsible_name || sub.clinic_name || 'Profissional';
+        if (recipientEmail) {
+          void TrialNotificationService.notifyTrialExpired(sub.clinic_id, recipientEmail, recipientName);
+        }
+      }
+      return expired.length;
+    })();
+  }
+  static async startSoloTrial(clinicId: string, userId: string): Promise<any> {
+    return withOperation(clinicId, async () => {
+      const tenant = clinicForBilling(clinicId);
+      if (tenant.trial_used) {
+        throw new BillingError('TRIAL_ALREADY_USED', 'O teste grátis de 7 dias já foi utilizado para esta clínica.', 400);
+      }
+
+      const email = tenant.responsible_email || tenant.email;
+      const cnpjCpf = tenant.cnpj_cpf ? String(tenant.cnpj_cpf).replace(/\D/g, '') : null;
+      if (email) {
+        const usedEmail = db.prepare('SELECT id FROM trial_history WHERE email = ?').get(email.trim().toLowerCase());
+        if (usedEmail) {
+          throw new BillingError('TRIAL_ALREADY_USED', 'O teste grátis já foi utilizado para este e-mail.', 400);
+        }
+      }
+      if (cnpjCpf && cnpjCpf.length >= 11) {
+        const usedDoc = db.prepare('SELECT id FROM trial_history WHERE cnpj_cpf = ?').get(cnpjCpf);
+        if (usedDoc) {
+          throw new BillingError('TRIAL_ALREADY_USED', 'O teste grátis já foi utilizado para este CPF/CNPJ.', 400);
+        }
+      }
+
+      const soloPlan = chosenPlan('SOLO');
+      const s = currentSubscription(clinicId);
+      if (s?.managed && s.status === 'ACTIVE') {
+        throw new BillingError('SUBSCRIPTION_ACTIVE', 'Esta clínica já possui uma assinatura ativa.', 400);
+      }
+
+      const sid = randomUUID();
+      const now = new Date();
+      const trialStartedAt = now.toISOString();
+      const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const startDay = today();
+      const endDay = addDays(startDay, 7);
+
+      db.transaction(() => {
+        if (s) {
+          db.prepare('UPDATE subscriptions SET is_current = 0 WHERE id = ?').run(s.id);
+        }
+        db.prepare(`
+          INSERT INTO subscriptions (
+            id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
+            managed, is_current, trial_started_at, trial_ends_at, updated_at
+          ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
+        `).run(sid, clinicId, clinicId, soloPlan.id, startDay, endDay, trialStartedAt, trialEndsAt);
+
+        db.prepare("UPDATE tenants SET plan_id = ?, trial_used = 1, billing_required = 1, status = 'active', updated_at = datetime('now') WHERE id = ?").run(soloPlan.id, clinicId);
+
+        const manager = db.prepare("SELECT user_id FROM clinic_users WHERE tenant_id = ? AND is_manager = 1 AND status = 'pending' ORDER BY created_at LIMIT 1").get(clinicId) as { user_id: string } | undefined;
+        if (manager) {
+          db.prepare("UPDATE users SET status = 'active' WHERE id = ? AND status = 'pending'").run(manager.user_id);
+          db.prepare("UPDATE clinic_users SET status = 'active' WHERE tenant_id = ? AND user_id = ? AND status = 'pending'").run(clinicId, manager.user_id);
+        }
+
+        const historyId = randomUUID();
+        db.prepare(`
+          INSERT INTO trial_history (
+            id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+        `).run(historyId, clinicId, userId, sid, email?.trim().toLowerCase() || '', cnpjCpf || null, trialStartedAt, trialEndsAt);
+
+        const newSub = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(sid);
+        billingAudit(newSub, 'TRIAL_STARTED', s?.status || null, 'TRIAL', userId, {
+          planCode: 'SOLO',
+          trialStartedAt,
+          trialEndsAt
+        });
+      })();
+
+      const recipientEmail = tenant.responsible_email || tenant.email;
+      const recipientName = tenant.responsible_name || tenant.name || 'Profissional';
+      if (recipientEmail) {
+        void TrialNotificationService.notifyTrialStarted(clinicId, recipientEmail, recipientName, trialEndsAt);
+      }
+
+      return {
+        success: true,
+        message: 'Teste grátis de 7 dias do Zemda Solo ativado com sucesso!',
+        trialEndsAt
+      };
+    });
+  }
+  static listSoloTrials(query: any) {
+    this.expireTrials();
+    let sql = `
+      SELECT 
+        th.id, th.tenant_id, th.user_id, th.subscription_id, th.email, th.cnpj_cpf,
+        th.started_at, th.ends_at, th.status, th.converted_at, th.created_at,
+        t.name as clinic_name, t.slug as clinic_slug,
+        u.name as user_name,
+        s.status as subscription_status,
+        CASE
+          WHEN th.status = 'CONVERTED' THEN 'CONVERTED'
+          WHEN datetime(th.ends_at) <= datetime('now') THEN 'EXPIRED'
+          ELSE 'ACTIVE'
+        END as computed_status
+      FROM trial_history th
+      JOIN tenants t ON t.id = th.tenant_id
+      JOIN users u ON u.id = th.user_id
+      LEFT JOIN subscriptions s ON s.id = th.subscription_id
+    `;
+    const where: string[] = [];
+    const params: any[] = [];
+
+    if (query?.search && typeof query.search === 'string') {
+      where.push('(t.name LIKE ? OR u.name LIKE ? OR th.email LIKE ?)');
+      const term = `%${query.search.trim()}%`;
+      params.push(term, term, term);
+    }
+    if (query?.status && typeof query.status === 'string') {
+      if (query.status === 'ACTIVE') {
+        where.push("th.status = 'ACTIVE' AND datetime(th.ends_at) > datetime('now')");
+      } else if (query.status === 'EXPIRED') {
+        where.push("(th.status = 'EXPIRED' OR (th.status = 'ACTIVE' AND datetime(th.ends_at) <= datetime('now')))");
+      } else if (query.status === 'CONVERTED') {
+        where.push("th.status = 'CONVERTED'");
+      }
+    }
+    if (where.length > 0) {
+      sql += ` WHERE ${where.join(' AND ')}`;
+    }
+    sql += ` ORDER BY th.created_at DESC LIMIT 500`;
+
+    const rows = db.prepare(sql).all(...params) as any[];
+    const now = Date.now();
+
+    const formattedRows = rows.map(r => {
+      let daysRemaining = 0;
+      if (r.computed_status === 'ACTIVE' && r.ends_at) {
+        const diffMs = new Date(r.ends_at).getTime() - now;
+        daysRemaining = Math.max(0, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+      }
+      return {
+        ...r,
+        days_remaining: daysRemaining
+      };
+    });
+
+    const summary = {
+      total: db.prepare('SELECT COUNT(*) total FROM trial_history').get()?.total || 0,
+      active: db.prepare("SELECT COUNT(*) total FROM trial_history WHERE status = 'ACTIVE' AND datetime(ends_at) > datetime('now')").get()?.total || 0,
+      expired: db.prepare("SELECT COUNT(*) total FROM trial_history WHERE status = 'EXPIRED' OR (status = 'ACTIVE' AND datetime(ends_at) <= datetime('now'))").get()?.total || 0,
+      converted: db.prepare("SELECT COUNT(*) total FROM trial_history WHERE status = 'CONVERTED'").get()?.total || 0
+    };
+
+    return { trials: formattedRows, summary };
   }
 }

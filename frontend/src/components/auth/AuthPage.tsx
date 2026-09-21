@@ -26,11 +26,15 @@ interface AuthPageProps {
   onOpenPublicBooking?: () => void;
   onBackToLanding?: () => void;
   initialAction?: 'login' | 'create-clinic' | 'register-user';
+  initialPlan?: string;
+  isTrial?: boolean;
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({
   onBackToLanding,
-  initialAction
+  initialAction,
+  initialPlan,
+  isTrial
 }) => {
   const { login } = useAuth();
   const { showToast } = useToast();
@@ -285,6 +289,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       <CreateClinicModal
         isOpen={isCreateClinicOpen}
         onClose={() => setIsCreateClinicOpen(false)}
+        initialPlan={initialPlan}
+        isTrial={isTrial}
       />
 
       <ForgotPasswordModal

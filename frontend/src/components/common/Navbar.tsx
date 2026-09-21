@@ -11,8 +11,10 @@ import {
   Shield,
   Menu,
   Key,
-  Monitor
+  Monitor,
+  HelpCircle
 } from 'lucide-react';
+import { useOnboarding } from '../onboarding/OnboardingContext';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
@@ -22,6 +24,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNavigate }) => {
   const { currentUser, currentTenant, isSuperAdmin, logout, clientTermLabel, isZemdaFisio, isZemdaOdonto } = useAuth();
+  const { openHelp } = useOnboarding();
   const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
 
   const getRoleBadge = () => {
@@ -121,9 +124,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
           <span className="hidden lg:inline">Zemda Windows</span>
         </a>
 
+        {/* Central de Ajuda Permanente */}
+        <button
+          onClick={openHelp}
+          data-tour="nav-help"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold rounded-lg border border-teal-200 transition-all cursor-pointer shadow-2xs"
+          title="Central de Ajuda, Tours e Novidades (Alt + H)"
+          aria-label="Central de Ajuda"
+        >
+          <HelpCircle className="w-4 h-4 text-teal-600" />
+          <span className="hidden sm:inline">Ajuda</span>
+        </button>
+
         {/* Botão do Assistente Zemda (acesso discreto e profissional) */}
         <button
           onClick={onOpenAI}
+          data-tour="nav-ai-assistant"
           className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold rounded-lg border border-slate-200 transition-colors cursor-pointer"
           title="Abrir Assistente Zemda"
         >
@@ -135,6 +151,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
         <div className="flex items-center gap-2 sm:gap-3 border-l border-slate-200 pl-3 sm:pl-4">
           <button
             type="button"
+            data-tour="nav-account"
             onClick={() => setIsAccountModalOpen(true)}
             className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors text-left cursor-pointer group"
             title="Minha Conta (Alterar E-mail ou Senha)"

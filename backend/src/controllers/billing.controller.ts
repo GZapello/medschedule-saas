@@ -1,7 +1,7 @@
 import { Request,Response,NextFunction,Router } from 'express';
 import { timingSafeEqual } from 'crypto';
 import { db } from '../config/database';
-import { BillingError,BillingService,canOperate,billingAddress } from '../services/billing.service';
+import { BillingError,BillingService,canOperate,billingAddress,currentSubscription } from '../services/billing.service';
 import { AsaasService,AsaasError } from '../services/asaas.service';
 import { BillingWebhookService } from '../services/billing-webhook.service';
 import { authMiddleware } from '../middlewares/auth.middleware';
@@ -35,8 +35,17 @@ export function subscriptionGate(req:Request,res:Response,next:NextFunction) {
   if(/^\/(?:v1\/)?(?:subscriptions|auth\/me|auth\/accept-legal|auth\/logout|auth\/change-password|tenants\/current)(?:\/|$)/.test(req.path) && (req.method==='GET' || req.path.includes('subscriptions') || req.path.includes('auth'))) {next();return;}
   if(req.tenantId) {
     BillingService.expireGrace();
+    BillingService.expireTrials();
     const t=db.prepare('SELECT billing_required FROM tenants WHERE id=?').get(req.tenantId);
-    if(t?.billing_required && !canOperate(req.tenantId)) {res.status(402).json({code:'SUBSCRIPTION_REQUIRED',error:'Acesse Assinatura e Plano para regularizar o pagamento.'});return;}
+    if(t?.billing_required && !canOperate(req.tenantId)) {
+      const sub = currentSubscription(req.tenantId);
+      const isTrialExpired = sub?.status === 'TRIAL_EXPIRED';
+      const errorMsg = isTrialExpired
+        ? 'Período de teste grátis encerrado. Assine o plano para continuar.'
+        : 'Acesse Assinatura e Plano para regularizar o pagamento.';
+      res.status(402).json({ code: isTrialExpired ? 'TRIAL_EXPIRED' : 'SUBSCRIPTION_REQUIRED', error: errorMsg });
+      return;
+    }
   }
   next();
 }
@@ -119,6 +128,8 @@ export function mountBillingRoutes(api:Router) {
     db.prepare('INSERT INTO billing_integration_status(environment,connected,last_test_at,error) VALUES(?,?,?,?) ON CONFLICT(environment) DO UPDATE SET connected=excluded.connected,last_test_at=excluded.last_test_at,error=excluded.error').run(result.environment,result.connected?1:0,lastTest,result.error || null);
     res.json({...result,lastTest});
   }));
+  api.post(['/subscriptions/start-trial','/v1/subscriptions/start-trial'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.startSoloTrial(req.tenantId!,req.user!.userId))));
+  api.get(['/admin/solo-trials','/v1/admin/solo-trials'],...guard,requireRole('superadmin'),handler((req,res)=>res.json(BillingService.listSoloTrials(req.query))));
   api.post(['/admin/subscriptions/sync-prices','/v1/admin/subscriptions/sync-prices'],...guard,requireRole('superadmin'),handler(async(_req,res)=>{
     const result=await BillingService.syncActiveSubscriptionPrices();
     res.json({success:true,...result});

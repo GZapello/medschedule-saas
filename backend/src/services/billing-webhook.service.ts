@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { AsaasError, AsaasService } from './asaas.service';
 import { activeUsers, addDays, addMonth, billingAudit, BillingService, today } from './billing.service';
 import { RegistrationCleanupService } from './registration-cleanup.service';
+import { TrialNotificationService } from './trial-notification.service';
 
 const events=new Set(['PAYMENT_CREATED','PAYMENT_CONFIRMED','PAYMENT_RECEIVED','PAYMENT_OVERDUE','PAYMENT_CREDIT_CARD_CAPTURE_REFUSED','PAYMENT_REFUNDED','PAYMENT_DELETED',
   'SUBSCRIPTION_CREATED','SUBSCRIPTION_UPDATED','SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED','CHECKOUT_CREATED','CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED']);
@@ -44,6 +45,8 @@ export class BillingWebhookService {
         }
       }
       BillingService.expireGrace();
+      BillingService.expireTrials();
+      void TrialNotificationService.processDueNotifications().catch(()=>{});
       // Reuse the existing scheduler; expiry has its own hourly throttle.
       void RegistrationCleanupService.runDue().catch(()=>console.error('[RegistrationCleanup] RETRY'));
     } finally {this.running=false;}
@@ -199,6 +202,10 @@ export class BillingWebhookService {
           db.prepare("UPDATE users SET status='active' WHERE id=? AND status='pending'").run(manager.user_id);
           db.prepare("UPDATE clinic_users SET status='active' WHERE tenant_id=? AND user_id=? AND status='pending'").run(s.clinic_id,manager.user_id);
         }
+      }
+      if (['TRIAL', 'TRIAL_EXPIRED'].includes(s.status)) {
+        db.prepare("UPDATE trial_history SET status = 'CONVERTED', converted_at = datetime('now'), updated_at = datetime('now') WHERE subscription_id = ?").run(s.id);
+        billingAudit(s, 'TRIAL_CONVERTED_TO_ACTIVE', s.status, 'ACTIVE');
       }
     }
     if(status!==s.status) billingAudit(s,status==='ACTIVE' && ['SUSPENDED','PAST_DUE'].includes(s.status)?'REACTIVATED':status,s.status,status);

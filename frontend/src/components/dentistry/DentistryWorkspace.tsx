@@ -674,6 +674,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1.5 border-b border-slate-200 pb-2`}>
             <button
               type="button"
+              data-tour="tab-odontogram"
               data-active={activeTab === 'odontogram'}
               onClick={() => setActiveTab('odontogram')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
@@ -688,6 +689,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-tour="tab-treatment_plans"
               data-active={activeTab === 'treatment_plans'}
               onClick={() => setActiveTab('treatment_plans')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
@@ -702,6 +704,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-tour="tab-perio"
               data-active={activeTab === 'perio'}
               onClick={() => setActiveTab('perio')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
@@ -716,6 +719,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-tour="tab-endo"
               data-active={activeTab === 'endo'}
               onClick={() => setActiveTab('endo')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
@@ -730,6 +734,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-tour="tab-prosthetics"
               data-active={activeTab === 'prosthetics'}
               onClick={() => setActiveTab('prosthetics')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
@@ -744,6 +749,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-tour="tab-ortho_hof"
               data-active={activeTab === 'ortho_hof'}
               onClick={() => setActiveTab('ortho_hof')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
@@ -758,6 +764,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-tour="tab-anamnesis"
               data-active={activeTab === 'anamnesis'}
               onClick={() => setActiveTab('anamnesis')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
@@ -772,6 +779,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-tour="tab-implants"
               data-active={activeTab === 'implants'}
               onClick={() => setActiveTab('implants')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
@@ -786,6 +794,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-tour="tab-photos_exams"
               data-active={activeTab === 'photos_exams'}
               onClick={() => setActiveTab('photos_exams')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${

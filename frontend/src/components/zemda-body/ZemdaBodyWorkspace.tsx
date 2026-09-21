@@ -330,7 +330,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
       {/* 1. BARRA DE FERRAMENTAS: SELEÇÃO, CANETA, BORRACHA E MODELO */}
       <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
         {/* Lado Esquerdo: Controle de Modo (Selecionar, Caneta, Borracha) */}
-        <div className="flex items-center flex-wrap gap-1.5">
+        <div data-tour="body-tool-selector" className="flex items-center flex-wrap gap-1.5">
           {/* Modo Selecionar */}
           <button
             type="button"
@@ -507,7 +507,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
       </div>
 
       {/* 2. MAPA CORPORAL PANORÂMICO INTERATIVO (3 CAMADAS: IMAGEM, SVG E CANVAS) */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex justify-center overflow-hidden">
+      <div data-tour="body-canvas-container" className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex justify-center overflow-hidden">
         <ZemdaBodyCanvas
           bodyModel={bodyModel}
           selectedRegions={selectedRegions}
@@ -619,7 +619,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
           </div>
 
           {/* Abas para alternar se necessário */}
-          <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
+          <div data-tour="body-section-selector" className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
             <button
               type="button"
               onClick={() => setActiveSection('anthropometry')}

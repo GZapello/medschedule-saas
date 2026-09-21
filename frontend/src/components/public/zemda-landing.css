@@ -147,6 +147,10 @@
 .zl-price strong { font-size:42px; letter-spacing:-.04em; font-weight:600; }
 .zl-accesses { display:flex; align-items:center; gap:10px; padding-bottom:22px; border-bottom:1px solid var(--zl-line); color:var(--zl-teal); font-size:13px; font-weight:600; }
 .zl-plan .zl-button { width:100%; margin-top:8px; }
+.zl-trial-badge { display:inline-flex; align-items:center; gap:6px; background:#e6f7f2; color:#0d766e; border:1px solid #bfeadb; font-size:11px; font-weight:700; letter-spacing:.02em; padding:4px 10px; border-radius:20px; margin-bottom:12px; }
+.zl-plans-note { margin-top:24px; text-align:center; font-size:13px; color:var(--zl-muted); line-height:1.7; }
+.zl-plans-note strong { color:var(--zl-ink); }
+.zl-plans-note a { color:var(--zl-teal); font-weight:650; text-decoration:underline; text-underline-offset:3px; }
 .zl-comparison { margin-top:45px; overflow-x:auto; border:1px solid var(--zl-line); border-radius:15px; background:#fff; }
 .zl-comparison table { width:100%; border-collapse:collapse; font-size:12px; }
 .zl-comparison caption { text-align:left; padding:24px; font-size:17px; font-weight:600; }

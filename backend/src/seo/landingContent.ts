@@ -16,9 +16,9 @@ export const LANDING_MODULES = [
 ];
 export const moduleHref = (module: typeof LANDING_MODULES[number]) => module.slug ? `/${module.slug}` : `/#produto`;
 export const LANDING_PLANS = [
-  { name: 'Solo', price: '69,90', accesses: '1 acesso', description: 'Para quem atende individualmente.' },
-  { name: 'Equipe', price: '249,90', accesses: 'Até 5 acessos', description: 'Para compartilhar a rotina da clínica.' },
-  { name: 'Clínica', price: '619,90', accesses: 'Até 20 acessos', description: 'Para equipes multiprofissionais maiores.' }
+  { name: 'Solo', price: '69,90', accesses: '1 acesso', description: 'Para quem atende individualmente.', trial: '7 dias grátis', badge: 'Sem compromisso', cta: 'Testar grátis por 7 dias' },
+  { name: 'Equipe', price: '249,90', accesses: 'Até 5 acessos', description: 'Para compartilhar a rotina da clínica.', cta: 'Começar agora' },
+  { name: 'Clínica', price: '619,90', accesses: 'Até 20 acessos', description: 'Para equipes multiprofissionais maiores.', cta: 'Começar agora' }
 ];
 export const LANDING_STEPS = [
   { title: 'Cadastre sua clínica ou consultório', description: 'Organize o espaço de trabalho e escolha o plano pelo número de acessos.' },

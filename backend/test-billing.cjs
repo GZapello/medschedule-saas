@@ -4,6 +4,8 @@ const root=fs.mkdtempSync(path.join(os.tmpdir(),'zemda-billing-'));
 process.env.DATABASE_PATH=path.join(root,'test.sqlite');
 process.env.ASAAS_ENV='sandbox';process.env.ASAAS_API_URL='https://api-sandbox.asaas.com/v3';
 process.env.ASAAS_API_KEY='$aact_hmlg_test_only';process.env.ASAAS_WEBHOOK_TOKEN='local-test-webhook-token-not-a-secret-12345';process.env.APP_URL='https://zemda.test';
+process.env.EMAIL_OTP_SECRET='local-test-otp-secret-must-be-long-enough-12345';
+const jwt=require('jsonwebtoken');
 const {db,initializeDatabase}=require('./dist/config/database');initializeDatabase();initializeDatabase();
 const {generateToken}=require('./dist/utils/jwt');
 const {BillingService,activeUsers,canOperate,addMonth}=require('./dist/services/billing.service');
@@ -65,8 +67,17 @@ let server,eventCounter=0;
     return {id,...r};
   };
   assert.deepEqual(BillingService.plans().map(p=>[p.code,p.monthly_price,p.max_users]),[['SOLO',69.9,1],['TEAM',249.9,5],['CLINIC',619.9,20]]);
-  // End-to-end registration creates only a pending owner with access to billing.
-  let r=await call('/v1/public/tenants/register',{responsibleName:'Owner',email:'new@test.invalid',password:'password123',clinicName:'New Clinic',cnpjCpf:'12345678909',termsAccepted:true,privacyAccepted:true});
+  const verificationId = 'verif_test_1';
+  db.prepare(`
+    INSERT INTO email_verifications (id, email, purpose, code_hash, status, verified_at, expires_at)
+    VALUES (?, 'new@test.invalid', 'clinic_registration', 'dummy', 'verified', datetime('now'), datetime('now', '+15 minutes'))
+  `).run(verificationId);
+  const emailVerificationToken = jwt.sign(
+    { email: 'new@test.invalid', purpose: 'clinic_registration', verified: true, verificationId },
+    process.env.EMAIL_OTP_SECRET,
+    { expiresIn: '15m' }
+  );
+  let r=await call('/v1/public/tenants/register',{responsibleName:'Owner',email:'new@test.invalid',password:'password123',clinicName:'New Clinic',cnpjCpf:'12345678909',termsAccepted:true,privacyAccepted:true,emailVerificationToken});
   assert.equal(r.status,201,JSON.stringify(r));const clinic=r.body.clinicId;
   r=await call('/v1/auth/login',{email:'new@test.invalid',password:'password123'});assert.equal(r.status,200,JSON.stringify(r));
   const signupToken=r.body.token;

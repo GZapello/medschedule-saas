@@ -677,6 +677,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             return (
               <button
                 key={tab.id}
+                data-tour={`tab-${tab.id}`}
                 data-active={isActive}
                 type="button"
                 onClick={() => setActiveTab(tab.id as any)}

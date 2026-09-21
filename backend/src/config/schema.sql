@@ -129,9 +129,9 @@ CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);
 -- 6. Assinaturas SaaS
 CREATE TABLE IF NOT EXISTS subscriptions (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL UNIQUE,
+  tenant_id TEXT NOT NULL,
   plan_id TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'past_due', 'cancelled', 'trial')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'past_due', 'cancelled', 'trial', 'TRIAL', 'TRIAL_EXPIRED', 'PENDING_PAYMENT', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CANCELED')),
   current_period_start TEXT NOT NULL,
   current_period_end TEXT NOT NULL,
   cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
@@ -667,3 +667,25 @@ CREATE TABLE IF NOT EXISTS whatsapp_cloud_system_integrations (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_by TEXT
 );
+
+-- 30. Persistência de Onboarding / Guia Interativo por Usuário
+CREATE TABLE IF NOT EXISTS user_onboarding (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,
+  tenant_id TEXT,
+  onboarding_status TEXT NOT NULL DEFAULT 'pending' CHECK(onboarding_status IN ('pending', 'in_progress', 'completed', 'skipped', 'dismissed')),
+  onboarding_started_at TEXT,
+  onboarding_completed_at TEXT,
+  onboarding_last_step INTEGER NOT NULL DEFAULT 1,
+  onboarding_version TEXT NOT NULL DEFAULT 'v1.1',
+  onboarding_dismissed INTEGER NOT NULL DEFAULT 0,
+  module_tours_completed TEXT NOT NULL DEFAULT '[]',
+  whats_new_dismissed TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_onboarding_user ON user_onboarding (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_onboarding_tenant ON user_onboarding (tenant_id);
+

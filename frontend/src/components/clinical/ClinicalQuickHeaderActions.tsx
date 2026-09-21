@@ -39,13 +39,16 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
     <div className={`flex items-center gap-2.5 flex-wrap ${className}`}>
       {/* Indicador Discreto de Autosave Universal */}
       {autosaveStatus && (
-        <ClinicalAutosaveIndicator status={autosaveStatus} lastSavedTime={lastSavedTime} />
+        <div data-tour="clinical-autosave" className="inline-flex">
+          <ClinicalAutosaveIndicator status={autosaveStatus} lastSavedTime={lastSavedTime} />
+        </div>
       )}
 
       {/* Acesso 1: Prontuários Anteriores (Histórico Longitudinal) */}
       {showPreviousRecords && onViewPreviousRecords && (
         <button
           type="button"
+          data-tour="clinical-previous-records"
           onClick={onViewPreviousRecords}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
           title="Visualizar histórico completo de prontuários e atendimentos anteriores"
@@ -57,17 +60,20 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
 
       {/* Acesso: Ferramentas Rápidas (Menu Dropdown Centralizado) */}
       {tools && tools.length > 0 && (
-        <ClinicalQuickToolsMenu
-          tools={tools}
-          label={toolsLabel}
-          variant={toolsVariant}
-        />
+        <div data-tour="clinical-tools" className="inline-flex">
+          <ClinicalQuickToolsMenu
+            tools={tools}
+            label={toolsLabel}
+            variant={toolsVariant}
+          />
+        </div>
       )}
 
       {/* Acesso 2: Finalizar Atendimento Rápido */}
       {showFinish && onFinishConsultation && (
         <button
           type="button"
+          data-tour="clinical-finish"
           disabled={isSubmitting}
           onClick={onFinishConsultation}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-500/20 transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"

@@ -280,4 +280,203 @@ export class OnboardingController {
       res.status(500).json({ error: 'Erro ao concluir configuração' });
     }
   }
+
+  // ========================================================
+  // PERSISTÊNCIA DO GUIA PRÁTICO / ONBOARDING POR USUÁRIO
+  // ========================================================
+
+  // Retorna o status do tour interativo do usuário autenticado
+  static getUserOnboarding(req: Request, res: Response): void {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Usuário não autenticado' });
+        return;
+      }
+
+      const row = db.prepare(`
+        SELECT 
+          id, user_id, tenant_id, onboarding_status,
+          onboarding_started_at, onboarding_completed_at,
+          onboarding_last_step, onboarding_version, onboarding_dismissed,
+          module_tours_completed, whats_new_dismissed,
+          updated_at
+        FROM user_onboarding
+        WHERE user_id = ?
+      `).get(userId) as any;
+
+      if (!row) {
+        res.json({
+          onboardingStatus: 'pending',
+          onboardingStartedAt: null,
+          onboardingCompletedAt: null,
+          onboardingLastStep: 1,
+          onboardingVersion: 'v1.1',
+          onboardingDismissed: false,
+          moduleToursCompleted: [],
+          whatsNewDismissed: []
+        });
+        return;
+      }
+
+      let moduleTours: string[] = [];
+      let whatsNew: string[] = [];
+      try {
+        moduleTours = JSON.parse(row.module_tours_completed || '[]');
+      } catch (_) {}
+      try {
+        whatsNew = JSON.parse(row.whats_new_dismissed || '[]');
+      } catch (_) {}
+
+      res.json({
+        onboardingStatus: row.onboarding_status || 'pending',
+        onboardingStartedAt: row.onboarding_started_at || null,
+        onboardingCompletedAt: row.onboarding_completed_at || null,
+        onboardingLastStep: row.onboarding_last_step || 1,
+        onboardingVersion: row.onboarding_version || 'v1.1',
+        onboardingDismissed: row.onboarding_dismissed === 1,
+        moduleToursCompleted: moduleTours,
+        whatsNewDismissed: whatsNew,
+        updatedAt: row.updated_at
+      });
+    } catch (err: any) {
+      console.error('[OnboardingController.getUserOnboarding] Erro:', err);
+      res.status(500).json({ error: 'Erro ao consultar guia do usuário' });
+    }
+  }
+
+  // Salva o progresso ou preferência do tour do usuário
+  static saveUserOnboarding(req: Request, res: Response): void {
+    try {
+      const userId = req.user?.userId;
+      const tenantId = req.tenantId || req.user?.tenantId || null;
+
+      if (!userId) {
+        res.status(401).json({ error: 'Usuário não autenticado' });
+        return;
+      }
+
+      const {
+        onboardingStatus,
+        onboardingStartedAt,
+        onboardingCompletedAt,
+        onboardingLastStep,
+        onboardingVersion,
+        onboardingDismissed,
+        moduleToursCompleted,
+        whatsNewDismissed
+      } = req.body;
+
+      const existing = db.prepare('SELECT id, module_tours_completed, whats_new_dismissed FROM user_onboarding WHERE user_id = ?').get(userId) as any;
+
+      let mergedModuleTours = existing?.module_tours_completed ? JSON.parse(existing.module_tours_completed) : [];
+      if (Array.isArray(moduleToursCompleted)) {
+        mergedModuleTours = Array.from(new Set([...mergedModuleTours, ...moduleToursCompleted]));
+      }
+
+      let mergedWhatsNew = existing?.whats_new_dismissed ? JSON.parse(existing.whats_new_dismissed) : [];
+      if (Array.isArray(whatsNewDismissed)) {
+        mergedWhatsNew = Array.from(new Set([...mergedWhatsNew, ...whatsNewDismissed]));
+      }
+
+      const recordId = existing?.id || 'uonb-' + userId;
+      const dismissedInt = onboardingDismissed === true || onboardingDismissed === 1 ? 1 : 0;
+      const stepInt = typeof onboardingLastStep === 'number' ? onboardingLastStep : 1;
+      const versionStr = onboardingVersion || 'v1.1';
+      const statusStr = onboardingStatus || (existing ? existing.onboarding_status : 'in_progress');
+
+      db.prepare(`
+        INSERT INTO user_onboarding (
+          id, user_id, tenant_id, onboarding_status,
+          onboarding_started_at, onboarding_completed_at,
+          onboarding_last_step, onboarding_version, onboarding_dismissed,
+          module_tours_completed, whats_new_dismissed,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(user_id) DO UPDATE SET
+          tenant_id = COALESCE(excluded.tenant_id, tenant_id),
+          onboarding_status = COALESCE(excluded.onboarding_status, onboarding_status),
+          onboarding_started_at = COALESCE(excluded.onboarding_started_at, onboarding_started_at),
+          onboarding_completed_at = COALESCE(excluded.onboarding_completed_at, onboarding_completed_at),
+          onboarding_last_step = COALESCE(excluded.onboarding_last_step, onboarding_last_step),
+          onboarding_version = COALESCE(excluded.onboarding_version, onboarding_version),
+          onboarding_dismissed = COALESCE(excluded.onboarding_dismissed, onboarding_dismissed),
+          module_tours_completed = excluded.module_tours_completed,
+          whats_new_dismissed = excluded.whats_new_dismissed,
+          updated_at = datetime('now')
+      `).run(
+        recordId,
+        userId,
+        tenantId,
+        statusStr,
+        onboardingStartedAt || null,
+        onboardingCompletedAt || null,
+        stepInt,
+        versionStr,
+        dismissedInt,
+        JSON.stringify(mergedModuleTours),
+        JSON.stringify(mergedWhatsNew)
+      );
+
+      res.json({
+        success: true,
+        onboardingStatus: statusStr,
+        onboardingLastStep: stepInt,
+        onboardingVersion: versionStr,
+        onboardingDismissed: dismissedInt === 1,
+        moduleToursCompleted: mergedModuleTours,
+        whatsNewDismissed: mergedWhatsNew
+      });
+    } catch (err: any) {
+      console.error('[OnboardingController.saveUserOnboarding] Erro:', err);
+      res.status(500).json({ error: 'Erro ao salvar guia do usuário' });
+    }
+  }
+
+  // Reinicia o tour do usuário (acionado via Central de Ajuda)
+  static resetUserOnboarding(req: Request, res: Response): void {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Usuário não autenticado' });
+        return;
+      }
+
+      const { resetModuleTours = false } = req.body || {};
+
+      if (resetModuleTours) {
+        db.prepare(`
+          UPDATE user_onboarding
+          SET onboarding_status = 'pending',
+              onboarding_started_at = null,
+              onboarding_completed_at = null,
+              onboarding_last_step = 1,
+              onboarding_dismissed = 0,
+              module_tours_completed = '[]',
+              updated_at = datetime('now')
+          WHERE user_id = ?
+        `).run(userId);
+      } else {
+        db.prepare(`
+          UPDATE user_onboarding
+          SET onboarding_status = 'pending',
+              onboarding_started_at = null,
+              onboarding_completed_at = null,
+              onboarding_last_step = 1,
+              onboarding_dismissed = 0,
+              updated_at = datetime('now')
+          WHERE user_id = ?
+        `).run(userId);
+      }
+
+      res.json({
+        success: true,
+        message: 'Guia reiniciado com sucesso'
+      });
+    } catch (err: any) {
+      console.error('[OnboardingController.resetUserOnboarding] Erro:', err);
+      res.status(500).json({ error: 'Erro ao reiniciar guia' });
+    }
+  }
 }
+

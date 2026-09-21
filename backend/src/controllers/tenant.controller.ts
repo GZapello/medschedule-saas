@@ -1,5 +1,5 @@
 import { respondBillingError } from './billing.controller';
-import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
+import { requireCapacity, pendingBillingManager, BillingService, today, addDays } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { globalAudit, purgeClinic } from '../services/clinic-control.service';
 import { ensureDefaultClinicService } from '../services/default-service.service';
 import { EmailService } from '../services/email.service';
+import { TrialNotificationService } from '../services/trial-notification.service';
 
 
 
@@ -109,6 +110,38 @@ export class TenantController {
         res.status(403).json({ error: 'Esta clínica está banida. Somente o Administrador do Sistema pode liberar seu cadastro.' }); return;
       }
 
+      // Validação de Teste Grátis Solo (7 dias)
+      const startTrial = req.body.startTrial === true || req.body.startTrial === 'true';
+      const planCode = req.body.planCode ? String(req.body.planCode).toUpperCase() : null;
+
+      if (startTrial) {
+        if (planCode && planCode !== 'SOLO') {
+          res.status(400).json({ error: 'O teste grátis de 7 dias é exclusivo para o plano Zemda Solo.' });
+          return;
+        }
+
+        const usedEmail = db.prepare('SELECT id FROM trial_history WHERE email = ?').get(cleanEmail);
+        if (usedEmail) {
+          res.status(400).json({ error: 'O teste grátis já foi utilizado para este e-mail. Escolha um plano para assinar.' });
+          return;
+        }
+        if (identity && identity.length >= 11) {
+          const usedDoc = db.prepare('SELECT id FROM trial_history WHERE cnpj_cpf = ?').get(identity);
+          if (usedDoc) {
+            res.status(400).json({ error: 'O teste grátis já foi utilizado para este CPF/CNPJ. Escolha um plano para assinar.' });
+            return;
+          }
+        }
+      }
+
+      const now = new Date();
+      const trialStartedAt = now.toISOString();
+      const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const trialStartDay = today();
+      const trialEndDay = addDays(trialStartDay, 7);
+      const soloPlan = startTrial ? db.prepare("SELECT id, code, name FROM plans WHERE code = 'SOLO' AND active = 1").get() as any : null;
+      const subId = 'sub-' + uuidv4().slice(0, 8);
+
       // Preparação dos dados auxiliares antes da transação (obtém IP seguro via req.ip/trust proxy)
       const ipAddress = (req.ip || req.socket?.remoteAddress || null)?.replace(/^::ffff:/, '') || null;
       const userAgent = (req.headers['user-agent'] as string) || null;
@@ -140,7 +173,10 @@ export class TenantController {
           throw new Error('EMAIL_ALREADY_EXISTS');
         }
 
-        // 3. Insere o tenant com status PENDENTE e registro dos termos aceitos
+        const initialTenantStatus = startTrial ? 'active' : 'pending';
+        const initialUserStatus = startTrial ? 'active' : 'pending';
+
+        // 3. Insere o tenant com status PENDENTE ou ACTIVE (se trial) e registro dos termos aceitos
         db.prepare(`
           INSERT INTO tenants (
             id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
@@ -148,15 +184,15 @@ export class TenantController {
             manager_profession, manager_practice_areas,
             status, onboarding_completed, onboarding_step, manager_confirmed,
             terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
-            terms_version, privacy_version,
+            terms_version, privacy_version, plan_id, trial_used, billing_required,
             created_at, updated_at
           ) VALUES (
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?,
-            'pending', 0, 1, 0,
+            ?, 0, 1, 0,
             1, datetime('now'), 1, datetime('now'),
-            ?, ?,
+            ?, ?, ?, ?, 1,
             datetime('now'), datetime('now')
           )
         `).run(
@@ -175,11 +211,14 @@ export class TenantController {
           phone || null,
           managerProfession || null,
           managerPracticeAreas || null,
+          initialTenantStatus,
           CURRENT_TERMS_VERSION,
-          CURRENT_PRIVACY_VERSION
+          CURRENT_PRIVACY_VERSION,
+          startTrial ? soloPlan?.id : null,
+          startTrial ? 1 : 0
         );
 
-        // 4. Insere o usuário gestor com status PENDENTE, role 'clinic_admin' e termos aceitos
+        // 4. Insere o usuário gestor com role 'clinic_admin' e termos aceitos
         db.prepare(`
           INSERT INTO users (
             id, tenant_id, name, email, password_hash, role, phone, status,
@@ -187,13 +226,13 @@ export class TenantController {
             terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
             created_at, updated_at
           ) VALUES (
-            ?, ?, ?, ?, ?, 'clinic_admin', ?, 'pending',
+            ?, ?, ?, ?, ?, 'clinic_admin', ?, ?,
             ?, ?, ?, ?,
             ?, ?, datetime('now'), datetime('now'),
             datetime('now'), datetime('now')
           )
         `).run(
-          userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null,
+          userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null, initialUserStatus,
           managerProfession || null, managerPracticeAreas || null, managerRegistrationType || null, managerRegistrationNumber || null,
           CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION
         );
@@ -220,13 +259,14 @@ export class TenantController {
             id, tenant_id, user_id, role, status, is_manager,
             profession_custom, practice_areas, permissions_json, zemda_body_enabled, created_at
           ) VALUES (
-            ?, ?, ?, 'clinic_admin', 'pending', 1,
+            ?, ?, ?, 'clinic_admin', ?, 1,
             ?, ?, ?, ?, datetime('now')
           )
         `).run(
           'cu-' + uuidv4().slice(0, 8),
           tenantId,
           userId,
+          initialUserStatus,
           managerProfession || null,
           managerPracticeAreas || null,
           initialPermissions,
@@ -258,6 +298,27 @@ export class TenantController {
 
         // 9. Criação automática e idempotente do serviço inicial padrão em modo estrito (falhas geram rollback)
         ensureDefaultClinicService(tenantId, true);
+
+        // 10. Se for Teste Grátis Solo, cria a assinatura TRIAL e o registro em trial_history
+        if (startTrial && soloPlan) {
+          db.prepare(`
+            INSERT INTO subscriptions (
+              id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
+              managed, is_current, trial_started_at, trial_ends_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
+          `).run(subId, tenantId, tenantId, soloPlan.id, trialStartDay, trialEndDay, trialStartedAt, trialEndsAt);
+
+          db.prepare(`
+            INSERT INTO trial_history (
+              id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+          `).run('th-' + uuidv4().slice(0, 8), tenantId, userId, subId, cleanEmail, identity || null, trialStartedAt, trialEndsAt);
+
+          db.prepare(`
+            INSERT INTO subscription_audit (id, clinic_id, subscription_id, user_id, action, previous_status, next_status, details_json)
+            VALUES (?, ?, ?, ?, 'TRIAL_STARTED', NULL, 'TRIAL', ?)
+          `).run(uuidv4(), tenantId, subId, userId, JSON.stringify({ planCode: 'SOLO', trialStartedAt, trialEndsAt }));
+        }
       });
 
       try {
@@ -272,6 +333,10 @@ export class TenantController {
           return;
         }
         throw txErr;
+      }
+
+      if (startTrial) {
+        void TrialNotificationService.notifyTrialStarted(tenantId, cleanEmail, responsibleName, trialEndsAt);
       }
 
       logAudit(req, 'REGISTER_CLINIC_REQUEST', 'tenants', tenantId, {
@@ -312,7 +377,7 @@ export class TenantController {
         name: responsibleName,
         email: cleanEmail,
         role: 'clinic_admin' as const,
-        status: 'pending',
+        status: startTrial ? 'active' : 'pending',
         phone: phone || null,
         avatarUrl: null,
         tenantId: tenantId,
@@ -334,13 +399,17 @@ export class TenantController {
       };
 
       res.status(201).json({
-        message: 'Clínica cadastrada com sucesso. Redirecionando para escolha do plano.',
+        message: startTrial
+          ? 'Teste grátis de 7 dias do Zemda Solo ativado com sucesso!'
+          : 'Clínica cadastrada com sucesso. Redirecionando para escolha do plano.',
         token,
         user: userPayload,
         tenant: tenantData,
         clinicId: tenantId,
         slug,
-        status: 'pending'
+        status: startTrial ? 'active' : 'pending',
+        isTrial: startTrial,
+        trialEndsAt: startTrial ? trialEndsAt : null
       });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;

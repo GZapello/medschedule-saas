@@ -9,7 +9,7 @@ import './zemda-landing.css';
 
 interface ZemdaLandingPageProps {
   onLogin: () => void;
-  onRegisterClinic: () => void;
+  onRegisterClinic: (plan?: string, isTrial?: boolean) => void;
   onRegisterUser?: () => void;
   onOpenPublicBooking?: () => void;
   onNavigateSeoPage?: (slug: string) => void;
@@ -48,7 +48,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
         <div className="zl-container">
           <RevealItem autoAnimate distancePx={14} durationMs={650}>
             <div className="zl-hero-top"><span className="zl-pill"><span />Ecossistema de Saúde &amp; Gestão</span><span className="zl-hero-note">Profissionais solo, consultórios, equipes e clínicas.</span></div>
-            <div className="zl-hero-grid"><h1>Gestão e atendimento em saúde.<br /><span>Do profissional solo à clínica.</span></h1><div className="zl-hero-copy"><p>O sistema completo para quem atende individualmente ou em equipe: agenda inteligente, prontuário eletrônico, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.</p><div className="zl-actions"><button className="zl-button" onClick={onRegisterClinic}>Começar agora <ArrowRight size={17} /></button><a className="zl-link" href="#profissoes">Conhecer os módulos <ArrowDown size={16} /></a></div><p className="zl-small">Feito para consultórios individuais, equipes em crescimento e clínicas multiprofissionais.</p></div></div>
+            <div className="zl-hero-grid"><h1>Gestão e atendimento em saúde.<br /><span>Do profissional solo à clínica.</span></h1><div className="zl-hero-copy"><p>O sistema completo para quem atende individualmente ou em equipe: agenda inteligente, prontuário eletrônico, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.</p><div className="zl-actions"><button className="zl-button" onClick={() => onRegisterClinic()}>Começar agora <ArrowRight size={17} /></button><a className="zl-link" href="#profissoes">Conhecer os módulos <ArrowDown size={16} /></a></div><p className="zl-small">Feito para consultórios individuais, equipes em crescimento e clínicas multiprofissionais.</p></div></div>
           </RevealItem>
           <RevealItem autoAnimate delayMs={100} distancePx={16} durationMs={700}>
             <LandingProductDemo />
@@ -103,13 +103,43 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
 
       <RevealSection id="planos" className="zl-section zl-tinted"><div className="zl-container">
         <RevealItem distancePx={16} durationMs={550}><Heading label="Planos" title="Um plano para cada momento da sua prática.">O plano define o número de acessos. A profissão define o módulo clínico, respeitando as permissões de cada usuário.</Heading></RevealItem>
-        <div className="zl-plans">{LANDING_PLANS.map((plan, i) => <RevealItem key={plan.name} distancePx={20} delayMs={i * 80} durationMs={600} className="zl-full-height"><article className={i === 1 ? 'zl-plan zl-plan-featured' : 'zl-plan'}><span className="zl-eyebrow">Zemda</span><h3>{plan.name}</h3><p>{plan.description}</p><div className="zl-price"><span>R$</span><strong>{plan.price}</strong><span>/mês</span></div><div className="zl-accesses"><Users size={17} />{plan.accesses}</div><Bullets items={['Gestão, agenda e prontuário', 'Módulo conforme a profissão', 'ZemdaBody e documentos']} /><button onClick={onRegisterClinic} className={i === 1 ? 'zl-button' : 'zl-button zl-button-secondary'}>Começar agora <ArrowRight size={16} /></button></article></RevealItem>)}</div>
+        <div className="zl-plans">{LANDING_PLANS.map((plan, i) => {
+          const isSolo = plan.name === 'Solo';
+          const planCode = isSolo ? 'SOLO' : i === 1 ? 'TEAM' : 'CLINIC';
+          return (
+            <RevealItem key={plan.name} distancePx={20} delayMs={i * 80} durationMs={600} className="zl-full-height">
+              <article className={i === 1 ? 'zl-plan zl-plan-featured' : 'zl-plan'}>
+                {isSolo && (
+                  <div className="zl-trial-badge">
+                    <Sparkles size={13} />
+                    <span>7 dias grátis · Sem compromisso</span>
+                  </div>
+                )}
+                <span className="zl-eyebrow">Zemda</span>
+                <h3>{plan.name}</h3>
+                <p>{plan.description}</p>
+                <div className="zl-price"><span>R$</span><strong>{plan.price}</strong><span>/mês</span></div>
+                <div className="zl-accesses"><Users size={17} />{plan.accesses}</div>
+                <Bullets items={['Gestão, agenda e prontuário', 'Módulo conforme a profissão', 'ZemdaBody e documentos']} />
+                <button
+                  onClick={() => onRegisterClinic(planCode, isSolo)}
+                  className={i === 1 ? 'zl-button' : 'zl-button zl-button-secondary'}
+                >
+                  {plan.cta || (isSolo ? 'Testar grátis por 7 dias' : 'Começar agora')} <ArrowRight size={16} />
+                </button>
+              </article>
+            </RevealItem>
+          );
+        })}</div>
+        <p className="zl-plans-note">
+          O teste grátis de 7 dias é exclusivo do plano <strong>Zemda Solo</strong>. Para informações ou implantação dos planos Equipe ou Clínica, entre em contato pelo <a href="mailto:suporte@zemda.com.br">suporte@zemda.com.br</a>.
+        </p>
         <RevealItem distancePx={18} delayMs={100} durationMs={600}><div className="zl-comparison" role="region" aria-label="Comparação dos planos" tabIndex={0}><table><caption>Compare os recursos dos planos</caption><thead><tr><th scope="col">Recursos</th>{LANDING_PLANS.map(plan => <th scope="col" key={plan.name}>{plan.name}</th>)}</tr></thead><tbody><tr><th scope="row">Acessos</th>{LANDING_PLANS.map(plan => <td key={plan.name}>{plan.accesses}</td>)}</tr>{['Gestão', 'Prontuário', 'Agenda', 'ZemdaBody', 'Financeiro', 'Documentos'].map(item => <tr key={item}><th scope="row">{item}</th>{LANDING_PLANS.map(plan => <td key={plan.name}><Check size={16} aria-hidden="true" /><span className="sr-only">Incluído</span></td>)}</tr>)}<tr><th scope="row">Módulos profissionais</th>{LANDING_PLANS.map(plan => <td key={plan.name}>Por profissão</td>)}</tr><tr><th scope="row">Suporte</th>{LANDING_PLANS.map(plan => <td key={plan.name}>Consultar condições</td>)}</tr></tbody></table></div><p className="zl-small">Acesso às funções conforme perfil e permissões. Canais e condições de suporte devem ser consultados na contratação.</p></RevealItem>
       </div></RevealSection>
 
       <RevealSection id="faq" className="zl-section"><div className="zl-container zl-faq-layout"><RevealItem distancePx={16} durationMs={550}><Heading label="Dúvidas frequentes" title="Antes de começar." /></RevealItem><RevealItem distancePx={18} delayMs={80} durationMs={600}><div className="zl-faq">{LANDING_FAQS.map(item => <details key={item.question}><summary>{item.question}<ChevronDown size={19} /></summary><p>{item.answer}</p></details>)}</div></RevealItem></div></RevealSection>
-      <section className="zl-final"><div className="zl-container"><RevealItem distancePx={20} durationMs={600}><span className="zl-eyebrow">Seu próximo atendimento começa aqui</span><h2>Sua gestão e seus atendimentos.<br />Em uma única plataforma.</h2><p>Comece no Solo ou organize sua equipe com ferramentas para cada profissão.</p><div className="zl-actions"><button className="zl-button" onClick={onRegisterClinic}>Começar agora <ArrowRight size={17} /></button><button className="zl-button zl-button-secondary" onClick={onLogin}>Entrar no Zemda</button></div></RevealItem></div></section>
+      <section className="zl-final"><div className="zl-container"><RevealItem distancePx={20} durationMs={600}><span className="zl-eyebrow">Seu próximo atendimento começa aqui</span><h2>Sua gestão e seus atendimentos.<br />Em uma única plataforma.</h2><p>Comece no Solo ou organize sua equipe com ferramentas para cada profissão.</p><div className="zl-actions"><button className="zl-button" onClick={() => onRegisterClinic()}>Começar agora <ArrowRight size={17} /></button><button className="zl-button zl-button-secondary" onClick={onLogin}>Entrar no Zemda</button></div></RevealItem></div></section>
     </main>
-    <PublicFooter onLogin={onLogin} onRegisterClinic={onRegisterClinic} onNavigateSeoPage={onNavigateSeoPage} />
+    <PublicFooter onLogin={onLogin} onRegisterClinic={() => onRegisterClinic()} onNavigateSeoPage={onNavigateSeoPage} />
   </div>;
 };

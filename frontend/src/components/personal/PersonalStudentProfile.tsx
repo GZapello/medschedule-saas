@@ -264,6 +264,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           </button>
           <button
             type="button"
+            data-tour="clinical-previous-records"
             onClick={() => setShowPreviousRecordsModal(true)}
             className="px-3.5 py-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
             title="Visualizar histórico de prontuários clínicos e evoluções anteriores"
@@ -272,6 +273,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
             Ver Prontuários Anteriores
           </button>
           <button
+            data-tour="personal-ai-btn"
             onClick={onOpenAIAssistant}
             className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
           >

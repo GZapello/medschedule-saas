@@ -21,17 +21,21 @@ import {
   ArrowLeft,
   RefreshCw,
   KeyRound,
-  AlertCircle
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 
 interface CreateClinicModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialPlan?: string;
+  isTrial?: boolean;
 }
 
-export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, onClose }) => {
+export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, onClose, initialPlan, isTrial }) => {
   const { showToast } = useToast();
   const { loginWithToken } = useAuth();
+  const isSoloTrial = Boolean(isTrial || initialPlan === 'SOLO');
 
   const [step, setStep] = useState<'form' | 'verify_email'>('form');
   const [loading, setLoading] = useState(false);
@@ -453,12 +457,22 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         managerRegistrationType: formData.managerProfession !== 'Apenas Gestão / Administrativo' ? formData.managerRegistrationType : undefined,
         managerRegistrationNumber: formData.managerProfession !== 'Apenas Gestão / Administrativo' ? formData.managerRegistrationNumber : undefined,
         zemdaBodyEnabled: formData.zemdaBodyEnabled,
-        emailVerificationToken: verifyRes.emailVerificationToken
+        emailVerificationToken: verifyRes.emailVerificationToken,
+        startTrial: isSoloTrial,
+        planCode: isSoloTrial ? 'SOLO' : (initialPlan || undefined)
       });
 
       if (data.token && data.user) {
         // Autenticação automática segura através do token de sessão retornado
         loginWithToken(data.token, data.user, data.tenant);
+        if (isSoloTrial || data.trialStarted) {
+          showToast('E-mail verificado! Seu teste grátis de 7 dias do Zemda Solo está ativo.', 'success');
+          handleModalClose();
+          window.history.pushState(null, '', '/');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+          window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
+          return;
+        }
         showToast('E-mail verificado e clínica cadastrada com sucesso! Redirecionando para escolha do plano...', 'success');
         handleModalClose();
         // Redireciona diretamente para /assinatura
@@ -675,12 +689,26 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
           ) : (
             <form onSubmit={handleRequestOtp} className="space-y-6">
               {/* Informação sobre ambiente exclusivo e configuração inicial */}
-              <div className="p-3.5 bg-teal-50/80 border border-teal-100 rounded-2xl text-xs text-teal-950 flex items-start gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
-                <p>
-                  Cada clínica possui um ambiente exclusivo e protegido. Após confirmar seu e-mail, você poderá escolher o plano e concluir a configuração inicial da sua clínica.
-                </p>
-              </div>
+              {isSoloTrial ? (
+                <div className="p-4 bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-200 rounded-2xl text-xs text-teal-950 flex items-start gap-3 shadow-xs">
+                  <Sparkles className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-extrabold text-teal-900 block text-sm">
+                      Teste Grátis de 7 Dias — Exclusivo Zemda Solo
+                    </span>
+                    <p className="text-teal-800/90 mt-0.5 leading-relaxed">
+                      Acesso imediato a todas as funcionalidades do Zemda (agenda, prontuário, documentos, financeiro, IA e ZemdaBody) para 1 usuário. Sem cobrança hoje e sem compromisso.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 bg-teal-50/80 border border-teal-100 rounded-2xl text-xs text-teal-950 flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
+                  <p>
+                    Cada clínica possui um ambiente exclusivo e protegido. Após confirmar seu e-mail, você poderá escolher o plano e concluir a configuração inicial da sua clínica.
+                  </p>
+                </div>
+              )}
 
               {/* Seção 1: Dados do Responsável / Gestor */}
               <div>

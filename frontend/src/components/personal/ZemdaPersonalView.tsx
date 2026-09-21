@@ -344,6 +344,7 @@ export const ZemdaPersonalView: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2">
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
               <button
+                data-tour="personal-overview"
                 data-active={currentTab === 'dashboard'}
                 onClick={() => setCurrentTab('dashboard')}
                 className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
@@ -357,6 +358,7 @@ export const ZemdaPersonalView: React.FC = () => {
               </button>
 
               <button
+                data-tour="personal-students-tab"
                 data-active={currentTab === 'students'}
                 onClick={() => setCurrentTab('students')}
                 className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
@@ -370,6 +372,7 @@ export const ZemdaPersonalView: React.FC = () => {
               </button>
 
               <button
+                data-tour="personal-templates-tab"
                 data-active={currentTab === 'templates'}
                 onClick={() => setCurrentTab('templates')}
                 className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
@@ -383,16 +386,27 @@ export const ZemdaPersonalView: React.FC = () => {
               </button>
             </div>
 
-            {/* Ação / Ferramenta Rápida: Biblioteca de Exercícios */}
-            <div className="shrink-0">
+            {/* Ação / Ferramenta Rápida: Biblioteca de Exercícios & IA */}
+            <div className="shrink-0 flex items-center gap-2">
               <button
                 type="button"
+                data-tour="personal-exercises-tab"
                 onClick={() => setIsExerciseLibraryOpen(true)}
                 className="px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
                 title="Abrir acervo completo e biblioteca de exercícios"
               >
                 <Dumbbell className="w-4 h-4 text-emerald-600" />
                 <span>Biblioteca de Exercícios</span>
+              </button>
+              <button
+                type="button"
+                data-tour="personal-ai-btn"
+                onClick={() => setIsAIAssistantOpen(true)}
+                className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+                title="Assistente IA ZemdaPersonal"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>Assistente IA</span>
               </button>
             </div>
           </div>

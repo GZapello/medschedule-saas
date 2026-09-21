@@ -6,7 +6,7 @@ import { CreditCard, Users, CheckCircle2, AlertCircle, ArrowUpRight, ArrowLeft, 
 const money=(v:number)=>Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const date=(v:string)=>v?new Date(v.slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—';
 const emptyProfile={name:'',cpfCnpj:'',email:'',phone:'',postalCode:'',address:'',addressNumber:'',province:'',complement:''};
-const statuses:Record<string,string>={ACTIVE:'Ativo',PENDING_PAYMENT:'Aguardando pagamento',PAST_DUE:'Pagamento pendente',SUSPENDED:'Suspenso',CANCELED:'Cancelado',NOT_SUBSCRIBED:'Escolha seu plano',CONFIRMED:'Pago',RECEIVED:'Pago',OVERDUE:'Vencido',PENDING:'Pendente',REFUNDED:'Estornado',DELETED:'Removido'};
+const statuses:Record<string,string>={ACTIVE:'Ativo',PENDING_PAYMENT:'Aguardando pagamento',PAST_DUE:'Pagamento pendente',SUSPENDED:'Suspenso',CANCELED:'Cancelado',NOT_SUBSCRIBED:'Escolha seu plano',CONFIRMED:'Pago',RECEIVED:'Pago',OVERDUE:'Vencido',PENDING:'Pendente',REFUNDED:'Estornado',DELETED:'Removido',TRIAL:'Teste Grátis (7 dias)',TRIAL_EXPIRED:'Teste Grátis Encerrado'};
 export function useBillingSummary(includeGlobal=false) {
   const {currentUser,currentTenant}=useAuth();
   const [summary,setSummary]=useState<any>(null);
@@ -32,8 +32,21 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
   useEffect(()=>{ApiClient.get<any[]>('/v1/plans').then(setPlans).catch((e:any)=>setError(e.message));},[]);
   useEffect(()=>{if(currentUser && canManage) ApiClient.get<any>('/v1/subscriptions/profile').then(p=>{setProfile(Object.fromEntries(Object.keys(emptyProfile).map(k=>[k,p[k] || ''])) as typeof emptyProfile);if(!p.cpfCnpj || !p.postalCode || !p.address || !p.addressNumber || !p.province)setProfileOpen(true);}).catch(()=>{});},[currentUser?.id,canManage]);
   const refresh=async()=>{await reload();window.dispatchEvent(new Event('zemda-billing-refresh'));};
+  const startSoloTrial=async()=>{
+    if(busy)return;setBusy(true);setError('');setNotice('');
+    try {
+      const res=await ApiClient.post<any>('/v1/subscriptions/start-trial',{});
+      setNotice(res.message || 'Teste grátis de 7 dias ativado com sucesso! Aproveite todos os recursos do Zemda Solo.');
+      await refresh();
+      setShowPlans(false);
+    } catch(e:any){setError(e.message);}finally{setBusy(false);}
+  };
   const choose=async(code:string)=>{
     if(!currentUser){window.location.assign('/assinatura?plan='+encodeURIComponent(code));return;}
+    if(summary?.isTrial && code!=='SOLO') {
+      setError('O teste grátis de 7 dias é exclusivo do plano Zemda Solo. Para migrar para os planos Equipe ou Clínica, entre em contato com nosso suporte pelo e-mail suporte@zemda.com.br.');
+      return;
+    }
     if(busy)return;setBusy(true);setError('');setNotice('');
     try {
       if(summary?.managed && summary.status==='ACTIVE') {
@@ -98,12 +111,71 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
     {notice && <p className="rounded-xl p-4 bg-emerald-50 text-emerald-800" role="status">{notice}</p>}
     {summary?.status==='ACTIVE' && callback==='sucesso' && <div className="p-4 rounded-xl bg-emerald-50 text-emerald-800 flex gap-3 items-center"><CheckCircle2 />Assinatura ativada com sucesso.<button className="underline ml-auto" onClick={async()=>{await reloadSession();window.location.assign('/');}}>Acessar Zemda</button></div>}
     {pending && <div className="bg-amber-50 text-amber-900 p-4 rounded-xl flex gap-3"><AlertCircle className="shrink-0"/><p>Há uma pendência na sua assinatura. Regularize o pagamento para evitar a suspensão do acesso. Prazo: {date(summary.gracePeriodUntil)}.</p></div>}
+    {summary?.isTrial && (
+      <div className="bg-gradient-to-r from-teal-50 via-emerald-50/50 to-teal-50 border border-teal-200/90 text-teal-950 p-5 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-extrabold text-sm sm:text-base text-teal-950">Teste Grátis do Zemda Solo Ativo</h3>
+            <p className="text-xs text-teal-800/90 mt-0.5">
+              Restam <strong>{summary.trialDaysRemaining ?? 0} {summary.trialDaysRemaining === 1 ? 'dia' : 'dias'}</strong> de teste. Você tem acesso completo aos recursos compatíveis com seu perfil.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={()=>setShowPlans(true)}
+          className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+        >
+          Assinar Plano Solo
+        </button>
+      </div>
+    )}
+    {summary?.status==='TRIAL_EXPIRED' && (
+      <div className="bg-rose-50 border border-rose-200 text-rose-950 p-5 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <AlertCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-extrabold text-sm sm:text-base text-rose-950">Período de Teste Grátis Encerrado</h3>
+            <p className="text-xs text-rose-800 mt-0.5">
+              Seus dados, pacientes, agendamentos e prontuários continuam <strong>100% preservados e seguros</strong>. Assine o Zemda Solo para continuar seus atendimentos.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={()=>setShowPlans(true)}
+          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+        >
+          Assinar Zemda Solo
+        </button>
+      </div>
+    )}
     {summary && <div className="bg-white border border-slate-200/80 shadow-xs rounded-3xl p-6 sm:p-8 space-y-6">
       <p className="text-sm text-slate-600">Clínica: <strong>{summary.clinicName}</strong>{summary.environment==='sandbox' && <span className="ml-3 text-amber-700">Ambiente de teste · Sandbox</span>}</p>
-      <div className="grid sm:grid-cols-4 gap-5"><div><p className="text-xs text-slate-500">Plano atual</p><h2 className="font-bold text-lg text-slate-900">{summary.plan?.name || 'Sem assinatura Asaas'}</h2><p className="text-teal-700 font-semibold">{summary.plan?money(summary.plan.monthly_price)+'/mês':'Escolha um dos planos abaixo'}</p></div>
-        <div><p className="text-xs text-slate-500">Status</p><p className="font-bold text-slate-800">{statuses[summary.status] || summary.status}</p></div>
-        <div><p className="text-xs text-slate-500">Usuários ativos</p><p className="font-bold text-slate-800">{summary.activeUsers} / {summary.maxUsers ?? '—'}</p></div>
-        <div><p className="text-xs text-slate-500">Próxima cobrança</p><p className="font-bold text-slate-800">{summary.status==='CANCELED'?'Renovação cancelada':date(summary.nextDueDate)}</p></div></div>
+      <div className="grid sm:grid-cols-4 gap-5">
+        <div>
+          <p className="text-xs text-slate-500">Plano atual</p>
+          <h2 className="font-bold text-lg text-slate-900">{summary.isTrial ? 'Zemda Solo (Trial)' : (summary.plan?.name || 'Sem assinatura Asaas')}</h2>
+          <p className="text-teal-700 font-semibold">{summary.isTrial ? 'R$ 0,00 (7 dias grátis)' : (summary.plan ? money(summary.plan.monthly_price)+'/mês' : 'Escolha um dos planos abaixo')}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">Status</p>
+          <p className="font-bold text-slate-800">{summary.isTrial ? `Teste Grátis · ${summary.trialDaysRemaining ?? 0} dias restantes` : (statuses[summary.status] || summary.status)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">Usuários ativos</p>
+          <p className="font-bold text-slate-800">{summary.activeUsers} / {summary.maxUsers ?? '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">{summary.isTrial ? 'Término do teste' : 'Próxima cobrança'}</p>
+          <p className="font-bold text-slate-800">{summary.isTrial ? date(summary.trialEndsAt) : summary.status==='CANCELED'?'Renovação cancelada':date(summary.nextDueDate)}</p>
+        </div>
+      </div>
       {summary.pendingPlan && <p className="text-teal-800 bg-teal-50 border border-teal-200/60 rounded-xl p-3 text-sm">Mudança para {summary.pendingPlan.name} no ciclo de {date(summary.changeEffectiveOn)}, após confirmação do pagamento.</p>}
       {summary.status==='CANCELED' && summary.currentPeriodEnd && <p>Acesso pago até {date(summary.currentPeriodEnd)}. Seus dados serão preservados.</p>}
       {canManage && <div className="flex flex-wrap gap-3"><button className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all" onClick={()=>setShowPlans(v=>!v)}>Alterar plano</button>
@@ -114,7 +186,7 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
     </div>}
     {currentUser && canManage && profileOpen && <form onSubmit={saveProfile} className="bg-white border border-slate-200/80 shadow-xs rounded-3xl p-6 sm:p-8 space-y-4"><h2 className="font-bold text-slate-900">Dados de cobrança</h2><p className="text-sm text-slate-600">Esses dados identificam o pagador no Asaas. Os dados do cartão são informados somente no checkout hospedado.</p><div className="grid sm:grid-cols-2 gap-4">
       {([['name','Nome do pagador'],['cpfCnpj','CPF/CNPJ'],['email','E-mail'],['phone','Telefone'],['postalCode','CEP'],['address','Logradouro'],['addressNumber','Número'],['province','Bairro'],['complement','Complemento (opcional)']] as const).map(([key,label])=><label key={key} className="text-xs font-semibold text-slate-700">{label}<input required={key!=='phone' && key!=='complement'} type={key==='email'?'email':'text'} maxLength={key==='email'?200:key==='postalCode'?9:['phone','cpfCnpj','addressNumber'].includes(key)?30:160} value={profile[key]} onChange={e=>setProfile({...profile,[key]:e.target.value})} className="w-full block border border-slate-200 rounded-xl p-2.5 mt-1 bg-slate-50 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden" /></label>)}</div><p className="text-xs text-slate-500">Informe o endereço do pagador. A cidade é identificada pelo Asaas a partir do CEP.</p><button disabled={busy} className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all disabled:opacity-50">Salvar dados de cobrança</button></form>}
-    {canManage && (showPlans || !summary?.managed || summary?.status==='PENDING_PAYMENT') && (
+    {canManage && (showPlans || !summary?.managed || summary?.status==='PENDING_PAYMENT' || summary?.status==='TRIAL_EXPIRED' || summary?.isTrial) && (
       <div className="space-y-6 pt-2">
         {/* Banner de recursos inclusos em todos os planos */}
         <div className="bg-white border border-teal-200/80 rounded-3xl p-6 sm:p-7 shadow-xs space-y-4">
@@ -154,64 +226,122 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
 
         {/* Cards dos Planos */}
         <div className="grid md:grid-cols-3 gap-6">
-          {plans.map(plan=>{
+          {plans.map(plan => {
+            const isSolo = (plan.code || '').toUpperCase() === 'SOLO' || plan.max_users === 1;
             const isFeatured = (plan.code || '').toLowerCase().includes('equipe') || (plan.name || '').toLowerCase().includes('equipe');
             const userLimitLabel = plan.max_users === 1 ? '1 acesso' : `${plan.max_users} acessos`;
-            return <article key={plan.code} className={`bg-white rounded-3xl p-6 sm:p-8 flex flex-col justify-between gap-6 transition-all relative ${
-              isFeatured
-                ? 'border-2 border-teal-500 shadow-xl shadow-teal-900/10 scale-[1.02] z-10'
-                : 'border border-slate-200 shadow-xs hover:border-slate-300'
-            }`}>
-              {isFeatured && (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-[11px] font-extrabold uppercase tracking-wider px-3.5 py-1 rounded-full shadow-xs">
-                  Mais Escolhido
-                </span>
-              )}
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-xl font-black text-slate-900">{plan.name}</h2>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 text-xs font-bold mt-2">
-                    <Users className="w-3.5 h-3.5 text-teal-600"/>
-                    <span>{userLimitLabel}</span>
+
+            let topBadge = isFeatured ? 'Mais Escolhido' : null;
+            let subDescription = plan.max_users === 1 ? 'Para atendimento autônomo individual.' : plan.max_users <= 5 ? 'Para clínicas e consultórios com até 5 acessos.' : 'Para clínicas consolidadas com até 20 acessos.';
+            let buttonText = summary?.managed && summary.status === 'ACTIVE' ? 'Programar mudança' : 'Assinar agora';
+            let buttonAction = () => void choose(plan.code);
+            let buttonDisabled = busy || (summary?.plan?.code === plan.code && summary?.status === 'ACTIVE');
+
+            if (isSolo) {
+              if (summary?.isTrial) {
+                topBadge = `Em teste grátis (${summary.trialDaysRemaining ?? 0}d restantes)`;
+                subDescription = 'Seu teste de 7 dias está ativo. Assine agora para continuar utilizando o Zemda Solo sem interrupções.';
+                buttonText = 'Assinar Zemda Solo';
+                buttonAction = () => void choose('SOLO');
+              } else if (summary?.status === 'TRIAL_EXPIRED') {
+                topBadge = 'Teste encerrado';
+                subDescription = 'Seu período de teste terminou. Assine o Zemda Solo para continuar seus atendimentos.';
+                buttonText = 'Assinar Zemda Solo';
+                buttonAction = () => void choose('SOLO');
+              } else if (!summary?.trialUsed && summary?.status !== 'ACTIVE') {
+                topBadge = '7 Dias Grátis';
+                subDescription = 'Teste grátis de 7 dias exclusivo para o plano Solo. Sem cobrança hoje.';
+                buttonText = 'Começar teste grátis (7 dias)';
+                buttonAction = () => void startSoloTrial();
+              }
+            } else {
+              if (summary?.isTrial) {
+                buttonText = 'Falar com suporte';
+                buttonAction = () => {
+                  setError('O teste grátis é exclusivo do plano Zemda Solo. Para migrar para os planos Equipe ou Clínica, entre em contato pelo e-mail suporte@zemda.com.br.');
+                  window.location.assign('mailto:suporte@zemda.com.br?subject=Migracao%20para%20plano%20' + encodeURIComponent(plan.name));
+                };
+              }
+            }
+
+            return (
+              <article
+                key={plan.code}
+                className={`bg-white rounded-3xl p-6 sm:p-8 flex flex-col justify-between gap-6 transition-all relative ${
+                  isFeatured || (isSolo && (summary?.isTrial || (!summary?.trialUsed && summary?.status !== 'ACTIVE')))
+                    ? 'border-2 border-teal-500 shadow-xl shadow-teal-900/10 scale-[1.02] z-10'
+                    : 'border border-slate-200 shadow-xs hover:border-slate-300'
+                }`}
+              >
+                {topBadge && (
+                  <span className={`absolute -top-3.5 left-1/2 -translate-x-1/2 text-white text-[11px] font-extrabold uppercase tracking-wider px-3.5 py-1 rounded-full shadow-xs ${
+                    summary?.status === 'TRIAL_EXPIRED' && isSolo ? 'bg-rose-600' : 'bg-gradient-to-r from-teal-600 to-emerald-600'
+                  }`}>
+                    {topBadge}
+                  </span>
+                )}
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">{plan.name}</h2>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 text-xs font-bold mt-2">
+                      <Users className="w-3.5 h-3.5 text-teal-600" />
+                      <span>{userLimitLabel}</span>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <p className="text-3xl font-black text-slate-900 tracking-tight">
-                    {money(plan.monthly_price)}
-                    <span className="text-xs text-slate-500 font-normal"> /mês</span>
-                  </p>
-                  <p className="text-xs text-slate-600 mt-2">
-                    {plan.max_users === 1 ? 'Para atendimento autônomo individual.' : plan.max_users <= 5 ? 'Para clínicas e consultórios com até 5 acessos.' : 'Para clínicas consolidadas com até 20 acessos.'}
-                  </p>
+                  <div>
+                    <p className="text-3xl font-black text-slate-900 tracking-tight">
+                      {money(plan.monthly_price)}
+                      <span className="text-xs text-slate-500 font-normal"> /mês</span>
+                    </p>
+                    <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                      {subDescription}
+                    </p>
+                    {!isSolo && (
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Sem teste grátis automático.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span>{userLimitLabel} no sistema</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span>Módulos clínicos especializados inclusos</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span>ZemdaBody liberado</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span>Agenda, Prontuário, Financeiro e IA</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100 space-y-2 text-xs text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                    <span>{userLimitLabel} no sistema</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                    <span>Módulos clínicos especializados inclusos</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                    <span>ZemdaBody liberado</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                    <span>Agenda, Prontuário, Financeiro e IA</span>
-                  </div>
-                </div>
-              </div>
-
-              <button disabled={busy || summary?.plan?.code===plan.code && summary?.status==='ACTIVE'} onClick={()=>void choose(plan.code)} className={`w-full font-bold text-xs py-3 px-4 rounded-xl cursor-pointer transition-all disabled:opacity-50 ${
-                isFeatured
-                  ? 'bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-700/20'
-                  : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
-              }`}>{busy?'Aguarde…':summary?.managed && summary.status==='ACTIVE'?'Programar mudança':'Assinar agora'}</button>
-            </article>;
+                <button
+                  disabled={buttonDisabled}
+                  onClick={buttonAction}
+                  className={`w-full font-bold text-xs py-3 px-4 rounded-xl cursor-pointer transition-all disabled:opacity-50 ${
+                    isFeatured || (isSolo && (summary?.isTrial || (!summary?.trialUsed && summary?.status !== 'ACTIVE')))
+                      ? 'bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white shadow-md shadow-teal-700/20'
+                      : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
+                  }`}
+                >
+                  {busy ? 'Aguarde…' : buttonText}
+                </button>
+              </article>
+            );
           })}
+        </div>
+
+        {/* Aviso de suporte exclusivo para planos coletivos */}
+        <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl text-center text-xs text-slate-600 leading-relaxed">
+          O teste grátis de 7 dias é exclusivo do plano <strong>Zemda Solo</strong>. Para informações comerciais, migrações e condições de implantação dos planos <strong>Equipe</strong> e <strong>Clínica</strong>, entre em contato pelo <a href="mailto:suporte@zemda.com.br" className="text-teal-700 font-bold underline hover:text-teal-900">suporte@zemda.com.br</a>.
         </div>
       </div>
     )}
@@ -251,6 +381,87 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
 };
 
 export const BillingBanner:React.FC<{summary:any}>=({summary})=>{
-  if(!summary || !['PAST_DUE','SUSPENDED'].includes(summary.status)) return null;
-  return <div className="m-4 p-4 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl flex flex-wrap gap-3 items-center" role="status"><AlertCircle className="w-5 h-5"/><p className="flex-1">Há uma pendência na sua assinatura. Regularize o pagamento para evitar a suspensão do acesso.</p><button onClick={()=>window.dispatchEvent(new CustomEvent('zemda-navigate',{detail:{view:'subscription'}}))} className="font-bold underline">Assinatura e Plano</button></div>;
+  if(!summary) return null;
+
+  // 1. Trial em andamento
+  if (summary.isTrial || summary.status === 'TRIAL') {
+    const days = summary.trialDaysRemaining ?? 0;
+    if (days <= 2) {
+      return (
+        <div className="m-4 p-3.5 bg-amber-50 text-amber-950 border border-amber-300 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs" role="alert">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="font-bold text-amber-900">
+              {days === 0 ? 'Último dia do seu teste grátis!' : `Atenção: Seu teste grátis termina em ${days} ${days === 1 ? 'dia' : 'dias'}!`}
+            </span>
+            <span className="hidden md:inline text-amber-800">
+              Assine o Zemda Solo para manter seu fluxo e agendamentos sem interrupções.
+            </span>
+          </div>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'subscription' } }))}
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl cursor-pointer shadow-xs transition"
+          >
+            Assinar Zemda Solo
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="m-4 px-4 py-2 bg-teal-50/90 text-teal-950 border border-teal-200/90 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs" role="status">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse shrink-0" />
+          <span className="font-semibold text-teal-900">
+            Teste grátis Zemda Solo · {days} {days === 1 ? 'dia restante' : 'dias restantes'}
+          </span>
+          <span className="hidden md:inline text-teal-700/80">
+            · Acesso liberado a todas as ferramentas do seu perfil
+          </span>
+        </div>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'subscription' } }))}
+          className="font-bold text-teal-800 hover:text-teal-950 underline cursor-pointer"
+        >
+          Assinar plano
+        </button>
+      </div>
+    );
+  }
+
+  // 2. Trial Expirado
+  if (summary.status === 'TRIAL_EXPIRED') {
+    return (
+      <div className="m-4 p-3.5 bg-rose-50 text-rose-950 border border-rose-300 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs" role="alert">
+        <div className="flex items-center gap-2.5">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <div>
+            <span className="font-bold text-rose-900">Seu teste grátis encerrou. </span>
+            <span className="text-rose-800">Assine o Zemda Solo para continuar seus atendimentos. Seus dados e prontuários estão salvos.</span>
+          </div>
+        </div>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'subscription' } }))}
+          className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl cursor-pointer shadow-xs transition"
+        >
+          Assinar agora
+        </button>
+      </div>
+    );
+  }
+
+  // 3. Pagamento pendente ou suspenso
+  if (['PAST_DUE','SUSPENDED'].includes(summary.status)) {
+    return (
+      <div className="m-4 p-4 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl flex flex-wrap gap-3 items-center" role="status">
+        <AlertCircle className="w-5 h-5 shrink-0" />
+        <p className="flex-1">Há uma pendência na sua assinatura. Regularize o pagamento para evitar a suspensão do acesso.</p>
+        <button onClick={()=>window.dispatchEvent(new CustomEvent('zemda-navigate',{detail:{view:'subscription'}}))} className="font-bold underline cursor-pointer">
+          Assinatura e Plano
+        </button>
+      </div>
+    );
+  }
+
+  return null;
 };

@@ -6,13 +6,19 @@ export function migrateBilling(db: DatabaseSync): void {
     if (!(db.prepare(`PRAGMA table_info(${table})`).all() as any[]).some(c => c.name === name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
   };
   const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE name='subscriptions'").get() as any).sql as string;
-  if (!sql.includes('PENDING_PAYMENT')) {
+  if (!sql.includes('PENDING_PAYMENT') || !sql.includes('TRIAL_EXPIRED')) {
     db.exec('PRAGMA foreign_keys=OFF');
     try {
       db.exec('BEGIN IMMEDIATE');
-    db.exec(sql.replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`]?subscriptions["`]?/i, 'CREATE TABLE subscriptions_billing_migration')
+      db.exec('DROP TRIGGER IF EXISTS billing_limit_users_INSERT');
+      db.exec('DROP TRIGGER IF EXISTS billing_limit_users_UPDATE');
+      db.exec('DROP TRIGGER IF EXISTS billing_limit_clinic_users_INSERT');
+      db.exec('DROP TRIGGER IF EXISTS billing_limit_clinic_users_UPDATE');
+      db.exec('DROP VIEW IF EXISTS billing_user_limits');
+      db.exec('DROP VIEW IF EXISTS billing_active_users');
+      db.exec(sql.replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`]?subscriptions["`]?/i, 'CREATE TABLE subscriptions_billing_migration')
         .replace(/tenant_id TEXT NOT NULL UNIQUE/i, 'tenant_id TEXT NOT NULL')
-        .replace(/CHECK\s*\(\s*status\s+IN\s*\(([^)]+)\)\s*\)/i, "CHECK(status IN ($1, 'PENDING_PAYMENT', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CANCELED'))"));
+        .replace(/CHECK\s*\(\s*status\s+IN\s*\(([^)]+)\)\s*\)/i, "CHECK(status IN ($1, 'TRIAL', 'TRIAL_EXPIRED', 'PENDING_PAYMENT', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CANCELED'))"));
       const indexes = db.prepare("SELECT sql FROM sqlite_master WHERE tbl_name='subscriptions' AND type IN ('index','trigger') AND sql IS NOT NULL").all() as any[];
       db.exec('INSERT INTO subscriptions_billing_migration SELECT * FROM subscriptions');
       db.exec('DROP TABLE subscriptions');
@@ -50,10 +56,12 @@ export function migrateBilling(db: DatabaseSync): void {
     add('tenants','billing_required','INTEGER NOT NULL DEFAULT 0');
     add('tenants','billing_name','TEXT');
     add('tenants','billing_address_json','TEXT');
+    add('tenants','trial_used','INTEGER NOT NULL DEFAULT 0');
     for (const [name,def] of Object.entries({clinic_id:'TEXT',asaas_customer_id:'TEXT',asaas_checkout_id:'TEXT',asaas_subscription_id:'TEXT',
       billing_cycle:"TEXT NOT NULL DEFAULT 'MONTHLY'", next_due_date:'TEXT',grace_period_until:'TEXT',updated_at:'TEXT',
       gateway_environment:'TEXT',managed:'INTEGER NOT NULL DEFAULT 0',is_current:'INTEGER NOT NULL DEFAULT 1',checkout_url:'TEXT',external_reference:'TEXT',
-      pending_plan_id:'TEXT',pending_plan_effective_on:'TEXT',plan_change_state:'TEXT',cancelled_at:'TEXT',cancelled_by:'TEXT',cancel_reason:'TEXT'})) add('subscriptions',name,def);
+      pending_plan_id:'TEXT',pending_plan_effective_on:'TEXT',plan_change_state:'TEXT',cancelled_at:'TEXT',cancelled_by:'TEXT',cancel_reason:'TEXT',
+      trial_started_at:'TEXT',trial_ends_at:'TEXT'})) add('subscriptions',name,def);
     db.exec(`UPDATE subscriptions SET clinic_id=tenant_id WHERE clinic_id IS NULL;
       CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_one_current ON subscriptions(clinic_id) WHERE is_current=1;
       CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_gateway_unique ON subscriptions(asaas_subscription_id) WHERE asaas_subscription_id IS NOT NULL;
@@ -89,15 +97,44 @@ export function migrateBilling(db: DatabaseSync): void {
         clinic_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,token TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now')));
       CREATE TABLE IF NOT EXISTS billing_integration_status (
         environment TEXT PRIMARY KEY,connected INTEGER NOT NULL,last_test_at TEXT NOT NULL,error TEXT);
+      CREATE TABLE IF NOT EXISTS trial_history (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+        email TEXT NOT NULL,
+        cnpj_cpf TEXT,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        ends_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        converted_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_trial_history_email ON trial_history(email);
+      CREATE INDEX IF NOT EXISTS idx_trial_history_tenant ON trial_history(tenant_id);
+      CREATE TABLE IF NOT EXISTS trial_notifications (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        stage TEXT NOT NULL,
+        sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(tenant_id, stage)
+      );
       CREATE VIEW IF NOT EXISTS billing_active_users AS
         SELECT cu.tenant_id AS clinic_id,u.id AS user_id FROM clinic_users cu JOIN users u ON u.id=cu.user_id
           WHERE u.status='active' AND cu.status='active' AND u.role!='superadmin'
         UNION
         SELECT u.tenant_id,u.id FROM users u WHERE u.status='active' AND u.role!='superadmin' AND u.tenant_id IS NOT NULL
           AND NOT EXISTS(SELECT 1 FROM clinic_users cu WHERE cu.tenant_id=u.tenant_id AND cu.user_id=u.id);
-      CREATE VIEW IF NOT EXISTS billing_user_limits AS
-        SELECT s.clinic_id,CASE WHEN s.status='ACTIVE' OR (s.status='PAST_DUE' AND s.current_period_end!='') OR (s.status='CANCELED' AND s.current_period_end>date('now')) THEN
-          MIN(p.max_users,COALESCE(pp.max_users,p.max_users)) ELSE 0 END AS max_users
+      DROP VIEW IF EXISTS billing_user_limits;
+      CREATE VIEW billing_user_limits AS
+        SELECT s.clinic_id,
+          CASE 
+            WHEN s.status='TRIAL' AND (s.trial_ends_at IS NULL OR s.trial_ends_at > datetime('now')) THEN p.max_users
+            WHEN s.status='ACTIVE' OR (s.status='PAST_DUE' AND s.current_period_end!='') OR (s.status='CANCELED' AND s.current_period_end>date('now')) THEN
+              MIN(p.max_users,COALESCE(pp.max_users,p.max_users)) 
+            ELSE 0 
+          END AS max_users
         FROM subscriptions s JOIN plans p ON p.id=s.plan_id LEFT JOIN plans pp ON pp.id=s.pending_plan_id
         WHERE s.managed=1 AND s.is_current=1;
     `);

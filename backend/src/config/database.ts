@@ -150,6 +150,7 @@ export function initializeDatabase(): void {
     addColIfMissing('tenants', 'whatsapp', 'TEXT');
     addColIfMissing('tenants', 'website', 'TEXT');
     addColIfMissing('tenants', 'description', 'TEXT');
+    addColIfMissing('tenants', 'trial_used', 'INTEGER NOT NULL DEFAULT 0');
 
     // Tabela e índices de Aceite Legal (Termos de Uso e Política de Privacidade / LGPD)
     try {
@@ -896,6 +897,28 @@ export function initializeDatabase(): void {
         PRAGMA foreign_keys = ON;
       `);
     }
+
+    // Tabela de Persistência de Onboarding / Guia Interativo por Usuário
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS user_onboarding (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL UNIQUE,
+        tenant_id TEXT,
+        onboarding_status TEXT NOT NULL DEFAULT 'pending' CHECK(onboarding_status IN ('pending', 'in_progress', 'completed', 'skipped', 'dismissed')),
+        onboarding_started_at TEXT,
+        onboarding_completed_at TEXT,
+        onboarding_last_step INTEGER NOT NULL DEFAULT 1,
+        onboarding_version TEXT NOT NULL DEFAULT 'v1.1',
+        onboarding_dismissed INTEGER NOT NULL DEFAULT 0,
+        module_tours_completed TEXT NOT NULL DEFAULT '[]',
+        whats_new_dismissed TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_onboarding_user ON user_onboarding (user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_onboarding_tenant ON user_onboarding (tenant_id);
+    `);
 
     // Assegura que a lista detalhada de profissões de saúde e administração exista no banco
     const allDetailedProfessions = [

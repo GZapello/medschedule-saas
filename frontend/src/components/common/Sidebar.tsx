@@ -306,10 +306,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {visibleItems.map(item => {
                       const Icon = item.icon;
                       const isActive = currentView === item.id;
+                      const isUserModule = (
+                        (item.id === 'zemda-fono' && isZemdaFono) ||
+                        (item.id === 'zemda-psico' && isZemdaPsico) ||
+                        (item.id === 'zemda-odonto' && isZemdaOdonto) ||
+                        (item.id === 'zemda-nutri' && isZemdaNutri) ||
+                        (item.id === 'zemda-fisio' && isZemdaFisio) ||
+                        (item.id === 'zemda-to' && isZemdaTO) ||
+                        (item.id === 'zemda-personal' && isZemdaPersonal) ||
+                        (item.id === 'zemda-pp' && isZemdaPP) ||
+                        (item.id === 'clinical' && (isProfessional || isClinicAdmin))
+                      );
 
                       return (
                         <button
                           key={item.id}
+                          data-tour={isUserModule ? "nav-clinical-module" : `nav-${item.id}`}
+                          data-nav-id={item.id}
+                          data-clinical-module={isUserModule ? "true" : undefined}
                           onClick={() => {
                             if (item.id === 'ai-assistant') {
                               openZemdaAI();

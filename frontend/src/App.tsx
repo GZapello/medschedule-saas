@@ -57,6 +57,12 @@ import { PrivacyPolicyView } from './components/public/PrivacyPolicyView';
 import { CookieBanner } from './components/common/CookieBanner';
 import { CookiePreferencesModal } from './components/common/CookiePreferencesModal';
 import { LegalReacceptanceModal } from './components/common/LegalReacceptanceModal';
+import { OnboardingProvider } from './components/onboarding/OnboardingContext';
+import { OnboardingSpotlight } from './components/onboarding/OnboardingSpotlight';
+import { OnboardingWelcomeModal } from './components/onboarding/OnboardingWelcomeModal';
+import { OnboardingHelpModal } from './components/onboarding/OnboardingHelpModal';
+import { WhatsNewModal } from './components/onboarding/WhatsNewModal';
+import { KeyboardShortcutsModal } from './components/onboarding/KeyboardShortcutsModal';
 import { trackPageView } from './utils/analytics';
 import { Sparkles, AlertCircle } from 'lucide-react';
 
@@ -202,6 +208,8 @@ const AppContent: React.FC = () => {
   };
 
   const [authInitialAction, setAuthInitialAction] = useState<'login' | 'create-clinic' | 'register-user'>('login');
+  const [selectedRegistrationPlan, setSelectedRegistrationPlan] = useState<string | undefined>(undefined);
+  const [isRegistrationTrial, setIsRegistrationTrial] = useState<boolean | undefined>(undefined);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [isNewApptOpen, setIsNewApptOpen] = useState<boolean>(false);
   const [newApptPrefill, setNewApptPrefill] = useState<{ date?: string; time?: string; professionalId?: string } | undefined>(undefined);
@@ -794,8 +802,10 @@ const AppContent: React.FC = () => {
             setAuthInitialAction('login');
             setPublicView('login');
           }}
-          onRegisterClinic={() => {
+          onRegisterClinic={(plan, isTrial) => {
             leaveBillingHome();
+            setSelectedRegistrationPlan(plan);
+            setIsRegistrationTrial(isTrial);
             setAuthInitialAction('create-clinic');
             setPublicView('login');
           }}
@@ -818,6 +828,8 @@ const AppContent: React.FC = () => {
           setPublicView('landing');
         }}
         initialAction={authInitialAction}
+        initialPlan={selectedRegistrationPlan}
+        isTrial={isRegistrationTrial}
       />
     );
   }
@@ -1099,12 +1111,19 @@ export const App: React.FC = () => {
   return (
     <AuthProvider>
       <ToastProvider>
-        <AppContent />
-        <CookieBanner />
-        <CookiePreferencesModal />
-        <LegalReacceptanceModal />
-        <NetworkOfflineModal />
-        <UpdateNotificationModal />
+        <OnboardingProvider>
+          <AppContent />
+          <CookieBanner />
+          <CookiePreferencesModal />
+          <LegalReacceptanceModal />
+          <NetworkOfflineModal />
+          <UpdateNotificationModal />
+          <OnboardingSpotlight />
+          <OnboardingWelcomeModal />
+          <OnboardingHelpModal />
+          <WhatsNewModal />
+          <KeyboardShortcutsModal />
+        </OnboardingProvider>
       </ToastProvider>
     </AuthProvider>
   );

@@ -843,7 +843,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             {/* Indicador Discreto de Autosave */}
             {selectedPatientId && (
-              <div className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs">
+              <div data-tour="clinical-autosave" className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs">
                 {autosaveStatus === 'saving' && (
                   <>
                     <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
@@ -882,6 +882,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             {/* Botão Assistente IA Ético */}
             <button
               type="button"
+              data-tour="psico-ai-btn"
               onClick={() => setShowAiDrawer(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold rounded-xl text-xs border border-purple-200 transition-colors cursor-pointer"
             >
@@ -892,6 +893,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             {/* Botão Histórico Confidencial */}
             <button
               type="button"
+              data-tour="clinical-previous-records"
               onClick={() => setShowHistoryModal(true)}
               disabled={!selectedPatientId}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
@@ -914,6 +916,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             {/* Botão Rápido: Finalizar Atendimento */}
             <button
               type="button"
+              data-tour="clinical-finish"
               onClick={handleQuickFinishClick}
               disabled={!selectedPatientId || saving}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
@@ -972,6 +975,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             return (
               <button
                 key={tab.id}
+                data-tour={`tab-${tab.id}`}
                 data-active={isActive}
                 type="button"
                 onClick={() => setActiveTab(tab.id as TabKey)}
