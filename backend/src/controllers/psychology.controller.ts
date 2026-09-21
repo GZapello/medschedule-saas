@@ -1234,12 +1234,19 @@ export class PsychologyController {
 
         db.prepare(`
           INSERT INTO consultation_completions (
-            id, tenant_id, appointment_id, completed_at, generated_docs_json
-          ) VALUES (?, ?, ?, datetime('now'), ?)
+            appointment_id, tenant_id, generated_docs_json, payload_json, saved_by, completed_at
+          ) VALUES (?, ?, ?, ?, ?, datetime('now'))
           ON CONFLICT(appointment_id) DO UPDATE SET
             completed_at = datetime('now'),
-            generated_docs_json = excluded.generated_docs_json
-        `).run(`comp-${uuidv4()}`, tenantId, appointmentId, JSON.stringify({ sessionId, recordId, signatureHash }));
+            generated_docs_json = excluded.generated_docs_json,
+            payload_json = excluded.payload_json
+        `).run(
+          appointmentId,
+          tenantId,
+          JSON.stringify({ sessionId, recordId, signatureHash }),
+          JSON.stringify({ modality, sessionNumber, sessionDate }),
+          userId || resolvedProfId || 'prof-psico'
+        );
       }
 
       logPsychologyAudit(req, patientId, 'finish_consultation', 'psychology_sessions', sessionId, `Atendimento concluído e selado com hash ${signatureHash.slice(0, 10)}`);
@@ -1689,6 +1696,142 @@ export class PsychologyController {
     } catch (err: any) {
       console.error('[PsychologyController.getAuditLogs]', err);
       res.status(500).json({ error: 'Erro ao obter logs de auditoria.' });
+    }
+  }
+
+  // ==========================================================================
+  // 15. RASCUNHOS & AUTOSAVE DO ATENDIMENTO
+  // ==========================================================================
+  static getDraft(req: Request, res: Response): void {
+    try {
+      const patientId = getParam(req.params.patientId);
+      const rawAppId = req.query.appointmentId || req.query.appointment_id;
+      const appointmentId = rawAppId ? String(rawAppId) : null;
+      const tenantId = req.tenantId;
+
+      if (!hasPsychologyAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso negado: Sigilo profissional.' });
+        return;
+      }
+
+      let draft: any = null;
+      if (appointmentId) {
+        draft = db.prepare(`
+          SELECT * FROM psychology_drafts 
+          WHERE tenant_id = ? AND patient_id = ? AND appointment_id = ?
+          ORDER BY updated_at DESC LIMIT 1
+        `).get(tenantId, patientId, appointmentId);
+      }
+
+      if (!draft) {
+        draft = db.prepare(`
+          SELECT * FROM psychology_drafts 
+          WHERE tenant_id = ? AND patient_id = ? AND (appointment_id IS NULL OR appointment_id = '')
+          ORDER BY updated_at DESC LIMIT 1
+        `).get(tenantId, patientId);
+      }
+
+      if (!draft) {
+        res.json({ draft: null });
+        return;
+      }
+
+      const parsedData = JSON.parse(draft.draft_data_json || '{}');
+
+      res.json({
+        draft: {
+          id: draft.id,
+          patientId: draft.patient_id,
+          patient_id: draft.patient_id,
+          appointmentId: draft.appointment_id,
+          appointment_id: draft.appointment_id,
+          draftData: parsedData,
+          draft_data: parsedData,
+          clientUpdatedAt: draft.client_updated_at,
+          client_updated_at: draft.client_updated_at,
+          updatedAt: draft.updated_at,
+          updated_at: draft.updated_at
+        }
+      });
+    } catch (err: any) {
+      console.error('[PsychologyController.getDraft]', err);
+      res.status(500).json({ error: 'Erro ao carregar rascunho de atendimento.' });
+    }
+  }
+
+  static saveDraft(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      const userId = req.user?.userId;
+      const {
+        patientId: rawPatientId,
+        appointmentId: rawAppId1,
+        appointment_id: rawAppId2,
+        draftData: rawDraftData1,
+        draft_data: rawDraftData2,
+        clientUpdatedAt: rawClientUpdated1,
+        client_updated_at: rawClientUpdated2
+      } = req.body;
+      const patientId = getParam(rawPatientId);
+      const appointmentId = rawAppId1 || rawAppId2 || null;
+      const draftData = rawDraftData1 || rawDraftData2;
+      const clientUpdatedAt = rawClientUpdated1 || rawClientUpdated2;
+
+      if (!patientId || !hasPsychologyAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso negado: Sigilo profissional.' });
+        return;
+      }
+
+      if (!draftData) {
+        res.status(400).json({ error: 'Dados do rascunho são obrigatórios.' });
+        return;
+      }
+
+      const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId) as any;
+      const profId = prof?.id || null;
+      const resolvedAppId = appointmentId || null;
+      const resolvedClientUpdated = clientUpdatedAt || new Date().toISOString();
+
+      // Previne sobrescrita caso a versão do banco seja estritamente mais recente que a versão recebida
+      const existing = db.prepare(`
+        SELECT id, client_updated_at FROM psychology_drafts
+        WHERE tenant_id = ? AND patient_id = ? AND COALESCE(appointment_id, 'none') = COALESCE(?, 'none')
+      `).get(tenantId, patientId, resolvedAppId) as any;
+
+      if (existing && existing.client_updated_at && resolvedClientUpdated) {
+        const existingTime = new Date(existing.client_updated_at).getTime();
+        const incomingTime = new Date(resolvedClientUpdated).getTime();
+        if (!isNaN(existingTime) && !isNaN(incomingTime) && incomingTime < existingTime) {
+          res.status(409).json({ error: 'Rascunho já atualizado com versão mais recente.', id: existing.id, savedAt: existing.client_updated_at });
+          return;
+        }
+      }
+
+      const id = existing?.id || `drf-psico-${uuidv4().slice(0, 10)}`;
+      const draftJson = JSON.stringify(draftData);
+
+      if (existing) {
+        db.prepare(`
+          UPDATE psychology_drafts SET
+            draft_data_json = ?,
+            client_updated_at = ?,
+            professional_id = COALESCE(?, professional_id),
+            updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(draftJson, resolvedClientUpdated, profId, existing.id, tenantId);
+      } else {
+        db.prepare(`
+          INSERT INTO psychology_drafts (
+            id, tenant_id, patient_id, professional_id, appointment_id,
+            draft_data_json, client_updated_at, updated_at, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `).run(id, tenantId, patientId, profId, resolvedAppId, draftJson, resolvedClientUpdated);
+      }
+
+      res.json({ success: true, message: 'Rascunho salvo com sucesso!', id, savedAt: new Date().toISOString() });
+    } catch (err: any) {
+      console.error('[PsychologyController.saveDraft]', err);
+      res.status(500).json({ error: 'Erro ao salvar rascunho de atendimento.' });
     }
   }
 }

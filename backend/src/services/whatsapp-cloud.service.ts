@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
+import { normalizePhoneWithDDI } from '../utils/phone.utils';
 
 export interface WhatsAppCloudConfig {
   appId: string;
@@ -475,5 +476,104 @@ export class WhatsAppCloudService {
       )
       .run();
     return res.changes > 0;
+  }
+
+  /**
+   * Verifica se a integração oficial com a WhatsApp Cloud API está ativa e operante.
+   */
+  public static isConnected(): boolean {
+    try {
+      const rawKey = (process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || '').trim();
+      if (!rawKey) return false;
+
+      const record = db
+        .prepare(
+          `SELECT encrypted_access_token, phone_number_id, status
+           FROM whatsapp_cloud_system_integrations
+           WHERE status = 'connected'
+           LIMIT 1`
+        )
+        .get() as any;
+
+      if (!record || !record.encrypted_access_token || !record.phone_number_id) {
+        return false;
+      }
+
+      const token = this.decryptToken(record.encrypted_access_token);
+      return Boolean(token && token.trim().length > 0);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Envia mensagem de texto simples através da API oficial do WhatsApp Cloud.
+   * Utiliza o token criptografado com AES-256-GCM e o Phone Number ID registrado.
+   */
+  public static async sendTextMessage(params: {
+    recipientPhone: string;
+    messageText: string;
+  }): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    try {
+      const rawKey = (process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || '').trim();
+      if (!rawKey) {
+        return { success: false, error: 'Chave de criptografia WHATSAPP_TOKEN_ENCRYPTION_KEY não configurada no ambiente.' };
+      }
+
+      const record = db
+        .prepare(
+          `SELECT encrypted_access_token, phone_number_id, status
+           FROM whatsapp_cloud_system_integrations
+           WHERE status = 'connected'
+           LIMIT 1`
+        )
+        .get() as any;
+
+      if (!record || !record.encrypted_access_token || !record.phone_number_id) {
+        return { success: false, error: 'Integração oficial do WhatsApp não está conectada no sistema.' };
+      }
+
+      const accessToken = this.decryptToken(record.encrypted_access_token);
+      const phoneNumberId = record.phone_number_id;
+      const apiVersion = this.getGraphApiVersion();
+      const normalizedPhone = normalizePhoneWithDDI(params.recipientPhone);
+
+      const url = `https://graph.facebook.com/${encodeURIComponent(apiVersion)}/${encodeURIComponent(phoneNumberId)}/messages`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: normalizedPhone,
+          type: 'text',
+          text: {
+            preview_url: false,
+            body: params.messageText
+          }
+        })
+      });
+
+      const data: any = await response.json().catch(() => ({}));
+
+      if (!response.ok || data.error) {
+        const errMsg =
+          data.error?.message ||
+          `Erro HTTP ${response.status} ao disparar mensagem pela Meta Graph API`;
+        console.error(`[WhatsAppCloudService.sendTextMessage] Falha Meta:`, data.error || errMsg);
+        return { success: false, error: errMsg };
+      }
+
+      const messageId = data.messages?.[0]?.id || `wamid-${Date.now()}`;
+      return { success: true, messageId };
+    } catch (err: any) {
+      console.error('[WhatsAppCloudService.sendTextMessage] Exceção:', err);
+      return { success: false, error: err.message || 'Exceção ao disparar mensagem oficial' };
+    }
   }
 }

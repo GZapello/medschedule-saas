@@ -6,6 +6,8 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { NotificationService } from '../services/notification.service';
+import { WhatsAppCloudService } from '../services/whatsapp-cloud.service';
+import { isValidPhoneNumber, normalizePhoneWithDDI, buildWhatsAppReminderMessage } from '../utils/phone.utils';
 
 export function validateClinicBusinessHours(tenantId: string, startTime: string, endTime: string): { valid: boolean; error?: string } {
   try {
@@ -809,6 +811,216 @@ export class AppointmentController {
     } catch (err: any) {
       console.error('[AppointmentController.update] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar dados do atendimento' });
+    }
+  }
+
+  /**
+   * Envia ou registra lembrete manual de consulta via WhatsApp (Oficial ou Fallback Link)
+   * POST /v1/appointments/:id/whatsapp-reminder
+   */
+  static async sendWhatsAppReminder(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenantId;
+      const { messageText, fallbackOpened } = req.body || {};
+
+      if (!tenantId) {
+        res.status(400).json({ error: 'Identificação da clínica obrigatória' });
+        return;
+      }
+
+      // 1. Busca dados completos do agendamento, paciente e profissional
+      const appt = db.prepare(`
+        SELECT a.id, a.tenant_id, a.patient_id, a.professional_id, a.start_time, a.status,
+               pat.full_name as patient_name, pat.phone as patient_phone,
+               t.name as clinic_name, p.name as professional_name, s.name as service_name
+        FROM appointments a
+        JOIN patients pat ON pat.id = a.patient_id
+        JOIN tenants t ON t.id = a.tenant_id
+        JOIN professionals p ON p.id = a.professional_id
+        JOIN services s ON s.id = a.service_id
+        WHERE a.id = ? AND a.tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!appt) {
+        res.status(404).json({ error: 'Agendamento não encontrado' });
+        return;
+      }
+
+      const phone = appt.patient_phone;
+      if (!phone || !isValidPhoneNumber(phone)) {
+        res.status(400).json({ error: 'Paciente sem telefone válido cadastrado' });
+        return;
+      }
+
+      const normalizedPhone = normalizePhoneWithDDI(phone);
+      const user = (req as any).user;
+      const userId = user?.userId || user?.id || null;
+      let userName = user?.name || user?.fullName || '';
+
+      if (!userName && userId) {
+        const uRow = db.prepare('SELECT name FROM users WHERE id = ?').get(userId) as any;
+        if (uRow?.name) userName = uRow.name;
+      }
+      userName = userName || 'Usuário';
+
+      const finalMessage = (messageText && typeof messageText === 'string' && messageText.trim().length > 0)
+        ? messageText.trim()
+        : buildWhatsAppReminderMessage({
+            patientName: appt.patient_name,
+            professionalName: appt.professional_name,
+            clinicName: appt.clinic_name,
+            startTime: appt.start_time,
+            serviceName: appt.service_name
+          });
+
+      // 2. Se for abertura direta pelo link manual (wa.me)
+      if (fallbackOpened) {
+        const notifId = 'not-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO notifications (
+            id, tenant_id, patient_id, professional_id, appointment_id,
+            type, channel, recipient, content, status, delivery_status,
+            mode, sent_by_user_id, sent_by_name, scheduled_for, sent_at
+          ) VALUES (?, ?, ?, ?, ?, 'reminder_manual', 'whatsapp', ?, ?, 'sent', 'manual_opened', 'manual', ?, ?, datetime('now'), datetime('now'))
+        `).run(
+          notifId,
+          tenantId,
+          appt.patient_id,
+          appt.professional_id,
+          appt.id,
+          normalizedPhone,
+          finalMessage,
+          userId,
+          userName
+        );
+
+        logAudit(req, 'WHATSAPP_MANUAL_OPENED', 'appointments', appt.id, {
+          recipient: normalizedPhone,
+          sent_by: userName,
+          channel: 'whatsapp_manual_link',
+          mode: 'fallback'
+        });
+
+        res.status(200).json({
+          success: true,
+          mode: 'manual_opened',
+          message: 'Lembrete manual registrado com sucesso'
+        });
+        return;
+      }
+
+      // 3. Tentativa de envio oficial via Meta WhatsApp Cloud API
+      const isOfficialConnected = WhatsAppCloudService.isConnected();
+      if (!isOfficialConnected) {
+        res.status(400).json({
+          success: false,
+          error: 'A integração oficial com a API do WhatsApp não está conectada no sistema.',
+          canFallback: true
+        });
+        return;
+      }
+
+      const sendResult = await WhatsAppCloudService.sendTextMessage({
+        recipientPhone: normalizedPhone,
+        messageText: finalMessage
+      });
+
+      if (!sendResult.success) {
+        const notifId = 'not-' + uuidv4().slice(0, 8);
+        db.prepare(`
+          INSERT INTO notifications (
+            id, tenant_id, patient_id, professional_id, appointment_id,
+            type, channel, recipient, content, status, delivery_status,
+            mode, sent_by_user_id, sent_by_name, scheduled_for, last_error
+          ) VALUES (?, ?, ?, ?, ?, 'reminder_manual', 'whatsapp', ?, ?, 'failed', 'failed', 'manual', ?, ?, datetime('now'), ?)
+        `).run(
+          notifId,
+          tenantId,
+          appt.patient_id,
+          appt.professional_id,
+          appt.id,
+          normalizedPhone,
+          finalMessage,
+          userId,
+          userName,
+          sendResult.error || 'Erro no envio da Meta Cloud API'
+        );
+
+        res.status(502).json({
+          success: false,
+          error: sendResult.error || 'Falha ao enviar mensagem pela Meta Cloud API',
+          canFallback: true
+        });
+        return;
+      }
+
+      // 4. Sucesso no envio oficial
+      const notifId = 'not-' + uuidv4().slice(0, 8);
+      db.prepare(`
+        INSERT INTO notifications (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          type, channel, recipient, content, status, delivery_status,
+          mode, sent_by_user_id, sent_by_name, scheduled_for, sent_at, external_message_id
+        ) VALUES (?, ?, ?, ?, ?, 'reminder_manual', 'whatsapp', ?, ?, 'sent', 'delivered', 'manual', ?, ?, datetime('now'), datetime('now'), ?)
+      `).run(
+        notifId,
+        tenantId,
+        appt.patient_id,
+        appt.professional_id,
+        appt.id,
+        normalizedPhone,
+        finalMessage,
+        userId,
+        userName,
+        sendResult.messageId || null
+      );
+
+      logAudit(req, 'WHATSAPP_REMINDER_SENT', 'appointments', appt.id, {
+        recipient: normalizedPhone,
+        sent_by: userName,
+        channel: 'whatsapp_cloud_official',
+        message_id: sendResult.messageId
+      });
+
+      res.status(200).json({
+        success: true,
+        mode: 'official',
+        messageId: sendResult.messageId,
+        message: 'Lembrete enviado com sucesso via WhatsApp Cloud API!'
+      });
+    } catch (err: any) {
+      console.error('[AppointmentController.sendWhatsAppReminder] Erro:', err);
+      res.status(500).json({ error: 'Erro ao processar envio de lembrete pelo WhatsApp' });
+    }
+  }
+
+  /**
+   * Consulta histórico de comunicações/lembretes de um agendamento
+   * GET /v1/appointments/:id/communications
+   */
+  static getCommunications(req: Request, res: Response): void {
+    try {
+      const { id } = req.params;
+      const tenantId = req.tenantId;
+
+      if (!tenantId) {
+        res.status(400).json({ error: 'Identificação da clínica obrigatória' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT id, type, channel, recipient, content, status, delivery_status,
+               mode, sent_by_name, sent_at, scheduled_for, last_error, created_at
+        FROM notifications
+        WHERE appointment_id = ? AND tenant_id = ?
+        ORDER BY created_at DESC
+      `).all(id, tenantId);
+
+      res.json(rows);
+    } catch (err: any) {
+      console.error('[AppointmentController.getCommunications] Erro:', err);
+      res.status(500).json({ error: 'Erro ao buscar comunicações do agendamento' });
     }
   }
 }

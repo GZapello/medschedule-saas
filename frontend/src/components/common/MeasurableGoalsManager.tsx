@@ -83,6 +83,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
   const [unit, setUnit] = useState('%');
   const [deadline, setDeadline] = useState('');
   const [notes, setNotes] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Progress modal state
   const [selectedGoalForProgress, setSelectedGoalForProgress] = useState<ClinicalGoalItem | null>(null);
@@ -93,6 +94,30 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
     notes: ''
   });
   const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [progressError, setProgressError] = useState<string | null>(null);
+
+  // Sanitiza entrada de texto para campos numéricos/percentuais (permite apenas dígitos, ponto, vírgula, hífen e %)
+  const sanitizeNumericInput = (val: string) => {
+    return val.replace(/[^0-9.,\-%\s]/g, '');
+  };
+
+  // Validação semântica e de intervalo para valores numéricos/percentuais
+  const validateGoalNumeric = (val: string, fieldName: string, unitStr: string): string | null => {
+    if (!val || !val.trim()) return null;
+    let clean = val.trim();
+    const isPercent = (unitStr && unitStr.includes('%')) || clean.endsWith('%');
+    if (clean.endsWith('%')) {
+      clean = clean.slice(0, -1).trim();
+    }
+    const num = Number(clean.replace(',', '.'));
+    if (isNaN(num)) {
+      return `O campo "${fieldName}" deve conter um valor numérico válido (ex: 80 ou 80%). Textos livres não são permitidos.`;
+    }
+    if (isPercent && (num < 0 || num > 100)) {
+      return `Para metas com unidade percentual (%), o campo "${fieldName}" deve estar no intervalo de 0% a 100%.`;
+    }
+    return null;
+  };
 
   const loadGoals = async () => {
     if (!patientId) return;
@@ -121,7 +146,34 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
 
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !patientId || !targetValue.trim()) return;
+    setFormError(null);
+
+    if (!title.trim() || !patientId || !targetValue.trim()) {
+      setFormError('Preencha os campos obrigatórios (*).');
+      return;
+    }
+
+    const targetErr = validateGoalNumeric(targetValue, 'Alvo (Meta)', unit);
+    if (targetErr) {
+      setFormError(targetErr);
+      return;
+    }
+
+    if (baselineValue.trim()) {
+      const baseErr = validateGoalNumeric(baselineValue, 'Valor Basal', unit);
+      if (baseErr) {
+        setFormError(baseErr);
+        return;
+      }
+    }
+
+    if (currentValue.trim()) {
+      const currErr = validateGoalNumeric(currentValue, 'Valor Atual', unit);
+      if (currErr) {
+        setFormError(currErr);
+        return;
+      }
+    }
 
     try {
       const payload = {
@@ -146,16 +198,18 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
       setTargetValue('');
       setNotes('');
       setDeadline('');
+      setFormError(null);
       setIsAdding(false);
       await loadGoals();
-    } catch (err) {
+    } catch (err: any) {
       console.error('[MeasurableGoalsManager] Erro ao criar meta:', err);
-      alert('Erro ao cadastrar meta terapêutica.');
+      setFormError(err?.message || 'Erro ao cadastrar meta terapêutica.');
     }
   };
 
   const handleOpenProgressModal = (goal: ClinicalGoalItem) => {
     setSelectedGoalForProgress(goal);
+    setProgressError(null);
     setProgressForm({
       date: new Date().toISOString().split('T')[0],
       value: goal.current_value || '',
@@ -166,21 +220,34 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
 
   const handleSaveProgress = async (e: React.FormEvent) => {
     e.preventDefault();
+    setProgressError(null);
     if (!selectedGoalForProgress) return;
+
+    if (!progressForm.value.trim()) {
+      setProgressError('Informe o novo valor alcançado.');
+      return;
+    }
+
+    const valErr = validateGoalNumeric(progressForm.value, 'Novo Valor', selectedGoalForProgress.unit || '');
+    if (valErr) {
+      setProgressError(valErr);
+      return;
+    }
 
     try {
       setIsSavingProgress(true);
       await ApiClient.put(`/v1/clinical/goals/${selectedGoalForProgress.id}/progress`, {
-        currentValue: progressForm.value,
+        currentValue: progressForm.value.trim(),
         status: progressForm.status,
         notes: progressForm.notes,
         date: progressForm.date
       });
       setSelectedGoalForProgress(null);
+      setProgressError(null);
       await loadGoals();
-    } catch (err) {
+    } catch (err: any) {
       console.error('[MeasurableGoalsManager] Erro ao registrar progresso:', err);
-      alert('Erro ao registrar progresso da meta.');
+      setProgressError(err?.message || 'Erro ao registrar progresso da meta.');
     } finally {
       setIsSavingProgress(false);
     }
@@ -289,6 +356,12 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
       {/* New Goal Form */}
       {isAdding && (
         <form onSubmit={handleCreateGoal} className="p-4 bg-teal-50/50 border border-teal-100 rounded-2xl space-y-3">
+          {formError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs text-rose-700">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -325,7 +398,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
               <input
                 type="text"
                 value={baselineValue}
-                onChange={(e) => setBaselineValue(e.target.value)}
+                onChange={(e) => setBaselineValue(sanitizeNumericInput(e.target.value))}
                 placeholder="Ex: 60"
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
@@ -337,7 +410,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
               <input
                 type="text"
                 value={currentValue}
-                onChange={(e) => setCurrentValue(e.target.value)}
+                onChange={(e) => setCurrentValue(sanitizeNumericInput(e.target.value))}
                 placeholder="Ex: 75"
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
@@ -350,8 +423,8 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                 type="text"
                 required
                 value={targetValue}
-                onChange={(e) => setTargetValue(e.target.value)}
-                placeholder="Ex: 110"
+                onChange={(e) => setTargetValue(sanitizeNumericInput(e.target.value))}
+                placeholder="Ex: 110 ou 100%"
                 className="w-full text-xs px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all shadow-xs"
               />
             </div>
@@ -398,7 +471,10 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
           <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
-              onClick={() => setIsAdding(false)}
+              onClick={() => {
+                setIsAdding(false);
+                setFormError(null);
+              }}
               className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
             >
               Cancelar
@@ -599,6 +675,12 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
             </div>
 
             <form onSubmit={handleSaveProgress} className="p-5 space-y-4">
+              {progressError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-xs text-rose-700">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{progressError}</span>
+                </div>
+              )}
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">Meta:</p>
                 <p className="text-xs font-bold text-slate-900">{selectedGoalForProgress.title}</p>
@@ -628,7 +710,7 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
                     type="text"
                     required
                     value={progressForm.value}
-                    onChange={(e) => setProgressForm({ ...progressForm, value: e.target.value })}
+                    onChange={(e) => setProgressForm({ ...progressForm, value: sanitizeNumericInput(e.target.value) })}
                     placeholder={`Ex: 90 ${selectedGoalForProgress.unit || ''}`}
                     className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
                   />
@@ -669,7 +751,10 @@ export const MeasurableGoalsManager: React.FC<MeasurableGoalsManagerProps> = ({
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setSelectedGoalForProgress(null)}
+                  onClick={() => {
+                    setSelectedGoalForProgress(null);
+                    setProgressError(null);
+                  }}
                   className="px-3 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-medium cursor-pointer"
                 >
                   Cancelar

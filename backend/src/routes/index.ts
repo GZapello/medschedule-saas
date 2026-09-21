@@ -339,6 +339,9 @@ api.post('/v1/appointments', requireTenant, AppointmentController.create);
 api.put('/v1/appointments/:id', requireTenant, AppointmentController.update);
 api.put('/v1/appointments/:id/status', requireTenant, AppointmentController.updateStatus);
 api.put('/v1/appointments/:id/reschedule', requireTenant, AppointmentController.reschedule);
+api.post('/v1/appointments/:id/whatsapp-reminder', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.sendWhatsAppReminder);
+api.get('/v1/appointments/:id/communications', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.getCommunications);
+api.get('/v1/whatsapp/status', requireTenant, WhatsAppCloudController.getClientStatus);
 api.get('/v1/slots/available', requireTenant, SlotController.getAvailableSlots);
 
 // Prontuário & Evolução Clínica (Restrito estritamente a Profissionais e Admins Clínicos - LGPD)
@@ -595,6 +598,8 @@ api.get('/v1/psychology/documents/:id/print', requireTenant, requireRole('clinic
 api.post('/v1/psychology/ai-assist', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.aiAssist);
 api.get('/v1/psychology/history/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getHistory);
 api.get('/v1/psychology/audit-logs/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getAuditLogs);
+api.get('/v1/psychology/draft/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.getDraft);
+api.post('/v1/psychology/draft', requireTenant, requireRole('clinic_admin', 'professional'), PsychologyController.saveDraft);
 
 // ==========================================
 // CENTRAL DE CERTIFICADOS DIGITAIS ICP-BRASIL & ASSINATURA PAdES

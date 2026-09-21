@@ -848,6 +848,10 @@ export function initializeDatabase(): void {
     addColIfMissing('notifications', 'last_error', 'TEXT');
     addColIfMissing('notifications', 'delivery_status', "TEXT DEFAULT 'pending'");
     addColIfMissing('notifications', 'idempotency_key', 'TEXT');
+    addColIfMissing('notifications', 'sent_by_user_id', 'TEXT');
+    addColIfMissing('notifications', 'sent_by_name', 'TEXT');
+    addColIfMissing('notifications', 'mode', "TEXT DEFAULT 'auto'");
+    addColIfMissing('notifications', 'external_message_id', 'TEXT');
 
     // Novas colunas solicitadas para horários da clínica, CID em exames, sexo do profissional e convênios
     addColIfMissing('tenants', 'business_hours_json', 'TEXT');
@@ -3266,5 +3270,20 @@ function repairLegacyPhotoUrls(rawDb: any): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS psychology_drafts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      draft_data_json TEXT NOT NULL,
+      client_updated_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_psico_drafts_unique ON psychology_drafts(tenant_id, patient_id, COALESCE(appointment_id, 'none'));
   `);
 }

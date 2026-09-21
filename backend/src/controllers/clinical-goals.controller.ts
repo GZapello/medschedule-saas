@@ -3,6 +3,38 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { hasClinicalAccess } from './clinical.controller';
 
+function sanitizeAndValidateGoalValue(
+  val: any,
+  fieldName: string,
+  unit: string | undefined | null
+): { valid: boolean; error?: string; normalized?: string } {
+  if (val === undefined || val === null || String(val).trim() === '') {
+    return { valid: true, normalized: undefined };
+  }
+  let str = String(val).trim();
+  const isPercentUnit = (unit && String(unit).includes('%')) || str.endsWith('%');
+  if (str.endsWith('%')) {
+    str = str.slice(0, -1).trim();
+  }
+  const normalizedStr = str.replace(',', '.');
+  const num = Number(normalizedStr);
+  if (isNaN(num)) {
+    return {
+      valid: false,
+      error: `O campo "${fieldName}" deve conter um valor numérico válido.`
+    };
+  }
+  if (isPercentUnit) {
+    if (num < 0 || num > 100) {
+      return {
+        valid: false,
+        error: `O campo "${fieldName}" com unidade percentual (%) deve estar entre 0 e 100.`
+      };
+    }
+  }
+  return { valid: true, normalized: String(normalizedStr) };
+}
+
 export class ClinicalGoalsController {
   /**
    * GET /v1/clinical/goals/:patientId?module_type=to|fono
@@ -76,6 +108,25 @@ export class ClinicalGoalsController {
 
       if (!patientId || !moduleType || !domain || !title || targetValue === undefined) {
         res.status(400).json({ error: 'patientId, moduleType, domain, title e targetValue são obrigatórios' });
+        return;
+      }
+
+      // Validar valores numéricos / percentuais
+      const valTarget = sanitizeAndValidateGoalValue(targetValue, 'Alvo', unit);
+      if (!valTarget.valid) {
+        res.status(400).json({ error: valTarget.error });
+        return;
+      }
+
+      const valBaseline = sanitizeAndValidateGoalValue(baselineValue, 'Valor Basal', unit);
+      if (!valBaseline.valid) {
+        res.status(400).json({ error: valBaseline.error });
+        return;
+      }
+
+      const valCurrent = sanitizeAndValidateGoalValue(currentValue, 'Valor Atual', unit);
+      if (!valCurrent.valid) {
+        res.status(400).json({ error: valCurrent.error });
         return;
       }
 
@@ -160,6 +211,22 @@ export class ClinicalGoalsController {
         deadline,
         targetValue
       } = req.body;
+
+      if (currentValue !== undefined) {
+        const valCurrent = sanitizeAndValidateGoalValue(currentValue, 'Valor Atual', existing.unit);
+        if (!valCurrent.valid) {
+          res.status(400).json({ error: valCurrent.error });
+          return;
+        }
+      }
+
+      if (targetValue !== undefined) {
+        const valTarget = sanitizeAndValidateGoalValue(targetValue, 'Alvo', existing.unit);
+        if (!valTarget.valid) {
+          res.status(400).json({ error: valTarget.error });
+          return;
+        }
+      }
 
       let history: any[] = [];
       try {

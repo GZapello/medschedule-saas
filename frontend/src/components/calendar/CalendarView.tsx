@@ -22,6 +22,8 @@ import {
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
+import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
+import { isValidPhoneNumber, formatPhoneDisplay } from '../../utils/phone.utils';
 
 interface CalendarViewProps {
   onOpenNewAppointment: (prefill?: { date?: string; time?: string; professionalId?: string }) => void;
@@ -58,6 +60,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [cancellingAppt, setCancellingAppt] = useState<any | null>(null);
   const [cancellationCategory, setCancellationCategory] = useState<string>('Desistência do paciente');
   const [cancellationReason, setCancellationReason] = useState<string>('');
+
+  // Lembrete manual pelo WhatsApp e histórico de comunicações
+  const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<Appointment | null>(null);
+  const [communications, setCommunications] = useState<any[]>([]);
+  const [loadingComms, setLoadingComms] = useState<boolean>(false);
+
+  const refreshCommunications = (apptId: string) => {
+    setLoadingComms(true);
+    ApiClient.get<any[]>(`/v1/appointments/${apptId}/communications`)
+      .then((data) => setCommunications(Array.isArray(data) ? data : []))
+      .catch((err) => console.warn('[CalendarView] Erro ao buscar histórico de comunicações:', err))
+      .finally(() => setLoadingComms(false));
+  };
+
+  useEffect(() => {
+    if (selectedAppt) {
+      refreshCommunications(selectedAppt.id);
+    } else {
+      setCommunications([]);
+    }
+  }, [selectedAppt]);
 
   const fetchCalendarData = async () => {
     try {
@@ -573,6 +596,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       </span>
                     </div>
                   </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-400 font-medium text-[11px] block">Telefone do Paciente:</span>
+                      <p className="font-bold text-slate-800 text-xs mt-0.5 flex items-center gap-1.5">
+                        {isValidPhoneNumber(selectedAppt.patient_phone) ? (
+                          <>
+                            <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600 inline shrink-0" />
+                            <span>{formatPhoneDisplay(selectedAppt.patient_phone)}</span>
+                          </>
+                        ) : (
+                          <span className="text-rose-500 font-medium italic text-[11px]">Paciente sem telefone cadastrado</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {selectedAppt.patient_notes && (
@@ -592,6 +630,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <Stethoscope className="w-4 h-4" />
                     <span>INICIAR ATENDIMENTO</span>
                   </button>
+
+                  {/* Botão de Envio de Lembrete pelo WhatsApp */}
+                  {(() => {
+                    const hasPhone = isValidPhoneNumber(selectedAppt.patient_phone);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (hasPhone) {
+                            setWhatsappReminderAppt(selectedAppt);
+                          }
+                        }}
+                        disabled={!hasPhone}
+                        title={hasPhone ? 'Enviar lembrete pelo WhatsApp' : 'Paciente sem telefone cadastrado'}
+                        className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+                          hasPhone
+                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300/80 shadow-xs cursor-pointer'
+                            : 'bg-slate-100 text-slate-400 border border-slate-200 opacity-60 cursor-not-allowed'
+                        }`}
+                      >
+                        <WhatsAppIcon className={`w-4 h-4 ${hasPhone ? 'fill-emerald-600' : 'fill-slate-400'}`} />
+                        <span>Enviar lembrete pelo WhatsApp</span>
+                      </button>
+                    );
+                  })()}
 
                   <div>
                     <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Alterar Status</h4>
@@ -649,6 +712,73 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <RotateCcw className="w-3.5 h-3.5" />
                     Remarcar este atendimento
                   </button>
+                </div>
+
+                {/* Histórico de Lembretes / Comunicações */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Histórico de Comunicações & Lembretes
+                    </h4>
+                    {loadingComms && (
+                      <span className="text-[10px] text-slate-400">Carregando...</span>
+                    )}
+                  </div>
+
+                  {communications.length === 0 && !loadingComms ? (
+                    <p className="text-[11px] text-slate-400 italic">
+                      Nenhum lembrete registrado para este agendamento até o momento.
+                    </p>
+                  ) : (
+                    <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1">
+                      {communications.map((comm) => {
+                        const sentDate = comm.sent_at || comm.created_at;
+                        const dateFormatted = sentDate
+                          ? new Date(sentDate).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                          : '';
+                        const isManual = comm.mode === 'manual' || comm.type === 'reminder_manual';
+
+                        return (
+                          <div
+                            key={comm.id}
+                            className="bg-slate-50 border border-slate-200/80 rounded-lg p-2 text-[11px] flex items-center justify-between gap-2"
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <WhatsAppIcon className="w-3.5 h-3.5 fill-emerald-600 shrink-0" />
+                              <div className="truncate">
+                                <span className="font-semibold text-slate-700">
+                                  {isManual ? 'WhatsApp Manual' : 'WhatsApp Automático'}
+                                </span>
+                                {comm.sent_by_name && (
+                                  <span className="text-slate-500 ml-1">por {comm.sent_by_name}</span>
+                                )}
+                                <span className="text-slate-400 ml-1">• {dateFormatted}</span>
+                              </div>
+                            </div>
+                            <span
+                              className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                comm.delivery_status === 'delivered' || comm.status === 'sent'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : comm.delivery_status === 'manual_opened'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : comm.status === 'failed'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {comm.delivery_status === 'delivered'
+                                ? 'Enviado'
+                                : comm.delivery_status === 'manual_opened'
+                                ? 'Aberto'
+                                : comm.status === 'failed'
+                                ? 'Falhou'
+                                : 'Pendente'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -818,6 +948,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           onClose={() => setFinishingAppt(null)}
           onFinished={() => {
             setFinishingAppt(null);
+            fetchCalendarData();
+          }}
+        />
+      )}
+
+      {/* Modal de Envio Manual de Lembrete pelo WhatsApp */}
+      {whatsappReminderAppt && (
+        <WhatsAppReminderModal
+          isOpen={Boolean(whatsappReminderAppt)}
+          onClose={() => setWhatsappReminderAppt(null)}
+          appointment={whatsappReminderAppt}
+          clinicName={currentTenant?.name || 'Clínica'}
+          onSuccess={() => {
+            refreshCommunications(whatsappReminderAppt.id);
             fetchCalendarData();
           }}
         />

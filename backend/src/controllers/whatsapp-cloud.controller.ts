@@ -162,4 +162,35 @@ export class WhatsAppCloudController {
       });
     }
   }
+
+  /**
+   * Consulta autorizada para a clínica sobre a disponibilidade da API oficial.
+   * Não expõe tokens, segredos ou chaves.
+   * GET /v1/whatsapp/status
+   */
+  public static async getClientStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const isConnected = WhatsAppCloudService.isConnected();
+      let displayPhoneNumber: string | null = null;
+
+      if (isConnected) {
+        const sys = WhatsAppCloudService.getSystemIntegration();
+        displayPhoneNumber = sys.integration?.displayPhoneNumber || sys.integration?.phoneNumber || null;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: {
+          officialAvailable: isConnected,
+          displayPhoneNumber
+        }
+      });
+    } catch (err: any) {
+      console.error('[WhatsAppCloudController.getClientStatus] Erro:', err.message || err);
+      res.status(500).json({
+        success: false,
+        error: 'Erro ao verificar disponibilidade do WhatsApp'
+      });
+    }
+  }
 }

@@ -84,6 +84,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
+        {/* Botão de retorno ao Painel Global para SuperAdmin */}
+        {isSuperAdmin && (
+          <button
+            onClick={() => onNavigate('superadmin')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200 cursor-pointer shadow-xs"
+            title="Voltar ao Painel Global do Administrador"
+          >
+            <Shield className="w-3.5 h-3.5 text-rose-600" />
+            <span>Painel Global</span>
+          </button>
+        )}
+
         {/* Link para página pública da clínica */}
         {currentTenant && (
           <button

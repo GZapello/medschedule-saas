@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -66,6 +66,15 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [completionSuccessData, setCompletionSuccessData] = useState<any | null>(null);
+
+  // Autosave & Finalização Rápida
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'offline'>('idle');
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [showFinishConfirmModal, setShowFinishConfirmModal] = useState<boolean>(false);
+
+  const initialLoadedRef = useRef<boolean>(false);
+  const debounceTimerRef = useRef<any>(null);
 
   // Assistente de IA Ético
   const [showAiDrawer, setShowAiDrawer] = useState(false);
@@ -225,10 +234,68 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       .catch(err => console.warn('[PsychologyWorkspace] Erro ao carregar pacientes:', err));
   }, [initialPatientId]);
 
+  // Persistência de Rascunho (Autosave Backend + Fallback Local)
+  const performSaveDraft = useCallback(async () => {
+    if (!selectedPatientId) return;
+
+    const now = new Date();
+    const clientUpdatedAt = now.toISOString();
+    const payload = {
+      currentSession,
+      anamnese,
+      mentalState,
+      riskAssessment,
+      activeTab
+    };
+
+    const localDraftKey = `zemda_psico_draft_${selectedPatientId}_${initialAppointmentId || 'none'}`;
+
+    // 1. Fallback local imediato
+    try {
+      localStorage.setItem(localDraftKey, JSON.stringify({
+        draftData: payload,
+        clientUpdatedAt
+      }));
+    } catch (err) {
+      console.warn('[PsychologyWorkspace] Falha ao gravar no localStorage:', err);
+    }
+
+    // 2. Persistência real no backend
+    try {
+      setAutosaveStatus('saving');
+      if (!navigator.onLine) {
+        setAutosaveStatus('offline');
+        return;
+      }
+
+      await ApiClient.post('/v1/psychology/draft', {
+        patientId: selectedPatientId,
+        appointmentId: initialAppointmentId,
+        draftData: payload,
+        clientUpdatedAt
+      });
+
+      const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      setLastSavedTime(timeStr);
+      setAutosaveStatus('saved');
+      setIsDirty(false);
+    } catch (err: any) {
+      console.warn('[PsychologyWorkspace] Erro no autosave do backend:', err);
+      if (!navigator.onLine || err?.message?.includes('conectar') || err?.message?.includes('Failed to fetch')) {
+        setAutosaveStatus('offline');
+      } else {
+        setAutosaveStatus('error');
+      }
+    }
+  }, [selectedPatientId, initialAppointmentId, currentSession, anamnese, mentalState, riskAssessment, activeTab]);
+
   // Carrega prontuário completo ao alterar paciente selecionado
   const loadPatientProfile = async (id: string) => {
     if (!id) return;
     try {
+      initialLoadedRef.current = false;
+      setIsDirty(false);
+      setAutosaveStatus('idle');
       setLoading(true);
       const data: any = await ApiClient.get(`/v1/psychology/profile/${id}`);
 
@@ -339,10 +406,63 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       setInstrumentsList(data.instruments || []);
       setScreeningsList(data.screenings || []);
       setDocumentsList(data.documents || []);
+
+      // Recuperação do Rascunho Persistido (Backend + LocalStorage)
+      try {
+        const draftRes: any = await ApiClient.get(`/v1/psychology/draft/${id}${initialAppointmentId ? `?appointment_id=${initialAppointmentId}` : ''}`);
+        const localDraftRaw = localStorage.getItem(`zemda_psico_draft_${id}_${initialAppointmentId || 'none'}`);
+        let localDraft: any = null;
+        if (localDraftRaw) {
+          try { localDraft = JSON.parse(localDraftRaw); } catch {}
+        }
+
+        const backendDraft = draftRes?.draft;
+        let effectiveDraft: any = null;
+
+        if (backendDraft && localDraft) {
+          const backendTime = new Date(backendDraft.client_updated_at || backendDraft.updated_at).getTime();
+          const localTime = new Date(localDraft.clientUpdatedAt).getTime();
+          effectiveDraft = localTime > backendTime ? localDraft.draftData : backendDraft.draft_data;
+        } else if (backendDraft) {
+          effectiveDraft = backendDraft.draft_data;
+        } else if (localDraft) {
+          effectiveDraft = localDraft.draftData;
+        }
+
+        if (effectiveDraft) {
+          if (effectiveDraft.currentSession) {
+            setCurrentSession(prev => ({
+              ...prev,
+              ...effectiveDraft.currentSession,
+              sessionNumber: prev.sessionNumber
+            }));
+          }
+          if (effectiveDraft.anamnese) {
+            setAnamnese(prev => ({ ...prev, ...effectiveDraft.anamnese }));
+          }
+          if (effectiveDraft.mentalState) {
+            setMentalState(prev => ({ ...prev, ...effectiveDraft.mentalState }));
+          }
+          if (effectiveDraft.riskAssessment) {
+            setRiskAssessment(prev => ({ ...prev, ...effectiveDraft.riskAssessment }));
+          }
+          if (effectiveDraft.activeTab) {
+            setActiveTab(effectiveDraft.activeTab);
+          }
+          setAutosaveStatus('saved');
+          const savedDate = backendDraft?.updated_at ? new Date(backendDraft.updated_at) : new Date();
+          setLastSavedTime(savedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+        }
+      } catch (draftErr) {
+        console.warn('[PsychologyWorkspace] Falha ao recuperar rascunho:', draftErr);
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao carregar prontuário.', 'error');
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        initialLoadedRef.current = true;
+      }, 600);
     }
   };
 
@@ -351,6 +471,67 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       loadPatientProfile(selectedPatientId);
     }
   }, [selectedPatientId]);
+
+  // Debounce do Autosave (1200ms após parar de digitar)
+  useEffect(() => {
+    if (!initialLoadedRef.current || !selectedPatientId) return;
+
+    setIsDirty(true);
+    setAutosaveStatus('saving');
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      performSaveDraft();
+    }, 1200);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [
+    currentSession,
+    anamnese,
+    mentalState,
+    riskAssessment,
+    activeTab,
+    selectedPatientId,
+    performSaveDraft
+  ]);
+
+  // Prevenção de perda de dados e monitoramento de conexão online
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty || autosaveStatus === 'saving') {
+        e.preventDefault();
+        e.returnValue = 'Existem alterações não salvas no atendimento psicológico. Deseja realmente sair?';
+        return e.returnValue;
+      }
+    };
+
+    const handleOnline = () => {
+      if (autosaveStatus === 'offline' && isDirty) {
+        performSaveDraft();
+      }
+    };
+
+    const handleOffline = () => {
+      setAutosaveStatus('offline');
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [isDirty, autosaveStatus, performSaveDraft]);
 
   // Handlers para Gravação das Abas
   const handleSaveAnamnese = async () => {
@@ -534,19 +715,30 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
     }
   };
 
-  // FLUXO OBRIGATÓRIO: CONCLUIR E SELAR ATENDIMENTO
-  const handleFinishConsultation = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // FLUXO OBRIGATÓRIO: CONCLUIR E SELAR ATENDIMENTO (Selamento Criptográfico SHA-256)
+  const handleQuickFinishClick = async () => {
+    if (!selectedPatientId) return;
+    if (isDirty) {
+      await performSaveDraft();
+    }
+    setShowFinishConfirmModal(true);
+  };
+
+  const confirmAndFinishConsultation = async () => {
     if (!selectedPatientId) return;
 
     if (!currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()) {
       showToast('O relato da evolução clínica é indispensável para selar o atendimento (CFP 01/2009).', 'error');
+      setShowFinishConfirmModal(false);
       setActiveTab('sessions');
       return;
     }
 
     try {
       setSaving(true);
+      // Salva rascunho mais recente antes de finalizar
+      await performSaveDraft();
+
       const res: any = await ApiClient.post('/v1/psychology/consultations/finish', {
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId,
@@ -565,6 +757,9 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         sessionRiskNotes: currentSession.sessionRiskNotes
       });
 
+      setShowFinishConfirmModal(false);
+      setIsDirty(false);
+      setAutosaveStatus('saved');
       setCompletionSuccessData(res);
       showToast('Atendimento de Psicologia finalizado e selado com SHA-256!', 'success');
       loadPatientProfile(selectedPatientId);
@@ -573,6 +768,11 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleFinishConsultation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await confirmAndFinishConsultation();
   };
 
   // Assistente de IA com Guardrails do CFP
@@ -636,7 +836,45 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Indicador Discreto de Autosave */}
+            {selectedPatientId && (
+              <div className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs">
+                {autosaveStatus === 'saving' && (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-amber-700 text-[11px] font-medium">Salvando...</span>
+                  </>
+                )}
+                {autosaveStatus === 'saved' && (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-emerald-700 text-[11px] font-medium">
+                      Salvo {lastSavedTime ? `às ${lastSavedTime}` : ''}
+                    </span>
+                  </>
+                )}
+                {autosaveStatus === 'offline' && (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-orange-500" />
+                    <span className="text-orange-700 text-[11px] font-medium">Aguardando conexão (cópia local salva)</span>
+                  </>
+                )}
+                {autosaveStatus === 'error' && (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span className="text-rose-700 text-[11px] font-medium">Erro ao salvar na nuvem</span>
+                  </>
+                )}
+                {autosaveStatus === 'idle' && (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-slate-300" />
+                    <span className="text-slate-500 text-[11px]">Autosave ativo</span>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Botão Assistente IA Ético */}
             <button
               type="button"
@@ -667,6 +905,18 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             >
               <FileText className="w-4 h-4 text-teal-600" />
               Emitir Documento CFP
+            </button>
+
+            {/* Botão Rápido: Finalizar Atendimento */}
+            <button
+              type="button"
+              onClick={handleQuickFinishClick}
+              disabled={!selectedPatientId || saving}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Finalizar atendimento, selar evolução com SHA-256 e emitir documentos"
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+              Finalizar Atendimento
             </button>
           </div>
         </div>
@@ -1732,6 +1982,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                     <label className="font-bold text-slate-700 block mb-1">Notas Clínicas e Interpretação</label>
                     <textarea
                       value={newScreening.clinicalNotes}
+                      onChange={e => setNewScreening(p => ({ ...p, clinicalNotes: e.target.value }))}
                       placeholder="Descreva a contextualização clínica do achado na história do paciente..."
                       rows={3}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
@@ -1910,6 +2161,79 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
           </>
         )}
       </main>
+
+      {/* ========================================================================= */}
+      {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO RÁPIDA (ZemdaPsico) */}
+      {/* ========================================================================= */}
+      {showFinishConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Finalizar Atendimento Psicológico?</h3>
+                <p className="text-xs text-slate-500">
+                  Esta ação salvará e selará a evolução com assinatura digital e hash SHA-256.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-2">
+              <div className="flex justify-between text-slate-700">
+                <span>Paciente:</span>
+                <strong>{selectedPatient?.full_name || selectedPatient?.name || 'Paciente'}</strong>
+              </div>
+              <div className="flex justify-between text-slate-700">
+                <span>Modalidade:</span>
+                <strong>{currentSession.modality === 'online' ? 'Online (TDIC)' : 'Presencial'}</strong>
+              </div>
+              <div className="flex justify-between text-slate-700">
+                <span>Evolução clínica:</span>
+                <span className={currentSession.clinicalEvolution && currentSession.clinicalEvolution.trim() ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold'}>
+                  {currentSession.clinicalEvolution && currentSession.clinicalEvolution.trim() ? 'Preenchida' : 'Pendente (Obrigatória)'}
+                </span>
+              </div>
+            </div>
+
+            {(!currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()) && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>O relato da evolução clínica é indispensável para concluir o atendimento (CFP 01/2009). Preencha-o na aba de Sessões.</span>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowFinishConfirmModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer"
+              >
+                Voltar e Revisar
+              </button>
+              <button
+                type="button"
+                disabled={saving || !currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()}
+                onClick={confirmAndFinishConsultation}
+                className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer shadow-xs flex items-center gap-2"
+              >
+                {saving ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Concluindo e Selando...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Confirmar e Concluir
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL OBRIGATÓRIO DE CONCLUSÃO DE ATENDIMENTO (CFP 06/2019) */}

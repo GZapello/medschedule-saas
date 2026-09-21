@@ -14,6 +14,7 @@ import {
   Info
 } from 'lucide-react';
 import { SignatureChoiceModal } from '../common/SignatureChoiceModal';
+import { printPsychologyDocument } from './psychology-print.util';
 
 interface PsychologyDocumentModalProps {
   isOpen: boolean;
@@ -189,8 +190,13 @@ export const PsychologyDocumentModal: React.FC<PsychologyDocumentModalProps> = (
     }
   };
 
-  const handlePrint = (docId: string) => {
-    window.open(`/api/v1/psychology/documents/${docId}/print`, '_blank', 'noopener,noreferrer');
+  const handlePrint = async (docId: string) => {
+    try {
+      showToast('Carregando documento autenticado para impressão...', 'info');
+      await printPsychologyDocument(docId);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao carregar documento para impressão.', 'error');
+    }
   };
 
   return (

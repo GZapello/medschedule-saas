@@ -24,6 +24,8 @@ import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { PatientProfileModal } from '../patients/PatientProfileModal';
 import { SelectConsultationModuleModal, getCompatibleClinicalModules, getModuleForProfession } from '../clinical/SelectConsultationModuleModal';
+import { WhatsAppReminderModal, WhatsAppIcon } from '../common/WhatsAppReminderModal';
+import { isValidPhoneNumber } from '../../utils/phone.utils';
 
 interface DashboardViewProps {
   onNavigate: (view: string) => void;
@@ -48,6 +50,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [filterTab, setFilterTab] = useState<'all' | 'scheduled' | 'in_progress' | 'completed' | 'no_show' | 'cancelled'>('all');
   const [printDoc, setPrintDoc] = useState<{ type: 'certificate' | 'prescription' | 'exam_request'; id: string } | null>(null);
   const [viewPatientId, setViewPatientId] = useState<string | null>(null);
+  const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<any | null>(null);
 
   const fetchMetrics = async () => {
     try {
@@ -460,6 +463,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           Faltou
                         </button>
                       )}
+
+                      {/* Botão de Envio Manual de Lembrete pelo WhatsApp */}
+                      {(() => {
+                        const hasPhone = isValidPhoneNumber(appt.patient_phone);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (hasPhone) {
+                                setWhatsappReminderAppt(appt);
+                              }
+                            }}
+                            disabled={!hasPhone}
+                            title={hasPhone ? 'Enviar lembrete pelo WhatsApp' : 'Paciente sem telefone cadastrado'}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                              hasPhone
+                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 cursor-pointer shadow-2xs'
+                                : 'bg-slate-100 text-slate-400 border border-slate-200/60 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <WhatsAppIcon className={`w-3.5 h-3.5 ${hasPhone ? 'fill-emerald-600' : 'fill-slate-400'}`} />
+                            <span>WhatsApp</span>
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 );
@@ -572,6 +600,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           patientId={viewPatientId}
           onClose={() => setViewPatientId(null)}
           onUpdated={() => fetchMetrics()}
+        />
+      )}
+
+      {/* Modal de Envio Manual de Lembrete pelo WhatsApp */}
+      {whatsappReminderAppt && (
+        <WhatsAppReminderModal
+          isOpen={Boolean(whatsappReminderAppt)}
+          onClose={() => setWhatsappReminderAppt(null)}
+          appointment={whatsappReminderAppt}
+          clinicName={auth.currentTenant?.name || 'Clínica'}
+          onSuccess={() => {
+            fetchMetrics();
+          }}
         />
       )}
     </div>

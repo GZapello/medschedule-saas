@@ -17,6 +17,7 @@ import {
   Globe,
   Award
 } from 'lucide-react';
+import { printPsychologyDocument } from './psychology-print.util';
 
 interface PsychologyHistoryModalProps {
   isOpen: boolean;
@@ -118,8 +119,13 @@ export const PsychologyHistoryModal: React.FC<PsychologyHistoryModalProps> = ({
     }
   };
 
-  const handlePrintDoc = (docId: string) => {
-    window.open(`/api/v1/psychology/documents/${docId}/print`, '_blank', 'noopener,noreferrer');
+  const handlePrintDoc = async (docId: string) => {
+    try {
+      showToast('Carregando documento autenticado para impressão...', 'info');
+      await printPsychologyDocument(docId);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao carregar documento para impressão.', 'error');
+    }
   };
 
   return (
