@@ -201,6 +201,33 @@ export function initializeDatabase(): void {
     }
     addColIfMissing('email_verifications', 'ip_address', 'TEXT');
 
+    // Tabela e índices do WhatsApp Business Cloud API (Embedded Signup com Coexistência)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS whatsapp_cloud_integrations (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          waba_id TEXT NOT NULL,
+          phone_number_id TEXT NOT NULL,
+          business_id TEXT,
+          phone_number TEXT,
+          display_phone_number TEXT,
+          coexistence_mode INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'connected' CHECK(status IN ('connected', 'disconnected', 'pending', 'error')),
+          encrypted_access_token TEXT,
+          token_expires_at TEXT,
+          connected_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          created_by TEXT,
+          FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+          UNIQUE(tenant_id, phone_number_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_whatsapp_cloud_tenant ON whatsapp_cloud_integrations(tenant_id);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabela whatsapp_cloud_integrations:', e);
+    }
+
     // Controle Administrativo Global (Banimento e Bloqueio de Cadastros)
     addColIfMissing('tenants', 'registrations_blocked', 'INTEGER DEFAULT 0');
     addColIfMissing('tenants', 'banned_at', 'TEXT');

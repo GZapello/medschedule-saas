@@ -49,6 +49,7 @@ import { PsychopedagogyController } from '../controllers/psychopedagogy.controll
 import { PsychologyController } from '../controllers/psychology.controller';
 import { ExternalTestsController } from '../controllers/external-tests.controller';
 import { EmailVerificationController } from '../controllers/email-verification.controller';
+import { WhatsAppCloudController } from '../controllers/whatsapp-cloud.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -874,5 +875,11 @@ api.get('/files/patient/:patientId', requireTenant, FileController.listPatientFi
 api.get('/v1/external-tests', requireTenant, ExternalTestsController.list);
 api.post('/v1/external-tests', requireTenant, ExternalTestsController.save);
 api.delete('/v1/external-tests/:id', requireTenant, ExternalTestsController.delete);
+
+// WhatsApp Business Cloud API (Embedded Signup com Coexistência)
+api.get('/v1/whatsapp-cloud/config', requireTenant, WhatsAppCloudController.getConfig);
+api.get('/v1/whatsapp-cloud/status', requireTenant, WhatsAppCloudController.getStatus);
+api.post('/v1/whatsapp-cloud/exchange-code', requireTenant, requireRole('clinic_admin'), WhatsAppCloudController.exchangeCode);
+api.post('/v1/whatsapp-cloud/disconnect', requireTenant, requireRole('clinic_admin'), WhatsAppCloudController.disconnect);
 
 export default api;
