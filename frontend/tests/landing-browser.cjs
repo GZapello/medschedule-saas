@@ -73,7 +73,8 @@ async function main() {
     await selector.selectOption('fono');
     for(const id of ['odonto','to','personal']) {
       await page.locator(`.zl-module-${id} a`).click();
-      assert.ok(await page.evaluate(id => {const r=document.getElementById(`modulo-${id}`).getBoundingClientRect();return r.top>=80&&r.top<innerHeight;},id));
+      assert.ok(await page.evaluate(() => {const r=document.getElementById('produto').getBoundingClientRect();return r.top>=0&&r.top<innerHeight;}));
+      assert.equal(await selector.inputValue(), id);
     }
     await page.getByRole('link',{name:'Conhecer módulo ZemdaFono',exact:true}).click();
     assert.equal(await page.locator('html').getAttribute('data-test-action'),'sistema-para-fonoaudiologos');

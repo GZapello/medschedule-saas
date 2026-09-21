@@ -51,6 +51,18 @@ export const LandingProductDemo: React.FC = () => {
   const Icon = isSpecialty ? moduleIcons[module.id] : view.icon;
   const features = isSpecialty ? module.features : view.items;
 
+  React.useEffect(() => {
+    const handleSelectSpecialty = (event: Event) => {
+      const customEv = event as CustomEvent<string>;
+      setActiveViewId('specialty');
+      if (customEv.detail) {
+        setActiveModuleId(customEv.detail);
+      }
+    };
+    window.addEventListener('select-landing-specialty', handleSelectSpecialty);
+    return () => window.removeEventListener('select-landing-specialty', handleSelectSpecialty);
+  }, []);
+
   return (
     <div id="produto" className="zl-product">
       <div className="zl-product-bar">
@@ -91,25 +103,27 @@ export const LandingProductDemo: React.FC = () => {
                 {LANDING_MODULE_PREVIEWS.map(item => {
                   const ChipIcon = moduleIcons[item.id];
                   const isSelected = activeModuleId === item.id;
+                  const isTransversal = item.id === 'body';
                   return (
                     <button
                       key={item.id}
                       type="button"
                       role="tab"
                       aria-selected={isSelected}
-                      className="zl-module-chip"
+                      className={`zl-module-chip ${isTransversal ? 'zl-module-chip-transversal' : ''}`}
                       onClick={() => setActiveModuleId(item.id)}
                       title={`${item.name} (${item.area})`}
                     >
                       <ChipIcon size={14} aria-hidden="true" />
                       <span>{item.name}</span>
+                      {isTransversal && <span className="zl-chip-badge">Transversal</span>}
                     </button>
                   );
                 })}
               </div>
             </div>
           )}
-          <div id="product-view" className="zl-product-content" role="region"
+          <div id="product-view" key={`${activeViewId}-${isSpecialty ? activeModuleId : ''}`} className="zl-product-content zl-fade-swap" role="region"
             aria-label="Recursos da área selecionada" aria-live="polite" aria-atomic="true">
             <div className="zl-product-copy">
               <span className="zl-icon"><Icon size={25} aria-hidden="true" /></span>

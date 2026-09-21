@@ -48,18 +48,18 @@ export const RevealItem: React.FC<RevealItemProps> = ({
   children,
   className = '',
   delayMs = 0,
-  durationMs = 650,
+  durationMs = 600,
   direction = 'up',
   distancePx,
   scale = false,
   autoAnimate = false,
-  threshold = 0.15,
-  rootMargin = '0px 0px -12% 0px'
+  threshold = 0.08,
+  rootMargin = '0px 0px -40px 0px'
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const itemRef = useRef<HTMLDivElement>(null);
 
-  const effectiveDistance = distancePx ?? (scale ? 40 : 45);
+  const effectiveDistance = distancePx ?? (scale ? 20 : 22);
 
   useEffect(() => {
     // Respeito estrito a prefers-reduced-motion (WCAG)
@@ -114,7 +114,7 @@ export const RevealItem: React.FC<RevealItemProps> = ({
     if (isVisible) {
       return scale ? 'translate3d(0, 0, 0) scale(1)' : 'translate3d(0, 0, 0)';
     }
-    const scaleStr = scale ? ' scale(0.96)' : '';
+    const scaleStr = scale ? ' scale(0.98)' : '';
     switch (direction) {
       case 'up':
         return `translate3d(0, ${effectiveDistance}px, 0)${scaleStr}`;
@@ -126,7 +126,7 @@ export const RevealItem: React.FC<RevealItemProps> = ({
         return `translate3d(-${effectiveDistance}px, 0, 0)${scaleStr}`;
       case 'none':
       default:
-        return scale ? 'scale(0.96)' : 'none';
+        return scale ? 'scale(0.98)' : 'none';
     }
   };
 

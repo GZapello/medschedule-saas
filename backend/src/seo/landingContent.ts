@@ -14,7 +14,7 @@ export const LANDING_MODULES = [
   { id: 'personal', name: 'ZemdaPersonal', profession: 'Educação Física', slug: null, features: ['Avaliação física, composição e TAV', 'Prescrição de treinos', 'Histórico e evolução', 'Fotos comparativas'] },
   { id: 'pp', name: 'ZemdaPP', profession: 'Psicopedagogia', slug: 'sistema-para-psicopedagogos', features: ['Perfil, anamnese e evolução', 'Avaliação psicopedagógica', 'Análise de aprendizagem e PIP', 'Histórico de acompanhamento'] }
 ];
-export const moduleHref = (module: typeof LANDING_MODULES[number]) => module.slug ? `/${module.slug}` : `/#modulo-${module.id}`;
+export const moduleHref = (module: typeof LANDING_MODULES[number]) => module.slug ? `/${module.slug}` : `/#produto`;
 export const LANDING_PLANS = [
   { name: 'Solo', price: '69,90', accesses: '1 acesso', description: 'Para quem atende individualmente.' },
   { name: 'Equipe', price: '249,90', accesses: 'Até 5 acessos', description: 'Para compartilhar a rotina da clínica.' },
