@@ -1,0 +1,117 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+process.env.DATABASE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'zemda-library-')), 'test.db');
+process.env.R2_MOCK_STORAGE = 'true';
+const { db, initializeDatabase } = require('./dist/config/database');
+const rawDb = db;
+initializeDatabase();
+const { DEFAULT_EXERCISE_LIBRARY: catalog, seedExerciseLibrary } = require('./dist/config/exercise-library.seed');
+const { PersonalController: personal } = require('./dist/controllers/personal.controller');
+const { FileController: files } = require('./dist/controllers/file.controller');
+const { audit, bundledPhotoExists } = require('./audit-and-sync-exercise-images.cjs');
+let checks = 0;
+function check(condition, label) { assert.ok(condition, label); checks++; console.log(`PASS ${label}`); }
+async function call(controller, method, body = {}, params = {}, query = {}, tenantId = 'library-test') {
+  const req = { body, params, query, tenantId, user: { userId: 'library-user', role: 'clinic_admin' }, headers: {}, ip: '127.0.0.1', get: () => undefined };
+  let status = 200, data;
+  const res = { status(n) { status = n; return this; }, json(value) { data = value; return this; } };
+  await controller[method](req, res);
+  return { status, data };
+}
+async function main() {
+  db.prepare("INSERT INTO tenants (id,name,slug,email,status) VALUES ('library-test','Test','library-test','test@example.test','active')").run();
+  db.prepare("INSERT INTO users (id,tenant_id,email,password_hash,role,status,name) VALUES ('library-user','library-test','test@example.test','test','clinic_admin','active','Tester')").run();
+  check(catalog.length === 268 && new Set(catalog.map(ex => ex.id)).size === 268, '268 distinct stable IDs');
+  check(catalog.filter(ex => ex.category === 'Alongamento').length === 48, '48 stretches');
+  check(catalog.filter(ex => ex.category === 'Mobilidade').length === 25, '25 mobility exercises');
+  check(catalog.every(ex => fs.existsSync(path.join(__dirname, '../frontend/public', ex.photo_url))), 'Every standard exercise has a shipped persistent image');
+  const previousIds = require('./test-fixtures/legacy-exercise-ids.json');
+  check(previousIds.length === 119 && previousIds.every(id => catalog.some(ex => ex.id === id)), 'All 119 original exercise IDs preserved');
+  const initialAudit = await audit(rawDb, async () => 'unverified', row => Boolean(row.photo_url?.startsWith('/exercise-fallbacks/')), bundledPhotoExists);
+  check(initialAudit.totals.LOCAL_REAL_IMAGE === 2 && initialAudit.totals.WITH_REAL_IMAGE === 2 && initialAudit.totals.FALLBACK_ONLY === 266, 'Audit verifies bundled photo hashes and separates 266 illustrations');
+  check(!bundledPhotoExists({photo_url:'/exercise-photos/unknown.webp'}), 'Unknown local image is not classified as a verified photograph');
+  const original = catalog.find(ex => ex.id === 'ex-supino-reto-barra');
+  db.prepare("UPDATE personal_exercises SET name='Personalizado', is_active=0 WHERE id=?").run(original.id);
+  seedExerciseLibrary(rawDb); seedExerciseLibrary(rawDb);
+  check(db.prepare('SELECT count(*) AS n FROM personal_exercises').get().n === 268, 'Repeated seed does not duplicate');
+  check(db.prepare('SELECT name,is_active FROM personal_exercises WHERE id=?').get(original.id).name === 'Personalizado', 'Seed preserves customization');
+  check(db.prepare('SELECT is_active FROM personal_exercises WHERE id=?').get(original.id).is_active === 0, 'Seed preserves deactivation');
+  for (const muscle of ['Alongamento','Alongamentos','alongamento']) {
+    const result = await call(personal, 'listExercises', {}, {}, { muscle });
+    check(result.data.exercises.length === 48, `Stretch alias ${muscle}`);
+  }
+  for (const muscle of ['biceps','triceps','antebraco','abdomen','posterior','panturrilha','corpo_inteiro','cardio','mobilidade']) {
+    check((await call(personal, 'listExercises', {}, {}, { muscle })).data.exercises.length > 0, `Filter ${muscle}`);
+  }
+  for (const q of ['quadriceps','TRÍCEPS','alongamento','kettlebell']) check((await call(personal, 'listExercises', {}, {}, { q })).data.exercises.length > 0, `Search ${q}`);
+  const invalid = await call(personal, 'createExercise', { name:'Invalid', muscle_group:'Ombros', exercise_file_id:'att-ex-invented' });
+  check(invalid.status === 400, 'Reject nonexistent attachment');
+  const uploadBody = { category: 'exercises', filename: 'photo.webp', mimeType: 'image/webp', fileSize: 100 };
+  check((await call(files, 'createUploadTicket', {...uploadBody, mimeType:'application/pdf'})).status === 400, 'Exercise upload rejects PDF');
+  const ticket = await call(files, 'createUploadTicket', uploadBody);
+  check(ticket.status === 200 && ticket.data.objectKey.includes('library-test'), 'Upload ticket scoped to tenant');
+  const realFetch = global.fetch;
+  // Explicit local Worker test double. This test does not upload anything to Cloudflare.
+  global.fetch = async () => new Response(null, { status: 404 });
+  check((await call(files, 'completeUpload', {...uploadBody, objectKey:ticket.data.objectKey})).status === 400, 'Cannot complete an absent object');
+  global.fetch = async () => new Response(null, { status: 200 });
+  const completed = await call(files, 'completeUpload', {...uploadBody, objectKey:ticket.data.objectKey});
+  check(completed.status < 300 && completed.data.file.id, 'Mock Worker completion creates attachment metadata');
+  const fileId = completed.data.file.id;
+  check((await call(files, 'getFileUrl', {}, {id:fileId})).data.url.includes('token='), 'Attachment resolves signed display URL');
+  check((await call(files, 'getFileUrl', {}, {id:fileId}, {}, 'foreign-tenant')).status === 404, 'Other tenant cannot read attachment');
+  const created = await call(personal, 'createExercise', { name:'Alongamento próprio', muscle_group:'Alongamentos', category:'Alongamento', instructions:'Instrução original', exercise_file_id:fileId });
+  check(created.status === 201, 'Create custom exercise with persisted file ID');
+  const customId = created.data.id;
+  check((await call(personal, 'listExercises')).data.exercises.find(ex => ex.id === customId).exercise_file_id === fileId, 'Reload library retains file ID');
+  const student = await call(personal, 'createStudent', {name:'Aluno Teste', phone:'11999990000'});
+  const patientId = student.data.id || student.data.student?.id;
+  const photoWorkout = await call(personal, 'createWorkout', {patient_id:patientId,title:'Foto persistente',exercises:[{exercise_id:'ex-prancha-isometrica'}]});
+  const savedPhoto = (await call(personal,'getWorkout',{}, {id:photoWorkout.data.id})).data.exercises[0];
+  check(savedPhoto.photo_url.startsWith('/exercise-photos/') && JSON.parse(savedPhoto.image_attribution_json).author.includes('Brzuska'), 'Real photograph and attribution persist in workout snapshot');
+  const workout = await call(personal, 'createWorkout', { patient_id: patientId, title:'Snapshot', exercises:[{exercise_id:customId, name:'Alongamento próprio', muscle_group:'Alongamentos', sets:2, reps:'', duration_seconds:25, side:'ambos', rest_seconds:0, rir:0}] });
+  check(workout.status === 201, 'Save stretch without load or RPE');
+  const workoutId = workout.data.id;
+  const before = (await call(personal, 'getWorkout', {}, {id:workoutId})).data.exercises;
+  check(before[0].exercise_file_id === fileId && before[0].duration_seconds === 25 && before[0].rest_seconds === 0 && before[0].rir === 0 && before[0].side === 'ambos', 'Reload workout preserves image, time, side and zero values');
+  const second = await call(files, 'completeUpload', {...uploadBody, objectKey:ticket.data.objectKey.replace(/[^/]+$/, 'new.webp')});
+  check((await call(personal, 'updateExercise', {name:'Renomeado', instructions:'Nova instrução', exercise_file_id:second.data.file.id}, {id:customId})).status === 200, 'Replace library photo');
+  check((await call(files, 'deleteFile', {}, {id:fileId})).status === 409, 'Historical image cannot be deleted');
+  check((await call(personal, 'updateExercise', {name:'Intrusão'}, {id:customId}, {}, 'foreign-tenant')).status === 404, 'Other tenant cannot edit exercise');
+  check((await call(personal, 'deleteExercise', {}, {id:customId}, {}, 'foreign-tenant')).status === 404, 'Other tenant cannot deactivate exercise');
+  await call(personal, 'deleteExercise', {}, {id:customId});
+  seedExerciseLibrary(rawDb);
+  initializeDatabase();
+  assert.deepEqual((await call(personal, 'getWorkout', {}, {id:workoutId})).data.exercises, before);
+  check(true, 'History unchanged after photo/name/instruction edits, deactivation and application restart');
+  const copy = await call(personal, 'duplicateWorkout', {}, {id:workoutId});
+  check(copy.status === 201, 'Duplicate workout');
+  const copied = (await call(personal, 'getWorkout', {}, {id:copy.data.id})).data.exercises[0];
+  check(copied.instructions === 'Instrução original' && copied.exercise_file_id === fileId && copied.duration_seconds === 25, 'Duplicate retains snapshot rather than live library data');
+  const fallbackWorkout = await call(personal, 'createWorkout', { patient_id:patientId, title:'Fallback', exercises:[{exercise_id:'ex-alongamento-quadriceps',sets:1,reps:''}] });
+  check((await call(personal, 'getWorkout', {}, {id:fallbackWorkout.data.id})).data.exercises[0].photo_url.endsWith('ex-alongamento-quadriceps.webp'), 'Fallback persists in new workout snapshot');
+  const report = await audit(rawDb, async () => 'unverified', row => Boolean(row.photo_url?.startsWith('/exercise-fallbacks/')));
+  check(report.standard_broken_references === 0 && report.totals.WITH_REAL_IMAGE === 0 && report.totals.R2_UNVERIFIED > 0, 'Audit never counts mock or unverified uploads as real photos');
+  db.prepare("UPDATE personal_exercises SET exercise_file_id='att-ex-legacy-missing' WHERE id='ex-dead-bug'").run();
+  db.prepare("UPDATE personal_workout_exercises SET exercise_file_id='att-ex-legacy-missing', photo_url='https://legacy.example.test/old.jpg' WHERE workout_id=?").run(photoWorkout.data.id);
+  const legacyBefore = (await call(personal,'getWorkout',{}, {id:photoWorkout.data.id})).data.exercises;
+  seedExerciseLibrary(rawDb);
+  check(db.prepare("SELECT exercise_file_id FROM personal_exercises WHERE id='ex-dead-bug'").get().exercise_file_id === null, 'Seed clears dangling global library reference');
+  assert.deepEqual((await call(personal,'getWorkout',{}, {id:photoWorkout.data.id})).data.exercises, legacyBefore);
+  check(true, 'Legacy historical URL and unavailable file ID remain unchanged');
+  check((await call(personal,'duplicateWorkout',{}, {id:photoWorkout.data.id})).status === 201, 'Legacy workout remains duplicable when its old image is unavailable');
+  const override = await call(personal, 'updateExercise', {is_active:0}, {id:'ex-dead-bug'});
+  const repeated = await call(personal, 'updateExercise', {is_active:0}, {id:'ex-dead-bug'});
+  check(override.data.id === repeated.data.id, 'Repeated customization of standard exercise reuses the tenant copy');
+  check(!(await call(personal, 'listExercises')).data.exercises.some(ex => ex.id === 'ex-dead-bug'), 'Tenant deactivation hides standard original');
+  check((await call(personal, 'listExercises', {}, {}, {}, 'foreign-tenant')).data.exercises.some(ex => ex.id === 'ex-dead-bug'), 'Tenant deactivation does not affect other clinics');
+  check((await call(personal, 'listExercises', {}, {}, {is_active:'all'})).data.exercises.some(ex => ex.id === override.data.id), 'Include inactive exposes the tenant copy');
+  const tpl = await call(personal, 'createTemplate', {title:'Template',workouts:[{title:'Treino',division:'A',exercises:before}]});
+  const applied = await call(personal, 'applyTemplate', {patient_id:patientId}, {id:tpl.data.id});
+  check(applied.status === 201, 'Apply template with exercise snapshots');
+  global.fetch = realFetch;
+  console.log(JSON.stringify({ checks, database:process.env.DATABASE_PATH, upload_verification:'local Worker test double only' }));
+}
+main().catch(err => { console.error(err); process.exitCode = 1; });

@@ -1,109 +1,74 @@
+// Read-only audit; historical command name retained for compatibility.
+require('dotenv').config();
 const { DatabaseSync } = require('node:sqlite');
-const path = require('path');
-const fs = require('fs');
-
+const { S3Client, HeadObjectCommand } = require('@aws-sdk/client-s3');
+const path = require('node:path');
+const fs = require('node:fs');
+function bundledPhotoExists(row) {
+  const photos = require('./src/config/exercise-library.photos.json');
+  const photo = photos.find(item => item.photo_url === row.photo_url);
+  if (!photo) return false;
+  const file = path.resolve(__dirname, '../frontend/public', photo.photo_url.slice(1));
+  return fs.existsSync(file) && require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') === photo.sha256;
+}
+async function audit(db, head, fallbackExists, localPhotoExists = () => false) {
+  const hasProvenance = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='exercise_image_provenance'").get();
+  const rows = db.prepare(`SELECT pe.*, fa.id AS attachment_id, fa.object_key, fa.mime_type, fa.category AS file_category, fa.storage_provider, fa.clinic_id FROM personal_exercises pe LEFT JOIN file_attachments fa ON fa.id = pe.exercise_file_id`).all();
+  const totals = { EXERCISES_TOTAL: rows.length, STANDARD: 0, CUSTOM: 0, WITH_REAL_IMAGE: 0, LOCAL_REAL_IMAGE: 0, WITHOUT_REAL_IMAGE: 0, BROKEN_FILE_REFERENCE: 0, FALLBACK_ONLY: 0, R2_FOUND: 0, R2_MISSING: 0, R2_UNVERIFIED: 0, ATTACHMENT_MISSING: 0, EXTERNAL_URL: 0, WITHOUT_IMAGE: 0, VALID_IMAGE: 0 };
+  const details = [];
+  for (const row of rows) {
+    const standard = row.tenant_id === 'global' && row.is_custom === 0;
+    totals[standard ? 'STANDARD' : 'CUSTOM']++;
+    let status = 'no_file', real = false, broken = false;
+    const generated = /^(att-lib-|att-illustration-)/.test(row.exercise_file_id || '');
+    if (row.exercise_file_id) {
+      if (!row.attachment_id) { status = 'attachment_missing'; totals.ATTACHMENT_MISSING++; broken = true; }
+      else if (row.storage_provider !== 'cloudflare_r2' || row.file_category !== 'exercises' || !['image/jpeg','image/png','image/webp'].includes(row.mime_type) || ![row.tenant_id, 'global'].includes(row.clinic_id)) { status = 'invalid_attachment'; broken = true; }
+      else {
+        status = await head(row.object_key);
+        if (status === 'found') {
+          totals.R2_FOUND++; totals.VALID_IMAGE++;
+          const provenance = hasProvenance && db.prepare('SELECT * FROM exercise_image_provenance WHERE file_id = ?').get(row.attachment_id);
+          real = !generated && provenance?.image_kind === 'photograph' && Boolean(provenance.source && provenance.license && provenance.author);
+        } else if (status === 'missing') { totals.R2_MISSING++; broken = true; }
+        else totals.R2_UNVERIFIED++;
+      }
+    }
+    const external = /^https?:\/\//i.test(row.photo_url || '');
+    if (external) totals.EXTERNAL_URL++;
+    const fallback = fallbackExists(row);
+    const localReal = status !== 'found' && localPhotoExists(row);
+    if (localReal) { real = true; totals.LOCAL_REAL_IMAGE++; }
+    if (!real && (fallback || (generated && status === 'found'))) totals.FALLBACK_ONLY++;
+    if (!fallback && !localReal && status !== 'found') totals.WITHOUT_IMAGE++;
+    if ((fallback || localReal) && status !== 'found') totals.VALID_IMAGE++;
+    if (broken) totals.BROKEN_FILE_REFERENCE++;
+    totals[real ? 'WITH_REAL_IMAGE' : 'WITHOUT_REAL_IMAGE']++;
+    details.push({ id: row.id, name: row.name, standard, active: row.is_active !== 0, category: row.category, muscle_group: row.muscle_group, file_status: status, broken, external_url: external, fallback, local_real_photo: localReal, real_photo_verified: Boolean(real) });
+  }
+  return { totals, standard_broken_references: details.filter(row => row.standard && row.broken).length, details };
+}
 async function main() {
   const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, 'saas_schedule.db');
-  console.log(`[Audit] Conectando ao banco de dados: ${dbPath}`);
-
-  if (!fs.existsSync(dbPath)) {
-    console.error(`[Audit] Banco de dados não encontrado em: ${dbPath}`);
-    process.exit(1);
-  }
-
-  const rawDb = new DatabaseSync(dbPath);
-
-  // Importa serviço compilado
-  const { syncAllExerciseLibraryImages } = require('./dist/services/exercise-image-generator.service');
-  const { DEFAULT_EXERCISE_LIBRARY } = require('./dist/config/exercise-library.seed');
-
-  console.log(`[Audit] Total de exercícios no catálogo padrão: ${DEFAULT_EXERCISE_LIBRARY.length}`);
-
-  // Executa sincronização e geração real de imagens WebP
-  const syncResult = await syncAllExerciseLibraryImages(rawDb);
-  console.log('[Audit] Resultado da sincronização:', syncResult);
-
-  // Auditoria completa no banco de dados
-  const totalExercises = rawDb.prepare('SELECT count(*) as count FROM personal_exercises').get().count;
-  const withImage = rawDb.prepare(`
-    SELECT count(*) as count
-    FROM personal_exercises pe
-    JOIN file_attachments fa ON fa.id = pe.exercise_file_id
-    WHERE fa.storage_provider = 'cloudflare_r2' 
-      AND fa.category = 'exercises'
-      AND fa.mime_type = 'image/webp'
-  `).get().count;
-
-  const withoutImage = rawDb.prepare(`
-    SELECT count(*) as count
-    FROM personal_exercises
-    WHERE exercise_file_id IS NULL OR trim(exercise_file_id) = ''
-  `).get().count;
-
-  const fakeIdExercises = rawDb.prepare(`
-    SELECT count(*) as count
-    FROM personal_exercises
-    WHERE exercise_file_id LIKE 'att-ex-%'
-  `).get().count;
-
-  const fakeAttachments = rawDb.prepare(`
-    SELECT count(*) as count
-    FROM file_attachments
-    WHERE id LIKE 'att-ex-%' OR object_key LIKE 'exercises/global/%'
-  `).get().count;
-
-  console.log('\n=============================================================');
-  console.log('         AUDITORIA DEFINITIVA DA BIBLIOTECA DE EXERCÍCIOS    ');
-  console.log('=============================================================');
-  console.log(`Total de exercícios cadastrados:           ${totalExercises}`);
-  console.log(`Exercícios com imagem real (WebP/R2):     ${withImage}`);
-  console.log(`Exercícios sem imagem ("Sem foto"):        ${withoutImage}`);
-  console.log(`Exercícios com ID fake (att-ex-%):         ${fakeIdExercises}`);
-  console.log(`Anexos fake no banco (att-ex-% / fake path): ${fakeAttachments}`);
-  console.log('-------------------------------------------------------------');
-
-  if (totalExercises !== 119) {
-    console.error(`❌ FALHA: Total de exercícios esperado é 119, mas encontrado ${totalExercises}`);
-    process.exit(1);
-  }
-
-  if (withImage !== 119) {
-    console.error(`❌ FALHA: Todos os 119 exercícios devem ter imagem real, mas apenas ${withImage} possuem!`);
-    process.exit(1);
-  }
-
-  if (withoutImage !== 0) {
-    console.error(`❌ FALHA: Nenhum exercício pode ficar sem foto, mas ${withoutImage} estão sem foto!`);
-    process.exit(1);
-  }
-
-  if (fakeIdExercises !== 0 || fakeAttachments !== 0) {
-    console.error(`❌ FALHA: Encontrados IDs ou anexos fake no banco!`);
-    process.exit(1);
-  }
-
-  // Exemplos de exercícios com suas imagens auditadas
-  console.log('\nAmostra de exercícios auditados com imagem real:');
-  const sample = rawDb.prepare(`
-    SELECT pe.id, pe.name, pe.muscle_group, pe.equipment, fa.id as file_id, fa.object_key, fa.file_size
-    FROM personal_exercises pe
-    JOIN file_attachments fa ON fa.id = pe.exercise_file_id
-    LIMIT 5
-  `).all();
-
-  sample.forEach((row, i) => {
-    console.log(`  ${i + 1}. [${row.id}] ${row.name}`);
-    console.log(`     Grupo: ${row.muscle_group} | Equipamento: ${row.equipment}`);
-    console.log(`     File Attachment ID: ${row.file_id}`);
-    console.log(`     R2 Object Key:      ${row.object_key}`);
-    console.log(`     Tamanho WebP:       ${row.file_size} bytes\n`);
-  });
-
-  console.log('✅ AUDITORIA 100% APROVADA: Todos os 119 exercícios possuem imagem real no R2!');
-  console.log('=============================================================\n');
+  if (!fs.existsSync(dbPath)) throw new Error('Banco não encontrado; auditoria não cria nem modifica banco.');
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const endpoint = process.env.R2_ENDPOINT || (process.env.R2_ACCOUNT_ID ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : '');
+  const configured = endpoint && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY && process.env.R2_MOCK_STORAGE !== 'true';
+  const client = configured ? new S3Client({ region: 'auto', endpoint, credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY } }) : null;
+  const head = async key => {
+    if (!client) return 'unverified';
+    try { await client.send(new HeadObjectCommand({ Bucket: process.env.R2_BUCKET_NAME || 'zemda-files', Key: key })); return 'found'; }
+    catch (err) { return err.$metadata?.httpStatusCode === 404 ? 'missing' : 'unverified'; }
+  };
+  const result = await audit(db, head, row => /^\/exercise-fallbacks\/[a-z0-9-]+\.webp$/.test(row.photo_url || '') && fs.existsSync(path.resolve(__dirname, '../frontend/public', row.photo_url.slice(1))), bundledPhotoExists);
+  db.close();
+  const output = process.argv.find(arg => arg.startsWith('--output='))?.slice(9);
+  if (output) fs.writeFileSync(output, JSON.stringify(result, null, 2) + '\n');
+  console.log(JSON.stringify(result.totals, null, 2));
+  console.log(`STANDARD_BROKEN_FILE_REFERENCE=${result.standard_broken_references}`);
+  if (result.totals.R2_UNVERIFIED) console.log('R2 não verificado: auditoria remota incompleta; nenhuma foto foi presumida real.');
+  if (result.totals.BROKEN_FILE_REFERENCE) process.exitCode = 1;
+  else if (result.totals.R2_UNVERIFIED) process.exitCode = 2;
 }
-
-main().catch(err => {
-  console.error('Erro na auditoria:', err);
-  process.exit(1);
-});
+module.exports = { audit, bundledPhotoExists };
+if (require.main === module) main().catch(err => { console.error(err.message); process.exitCode = 1; });

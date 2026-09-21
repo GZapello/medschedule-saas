@@ -2418,13 +2418,13 @@ export function initializeDatabase(): void {
     `);
   } catch (_) {}
 
-  // Sincroniza em background as ilustrações reais de exercícios com o Cloudflare R2
-  try {
-    const { syncAllExerciseLibraryImages } = require('../services/exercise-image-generator.service');
-    syncAllExerciseLibraryImages(rawDb).catch((syncErr: any) => {
-      console.warn('[Database] Aviso ao sincronizar imagens de exercícios em background:', syncErr);
-    });
-  } catch (_) {}
+  // Fallback artwork is shipped locally. R2 imports are explicit maintenance operations.
+  for (const [column, definition] of Object.entries({
+    instructions: 'TEXT', category: 'TEXT', duration_seconds: 'REAL', side: 'TEXT', snapshot_version: 'INTEGER', image_attribution_json: 'TEXT'
+  })) {
+    const columns = rawDb.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
+    if (!columns.includes(column)) rawDb.exec(`ALTER TABLE personal_workout_exercises ADD COLUMN ${column} ${definition}`);
+  }
 
   // Pre-seed protocolos e faixas de TAV (Tecido Adiposo Visceral) padrão
   try {
@@ -2676,63 +2676,14 @@ function repairLegacyPhotoUrls(rawDb: any): void {
       }
     }
 
-    // 2. Repara personal_exercises onde exercise_file_id é NULL ou photo_url contém worker/r2/blob
-    const brokenExercises = rawDb.prepare(`
-      SELECT id, tenant_id, photo_url, exercise_file_id 
-      FROM personal_exercises 
-      WHERE (exercise_file_id IS NULL AND photo_url IS NOT NULL) OR photo_url LIKE '%workers.dev%' OR photo_url LIKE '%r2.cloudflarestorage.com%' OR photo_url LIKE 'blob:%'
-    `).all() as any[];
+    // Exercise URLs are not repaired destructively on startup. The explicit read-only
+    // audit reports legacy URLs/references for operator review.
 
-    for (const ex of brokenExercises) {
-      let recoveredFileId = ex.exercise_file_id || null;
-      let objectKey: string | null = null;
-      const url = String(ex.photo_url || '').trim();
-
-      if (!recoveredFileId && url) {
-        if (url.startsWith('att-')) {
-          recoveredFileId = url;
-        } else if (url.includes('token=')) {
-          try {
-            const tokenMatch = url.match(/token=([^&]+)/);
-            if (tokenMatch && tokenMatch[1]) {
-              const tokenPart = decodeURIComponent(tokenMatch[1]).split('.')[0];
-              const jsonStr = Buffer.from(tokenPart, 'base64url').toString('utf8');
-              const parsed = JSON.parse(jsonStr);
-              if (parsed && parsed.objectKey) {
-                objectKey = parsed.objectKey;
-              }
-            }
-          } catch (_) {}
-        } else if (url.includes('clinics/')) {
-          const match = url.match(/clinics\/[^\s?]+/);
-          if (match) objectKey = match[0];
-        }
-
-        if (objectKey) {
-          const attach = rawDb.prepare('SELECT id FROM file_attachments WHERE object_key = ?').get(objectKey) as any;
-          if (attach && attach.id) {
-            recoveredFileId = attach.id;
-          }
-        }
-      }
-
-      const isUnsafeUrl = url.includes('workers.dev') || url.includes('r2.cloudflarestorage.com') || url.startsWith('blob:');
-      if (recoveredFileId || isUnsafeUrl) {
-        rawDb.prepare(`
-          UPDATE personal_exercises 
-          SET exercise_file_id = COALESCE(?, exercise_file_id),
-              photo_url = CASE WHEN ? = 1 THEN NULL ELSE photo_url END
-          WHERE id = ?
-        `).run(recoveredFileId || null, isUnsafeUrl ? 1 : 0, ex.id);
-      }
-    }
-
-    // ZemdaPersonal persists durable attachment IDs only. URLs (including old
-    // signed Worker URLs and external addresses) are presentation data and
-    // must never remain in personal assessment or exercise records.
+    // Existing assessment-photo migration remains unchanged. Exercise images and
+    // workout snapshots are intentionally excluded from this legacy cleanup.
     rawDb.prepare("UPDATE personal_assessment_photos SET photo_url = '' WHERE photo_url IS NOT NULL").run();
-    rawDb.prepare('UPDATE personal_exercises SET photo_url = NULL WHERE photo_url IS NOT NULL').run();
-    rawDb.prepare("UPDATE personal_workout_exercises SET photo_url = '' WHERE photo_url IS NOT NULL").run();
+    // Preserve stable exercise assets and immutable workout snapshots.
+
   } catch (repairErr) {
     console.warn('[Database] Aviso ao executar repairLegacyPhotoUrls:', repairErr);
   }

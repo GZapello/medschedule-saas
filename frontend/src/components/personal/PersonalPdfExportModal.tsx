@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   X,
   Printer,
@@ -16,6 +16,8 @@ import {
 import { Student, Workout, Assessment, StrengthTestItem, EnduranceTestItem } from './types';
 import { useAuth } from '../../context/AuthContext';
 import { SecureFileImage } from '../common/SecureFileImage';
+import { isStretch } from './exercisePresentation';
+import { ExerciseImageCredit } from './ExerciseImageCredit';
 import {
   useClinicDocumentData,
   ClinicDocumentHeader,
@@ -56,11 +58,20 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
     notes: true
   });
 
+  const printRef = useRef<HTMLDivElement>(null);
+  const [printing, setPrinting] = useState(false);
   if (!isOpen) return null;
 
-  const handlePrint = () => {
-    if (!canIssueClinic) return;
-    window.print();
+  const handlePrint = async () => {
+    if (!canIssueClinic || printing) return;
+    setPrinting(true);
+    try {
+      // Secure images report pending resolution/loading; errors settle to a placeholder.
+      const deadline = Date.now() + 15000;
+      while (printRef.current?.querySelector('[data-image-pending="true"]') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
+      await document.fonts.ready;
+      window.print();
+    } finally { setPrinting(false); }
   };
 
   const toggleSection = (key: keyof typeof sections) => {
@@ -90,8 +101,18 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+    <div className="personal-print-root fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+      <style>{`@media print {
+        body * { visibility: hidden; }
+        .personal-print-root, .personal-print-root * { visibility: visible; }
+        .personal-print-root { position: absolute !important; inset: 0 auto auto 0 !important; width: 100%; height: auto; display: block; background: white; padding: 0; }
+        .personal-print-modal { max-height: none !important; max-width: none !important; overflow: visible !important; display: block !important; border: 0; box-shadow: none; }
+        .personal-print-document { overflow: visible !important; }
+        .personal-print-root tr { break-inside: avoid; }
+        .personal-print-root thead { display: table-header-group; }
+        .personal-print-root [data-image-pending="true"] { visibility: hidden; }
+      }`}</style>
+      <div className="personal-print-modal bg-white rounded-3xl max-w-4xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Header no Modal (oculto na impressão) */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden">
           <div className="flex items-center gap-3">
@@ -109,7 +130,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              disabled={!canIssueClinic}
+              disabled={!canIssueClinic || printing}
               className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-2 shadow-sm transition-colors ${
                 canIssueClinic
                   ? 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer'
@@ -139,7 +160,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                 exportType === 'full_workout' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600'
               }`}
             >
-              Ficha de Treino Completa
+              PDF com imagens
             </button>
             <button
               onClick={() => setExportType('compact_workout')}
@@ -147,7 +168,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                 exportType === 'compact_workout' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600'
               }`}
             >
-              Ficha Compacta
+              PDF compacto sem imagens
             </button>
             <button
               onClick={() => setExportType('assessment_report')}
@@ -195,7 +216,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
         )}
 
         {/* Folha de Pré-visualização / Impressão */}
-        <div className="p-8 overflow-y-auto flex-1 bg-slate-100/50 print:p-0 print:bg-white">
+        <div ref={printRef} className="personal-print-document p-8 overflow-y-auto flex-1 bg-slate-100/50 print:p-0 print:bg-white">
           <div className="max-w-3xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-200 print:border-none print:shadow-none print:p-0 print:max-w-full space-y-6">
             {/* Cabeçalho Institucional da Clínica */}
             <ClinicDocumentHeader
@@ -264,7 +285,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                           {exportType === 'full_workout' && <th className="py-2 px-2">Foto</th>}
                           <th className="py-2 px-2">Exercício</th>
                           <th className="py-2 px-2 text-center">Séries</th>
-                          <th className="py-2 px-2 text-center">Reps</th>
+                          <th className="py-2 px-2 text-center">Reps / Tempo</th>
                           <th className="py-2 px-2 text-center">Carga</th>
                           <th className="py-2 px-2 text-center">Descanso</th>
                           <th className="py-2 px-2 text-center">Cadência</th>
@@ -273,7 +294,7 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                       </thead>
                       <tbody className="divide-y divide-slate-200">
                         {w.exercises?.map((ex, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50">
+                          <tr key={idx} className="hover:bg-slate-50 break-inside-avoid">
                             <td className="py-2 px-2 font-bold text-slate-400">{idx + 1}</td>
                             {exportType === 'full_workout' && (
                               <td className="py-1 px-2">
@@ -294,11 +315,12 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
                             )}
                             <td className="py-2 px-2 font-bold text-slate-800">
                               {ex.name}
+                              {exportType === 'full_workout' && <ExerciseImageCredit value={ex.image_attribution_json} />}
                               {ex.notes && <span className="block text-[10px] font-normal text-slate-500">{ex.notes}</span>}
                             </td>
                             <td className="py-2 px-2 text-center font-bold text-slate-800">{ex.sets}</td>
-                            <td className="py-2 px-2 text-center text-slate-700">{ex.reps}</td>
-                            <td className="py-2 px-2 text-center font-bold text-emerald-700">{ex.load_kg ? `${ex.load_kg}kg` : '—'}</td>
+                            <td className="py-2 px-2 text-center text-slate-700">{ex.duration_seconds != null ? `${ex.duration_seconds}s` : ex.reps}{ex.side ? ` • ${ex.side}` : ''}</td>
+                            <td className="py-2 px-2 text-center font-bold text-emerald-700">{!isStretch(ex) && ex.load_kg ? `${ex.load_kg}kg` : '—'}</td>
                             <td className="py-2 px-2 text-center text-slate-600">{ex.rest_seconds}s</td>
                             <td className="py-2 px-2 text-center text-slate-600">{ex.cadence || '—'}</td>
                             <td className="py-2 px-2 font-semibold text-slate-700">{ex.technique || 'Direta'}</td>

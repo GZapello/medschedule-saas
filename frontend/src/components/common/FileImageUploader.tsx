@@ -43,6 +43,7 @@ export interface FileImageUploaderProps {
   onUploaded?: (fileInfo: FileUploadedInfo) => void;
   onRemoved?: () => void;
   onError?: (errorMessage: string) => void;
+  onUploadingChange?: (uploading: boolean) => void;
   disabled?: boolean;
 }
 
@@ -80,6 +81,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
   onUploaded,
   onRemoved,
   onError,
+  onUploadingChange,
   disabled = false
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -93,6 +95,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
   const [currentFileSize, setCurrentFileSize] = useState<number | null>(null);
 
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  useEffect(() => { onUploadingChange?.(isUploading); }, [isUploading, onUploadingChange]);
   const [uploadSuccess, setUploadSuccess] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -232,9 +235,10 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
       // 0. Otimização inteligente prévia da imagem no cliente (exceto se for diagnóstico)
       const optimizedFile = await optimizeImageFile(fileToUpload, {
         isDiagnostic,
-        maxWidth: 1800,
-        maxHeight: 1800,
-        quality: 0.85
+        maxWidth: category === 'exercises' ? 960 : 1800,
+        maxHeight: category === 'exercises' ? 960 : 1800,
+        outputType: category === 'exercises' ? 'image/webp' : undefined,
+        quality: category === 'exercises' ? 0.8 : 0.85
       });
 
       // 1. POST /api/files/upload-ticket
@@ -332,7 +336,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
 
       // Exclui anexo anterior substituído para não duplicar no storage (mas NUNCA exclui de avaliações físicas históricas)
       const isHistoricalAssessment = category === 'personal_assessment' || category?.startsWith('personal_assessment');
-      if (previousTarget && previousTarget !== finalObjectKey && previousTarget !== savedFile.id && !isHistoricalAssessment) {
+      if (previousTarget && previousTarget !== finalObjectKey && previousTarget !== savedFile.id && !isHistoricalAssessment && category !== 'exercises') {
         try {
           await ApiClient.delete(`/files/${encodeURIComponent(previousTarget)}`);
         } catch (_) {}
@@ -439,7 +443,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         targetIdOrKey = match ? match[0] : currentUrl;
       }
 
-      if (targetIdOrKey) {
+      if (targetIdOrKey && category !== 'exercises') {
         await ApiClient.delete(`/files/${encodeURIComponent(targetIdOrKey)}`);
       }
 

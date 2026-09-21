@@ -1,0 +1,24 @@
+[
+  {
+    "exercise_id": "ex-supino-reto-barra",
+    "photo_url": "/exercise-photos/ex-supino-reto-barra-78c675419896.webp",
+    "sha256": "78c6754198964dd9cbc3e704e61ff48f8eb0da32de30a1784d2d9d8af54aa97d",
+    "source": "https://commons.wikimedia.org/wiki/File:Bench_press.png",
+    "author": "U.S. Army / Task Force Eagle (autor individual não informado)",
+    "license": "Public domain",
+    "license_evidence": "https://commons.wikimedia.org/wiki/File:Bench_press.png",
+    "image_kind": "photograph",
+    "modifications": "Redimensionamento e conversão para WebP; imagem documental ilustrativa do exercício."
+  },
+  {
+    "exercise_id": "ex-prancha-isometrica",
+    "photo_url": "/exercise-photos/ex-prancha-isometrica-123b6d7c2f36.webp",
+    "sha256": "123b6d7c2f36ecebf46f5d5e6abc5c13dfc56ec77772b2ac3fa83476cec02ba1",
+    "source": "https://commons.wikimedia.org/wiki/File:A_U.S._Coast_Guard_recruit,_assigned_to_Company_Oscar_188,_performs_a_plank_during_incentive_training_at_Coast_Guard_Training_Center_Cape_May_in_Cape_May,_N.J.,_July_31,_2013_130731-G-WA946-943.jpg",
+    "author": "Donnie Brzuska / U.S. Coast Guard",
+    "license": "Public domain",
+    "license_evidence": "https://commons.wikimedia.org/wiki/File:A_U.S._Coast_Guard_recruit,_assigned_to_Company_Oscar_188,_performs_a_plank_during_incentive_training_at_Coast_Guard_Training_Center_Cape_May_in_Cape_May,_N.J.,_July_31,_2013_130731-G-WA946-943.jpg",
+    "image_kind": "photograph",
+    "modifications": "Redimensionamento e conversão para WebP; imagem documental ilustrativa do exercício."
+  }
+]

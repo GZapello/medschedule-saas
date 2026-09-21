@@ -91,6 +91,7 @@ export class FileController {
 
       // Validação estrita de tipo de arquivo
       const normalizedMime = String(mimeType).toLowerCase().trim();
+      if (safeCategory === 'exercises' && !['image/jpeg', 'image/png', 'image/webp'].includes(normalizedMime)) { res.status(400).json({ error: 'Exercícios aceitam JPEG, PNG e WebP.' }); return; }
       if (!ALLOWED_MIME_TYPES.includes(normalizedMime)) {
         res.status(400).json({
           error: 'Tipo de arquivo não permitido. Formatos aceitos: JPG, PNG, WebP, PDF, DOC, DOCX, XLS, XLSX, CSV.',
@@ -210,7 +211,7 @@ export class FileController {
       const uploadUrl = `${workerBaseUrl}/upload`;
 
       // Helper para simular disponibilidade imediata no mock de testes locais
-      r2StorageService.simulateMockUpload(objectKey);
+      if (!isExercise) r2StorageService.simulateMockUpload(objectKey);
 
       res.status(200).json({
         uploadUrl,
@@ -249,6 +250,7 @@ export class FileController {
 
       // Validação estrita de tipo de arquivo
       const normalizedMime = String(mimeType).toLowerCase().trim();
+      if (safeCategory === 'exercises' && !['image/jpeg', 'image/png', 'image/webp'].includes(normalizedMime)) { res.status(400).json({ error: 'Exercícios aceitam JPEG, PNG e WebP.' }); return; }
       if (!ALLOWED_MIME_TYPES.includes(normalizedMime)) {
         res.status(400).json({
           error: 'Tipo de arquivo não permitido. Apenas imagens JPEG, PNG ou WebP são aceitas.',
@@ -351,6 +353,7 @@ export class FileController {
 
       const safeCategory = String(category || 'general').trim();
       const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || safeCategory === 'exercises' || safeCategory.includes('exercise') || String(objectKey).includes('/exercises/');
+      if ((safeCategory === 'exercises' || objectKey.includes('/exercises/')) && (!['image/jpeg','image/png','image/webp'].includes(mimeType) || !fileSize || fileSize > MAX_FILE_SIZE_BYTES)) { res.status(400).json({ error: 'Imagem de exercício inválida.' }); return; }
 
       if (!objectKey || (!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || fileSize === null || isNaN(fileSize) || fileSize <= 0) {
         res.status(400).json({
@@ -447,8 +450,9 @@ export class FileController {
         }
       }
 
-      // 3. Se ainda não confirmado pelo Worker (ex: em ambiente local, mock ou se S3 direto configurado)
-      if (!existsInR2) {
+      // Exercises require real storage confirmation; in-memory mocks cannot prove an upload.
+      const exerciseUpload = safeCategory === 'exercises' || objectKey.includes('/exercises/');
+      if (!existsInR2 && (!exerciseUpload || (r2StorageService.isConfiguredClient && process.env.R2_MOCK_STORAGE !== 'true'))) {
         try {
           const s3Exists = await r2StorageService.fileExists(objectKey);
           if (s3Exists) {
@@ -725,6 +729,12 @@ export class FileController {
         res.status(404).json({
           error: 'Arquivo não encontrado ou você não tem permissão para excluí-lo'
         });
+        return;
+      }
+
+      // Exercise media may be referenced by historical workout snapshots or saved templates.
+      if (file?.category === 'exercises' || String(targetObjectKey).includes('/exercises/')) {
+        res.status(409).json({ error: 'Imagem de exercício preservada para o histórico. Remova apenas o vínculo no exercício.' });
         return;
       }
 

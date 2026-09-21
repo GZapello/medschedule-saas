@@ -1,3 +1,5 @@
+import licensedPhotos from './exercise-library.photos.json';
+import { EXPANDED_EXERCISES } from './exercise-library.expansion';
 export interface SeedExercise {
   id: string;
   name: string;
@@ -11,6 +13,7 @@ export interface SeedExercise {
   level: string;
   instructions: string;
   technical_notes?: string;
+  suggested_duration?: string;
   photo_url?: string;
   exercise_file_id?: string;
 }
@@ -1755,15 +1758,16 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
   }
 ];
 
-// Garante identificador persistente e único de anexo R2 para cada um dos 119 exercícios do catálogo global
-for (const ex of DEFAULT_EXERCISE_LIBRARY) {
-  if (!ex.exercise_file_id) {
-    ex.exercise_file_id = `att-${ex.id}`;
-  }
-}
+DEFAULT_EXERCISE_LIBRARY.push(...EXPANDED_EXERCISES);
+for (const ex of DEFAULT_EXERCISE_LIBRARY) ex.photo_url = licensedPhotos.find(photo => photo.exercise_id === ex.id)?.photo_url || `/exercise-fallbacks/${ex.id}.webp`;
 
 export function seedExerciseLibrary(rawDb: any): void {
   try {
+    rawDb.exec(`CREATE TABLE IF NOT EXISTS exercise_image_provenance (
+      file_id TEXT PRIMARY KEY, exercise_id TEXT NOT NULL, sha256 TEXT NOT NULL,
+      image_kind TEXT NOT NULL, source TEXT NOT NULL, license TEXT NOT NULL, author TEXT NOT NULL,
+      license_evidence TEXT, created_at TEXT DEFAULT (datetime('now'))
+    )`);
     // Garante que todas as colunas necessárias existam
     const pExCols = rawDb.prepare('PRAGMA table_info(personal_exercises)').all().map((c: any) => c.name);
     if (!pExCols.includes('body_region')) rawDb.exec('ALTER TABLE personal_exercises ADD COLUMN body_region TEXT');
@@ -1775,6 +1779,9 @@ export function seedExerciseLibrary(rawDb: any): void {
     if (!pExCols.includes('technical_notes')) rawDb.exec('ALTER TABLE personal_exercises ADD COLUMN technical_notes TEXT');
     if (!pExCols.includes('exercise_file_id')) rawDb.exec('ALTER TABLE personal_exercises ADD COLUMN exercise_file_id TEXT');
     if (!pExCols.includes('is_active')) rawDb.exec('ALTER TABLE personal_exercises ADD COLUMN is_active INTEGER DEFAULT 1');
+
+    if (!pExCols.includes('source_exercise_id')) rawDb.exec('ALTER TABLE personal_exercises ADD COLUMN source_exercise_id TEXT');
+    if (!pExCols.includes('suggested_duration')) rawDb.exec('ALTER TABLE personal_exercises ADD COLUMN suggested_duration TEXT');
 
     rawDb.exec(`
       CREATE TABLE IF NOT EXISTS file_attachments (
@@ -1820,32 +1827,22 @@ export function seedExerciseLibrary(rawDb: any): void {
         datetime('now'), datetime('now')
       )
       ON CONFLICT(id) DO UPDATE SET
-        name = excluded.name,
-        muscle_group = excluded.muscle_group,
-        secondary_muscles_json = excluded.secondary_muscles_json,
-        body_region = excluded.body_region,
-        equipment = excluded.equipment,
-        category = excluded.category,
-        execution_type = excluded.execution_type,
-        mechanics = excluded.mechanics,
-        level = excluded.level,
-        instructions = excluded.instructions,
-        technical_notes = excluded.technical_notes,
-        photo_url = null,
-        exercise_file_id = excluded.exercise_file_id,
-        is_active = 1,
-        updated_at = datetime('now')
-      WHERE personal_exercises.is_custom = 0
+        name = COALESCE(NULLIF(personal_exercises.name, ''), excluded.name),
+        muscle_group = COALESCE(NULLIF(personal_exercises.muscle_group, ''), excluded.muscle_group),
+        secondary_muscles_json = COALESCE(NULLIF(personal_exercises.secondary_muscles_json, ''), excluded.secondary_muscles_json),
+        body_region = COALESCE(NULLIF(personal_exercises.body_region, ''), excluded.body_region),
+        equipment = COALESCE(NULLIF(personal_exercises.equipment, ''), excluded.equipment),
+        category = COALESCE(NULLIF(personal_exercises.category, ''), excluded.category),
+        execution_type = COALESCE(NULLIF(personal_exercises.execution_type, ''), excluded.execution_type),
+        mechanics = COALESCE(NULLIF(personal_exercises.mechanics, ''), excluded.mechanics),
+        level = COALESCE(NULLIF(personal_exercises.level, ''), excluded.level),
+        instructions = COALESCE(NULLIF(personal_exercises.instructions, ''), excluded.instructions),
+        technical_notes = COALESCE(NULLIF(personal_exercises.technical_notes, ''), excluded.technical_notes)
+      WHERE personal_exercises.is_custom = 0 AND personal_exercises.tenant_id = 'global'
     `);
 
     rawDb.exec('BEGIN IMMEDIATE;');
     try {
-      // Limpeza de quaisquer anexos fake gerados anteriormente sem arquivo real no R2
-      rawDb.exec(`
-        DELETE FROM file_attachments 
-        WHERE id LIKE 'att-ex-%' OR object_key LIKE 'exercises/global/%'
-      `);
-
       for (const ex of DEFAULT_EXERCISE_LIBRARY) {
         // Preserva anexo real já cadastrado no banco para o exercício, se houver
         const currentExercise = rawDb.prepare(`
@@ -1873,12 +1870,22 @@ export function seedExerciseLibrary(rawDb: any): void {
           validFileId
         );
       }
+      const duration = rawDb.prepare("UPDATE personal_exercises SET suggested_duration = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND suggested_duration IS NULL");
+      const fallback = rawDb.prepare("UPDATE personal_exercises SET photo_url = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND (photo_url IS NULL OR photo_url = '')");
+      for (const ex of DEFAULT_EXERCISE_LIBRARY) fallback.run(ex.photo_url, ex.id);
+      const upgradePhoto = rawDb.prepare("UPDATE personal_exercises SET photo_url = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND photo_url = ?");
+      for (const photo of licensedPhotos) upgradePhoto.run(photo.photo_url, photo.exercise_id, `/exercise-fallbacks/${photo.exercise_id}.webp`);
+      for (const ex of DEFAULT_EXERCISE_LIBRARY) duration.run(ex.suggested_duration || (ex.category === 'Alongamento' ? 'Referência opcional: 15–30 segundos; ajustar com o profissional.' : null), ex.id);
+      // Only detach provably dangling references in the standard catalogue. Never delete attachments or historical rows.
+      rawDb.exec(`UPDATE personal_exercises SET exercise_file_id = NULL
+        WHERE tenant_id = 'global' AND is_custom = 0 AND exercise_file_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM file_attachments fa WHERE fa.id = personal_exercises.exercise_file_id)`);
       rawDb.exec('COMMIT;');
     } catch (txErr) {
       try { rawDb.exec('ROLLBACK;'); } catch (_) {}
       throw txErr;
     }
-    console.log(`[Database] Biblioteca expandida de exercícios semeada com sucesso: ${DEFAULT_EXERCISE_LIBRARY.length} exercícios preservados com integridade estrita de anexos R2.`);
+    console.log(`[Database] Catálogo semeado: ${DEFAULT_EXERCISE_LIBRARY.length} exercícios. Verificação remota de imagens disponível na auditoria.`);
   } catch (err) {
     console.error('[Database] Erro ao semear biblioteca expandida de exercícios:', err);
   }

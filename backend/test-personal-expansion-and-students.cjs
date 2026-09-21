@@ -206,12 +206,12 @@ async function runTests() {
       instructions: 'Apoiar escápulas no banco, posicionar barra na linha do quadril e estender o quadril até alinhamento neutro.',
       technical_notes: 'Manter tíbias perpendiculares ao solo no topo da contração.',
       photo_url: 'https://r2.zemda.com/exercises/gluteos/elevacao-pelvica.jpg',
-      exercise_file_id: 'file-uuid-r2-test'
+      exercise_file_id: null
     });
     assert(resCreateEx.status === 201, 'POST /v1/personal/exercises customizado retorna HTTP 201');
     const customExId = resCreateEx.data.exercise.id;
     assert(resCreateEx.data.exercise.equipment === 'barra', 'Equipamento salvo corretamente');
-    assert(resCreateEx.data.exercise.photo_url.includes('r2.zemda.com'), 'Foto R2 associada ao exercicio');
+    assert(resCreateEx.data.exercise.photo_url === null && resCreateEx.data.exercise.exercise_file_id === null, 'URL não verificada não é persistida como foto R2');
 
     // Edicao do exercicio
     const resEditEx = await makeRequest('PUT', `/api/v1/personal/exercises/${customExId}`, authHeaders, {
@@ -279,6 +279,12 @@ async function runTests() {
 
     // 7. Teste de Avaliacao Fisica com Fotos Cloudflare R2
     console.log('\n--- TEST GROUP 7: Avaliacao Fisica com Fotos R2 e Antropometria ---');
+    // Metadata fixtures only: no assertion here claims an upload to a real R2 bucket.
+    for (const side of ['front', 'back', 'right', 'left']) {
+      db.prepare(`INSERT INTO file_attachments (id,clinic_id,uploaded_by,object_key,original_filename,mime_type,file_size,category) VALUES (?, ?, ?, ?, ?, 'image/webp', 100, 'personal_assessment')`).run(
+        `test-assessment-${side}`, tenantId, personalTrainerId, `clinics/${tenantId}/test/${side}.webp`, `${side}.webp`
+      );
+    }
     const resAssessment = await makeRequest('POST', '/api/v1/personal/assessments', authHeaders, {
       patient_id: student1Id,
       assessment_date: '2026-09-17',
@@ -288,10 +294,10 @@ async function runTests() {
       body_fat_percentage: 21.5,
       composition_method: 'bioimpedance',
       photos: [
-        { photo_type: 'front', photo_url: 'https://r2.zemda.com/assessments/front.webp' },
-        { photo_type: 'back', photo_url: 'https://r2.zemda.com/assessments/back.webp' },
-        { photo_type: 'right', photo_url: 'https://r2.zemda.com/assessments/right.webp' },
-        { photo_type: 'left', photo_url: 'https://r2.zemda.com/assessments/left.webp' }
+        { photo_type: 'front', file_id: 'test-assessment-front' },
+        { photo_type: 'back', file_id: 'test-assessment-back' },
+        { photo_type: 'right', file_id: 'test-assessment-right' },
+        { photo_type: 'left', file_id: 'test-assessment-left' }
       ]
     });
     assert(resAssessment.status === 201, 'POST /v1/personal/assessments com 4 fotos R2 retorna HTTP 201');

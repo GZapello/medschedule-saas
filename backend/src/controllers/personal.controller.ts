@@ -1,3 +1,4 @@
+import { matchesExercise, insertWorkoutExercise, imageAttribution } from '../services/personal-exercise-utils';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -244,6 +245,13 @@ function requireAttachmentId(fileId: any, tenantId: string): string | null {
       AND (clinic_id = ? OR clinic_id = ? OR clinic_id = 'global')
   `).get(id, tenantId, sanitizedClinicId) as any;
   return attachment?.id || null;
+}
+
+function requireExerciseAttachment(fileId: any, tenantId: string): string | null {
+  if (!fileId) return null;
+  const valid = requireAttachmentId(fileId, tenantId);
+  if (!valid || !db.prepare("SELECT id FROM file_attachments WHERE id = ? AND category = 'exercises' AND mime_type IN ('image/jpeg','image/png','image/webp')").get(valid)) throw new Error('Anexo de exercício inválido ou inacessível');
+  return valid;
 }
 
 function saveAssessmentPhotos(
@@ -1609,57 +1617,21 @@ export class PersonalController {
       const category = req.query.category ? String(req.query.category).trim() : '';
       const level = req.query.level ? String(req.query.level).trim() : '';
       const q = req.query.q ? String(req.query.q).trim() : '';
-      const includeInactive = req.query.include_inactive === '1' || req.query.include_inactive === 'true' || req.query.all === '1';
+      const includeInactive = req.query.include_inactive === '1' || req.query.include_inactive === 'true' || req.query.all === '1' || req.query.is_active === 'all';
 
       let sql = `
         SELECT * FROM personal_exercises
         WHERE (tenant_id = ? OR tenant_id = 'global')
+          AND NOT (tenant_id = 'global' AND EXISTS (SELECT 1 FROM personal_exercises custom WHERE custom.tenant_id = ? AND custom.source_exercise_id = personal_exercises.id))
       `;
-      const params: any[] = [tenantId];
+      const params: any[] = [tenantId, tenantId];
 
       if (!includeInactive) {
         sql += ` AND (is_active = 1 OR is_active IS NULL)`;
       }
-      if (muscle) {
-        sql += ` AND (LOWER(muscle_group) = LOWER(?) OR LOWER(muscle_group) LIKE LOWER(?))`;
-        params.push(muscle, `%${muscle}%`);
-      }
-      if (region) {
-        sql += ` AND LOWER(body_region) = LOWER(?)`;
-        params.push(region);
-      }
-      if (equipment) {
-        sql += ` AND (LOWER(equipment) = LOWER(?) OR LOWER(equipment) LIKE LOWER(?))`;
-        params.push(equipment, `%${equipment}%`);
-      }
-      if (category) {
-        const normCat = category.toLowerCase();
-        if (normCat.includes('hipertrof') || normCat.includes('muscula')) {
-          sql += ` AND (LOWER(category) LIKE '%muscul%' OR LOWER(category) LIKE '%hipertrof%')`;
-        } else {
-          sql += ` AND (LOWER(category) = LOWER(?) OR LOWER(category) LIKE LOWER(?))`;
-          params.push(category, `%${category}%`);
-        }
-      }
-      if (level) {
-        sql += ` AND LOWER(level) = LOWER(?)`;
-        params.push(level);
-      }
-      if (q) {
-        sql += ` AND (
-          LOWER(name) LIKE LOWER(?) OR
-          LOWER(COALESCE(instructions, '')) LIKE LOWER(?) OR
-          LOWER(COALESCE(technical_notes, '')) LIKE LOWER(?) OR
-          LOWER(COALESCE(equipment, '')) LIKE LOWER(?) OR
-          LOWER(muscle_group) LIKE LOWER(?)
-        )`;
-        const wild = `%${q}%`;
-        params.push(wild, wild, wild, wild, wild);
-      }
-
-      sql += ` ORDER BY name ASC`;
-
-      const exercises = db.prepare(sql).all(...params) as any[];
+      sql += ' ORDER BY name ASC';
+      const exercises = (db.prepare(sql).all(...params) as any[]).filter(ex => matchesExercise(ex, { muscle, region, equipment, category, level, q }));
+      for (const ex of exercises) ex.image_attribution_json = imageAttribution(db, ex.exercise_file_id, ex.photo_url);
       res.json({ exercises });
     } catch (err: any) {
       console.error('[PersonalController.listExercises] Erro:', err);
@@ -1686,7 +1658,7 @@ export class PersonalController {
       }
 
       const id = 'pex-' + uuidv4().slice(0, 8);
-      const effectiveExerciseFileId = requireAttachmentId(exercise_file_id, tenantId);
+      const effectiveExerciseFileId = requireExerciseAttachment(exercise_file_id, tenantId);
 
       db.prepare(`
         INSERT INTO personal_exercises (
@@ -1708,7 +1680,7 @@ export class PersonalController {
       res.status(201).json({ id, exercise, message: 'Exercício cadastrado com sucesso' });
     } catch (err: any) {
       console.error('[PersonalController.createExercise] Erro:', err);
-      res.status(500).json({ error: 'Erro ao cadastrar exercício' });
+      res.status(String(err?.message).includes('Anexo de exercício') ? 400 : 500).json({ error: 'Erro ao cadastrar exercício' });
     }
   }
 
@@ -1727,17 +1699,19 @@ export class PersonalController {
       } = req.body;
 
       // Verifica se o exercício existe (na clínica ou no global)
-      const existing = db.prepare("SELECT * FROM personal_exercises WHERE id = ? AND (tenant_id = ? OR tenant_id = 'global')").get(id, tenantId) as any;
+      let existing = db.prepare("SELECT * FROM personal_exercises WHERE id = ? AND (tenant_id = ? OR tenant_id = 'global')").get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Exercício não encontrado' });
         return;
       }
 
+      if (existing.tenant_id === 'global') existing = db.prepare('SELECT * FROM personal_exercises WHERE source_exercise_id = ? AND tenant_id = ?').get(id, tenantId) || existing;
+
       const effectiveExerciseFileId = exercise_file_id !== undefined
-        ? requireAttachmentId(exercise_file_id, tenantId)
+        ? requireExerciseAttachment(exercise_file_id, tenantId)
         : undefined;
 
-      let targetId = id;
+      let targetId = existing.id;
       if (existing.tenant_id === tenantId) {
         // Atualiza exercício customizado da própria clínica
         db.prepare(`
@@ -1775,7 +1749,7 @@ export class PersonalController {
           effectiveExerciseFileId !== undefined ? 1 : 0,
           effectiveExerciseFileId || null,
           is_active !== undefined ? (is_active ? 1 : 0) : null,
-          id, tenantId
+          targetId, tenantId
         );
       } else {
         // Se for global, clona para a clínica como custom para preservar isolamento
@@ -1806,11 +1780,13 @@ export class PersonalController {
         );
       }
 
+      if (existing.tenant_id === 'global') db.prepare('UPDATE personal_exercises SET source_exercise_id = ? WHERE id = ? AND tenant_id = ?').run(id, targetId, tenantId);
+
       const updatedEx = db.prepare('SELECT * FROM personal_exercises WHERE id = ?').get(targetId) as any;
       res.json({ message: 'Exercício atualizado com sucesso', exercise: updatedEx, id: targetId });
     } catch (err: any) {
       console.error('[PersonalController.updateExercise] Erro:', err);
-      res.status(500).json({ error: 'Erro ao atualizar exercício' });
+      res.status(String(err?.message).includes('Anexo de exercício') ? 400 : 500).json({ error: 'Erro ao atualizar exercício' });
     }
   }
 
@@ -1823,22 +1799,9 @@ export class PersonalController {
       const tenantId = req.tenantId!;
       const { id } = req.params;
 
-      // Se o exercício estiver vinculado a prescrições históricas, desativa para manter histórico
-      const inUse = db.prepare('SELECT COUNT(*) as count FROM personal_workout_exercises WHERE exercise_id = ? AND tenant_id = ?').get(id, tenantId) as any;
-      if (inUse && inUse.count > 0) {
-        db.prepare("UPDATE personal_exercises SET is_active = 0, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?").run(id, tenantId);
-        res.json({ message: 'Exercício desativado para preservar histórico dos treinos.', deactivated: true });
-        return;
-      }
-
-      const result = db.prepare('DELETE FROM personal_exercises WHERE id = ? AND tenant_id = ? AND is_custom = 1').run(id, tenantId);
-      if (result.changes === 0) {
-        // Se for global, marca desativação para o contexto ou avisa
-        db.prepare('UPDATE personal_exercises SET is_active = 0 WHERE id = ?').run(id);
-        res.json({ message: 'Exercício desativado com sucesso', deactivated: true });
-        return;
-      }
-      res.json({ message: 'Exercício excluído com sucesso' });
+      const result = db.prepare("UPDATE personal_exercises SET is_active = 0, updated_at = datetime('now') WHERE id = ? AND tenant_id = ? AND is_custom = 1").run(id, tenantId);
+      if (!result.changes) { res.status(404).json({ error: 'Exercício customizado não encontrado nesta clínica' }); return; }
+      res.json({ message: 'Exercício desativado; histórico preservado.', deactivated: true });
     } catch (err: any) {
       console.error('[PersonalController.deleteExercise] Erro:', err);
       res.status(500).json({ error: 'Erro ao excluir exercício' });
@@ -1905,19 +1868,8 @@ export class PersonalController {
       }
 
       const exercises = db.prepare(`
-        SELECT we.*, pe.instructions, pe.photo_url as exercise_default_photo,
-               COALESCE(we.exercise_file_id, pe.exercise_file_id) as effective_exercise_file_id
-        FROM personal_workout_exercises we
-        LEFT JOIN personal_exercises pe ON pe.id = we.exercise_id
-        WHERE we.workout_id = ? AND we.tenant_id = ?
-        ORDER BY we.order_index ASC
+        SELECT * FROM personal_workout_exercises WHERE workout_id = ? AND tenant_id = ? ORDER BY order_index ASC
       `).all(id, tenantId) as any[];
-
-      exercises.forEach((ex: any) => {
-        if (!ex.exercise_file_id && ex.effective_exercise_file_id) {
-          ex.exercise_file_id = ex.effective_exercise_file_id;
-        }
-      });
 
       // Agrupa cálculo de volume semanal por grupo muscular desse treino
       const muscleVolume: Record<string, number> = {};
@@ -1960,51 +1912,7 @@ export class PersonalController {
         );
 
         if (Array.isArray(exercises)) {
-          let hasFileIdCol = true;
-          try {
-            const cols = db.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
-            hasFileIdCol = cols.includes('exercise_file_id');
-          } catch (_) {}
-
-          const insertExWithFileId = db.prepare(`
-            INSERT INTO personal_workout_exercises (
-              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
-              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url, exercise_file_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-
-          const insertExLegacy = db.prepare(`
-            INSERT INTO personal_workout_exercises (
-              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
-              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-
-          exercises.forEach((ex: any, idx: number) => {
-            const weId = 'pwe-' + uuidv4().slice(0, 8);
-            const effectiveFileId = ex.exercise_file_id || (ex.exercise_id ? (db.prepare('SELECT exercise_file_id FROM personal_exercises WHERE id = ?').get(ex.exercise_id) as any)?.exercise_file_id : null) || null;
-
-            if (hasFileIdCol) {
-              insertExWithFileId.run(
-                weId, tenantId, workoutId, ex.exercise_id || null, idx + 1,
-                ex.name || 'Exercício', ex.muscle_group || 'Geral',
-                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
-                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
-                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, '',
-                effectiveFileId
-              );
-            } else {
-              insertExLegacy.run(
-                weId, tenantId, workoutId, ex.exercise_id || null, idx + 1,
-                ex.name || 'Exercício', ex.muscle_group || 'Geral',
-                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
-                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
-                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ''
-              );
-            }
-          });
+          exercises.forEach((ex: any, idx: number) => insertWorkoutExercise(db, 'pwe-' + uuidv4(), tenantId, workoutId, ex, idx + 1));
         }
       });
 
@@ -2055,52 +1963,7 @@ export class PersonalController {
 
         if (Array.isArray(exercises)) {
           db.prepare('DELETE FROM personal_workout_exercises WHERE workout_id = ? AND tenant_id = ?').run(id, tenantId);
-
-          let hasFileIdCol = true;
-          try {
-            const cols = db.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
-            hasFileIdCol = cols.includes('exercise_file_id');
-          } catch (_) {}
-
-          const insertExWithFileId = db.prepare(`
-            INSERT INTO personal_workout_exercises (
-              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
-              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url, exercise_file_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-
-          const insertExLegacy = db.prepare(`
-            INSERT INTO personal_workout_exercises (
-              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
-              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `);
-
-          exercises.forEach((ex: any, idx: number) => {
-            const weId = 'pwe-' + uuidv4().slice(0, 8);
-            const effectiveFileId = ex.exercise_file_id || (ex.exercise_id ? (db.prepare('SELECT exercise_file_id FROM personal_exercises WHERE id = ?').get(ex.exercise_id) as any)?.exercise_file_id : null) || null;
-
-            if (hasFileIdCol) {
-              insertExWithFileId.run(
-                weId, tenantId, id, ex.exercise_id || null, idx + 1,
-                ex.name || 'Exercício', ex.muscle_group || 'Geral',
-                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
-                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
-                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, '',
-                effectiveFileId
-              );
-            } else {
-              insertExLegacy.run(
-                weId, tenantId, id, ex.exercise_id || null, idx + 1,
-                ex.name || 'Exercício', ex.muscle_group || 'Geral',
-                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
-                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
-                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ''
-              );
-            }
-          });
+          exercises.forEach((ex: any, idx: number) => insertWorkoutExercise(db, 'pwe-' + uuidv4(), tenantId, String(id), ex, idx + 1));
         }
       });
 
@@ -2146,45 +2009,8 @@ export class PersonalController {
           newWorkoutId, tenantId, destPatientId, professionalId, destTitle, destDivision, original.structure_type, original.notes
         );
 
-        let hasFileIdCol = false;
-        try {
-          const cols = db.prepare('PRAGMA table_info(personal_workout_exercises)').all().map((c: any) => c.name);
-          hasFileIdCol = cols.includes('exercise_file_id');
-        } catch (_) {}
+        origExercises.forEach((ex: any) => insertWorkoutExercise(db, 'pwe-' + uuidv4(), tenantId, newWorkoutId, ex, ex.order_index, true));
 
-        if (hasFileIdCol) {
-          const insertExWithFileId = db.prepare(`
-            INSERT INTO personal_workout_exercises (
-              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
-              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url, exercise_file_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?)
-          `);
-
-          origExercises.forEach((ex: any) => {
-            const effectiveFileId = ex.exercise_file_id || (ex.exercise_id ? (db.prepare('SELECT exercise_file_id FROM personal_exercises WHERE id = ?').get(ex.exercise_id) as any)?.exercise_file_id : null) || null;
-            insertExWithFileId.run(
-              'pwe-' + uuidv4().slice(0, 8), tenantId, newWorkoutId, ex.exercise_id || null, ex.order_index,
-              ex.name, ex.muscle_group, ex.sets, ex.reps, ex.load_kg, ex.tempo, ex.rest_seconds,
-              ex.cadence, ex.rpe, ex.rir, ex.technique, ex.technique_custom, ex.notes,
-              effectiveFileId
-            );
-          });
-        } else {
-          const insertEx = db.prepare(`
-            INSERT INTO personal_workout_exercises (
-              id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
-              sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')
-          `);
-
-          origExercises.forEach((ex: any) => {
-            insertEx.run(
-              'pwe-' + uuidv4().slice(0, 8), tenantId, newWorkoutId, ex.exercise_id || null, ex.order_index,
-              ex.name, ex.muscle_group, ex.sets, ex.reps, ex.load_kg, ex.tempo, ex.rest_seconds,
-              ex.cadence, ex.rpe, ex.rir, ex.technique, ex.technique_custom, ex.notes
-            );
-          });
-        }
       });
 
       transaction();
@@ -2329,23 +2155,7 @@ export class PersonalController {
           );
 
           if (Array.isArray(w.exercises)) {
-            const insertEx = db.prepare(`
-              INSERT INTO personal_workout_exercises (
-                id, tenant_id, workout_id, exercise_id, order_index, name, muscle_group,
-                sets, reps, load_kg, tempo, rest_seconds, cadence, rpe, rir, technique, technique_custom, notes, photo_url
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-
-            w.exercises.forEach((ex: any, idx: number) => {
-              insertEx.run(
-                'pwe-' + uuidv4().slice(0, 8), tenantId, wId, ex.exercise_id || null, idx + 1,
-                ex.name || 'Exercício', ex.muscle_group || 'Geral',
-                Number(ex.sets) || 3, String(ex.reps || '10-12'), Number(ex.load_kg) || null,
-                ex.tempo || null, Number(ex.rest_seconds) || 60, ex.cadence || null,
-                ex.rpe ? Number(ex.rpe) : null, ex.rir ? Number(ex.rir) : null,
-                ex.technique || 'Direta', ex.technique_custom || null, ex.notes || null, ex.photo_url || null
-              );
-            });
+            w.exercises.forEach((ex: any, idx: number) => insertWorkoutExercise(db, 'pwe-' + uuidv4(), tenantId, wId, ex, idx + 1));
           }
         }
       });

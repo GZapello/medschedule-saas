@@ -21,6 +21,8 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { PersonalExerciseLibraryModal } from './PersonalExerciseLibraryModal';
 import { SecureFileImage } from '../common/SecureFileImage';
+import { isStretch } from './exercisePresentation';
+import { ExerciseImageCredit } from './ExerciseImageCredit';
 
 interface PersonalWorkoutBuilderProps {
   isOpen: boolean;
@@ -111,6 +113,8 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
         photo_url: exercise.photo_url,
         exercise_file_id: exercise.exercise_file_id,
         exercise_default_photo: exercise.photo_url,
+        category: exercise.category,
+        image_attribution_json: exercise.image_attribution_json,
         instructions: exercise.instructions
       };
       setExercises(updated);
@@ -124,16 +128,18 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
         name: exercise.name,
         muscle_group: exercise.muscle_group,
         sets: 3,
-        reps: '10-12',
-        load_kg: 0,
-        rest_seconds: 60,
-        cadence: '2-0-2',
-        rpe: 8,
-        rir: 2,
+        reps: isStretch(exercise) ? '' : '10-12',
+        load_kg: isStretch(exercise) ? undefined : 0,
+        rest_seconds: isStretch(exercise) ? 0 : 60,
+        cadence: isStretch(exercise) ? '' : '2-0-2',
+        rpe: isStretch(exercise) ? undefined : 8,
+        rir: isStretch(exercise) ? undefined : 2,
         technique: 'Direta',
         photo_url: exercise.photo_url,
         exercise_file_id: exercise.exercise_file_id,
         exercise_default_photo: exercise.photo_url,
+        category: exercise.category,
+        image_attribution_json: exercise.image_attribution_json,
         instructions: exercise.instructions
       };
       setExercises([...exercises, newEx]);
@@ -444,6 +450,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                           <span className="text-[10px] uppercase font-bold text-slate-400">
                             {ex.muscle_group}
                           </span>
+                          <ExerciseImageCredit value={ex.image_attribution_json} />
                         </div>
                       </div>
 
@@ -530,7 +537,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                         />
                       </div>
 
-                      <div>
+                      <div hidden={isStretch(ex)}>
                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">Carga Alvo (kg)</label>
                         <input
                           type="number"
@@ -565,7 +572,7 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                         />
                       </div>
 
-                      <div>
+                      <div hidden={isStretch(ex)}>
                         <label className="block text-[10px] font-semibold text-slate-500 mb-1">RPE Alvo / RIR</label>
                         <div className="flex items-center gap-1">
                           <input
@@ -591,6 +598,16 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="text-xs text-slate-600">Duração (segundos, opcional)
+                        <input aria-label="Duração em segundos" type="number" min="0" value={ex.duration_seconds ?? ''} onChange={e => handleUpdateExercise(index, 'duration_seconds', e.target.value === '' ? undefined : Number(e.target.value))} className="block w-full border rounded-lg p-2" />
+                      </label>
+                      <label className="text-xs text-slate-600">Lado
+                        <select aria-label="Lado" value={ex.side || ''} onChange={e => handleUpdateExercise(index, 'side', e.target.value)} className="block w-full border rounded-lg p-2">
+                          <option value="">Não especificado</option><option value="direito">Direito</option><option value="esquerdo">Esquerdo</option><option value="ambos">Ambos</option><option value="alternado">Alternado</option>
+                        </select>
+                      </label>
+                    </div>
                     {/* Observações da técnica do exercício */}
                     <div className="pt-1">
                       <input

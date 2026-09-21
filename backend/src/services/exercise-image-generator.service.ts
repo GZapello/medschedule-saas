@@ -548,7 +548,7 @@ export function generateExerciseIllustrationSvg(exercise: SeedExercise): string 
   </g>
 
   <!-- Branding Badge -->
-  <text x="604" y="460" fill="#475569" font-family="system-ui, -apple-system, sans-serif" font-size="9" font-weight="700" letter-spacing="1" text-anchor="end">ZEMDA PERSONAL • R2 VERIFIED</text>
+  <text x="604" y="460" fill="#475569" font-family="system-ui, -apple-system, sans-serif" font-size="9" font-weight="700" letter-spacing="1" text-anchor="end">ZEMDA PERSONAL • ILUSTRAÇÃO DE REFERÊNCIA</text>
 </svg>
   `.trim();
 }
@@ -565,7 +565,10 @@ export async function syncAllExerciseLibraryImages(rawDb: any): Promise<{
   created: number;
   reused: number;
 }> {
-  console.log(`[ExerciseImageSync] Iniciando auditoria e sincronização de imagens reais para ${DEFAULT_EXERCISE_LIBRARY.length} exercícios...`);
+  if (!r2StorageService.isConfiguredClient || process.env.R2_MOCK_STORAGE === 'true') {
+    return { total: DEFAULT_EXERCISE_LIBRARY.length, created: 0, reused: 0 };
+  }
+  console.log(`[ExerciseImageSync] Iniciando auditoria e sincronização de ilustrações de fallback para ${DEFAULT_EXERCISE_LIBRARY.length} exercícios...`);
 
   // Garante tenant global para a foreign key de file_attachments
   try {
@@ -620,13 +623,13 @@ export async function syncAllExerciseLibraryImages(rawDb: any): Promise<{
       JOIN personal_exercises pe ON pe.exercise_file_id = fa.id
       WHERE pe.id = ? 
         AND fa.storage_provider = 'cloudflare_r2'
-        AND fa.id NOT LIKE 'att-ex-%'
-        AND fa.object_key NOT LIKE 'exercises/global/%'
+
     `).get(ex.id) as any;
 
     if (existingAttach && existingAttach.id) {
       // Confirma no serviço de storage R2
-      r2StorageService.simulateMockUpload(existingAttach.object_key);
+      // Existing media is immutable; failures belong in the read-only audit.
+      // Do not replace an uploaded photograph with generated artwork.
       reusedCount++;
       continue;
     }
@@ -641,8 +644,10 @@ export async function syncAllExerciseLibraryImages(rawDb: any): Promise<{
     // 4. Envia o arquivo REAL para o Cloudflare R2
     await r2StorageService.uploadFile(objectKey, webpBuffer, 'image/webp');
 
+    if (!await r2StorageService.fileExists(objectKey)) throw new Error('R2 não confirmou o objeto enviado');
+
     // 5. Cria registro legítimo em file_attachments (evita prefixo att-ex-)
-    const attachmentId = `att-lib-${ex.id.replace(/^ex-/, '')}`;
+    const attachmentId = `att-illustration-${uuidv4()}`;
     rawDb.prepare(`
       INSERT INTO file_attachments (
         id, clinic_id, patient_id, appointment_id, assessment_id, exercise_id,
@@ -669,7 +674,7 @@ export async function syncAllExerciseLibraryImages(rawDb: any): Promise<{
     rawDb.prepare(`
       UPDATE personal_exercises
       SET exercise_file_id = ?, updated_at = datetime('now')
-      WHERE id = ?
+      WHERE id = ? AND tenant_id = 'global' AND exercise_file_id IS NULL
     `).run(attachmentId, ex.id);
 
     // Atualiza o objeto em memória para coerência do processo

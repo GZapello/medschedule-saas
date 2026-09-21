@@ -12,6 +12,7 @@ import {
   Power
 } from 'lucide-react';
 import { Exercise } from './types';
+import { ExerciseImageCredit } from './ExerciseImageCredit';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { FileImageUploader } from '../common/FileImageUploader';
@@ -60,6 +61,8 @@ export const EQUIPMENT_LIST = [
 
 export const CATEGORY_LIST = [
   { id: '', label: 'Todas as Categorias' },
+  { id: 'musculacao', label: 'Musculação' },
+  { id: 'cardio', label: 'Cardiorrespiratório' },
   { id: 'hipertrofia', label: 'Hipertrofia' },
   { id: 'forca', label: 'Força' },
   { id: 'resistencia', label: 'Resistência' },
@@ -106,6 +109,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
   const [formFileId, setFormFileId] = useState('');
   const [formIsActive, setFormIsActive] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -259,7 +263,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 {isPickerMode ? 'Selecionar Exercício para o Treino' : 'Biblioteca de Exercícios & Cinesiologia'}
               </h3>
               <p className="text-xs text-slate-500">
-                Catálogo completo com fotos anatômicas R2, execução biomecânica e filtros cinesiológicos.
+                Exercícios, instruções técnicas e imagens. Ilustrações de referência enquanto a foto não estiver disponível.
               </p>
             </div>
           </div>
@@ -375,8 +379,9 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                       } p-3 flex flex-col justify-between shadow-sm hover:shadow-md transition-all group relative`}
                     >
                       {/* Thumbnail com Zoom */}
-                      <div className="relative w-full h-36 bg-slate-100 rounded-xl overflow-hidden mb-3 flex items-center justify-center border border-slate-100">
+                      <div onClick={() => setZoomedExercise(ex)} className="relative w-full h-36 bg-slate-100 rounded-xl overflow-hidden mb-3 flex items-center justify-center border border-slate-100">
                         <SecureFileImage
+                          lazy
                           fileId={ex.exercise_file_id}
                           fallbackUrl={ex.photo_url}
                           alt={ex.name}
@@ -397,6 +402,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                               Customizado
                             </span>
                           )}
+                          {!ex.exercise_file_id && ex.photo_url?.startsWith('/exercise-fallbacks/') && <span className="text-[9px] bg-slate-900/80 text-white rounded px-1.5">Ilustração de referência</span>}
                           {isInactive && (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-600/90 text-white rounded-md backdrop-blur-sm">
                               Inativo
@@ -422,7 +428,8 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                             </span>
                           )}
                         </div>
-                        <h4 className="font-bold text-slate-800 text-xs leading-snug line-clamp-1">{ex.name}</h4>
+                        <span className="text-[10px] text-slate-500">{ex.category}</span>
+                        <h4 onClick={() => setZoomedExercise(ex)} className="font-bold text-slate-800 text-xs leading-snug line-clamp-1">{ex.name}</h4>
                         {ex.instructions && (
                           <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
                             {ex.instructions}
@@ -520,6 +527,10 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 />
               </div>
 
+              <p className="text-xs text-slate-600">Execução: {zoomedExercise.execution_type} • Mecânica: {zoomedExercise.mechanics} • Região: {zoomedExercise.body_region}</p>
+              <p className="text-xs text-slate-600">Músculos secundários: {zoomedExercise.secondary_muscles_json || 'Não informados'}</p>
+              {zoomedExercise.suggested_duration && <p className="text-xs text-slate-600">{zoomedExercise.suggested_duration}</p>}
+              <ExerciseImageCredit value={zoomedExercise.image_attribution_json} />
               {/* Informações detalhadas */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                 {zoomedExercise.equipment && (
@@ -621,7 +632,8 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     onChange={(e) => setFormMuscle(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none capitalize"
                   >
-                    {MUSCLE_CATEGORIES.filter((c) => c.id).map((c) => (
+                    {formMuscle && !MUSCLE_CATEGORIES.some(item => item.id === formMuscle) && <option value={formMuscle}>{formMuscle}</option>}
+                  {MUSCLE_CATEGORIES.filter((c) => c.id).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label}
                       </option>
@@ -636,7 +648,8 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     onChange={(e) => setFormEquipment(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
-                    {EQUIPMENT_LIST.filter((eq) => eq.id).map((eq) => (
+                    {formEquipment && !EQUIPMENT_LIST.some(item => item.id === formEquipment) && <option value={formEquipment}>{formEquipment}</option>}
+                  {EQUIPMENT_LIST.filter((eq) => eq.id).map((eq) => (
                       <option key={eq.id} value={eq.id}>
                         {eq.label}
                       </option>
@@ -651,7 +664,8 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                     onChange={(e) => setFormCategory(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
-                    {CATEGORY_LIST.filter((cat) => cat.id).map((cat) => (
+                    {formCategory && !CATEGORY_LIST.some(item => item.id === formCategory) && <option value={formCategory}>{formCategory}</option>}
+                  {CATEGORY_LIST.filter((cat) => cat.id).map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.label}
                       </option>
@@ -729,6 +743,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   patientId="exercises"
                   exerciseId={editingExerciseId || undefined}
                   initialFileId={formFileId}
+                  onUploadingChange={setUploading}
                   onUploaded={(info) => {
                     setFormFileId(info.id);
                     setFormPhotoUrl('');
@@ -778,7 +793,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || uploading}
                   className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors"
                 >
                   {saving ? 'Salvando...' : editingExerciseId ? 'Salvar Alterações' : 'Cadastrar Exercício'}

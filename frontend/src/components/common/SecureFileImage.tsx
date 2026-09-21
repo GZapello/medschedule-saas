@@ -3,6 +3,7 @@ import { ApiClient } from '../../api/client';
 import { Image as ImageIcon, RefreshCw } from 'lucide-react';
 
 export interface SecureFileImageProps {
+  lazy?: boolean;
   fileId?: string | null;
   fallbackUrl?: string | null;
   alt?: string;
@@ -76,6 +77,7 @@ export async function fetchFreshFileUrl(fileId: string, forceFresh: boolean = fa
 }
 
 export const SecureFileImage: React.FC<SecureFileImageProps> = ({
+  lazy = false,
   fileId,
   fallbackUrl,
   alt = 'Imagem',
@@ -89,10 +91,24 @@ export const SecureFileImage: React.FC<SecureFileImageProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
   const retryCountRef = useRef<number>(0);
+  const requestRef = useRef(0);
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(!lazy);
+  const [decoded, setDecoded] = useState(false);
+  useEffect(() => {
+    if (!lazy || visible) return;
+    if (!('IntersectionObserver' in window)) { setVisible(true); return; }
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { setVisible(true); observer.disconnect(); }
+    }, { rootMargin: '160px' });
+    if (hostRef.current) observer.observe(hostRef.current);
+    return () => observer.disconnect();
+  }, [lazy, visible]);
 
   const safeFallback = isSafeFallbackUrl(fallbackUrl) ? fallbackUrl : null;
 
   const loadFileUrl = useCallback(async (forceFresh: boolean = false) => {
+    const request = ++requestRef.current;
     if (!fileId) {
       if (safeFallback) {
         setImageUrl(safeFallback);
@@ -109,9 +125,11 @@ export const SecureFileImage: React.FC<SecureFileImageProps> = ({
 
     try {
       const freshUrl = await fetchFreshFileUrl(fileId, forceFresh);
+      if (request !== requestRef.current) return;
       setImageUrl(freshUrl);
       setHasError(false);
     } catch (err) {
+      if (request !== requestRef.current) return;
       console.warn(`[SecureFileImage] Não foi possível carregar URL assinada para fileId=${fileId}:`, err);
       if (safeFallback) {
         setImageUrl(safeFallback);
@@ -121,14 +139,17 @@ export const SecureFileImage: React.FC<SecureFileImageProps> = ({
         setHasError(true);
       }
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
   }, [fileId, safeFallback]);
 
   useEffect(() => {
+    if (!visible) return;
+    setDecoded(false);
     retryCountRef.current = 0;
     loadFileUrl(false);
-  }, [loadFileUrl]);
+    return () => { requestRef.current++; };
+  }, [loadFileUrl, visible]);
 
   const handleImageError = () => {
     if (fileId && retryCountRef.current < 1) {
@@ -154,9 +175,10 @@ export const SecureFileImage: React.FC<SecureFileImageProps> = ({
     }
   };
 
+  if (!visible) return <div ref={hostRef} className={containerClassName} style={style} />;
   if (loading) {
     return (
-      <div className={`${containerClassName} bg-slate-100 animate-pulse`} style={style}>
+      <div data-image-pending="true" className={`${containerClassName} bg-slate-100 animate-pulse`} style={style}>
         <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -183,6 +205,10 @@ export const SecureFileImage: React.FC<SecureFileImageProps> = ({
 
   return (
     <img
+      data-image-pending={!decoded}
+      loading={lazy ? 'lazy' : 'eager'}
+      decoding="async"
+      onLoad={() => setDecoded(true)}
       src={imageUrl}
       alt={alt}
       className={className}

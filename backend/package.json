@@ -1,13 +1,17 @@
 {
   "name": "medschedule-backend",
   "version": "1.1.2",
-  "description": "Backend modular em Node.js e SQLite com suporte a sincronização Local-First para SaaS de saúde",
+  "description": "Backend modular em Node.js e SQLite com suporte a sincronizaÃ§Ã£o Local-First para SaaS de saÃºde",
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test:billing": "npm run build && node test-billing.cjs"
+    "test:billing": "npm run build && node test-billing.cjs",
+    "test:exercises": "npm run build && node test-exercise-library.cjs && node test-personal-expansion-and-students.cjs",
+    "exercises:audit": "node audit-and-sync-exercise-images.cjs",
+    "exercises:photos": "node import-exercise-photos.cjs",
+    "exercises:fallbacks": "npm run build && node build-exercise-fallbacks.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1134.0",

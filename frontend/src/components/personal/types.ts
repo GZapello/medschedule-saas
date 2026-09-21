@@ -34,6 +34,7 @@ export interface Student {
 }
 
 export interface Exercise {
+  image_attribution_json?: string;
   id: string;
   name: string;
   muscle_group: string;
@@ -46,6 +47,7 @@ export interface Exercise {
   level?: string;
   description?: string;
   technical_notes?: string;
+  suggested_duration?: string;
   instructions?: string;
   photo_url?: string;
   exercise_file_id?: string;
@@ -55,6 +57,11 @@ export interface Exercise {
 }
 
 export interface WorkoutExercise {
+  image_attribution_json?: string;
+  category?: string;
+  duration_seconds?: number;
+  side?: string;
+  snapshot_version?: number;
   id?: string;
   exercise_id?: string;
   order_index?: number;
