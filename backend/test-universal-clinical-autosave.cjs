@@ -448,7 +448,12 @@ async function runTests() {
     const finishPayload = {
       appointmentId: appointmentId,
       clinicalEvolution: 'Sessão concluída com boa resposta aos treinos fonéticos e de voz.',
-      isSealed: true
+      isSealed: true,
+      payment: {
+        status: 'paid',
+        paymentMethod: 'pix',
+        amount: 150.0
+      }
     };
     res = await makeRequest('POST', '/v1/speech-therapy/consultations/finish', authHeaders1, finishPayload);
     assert.strictEqual(res.status, 200, 'Finalização de consulta deve retornar 200');
