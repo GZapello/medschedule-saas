@@ -174,8 +174,17 @@ export const SuperAdminView: React.FC = () => {
   };
 
   const handleSwitch = async (tenantId: string, tenantName: string) => {
-    await switchTenant(tenantId);
-    showToast(`Contexto administrativo alternado para: ${tenantName}`, 'success');
+    try {
+      await switchTenant(tenantId);
+      showToast(`Contexto administrativo alternado para: ${tenantName}`, 'success');
+      window.dispatchEvent(
+        new CustomEvent('zemda-navigate', {
+          detail: { view: 'dashboard' }
+        })
+      );
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao alternar clínica', 'error');
+    }
   };
 
   // Handlers de Profissões Globais
@@ -381,7 +390,7 @@ export const SuperAdminView: React.FC = () => {
             }`}
           >
             <Building2 className="w-3.5 h-3.5" />
-            Clínicas ({tenants.length})
+            Clínicas {loading ? '(…)' : `(${tenants.length})`}
           </button>
 
           <button
@@ -393,7 +402,7 @@ export const SuperAdminView: React.FC = () => {
             }`}
           >
             <Briefcase className="w-3.5 h-3.5" />
-            Profissões Globais ({professions.length})
+            Profissões Globais {loading ? '(…)' : `(${professions.length})`}
           </button>
 
           <button
@@ -405,7 +414,7 @@ export const SuperAdminView: React.FC = () => {
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            Tipos de Serviço ({categories.length})
+            Tipos de Serviço {loading ? '(…)' : `(${categories.length})`}
           </button>
 
           <button
@@ -502,7 +511,7 @@ export const SuperAdminView: React.FC = () => {
                     activeTab === 'all' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Todas ({tenants.length})
+                  Todas {loading ? '(…)' : `(${tenants.length})`}
                 </button>
                 <button
                   onClick={() => setActiveTab('pending')}
@@ -511,11 +520,13 @@ export const SuperAdminView: React.FC = () => {
                   }`}
                 >
                   Pendentes
-                  {metrics?.pendingClinics > 0 && (
+                  {loading ? (
+                    <span className="text-slate-400 font-normal text-[10px]">(…)</span>
+                  ) : metrics?.pendingClinics > 0 ? (
                     <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-black">
                       {metrics.pendingClinics}
                     </span>
-                  )}
+                  ) : null}
                 </button>
                 <button
                   onClick={() => setActiveTab('active')}
@@ -523,7 +534,7 @@ export const SuperAdminView: React.FC = () => {
                     activeTab === 'active' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Ativas ({tenants.filter(t => t.status === 'active').length})
+                  Ativas {loading ? '(…)' : `(${tenants.filter(t => t.status === 'active').length})`}
                 </button>
                 <button
                   onClick={() => setActiveTab('blocked')}
@@ -531,7 +542,7 @@ export const SuperAdminView: React.FC = () => {
                     activeTab === 'blocked' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Bloqueadas ({tenants.filter(t => t.status === 'blocked' || t.status === 'suspended').length})
+                  Bloqueadas {loading ? '(…)' : `(${tenants.filter(t => t.status === 'blocked' || t.status === 'suspended').length})`}
                 </button>
               </div>
 
@@ -561,12 +572,28 @@ export const SuperAdminView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredTenants.map(t => (
-                    <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-3">
-                        <p className="font-bold text-slate-800 text-sm">{t.trade_name || t.name}</p>
-                        <p className="text-[11px] text-slate-400 font-mono">
-                          /c/{t.slug} • {t.city || 'São Paulo'}/{t.state || 'SP'}
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
+                          <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs font-medium">Carregando estabelecimentos cadastrados...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredTenants.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-slate-400 text-xs font-medium">
+                        Nenhum estabelecimento encontrado com os filtros selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTenants.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-3">
+                          <p className="font-bold text-slate-800 text-sm">{t.trade_name || t.name}</p>
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            /c/{t.slug} • {t.city || 'São Paulo'}/{t.state || 'SP'}
                         </p>
                       </td>
                       <td className="py-3 px-3">
@@ -671,7 +698,7 @@ export const SuperAdminView: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )))}
                 </tbody>
               </table>
             </div>
@@ -731,7 +758,23 @@ export const SuperAdminView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filteredProfessions.map(p => (
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center">
+                      <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
+                        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-xs font-medium">Carregando catálogo de profissões...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredProfessions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-10 text-center text-slate-400 text-xs font-medium">
+                      Nenhuma profissão encontrada.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProfessions.map(p => (
                   <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-4 font-bold text-slate-900 text-sm">
                       {p.name}
@@ -792,7 +835,7 @@ export const SuperAdminView: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
@@ -838,73 +881,83 @@ export const SuperAdminView: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredCategories.map(c => (
-              <div
-                key={c.id}
-                className={`p-5 rounded-3xl border flex flex-col justify-between space-y-3 transition-shadow hover:shadow-md ${
-                  c.active === 1 ? 'bg-white border-slate-100' : 'bg-slate-50/80 border-slate-200 opacity-80'
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+          {loading ? (
+            <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
+              <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs font-medium">Carregando tipos de serviço...</span>
+            </div>
+          ) : filteredCategories.length === 0 ? (
+            <div className="py-10 text-center text-slate-400 text-xs font-medium">
+              Nenhum tipo de serviço encontrado.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredCategories.map(c => (
+                <div
+                  key={c.id}
+                  className={`p-5 rounded-3xl border flex flex-col justify-between space-y-3 transition-shadow hover:shadow-md ${
+                    c.active === 1 ? 'bg-white border-slate-100' : 'bg-slate-50/80 border-slate-200 opacity-80'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="font-bold text-slate-900 text-sm">{c.name}</h4>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                          c.active === 1
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {c.active === 1 ? 'Ativo' : 'Desativado'}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-500 line-clamp-2">
+                      {c.description || 'Sem descrição cadastrada.'}
+                    </p>
+
+                    <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px] text-slate-600">
+                      <p>
+                        <strong>Área:</strong>{' '}
+                        {c.is_clinical === 1 ? (
+                          <span className="text-purple-700 font-bold">Saúde / Clínica (com prontuário)</span>
+                        ) : (
+                          <span className="text-slate-600 font-medium">Serviços Gerais</span>
+                        )}
+                      </p>
+                      <p>
+                        <strong>Terminologia padrão:</strong>{' '}
+                        <span className="capitalize font-semibold text-slate-800">{c.default_terminology}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenCatModal(c)}
+                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-lg flex items-center gap-1 cursor-pointer"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleCatStatus(c)}
+                      className={`px-3 py-1.5 font-bold text-xs rounded-xl cursor-pointer ${
                         c.active === 1
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-slate-200 text-slate-600'
+                          ? 'bg-rose-50 hover:bg-rose-100 text-rose-700'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
                       }`}
                     >
-                      {c.active === 1 ? 'Ativo' : 'Desativado'}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-500 line-clamp-2">
-                    {c.description || 'Sem descrição cadastrada.'}
-                  </p>
-
-                  <div className="pt-2 border-t border-slate-100 space-y-1 text-[11px] text-slate-600">
-                    <p>
-                      <strong>Área:</strong>{' '}
-                      {c.is_clinical === 1 ? (
-                        <span className="text-purple-700 font-bold">Saúde / Clínica (com prontuário)</span>
-                      ) : (
-                        <span className="text-slate-600 font-medium">Serviços Gerais</span>
-                      )}
-                    </p>
-                    <p>
-                      <strong>Terminologia padrão:</strong>{' '}
-                      <span className="capitalize font-semibold text-slate-800">{c.default_terminology}</span>
-                    </p>
+                      {c.active === 1 ? 'Desativar' : 'Ativar'}
+                    </button>
                   </div>
                 </div>
-
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenCatModal(c)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    Editar
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleToggleCatStatus(c)}
-                    className={`px-3 py-1.5 font-bold text-xs rounded-xl cursor-pointer ${
-                      c.active === 1
-                        ? 'bg-rose-50 hover:bg-rose-100 text-rose-700'
-                        : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
-                    }`}
-                  >
-                    {c.active === 1 ? 'Desativar' : 'Ativar'}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

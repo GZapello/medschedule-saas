@@ -272,11 +272,11 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (currentUser?.role === 'superadmin') {
-      setCurrentView('superadmin');
-    } else if (currentView === 'superadmin') {
-      setCurrentView('dashboard');
+      setCurrentView(prev => (prev === 'dashboard' ? 'superadmin' : prev));
+    } else {
+      setCurrentView(prev => (prev === 'superadmin' ? 'dashboard' : prev));
     }
-  }, [currentUser?.role, currentView]);
+  }, [currentUser?.role]);
 
   // Sincronização dinâmica de Metadados de SEO, Canonical e Google Analytics 4 na SPA
   useEffect(() => {
