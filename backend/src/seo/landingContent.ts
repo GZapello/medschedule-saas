@@ -1,6 +1,6 @@
 /** Conteúdo público compartilhado entre a landing e sua pré-renderização. */
 export const LANDING_HERO = {
-  title: 'Um só Zemda. Uma experiência feita para cada profissão.',
+  title: 'Gestão e atendimento em saúde: do profissional solo à clínica multiprofissional.',
   description: 'Agenda, prontuário, documentos, financeiro, equipe e módulos clínicos especializados conectados em uma única plataforma.'
 };
 

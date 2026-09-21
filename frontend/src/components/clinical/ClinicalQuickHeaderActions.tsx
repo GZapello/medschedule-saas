@@ -2,6 +2,9 @@ import React from 'react';
 import { FileText, CheckCircle2 } from 'lucide-react';
 import { ClinicalAutosaveIndicator } from './ClinicalAutosaveIndicator';
 import { AutosaveStatus } from '../../hooks/useClinicalAutosave';
+import { ClinicalQuickToolsMenu, ClinicalQuickToolItem } from './ClinicalQuickToolsMenu';
+
+export type { ClinicalQuickToolItem };
 
 interface ClinicalQuickHeaderActionsProps {
   onViewPreviousRecords?: () => void;
@@ -13,6 +16,9 @@ interface ClinicalQuickHeaderActionsProps {
   showPreviousRecords?: boolean;
   isSubmitting?: boolean;
   className?: string;
+  tools?: ClinicalQuickToolItem[];
+  toolsLabel?: string;
+  toolsVariant?: 'sky' | 'teal' | 'indigo' | 'emerald' | 'cyan' | 'purple' | 'slate';
 }
 
 export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProps> = ({
@@ -24,7 +30,10 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
   showFinish = true,
   showPreviousRecords = true,
   isSubmitting = false,
-  className = ''
+  className = '',
+  tools,
+  toolsLabel = 'Ferramentas',
+  toolsVariant = 'slate'
 }) => {
   return (
     <div className={`flex items-center gap-2.5 flex-wrap ${className}`}>
@@ -44,6 +53,15 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
           <FileText className="w-3.5 h-3.5 text-sky-600" />
           <span>Prontuários Anteriores</span>
         </button>
+      )}
+
+      {/* Acesso: Ferramentas Rápidas (Menu Dropdown Centralizado) */}
+      {tools && tools.length > 0 && (
+        <ClinicalQuickToolsMenu
+          tools={tools}
+          label={toolsLabel}
+          variant={toolsVariant}
+        />
       )}
 
       {/* Acesso 2: Finalizar Atendimento Rápido */}

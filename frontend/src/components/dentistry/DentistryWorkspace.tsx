@@ -44,7 +44,8 @@ import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsM
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
-import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 
 interface DentistryWorkspaceProps {
@@ -68,10 +69,12 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   const [patientSearch, setPatientSearch] = useState<string>('');
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
-  // Abas do Módulo
   const [activeTab, setActiveTab] = useState<
     'odontogram' | 'perio' | 'endo' | 'anamnesis' | 'treatment_plans' | 'prosthetics' | 'ortho_hof' | 'implants' | 'photos_exams' | 'documents'
   >('odontogram');
+
+  // Hook para usabilidade e scroll suave das abas odontológicas
+  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
 
   // Dossiê do dente
   const [dossierToothNumber, setDossierToothNumber] = useState<number | null>(null);
@@ -646,6 +649,17 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
               onFinishConsultation={handleFinishConsultation}
               finishLabel="Finalizar Atendimento"
               isSubmitting={saving}
+              tools={[
+                {
+                  id: 'dictation',
+                  label: 'Ditado Clínico IA',
+                  icon: Sparkles,
+                  highlight: true,
+                  onClick: () => setIsDictationModalOpen(true)
+                }
+              ]}
+              toolsVariant="cyan"
+              toolsLabel="Ferramentas"
             />
             <span className="px-3 py-1 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-full text-xs font-bold">
               Prontuário Ativo
@@ -654,14 +668,15 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Navegação por Abas do ZemdaOdonto */}
+      {/* Navegação por Abas do ZemdaOdonto (Trilha Horizontal Única com Scroll Suave) */}
       {selectedPatientId && (
         <div className="space-y-6">
-          <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1.5 border-b border-slate-200 pb-2`}>
             <button
               type="button"
+              data-active={activeTab === 'odontogram'}
               onClick={() => setActiveTab('odontogram')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'odontogram'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -673,8 +688,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-active={activeTab === 'treatment_plans'}
               onClick={() => setActiveTab('treatment_plans')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'treatment_plans'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -686,8 +702,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-active={activeTab === 'perio'}
               onClick={() => setActiveTab('perio')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'perio'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -699,8 +716,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-active={activeTab === 'endo'}
               onClick={() => setActiveTab('endo')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'endo'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -712,8 +730,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-active={activeTab === 'prosthetics'}
               onClick={() => setActiveTab('prosthetics')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'prosthetics'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -725,8 +744,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-active={activeTab === 'ortho_hof'}
               onClick={() => setActiveTab('ortho_hof')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'ortho_hof'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -738,8 +758,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-active={activeTab === 'anamnesis'}
               onClick={() => setActiveTab('anamnesis')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'anamnesis'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -751,8 +772,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-active={activeTab === 'implants'}
               onClick={() => setActiveTab('implants')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'implants'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -764,8 +786,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
             <button
               type="button"
+              data-active={activeTab === 'photos_exams'}
               onClick={() => setActiveTab('photos_exams')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'photos_exams'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'

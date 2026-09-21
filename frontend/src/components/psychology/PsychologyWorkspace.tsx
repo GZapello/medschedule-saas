@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { PsychologyDocumentModal } from './PsychologyDocumentModal';
 import { PsychologyHistoryModal } from './PsychologyHistoryModal';
+import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 
@@ -58,6 +59,9 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   type TabKey = 'anamnese' | 'eem' | 'risk' | 'assessments' | 'screenings' | 'sessions' | 'goals' | 'external_tests';
   const [activeTab, setActiveTab] = useState<TabKey>('sessions');
+
+  // Hook para usabilidade e scroll suave das abas de Psicologia
+  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -950,9 +954,9 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         )}
       </header>
 
-      {/* Barra de Navegação de Abas Estruturadas */}
-      <div className="bg-white border-b border-slate-200 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex overflow-x-auto gap-2 py-2">
+      {/* Barra de Navegação de Abas Estruturadas (Trilha Suave com Scroll Livre) */}
+      <div className="bg-white border-b border-slate-200 shadow-2xs shrink-0">
+        <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 py-2`}>
           {[
             { id: 'sessions', label: '1. Sessões & Evolução', icon: Clock },
             { id: 'anamnese', label: '2. Anamnese Psicológica', icon: User },
@@ -968,9 +972,10 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             return (
               <button
                 key={tab.id}
+                data-active={isActive}
                 type="button"
                 onClick={() => setActiveTab(tab.id as TabKey)}
-                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                   isActive
                     ? 'bg-teal-700 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'

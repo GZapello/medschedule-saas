@@ -15,7 +15,7 @@ export const PublicFooter: React.FC<PublicFooterProps> = ({ onLogin, onRegisterC
     <div className="max-w-7xl mx-auto px-5 sm:px-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-10 mb-10 border-b border-slate-200">
         <a href="/" className="flex items-center gap-3 w-fit"><img src="/brand/zemda-icon.png" alt="" width="36" height="36" loading="lazy" /><span><span className="block text-2xl font-black tracking-tight text-slate-900">Zemda</span><span className="text-[10px] uppercase tracking-widest font-bold text-teal-700">Saúde e Gestão</span></span></a>
-        <p className="max-w-md text-xs leading-relaxed">Um ecossistema multiprofissional de saúde. Gestão compartilhada e ferramentas clínicas para cada profissão.</p>
+        <p className="max-w-md text-xs leading-relaxed">Gestão e atendimento em saúde para profissionais autônomos, consultórios e clínicas. Ferramentas especializadas para cada profissão.</p>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-7 gap-y-9">
         <div><h2 className={titleClass}>Produto</h2><a className={linkClass} href="/#produto">Conheça o Zemda</a><a className={linkClass} href="/#como-funciona">Como funciona</a><a className={linkClass} href="/#funcionalidades">Funcionalidades</a><a className={linkClass} href="/planos">Planos e valores</a><a className={linkClass} href="/#seguranca">Segurança</a></div>

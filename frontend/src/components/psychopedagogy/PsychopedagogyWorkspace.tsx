@@ -7,7 +7,8 @@ import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PsychopedagogyDocumentModal, PsychopedagogyDocType } from './PsychopedagogyDocumentModal';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
-import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import {
   GraduationCap,
@@ -78,6 +79,9 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
   // Navegação horizontal moderna das 8 abas
   const [activeTab, setActiveTab] = useState<TabKey>('evolution');
+
+  // Hook para usabilidade e rolagem horizontal suave das abas de Psicopedagogia
+  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
 
   // Subaba da área de Aprendizagem
   const [learningSubTab, setLearningSubTab] = useState<LearningSubTab>('reading');
@@ -847,72 +851,71 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
           </div>
 
           {selectedPatientId && (
-            <>
-              <ClinicalQuickHeaderActions
-                autosaveStatus={autosave.autosaveStatus}
-                lastSavedTime={autosave.lastSavedTime}
-                onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-                onFinishConsultation={() => setActiveTab('finish')}
-                finishLabel="Finalizar Atendimento"
-                isSubmitting={saving}
-              />
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedDocType('relatorio');
-                  setShowDocumentModal(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                title="Emitir documentos, relatórios ou pareceres psicopedagógicos"
-              >
-                <Printer className="w-3.5 h-3.5 text-slate-600" />
-                <span>Documentos</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowAiModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                title="Assistente IA para apoio pedagógico e estratégias"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                <span>IA Apoio</span>
-              </button>
-            </>
+            <ClinicalQuickHeaderActions
+              autosaveStatus={autosave.autosaveStatus}
+              lastSavedTime={autosave.lastSavedTime}
+              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+              onFinishConsultation={() => setActiveTab('finish')}
+              finishLabel="Finalizar Atendimento"
+              isSubmitting={saving}
+              tools={[
+                {
+                  id: 'documents',
+                  label: 'Documentos & Pareceres',
+                  icon: Printer,
+                  onClick: () => {
+                    setSelectedDocType('relatorio');
+                    setShowDocumentModal(true);
+                  }
+                },
+                {
+                  id: 'ai_support',
+                  label: 'IA Apoio Pedagógico',
+                  icon: Sparkles,
+                  highlight: true,
+                  onClick: () => setShowAiModal(true)
+                }
+              ]}
+              toolsVariant="indigo"
+              toolsLabel="Ferramentas"
+            />
           )}
         </div>
       </div>
 
-      {/* 1. NAVEGAÇÃO HORIZONTAL NAS 8 ABAS (PADRÃO MODERNO ZEMDA) */}
-      <div className="bg-white border-b border-slate-200 px-6 flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
-        {[
-          { id: 'evolution', label: '1. Evolução', icon: Clock },
-          { id: 'profile_anamnese', label: '2. Perfil & Anamnese', icon: BookOpen },
-          { id: 'assessment', label: '3. Avaliação Psicopedagógica', icon: Brain },
-          { id: 'learning', label: '4. Aprendizagem', icon: Pencil },
-          { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
-          { id: 'family_school', label: '6. Família & Escola', icon: School },
-          { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
-          { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as TabKey)}
-              className={`flex items-center gap-1.5 px-3.5 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
-                isActive
-                  ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* 1. NAVEGAÇÃO HORIZONTAL NAS 8 ABAS (PADRÃO MODERNO ZEMDA COM SCROLL FLUIDO) */}
+      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
+        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+          {[
+            { id: 'evolution', label: '1. Evolução', icon: Clock },
+            { id: 'profile_anamnese', label: '2. Perfil & Anamnese', icon: BookOpen },
+            { id: 'assessment', label: '3. Avaliação Psicopedagógica', icon: Brain },
+            { id: 'learning', label: '4. Aprendizagem', icon: Pencil },
+            { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
+            { id: 'family_school', label: '6. Família & Escola', icon: School },
+            { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
+            { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                data-active={isActive}
+                type="button"
+                onClick={() => setActiveTab(tab.id as TabKey)}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                  isActive
+                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ÁREA DE CONTEÚDO PRINCIPAL DAS 8 ABAS */}

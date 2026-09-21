@@ -340,51 +340,61 @@ export const ZemdaPersonalView: React.FC = () => {
       ) : (
         /* Caso contrário, renderiza a navegação principal (Dashboard, Alunos, Exercícios, Modelos) */
         <div className="space-y-6">
-          {/* Navegação por Abas Principais */}
-          <div className="flex items-center gap-2 border-b border-slate-200 overflow-x-auto pb-1">
-            <button
-              onClick={() => setCurrentTab('dashboard')}
-              className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
-                currentTab === 'dashboard'
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Painel de Treinamento
-            </button>
+          {/* Navegação por Abas Principais e Ação Rápida */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
+              <button
+                data-active={currentTab === 'dashboard'}
+                onClick={() => setCurrentTab('dashboard')}
+                className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                  currentTab === 'dashboard'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Painel de Treinamento
+              </button>
 
-            <button
-              onClick={() => setCurrentTab('students')}
-              className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
-                currentTab === 'students'
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              Alunos & Prescrições ({students.length})
-            </button>
+              <button
+                data-active={currentTab === 'students'}
+                onClick={() => setCurrentTab('students')}
+                className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                  currentTab === 'students'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                Alunos & Prescrições ({students.length})
+              </button>
 
-            <button
-              onClick={() => setIsExerciseLibraryOpen(true)}
-              className="px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap text-slate-600 hover:bg-slate-100"
-            >
-              <Dumbbell className="w-4 h-4" />
-              Biblioteca de Exercícios
-            </button>
+              <button
+                data-active={currentTab === 'templates'}
+                onClick={() => setCurrentTab('templates')}
+                className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
+                  currentTab === 'templates'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                Modelos de Treino (Templates)
+              </button>
+            </div>
 
-            <button
-              onClick={() => setCurrentTab('templates')}
-              className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap ${
-                currentTab === 'templates'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-              Modelos de Treino (Templates)
-            </button>
+            {/* Ação / Ferramenta Rápida: Biblioteca de Exercícios */}
+            <div className="shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsExerciseLibraryOpen(true)}
+                className="px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+                title="Abrir acervo completo e biblioteca de exercícios"
+              >
+                <Dumbbell className="w-4 h-4 text-emerald-600" />
+                <span>Biblioteca de Exercícios</span>
+              </button>
+            </div>
           </div>
 
           {/* CONTEÚDO: DASHBOARD */}

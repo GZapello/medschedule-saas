@@ -32,7 +32,8 @@ import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
-import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 
 interface PhysiotherapyWorkspaceProps {
@@ -133,6 +134,9 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     | 'home_exercises'
     | 'finish'
   >('evolution');
+
+  // Hook para usabilidade e rolagem suave das abas de Fisioterapia
+  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -521,65 +525,67 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           )}
 
           {selectedPatientId && (
-            <>
-              <ClinicalQuickHeaderActions
-                autosaveStatus={autosave.autosaveStatus}
-                lastSavedTime={autosave.lastSavedTime}
-                onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-                onFinishConsultation={() => setActiveTab('finish')}
-                finishLabel="Finalizar Atendimento"
-                isSubmitting={saving}
-              />
-
-              <button
-                type="button"
-                onClick={() => setShowFollowUpModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                title="Imprimir prescrição de exercícios domiciliares para o paciente"
-              >
-                <Printer className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Guia de Exercícios</span>
-              </button>
-            </>
+            <ClinicalQuickHeaderActions
+              autosaveStatus={autosave.autosaveStatus}
+              lastSavedTime={autosave.lastSavedTime}
+              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+              onFinishConsultation={() => setActiveTab('finish')}
+              finishLabel="Finalizar Atendimento"
+              isSubmitting={saving}
+              tools={[
+                {
+                  id: 'exercise_guide',
+                  label: 'Guia de Exercícios',
+                  icon: Printer,
+                  onClick: () => setShowFollowUpModal(true)
+                }
+              ]}
+              toolsVariant="teal"
+              toolsLabel="Ferramentas"
+            />
           )}
         </div>
       </div>
 
-      {/* 14 ABAS DE NAVEGAÇÃO ESTRUTURADAS (Item 10) */}
-      <div className="bg-white border-b border-slate-200 px-6 flex items-center gap-1 overflow-x-auto no-scrollbar">
-        {[
-          { id: 'evolution', label: '1. Evolução', icon: Activity },
-          { id: 'anamnesis', label: '2. Anamnese', icon: FileText },
-          { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
-          { id: 'pain_zemdabody', label: '4. Dor & ZemdaBody', icon: AlertCircle },
-          { id: 'adm_goniometry', label: '5. ADM / Goniometria', icon: Activity },
-          { id: 'muscle_strength', label: '6. Força Oxford', icon: Dumbbell },
-          { id: 'posture_gait', label: '7. Postura & Marcha', icon: User },
-          { id: 'functional_tests', label: '8. Testes Funcionais', icon: Award },
-          { id: 'cbdf', label: '9. CBDF COFFITO', icon: ShieldCheck },
-          { id: 'treatment_plan', label: '10. Plano RBPF', icon: Calendar },
-          { id: 'goals', label: '11. Metas', icon: Target },
-          { id: 'external_tests', label: '12. Testes Externos', icon: FileText },
-          { id: 'home_exercises', label: '13. Exercícios em Casa', icon: Dumbbell },
-          { id: 'finish', label: '14. Finalização', icon: CheckCircle2 }
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 px-3 py-3 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
-                isActive
-                  ? 'border-teal-600 text-teal-700 bg-teal-50/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-              }`}
-            >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* 14 ABAS DE NAVEGAÇÃO ESTRUTURADAS (Trilha Limpa com Rolagem Livre) */}
+      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
+        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+          {[
+            { id: 'evolution', label: '1. Evolução', icon: Activity },
+            { id: 'anamnesis', label: '2. Anamnese', icon: FileText },
+            { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
+            { id: 'pain_zemdabody', label: '4. Dor & ZemdaBody', icon: AlertCircle },
+            { id: 'adm_goniometry', label: '5. ADM / Goniometria', icon: Activity },
+            { id: 'muscle_strength', label: '6. Força Oxford', icon: Dumbbell },
+            { id: 'posture_gait', label: '7. Postura & Marcha', icon: User },
+            { id: 'functional_tests', label: '8. Testes Funcionais', icon: Award },
+            { id: 'cbdf', label: '9. CBDF COFFITO', icon: ShieldCheck },
+            { id: 'treatment_plan', label: '10. Plano RBPF', icon: Calendar },
+            { id: 'goals', label: '11. Metas', icon: Target },
+            { id: 'external_tests', label: '12. Testes Externos', icon: FileText },
+            { id: 'home_exercises', label: '13. Exercícios em Casa', icon: Dumbbell },
+            { id: 'finish', label: '14. Finalização', icon: CheckCircle2 }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                data-active={isActive}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                  isActive
+                    ? 'border-teal-600 text-teal-700 bg-teal-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}

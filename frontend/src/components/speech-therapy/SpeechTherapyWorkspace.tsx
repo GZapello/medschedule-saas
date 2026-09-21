@@ -52,7 +52,8 @@ import { SecureFileImage } from '../common/SecureFileImage';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
-import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { FoisAssessmentSection } from './FoisAssessmentSection';
 import { Idv10AssessmentSection } from './Idv10AssessmentSection';
@@ -700,6 +701,44 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
     }
   };
 
+  // Hook para usabilidade e scroll suave da barra de abas
+  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
+
+  // Ferramentas Clínicas Rápidas do ZemdaFono (desacopladas da trilha de abas)
+  const fonoQuickTools: ClinicalQuickToolItem[] = [
+    {
+      id: 'fluency_counter',
+      label: 'Contador de Fluência',
+      icon: Wind,
+      onClick: () => setIsFluencyModalOpen(true)
+    },
+    {
+      id: 'language_sample',
+      label: 'Amostra Linguagem',
+      icon: BookOpen,
+      onClick: () => setIsLanguageSampleModalOpen(true)
+    },
+    {
+      id: 'dysphagia_matrix',
+      label: 'Matriz Disfagia',
+      icon: Activity,
+      onClick: () => setIsDysphagiaModalOpen(true)
+    },
+    {
+      id: 'aac_manager',
+      label: 'Gestor CAA',
+      icon: Layers,
+      onClick: () => setIsAACModalOpen(true)
+    },
+    {
+      id: 'ai_report',
+      label: 'Relatório IA',
+      icon: Sparkles,
+      highlight: true,
+      onClick: () => setIsAIReportOpen(true)
+    }
+  ];
+
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {completion.dialog}
@@ -775,14 +814,17 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               onFinishConsultation={() => setActiveTab('finish')}
               finishLabel="Finalizar Atendimento"
               isSubmitting={saving}
+              tools={fonoQuickTools}
+              toolsVariant="sky"
+              toolsLabel="Ferramentas"
             />
           )}
         </div>
       </div>
 
-      {/* ABAS DE NAVEGAÇÃO E AÇÕES RÁPIDAS */}
-      <div className="bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+      {/* BARRA HORIZONTAL DE ABAS EXCLUSIVA (SEM INTERFERÊNCIA DE ATALHOS) */}
+      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
+        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
           {[
             { id: 'phonemes', label: 'Painel Fonêmico', icon: MessageSquare },
             { id: 'language', label: 'Linguagem', icon: BookOpen },
@@ -799,12 +841,14 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
           ].map(tab => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            const isActive = activeTab === (tab.id as any);
             return (
               <button
                 key={tab.id}
+                data-active={isActive}
+                type="button"
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
                   isActive
                     ? 'border-sky-600 text-sky-700 bg-sky-50/50'
                     : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
@@ -816,48 +860,6 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             );
           })}
         </div>
-
-        {/* FERRAMENTAS CLÍNICAS RÁPIDAS DE FONOAUDIOLOGIA */}
-        {selectedPatientId && (
-          <div className="hidden xl:flex items-center gap-1.5 shrink-0 pl-3">
-            <button
-              type="button"
-              onClick={() => setIsFluencyModalOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-sky-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
-            >
-              Contador de Fluência
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsLanguageSampleModalOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-sky-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
-            >
-              Amostra Linguagem
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsDysphagiaModalOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-sky-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
-            >
-              Matriz Disfagia
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsAACModalOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-slate-200 hover:border-sky-300 text-slate-700 bg-slate-50 hover:bg-white transition-colors cursor-pointer"
-            >
-              Gestor CAA
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsAIReportOpen(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-sky-50 border border-sky-200 text-sky-700 hover:bg-sky-100 transition-colors cursor-pointer"
-            >
-              <Sparkles className="w-3 h-3 text-sky-600" />
-              Relatório IA
-            </button>
-          </div>
-        )}
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}

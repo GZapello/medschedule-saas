@@ -16,7 +16,22 @@ async function main() {
     await page.goto(base);
     await page.locator('h1').waitFor();
     assert.equal(await page.locator('h1').count(),1);
-    for (const width of [360,390,640,768,1024,1440]) {
+    assert.match(await page.locator('h1').innerText(), /Gestão e atendimento/);
+    assert.ok(!(await page.locator('body').innerText()).includes('Um só Zemda.'));
+    const previewCases = [
+      ['fono', 'ZemdaFono', 'Audiologia e audiograma'],
+      ['psico', 'ZemdaPsico', 'Testes externos e laudos'],
+      ['odonto', 'ZemdaOdonto', 'Periodontograma'],
+      ['nutri', 'ZemdaNutri', 'Recordatório 24h'],
+      ['fisio', 'ZemdaFisio', 'Goniometria e força muscular'],
+      ['to', 'ZemdaTO', 'Perfil sensorial'],
+      ['personal', 'ZemdaPersonal', 'Fichas e relatórios em PDF'],
+      ['pp', 'ZemdaPP', 'Plano de intervenção (PIP)'],
+      ['body', 'ZemdaBody', 'Marcações por região e desenhos']
+    ];
+    const selector=page.getByRole('combobox',{name:'Escolha sua área'});
+    assert.equal(await selector.locator('option').count(),9);
+    for (const width of [320,360,390,640,768,1024,1440]) {
       await page.setViewportSize({width,height:1000});
       const overflow=await page.evaluate(() => ({width:innerWidth,scroll:document.documentElement.scrollWidth}));
       assert.ok(overflow.scroll<=width,`Horizontal overflow at ${width}: ${JSON.stringify(overflow)}`);
@@ -28,12 +43,34 @@ async function main() {
         assert.ok(await page.evaluate(() => location.hash==='#profissoes'));
         await page.evaluate(() => scrollTo(0,0));
       }
-      console.log(`Responsive ${width}px: OK`);
+      const icons=new Set(); const descriptions=new Set(); const focusTexts=new Set();
+      for(const [id,name,feature] of previewCases) {
+        await selector.selectOption(id);
+        assert.equal(await page.locator('#product-view h2').innerText(),name);
+        assert.equal(await page.locator('#product-view .zl-resource-map li').count(),4);
+        await page.locator('#product-view').getByText(feature,{exact:true}).waitFor();
+        icons.add(await page.locator('#product-view .zl-icon svg').getAttribute('class'));
+        descriptions.add(await page.locator('#product-view .zl-product-copy p').innerText());
+        focusTexts.add(await page.locator('.zl-module-focus').innerText());
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Overflow: ${name} at ${width}`);
+      }
+      assert.equal(icons.size,9); assert.equal(descriptions.size,9); assert.equal(focusTexts.size,9);
+      assert.equal(await page.locator('#product-view .zl-eyebrow').textContent(),'Módulo transversal');
+      await selector.focus(); await selector.press('Home');
+      assert.equal(await selector.inputValue(),'fono');
+      console.log(`Responsive ${width}px and all 9 specialty previews: OK`);
     }
     for(const name of ['Agenda','Prontuário','Especialidade','Financeiro','Dashboard']) {
       const button=page.locator('.zl-view-picker').getByRole('button',{name,exact:true});
       await button.click(); assert.equal(await button.getAttribute('aria-pressed'),'true');
     }
+    await page.locator('.zl-view-picker').getByRole('button',{name:'Especialidade',exact:true}).click();
+    await selector.selectOption('psico');
+    await page.locator('.zl-view-picker').getByRole('button',{name:'Agenda',exact:true}).click();
+    assert.equal(await selector.count(),0);
+    await page.locator('.zl-view-picker').getByRole('button',{name:'Especialidade',exact:true}).click();
+    assert.equal(await selector.inputValue(),'psico');
+    await selector.selectOption('fono');
     for(const id of ['odonto','to','personal']) {
       await page.locator(`.zl-module-${id} a`).click();
       assert.ok(await page.evaluate(id => {const r=document.getElementById(`modulo-${id}`).getBoundingClientRect();return r.top>=80&&r.top<innerHeight;},id));
@@ -60,6 +97,11 @@ async function main() {
       await page.setViewportSize({width:390,height:844}); await page.evaluate(()=>scrollTo(0,0));
       await page.screenshot({path:path.join(out,'zemda-mobile.png'),fullPage:true});
       await page.screenshot({path:path.join(out,'zemda-hero-mobile.png')});
+      await selector.selectOption('body');
+      await page.locator('#produto').screenshot({path:path.join(out,'zemda-demo-mobile.png'),style:'header.sticky, .zl-skip { visibility:hidden !important; }'});
+      await page.setViewportSize({width:1440,height:1000});
+      await selector.selectOption('psico');
+      await page.locator('#produto').screenshot({path:path.join(out,'zemda-demo-desktop.png'),style:'header.sticky, .zl-skip { visibility:hidden !important; }'});
     }
     assert.deepEqual(errors,[]);
     console.log('Navigation, CTAs, preview controls, FAQ, anchors, public copy and console: OK');
