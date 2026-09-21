@@ -9,13 +9,14 @@ export interface EmailVerificationRecord {
   email: string;
   purpose: string;
   code_hash: string;
-  status: 'pending' | 'verified' | 'consumed' | 'expired' | 'blocked' | 'invalidated';
+  status: 'pending' | 'verified' | 'consumed' | 'expired' | 'blocked' | 'invalidated' | 'failed';
   attempts: number;
   resend_count: number;
   expires_at: string;
   verified_at: string | null;
   consumed_at: string | null;
   last_sent_at: string | null;
+  ip_address: string | null;
   created_at: string;
 }
 
@@ -45,8 +46,16 @@ export class EmailService {
     return process.env.EMAIL_REPLY_TO || 'suporte@zemda.com.br';
   }
 
+  /**
+   * Obtém o segredo exclusivo para OTP e tokens de verificação de e-mail.
+   * Não possui fallback nem permite uso automático de outras chaves (como JWT_SECRET).
+   */
   private static getOtpSecret(): string {
-    return process.env.EMAIL_OTP_SECRET || process.env.JWT_SECRET || 'zemda-email-otp-secret-2026-x88';
+    const secret = process.env.EMAIL_OTP_SECRET;
+    if (!secret || !secret.trim()) {
+      throw new Error('EMAIL_OTP_SECRET_MISSING');
+    }
+    return secret.trim();
   }
 
   /**
@@ -143,10 +152,19 @@ export class EmailService {
 
   /**
    * Solicita um novo código OTP de 6 dígitos e despacha via Resend.
+   * Regras estritas:
+   * - Exige EMAIL_OTP_SECRET presente;
+   * - Exige RESEND_API_KEY presente (não retorna sucesso falso);
+   * - Evita enumeração de contas (não expõe se e-mail já existe);
+   * - Rate limit por IP e por e-mail;
+   * - Invalida códigos pending e verificações verified não consumidas;
+   * - Código gerado com crypto.randomInt;
+   * - Se o envio via Resend falhar, marca o registro como 'failed'.
    */
   static async requestVerificationCode(
     rawEmail: string,
-    purpose: string = 'clinic_registration'
+    purpose: string = 'clinic_registration',
+    clientIp?: string
   ): Promise<{ success: boolean; error?: string; remainingSeconds?: number }> {
     const email = (rawEmail || '').trim().toLowerCase();
 
@@ -158,13 +176,50 @@ export class EmailService {
       return { success: false, error: 'Finalidade de verificação não suportada' };
     }
 
-    // 1. Verifica se o e-mail já pertence a uma conta de usuário ativa/existente
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existingUser) {
-      return { success: false, error: 'Este e-mail já está cadastrado na plataforma. Faça login ou use outro e-mail.' };
+    // 1. Validação obrigatória de EMAIL_OTP_SECRET
+    try {
+      this.getOtpSecret();
+    } catch {
+      return {
+        success: false,
+        error: 'Serviço de verificação temporariamente indisponível. Contate o suporte.'
+      };
     }
 
-    // 2. Proteção contra envio repetitivo: Cooldown de 60 segundos
+    // 2. Validação obrigatória de RESEND_API_KEY
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey || !apiKey.trim()) {
+      return {
+        success: false,
+        error: 'Serviço de envio de e-mails temporariamente indisponível. Tente novamente mais tarde.'
+      };
+    }
+
+    // 3. Prevenção contra enumeração de contas
+    // Se o e-mail já pertence a uma conta existente, retorna sucesso genérico sem vazar informações
+    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existingUser) {
+      return { success: true };
+    }
+
+    // 4. Rate limit por IP: máximo de 10 envios por hora por IP
+    const normalizedIp = (clientIp || '').trim() || null;
+    if (normalizedIp) {
+      const hourlyIpCountRow = db.prepare(`
+        SELECT count(*) as total
+        FROM email_verifications
+        WHERE ip_address = ? AND datetime(created_at) >= datetime('now', '-1 hour')
+      `).get(normalizedIp) as { total: number } | undefined;
+
+      if (hourlyIpCountRow && hourlyIpCountRow.total >= 10) {
+        return {
+          success: false,
+          error: 'Limite de solicitações por hora atingido para este endereço IP. Aguarde antes de tentar novamente.'
+        };
+      }
+    }
+
+    // 5. Cooldown de 60 segundos por e-mail
     const recentVerification = db.prepare(`
       SELECT id, last_sent_at, strftime('%s', 'now') - strftime('%s', last_sent_at) as seconds_since_last
       FROM email_verifications
@@ -182,29 +237,29 @@ export class EmailService {
       };
     }
 
-    // 3. Limite de segurança: máximo de 5 envios por hora para o mesmo e-mail
-    const hourlyCountRow = db.prepare(`
+    // 6. Limite de segurança: máximo de 5 envios por hora para o mesmo e-mail
+    const hourlyEmailCountRow = db.prepare(`
       SELECT count(*) as total
       FROM email_verifications
       WHERE email = ? AND datetime(created_at) >= datetime('now', '-1 hour')
-    `).get(email) as { total: number };
+    `).get(email) as { total: number } | undefined;
 
-    if (hourlyCountRow && hourlyCountRow.total >= 5) {
+    if (hourlyEmailCountRow && hourlyEmailCountRow.total >= 5) {
       return {
         success: false,
         error: 'Limite de tentativas de envio por hora atingido para este e-mail. Aguarde antes de tentar novamente.'
       };
     }
 
-    // 4. Invalida qualquer código anterior ainda pendente para este e-mail e propósito
+    // 7. Invalida qualquer código anterior pendente OU verificação verified ainda não consumida
     db.prepare(`
       UPDATE email_verifications
       SET status = 'invalidated'
-      WHERE email = ? AND purpose = ? AND status = 'pending'
+      WHERE email = ? AND purpose = ? AND (status = 'pending' OR (status = 'verified' AND consumed_at IS NULL))
     `).run(email, purpose);
 
-    // 5. Gera código numérico de 6 dígitos (100000 a 999999) e calcula o hash HMAC
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // 8. Gera código numérico de 6 dígitos criptograficamente seguro via crypto.randomInt
+    const code = crypto.randomInt(100000, 1000000).toString();
     const codeHash = this.hashCode(email, code, purpose);
     const verificationId = 'ev_' + uuidv4().replace(/-/g, '').slice(0, 16);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -218,43 +273,46 @@ export class EmailService {
 
     const resendCount = (previousCountRow?.last_count || 0) + 1;
 
-    // 6. Registra no banco de dados com hash seguro (código puro NUNCA é persistido nem logado)
+    // 9. Registra no banco de dados com hash seguro (código puro NUNCA é persistido nem logado)
     db.prepare(`
       INSERT INTO email_verifications (
         id, email, purpose, code_hash, status, attempts, resend_count,
-        expires_at, verified_at, consumed_at, last_sent_at, created_at
-      ) VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, NULL, NULL, ?, datetime('now'))
-    `).run(verificationId, email, purpose, codeHash, resendCount, expiresAt, nowIso);
+        expires_at, verified_at, consumed_at, last_sent_at, ip_address, created_at
+      ) VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, NULL, NULL, ?, ?, datetime('now'))
+    `).run(verificationId, email, purpose, codeHash, resendCount, expiresAt, nowIso, normalizedIp);
 
-    // 7. Envio real via Resend
+    // 10. Envio via Resend
     const resend = this.getResendClient();
-    if (resend) {
-      try {
-        const sendResult = await resend.emails.send({
-          from: this.getFromAddress(),
-          replyTo: this.getReplyToAddress(),
-          to: email,
-          subject: 'Seu código de verificação Zemda',
-          html: this.buildOtpHtml(code)
-        });
+    if (!resend) {
+      db.prepare("UPDATE email_verifications SET status = 'failed' WHERE id = ?").run(verificationId);
+      return {
+        success: false,
+        error: 'Serviço de envio de e-mails temporariamente indisponível. Tente novamente mais tarde.'
+      };
+    }
 
-        if (sendResult.error) {
-          console.error('[EmailService] Erro retornado pela API do Resend:', sendResult.error.message);
-          return {
-            success: false,
-            error: 'Não foi possível enviar o e-mail de verificação. Verifique se o endereço é válido e tente novamente.'
-          };
-        }
-      } catch (sendErr: any) {
-        console.error('[EmailService] Falha de comunicação com Resend:', sendErr?.message || sendErr);
+    try {
+      const sendResult = await resend.emails.send({
+        from: this.getFromAddress(),
+        replyTo: this.getReplyToAddress(),
+        to: email,
+        subject: 'Seu código de verificação Zemda',
+        html: this.buildOtpHtml(code)
+      });
+
+      if (sendResult.error) {
+        db.prepare("UPDATE email_verifications SET status = 'failed' WHERE id = ?").run(verificationId);
         return {
           success: false,
-          error: 'Falha ao conectar ao serviço de e-mail. Tente novamente em alguns instantes.'
+          error: 'Não foi possível enviar o e-mail de verificação. Verifique se o endereço é válido e tente novamente.'
         };
       }
-    } else {
-      // Se RESEND_API_KEY não estiver configurada no ambiente (ex: teste inicial local), registra aviso
-      console.warn(`[EmailService] AVISO: RESEND_API_KEY não configurada. E-mail não pôde ser despachado para ${email}.`);
+    } catch {
+      db.prepare("UPDATE email_verifications SET status = 'failed' WHERE id = ?").run(verificationId);
+      return {
+        success: false,
+        error: 'Falha ao conectar ao serviço de e-mail. Tente novamente em alguns instantes.'
+      };
     }
 
     return { success: true };
@@ -283,6 +341,15 @@ export class EmailService {
 
     if (!email || !code || code.length !== 6) {
       return { success: false, error: 'Código de verificação deve conter 6 dígitos' };
+    }
+
+    try {
+      this.getOtpSecret();
+    } catch {
+      return {
+        success: false,
+        error: 'Serviço de verificação temporariamente indisponível. Contate o suporte.'
+      };
     }
 
     // Busca o registro pendente mais recente
@@ -399,7 +466,13 @@ export class EmailService {
       return { valid: false, error: 'Token de verificação de e-mail não fornecido' };
     }
 
-    const secret = this.getOtpSecret();
+    let secret: string;
+    try {
+      secret = this.getOtpSecret();
+    } catch {
+      return { valid: false, error: 'Serviço de verificação temporariamente indisponível' };
+    }
+
     let decoded: VerificationTokenPayload;
     try {
       decoded = jwt.verify(token, secret) as VerificationTokenPayload;
@@ -442,13 +515,25 @@ export class EmailService {
   }
 
   /**
-   * Marca a verificação como consumida após a criação da clínica/usuário.
+   * Executa a atualização atômica e condicional do token para 'consumed'.
+   * Exige: UPDATE email_verifications SET status='consumed', consumed_at=datetime('now')
+   * WHERE id=? AND status='verified' AND consumed_at IS NULL
+   * Retorna true se e somente se exatamente 1 linha foi alterada.
    */
-  static markVerificationConsumed(verificationId: string): void {
-    db.prepare(`
+  static consumeVerificationToken(verificationId: string): boolean {
+    const result = db.prepare(`
       UPDATE email_verifications
       SET status = 'consumed', consumed_at = datetime('now')
-      WHERE id = ?
+      WHERE id = ? AND status = 'verified' AND consumed_at IS NULL
     `).run(verificationId);
+
+    return result.changes === 1;
+  }
+
+  /**
+   * Alias de conveniência mantido para compatibilidade.
+   */
+  static markVerificationConsumed(verificationId: string): boolean {
+    return this.consumeVerificationToken(verificationId);
   }
 }

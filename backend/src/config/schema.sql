@@ -643,10 +643,12 @@ CREATE TABLE IF NOT EXISTS email_verifications (
   verified_at TEXT,
   consumed_at TEXT,
   last_sent_at TEXT,
+  ip_address TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_email_verif_email_purpose ON email_verifications(email, purpose);
 CREATE INDEX IF NOT EXISTS idx_email_verif_status ON email_verifications(status);
+CREATE INDEX IF NOT EXISTS idx_email_verif_ip_created ON email_verifications(ip_address, created_at);
 
 

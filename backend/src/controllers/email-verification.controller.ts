@@ -21,13 +21,13 @@ export class EmailVerificationController {
         return;
       }
 
-      const result = await EmailService.requestVerificationCode(email, purpose);
+      // Extração robusta do endereço IP do cliente para rate limiting
+      const rawIp = (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || '';
+      const clientIp = rawIp.split(',')[0].trim() || '127.0.0.1';
+
+      const result = await EmailService.requestVerificationCode(email, purpose, clientIp);
 
       if (!result.success) {
-        if (result.error?.includes('já está cadastrado')) {
-          res.status(409).json({ error: result.error });
-          return;
-        }
         if (result.remainingSeconds) {
           res.status(429).json({
             error: result.error,
@@ -35,8 +35,12 @@ export class EmailVerificationController {
           });
           return;
         }
-        if (result.error?.includes('Limite de tentativas')) {
+        if (result.error?.includes('Limite de')) {
           res.status(429).json({ error: result.error });
+          return;
+        }
+        if (result.error?.includes('indisponível')) {
+          res.status(503).json({ error: result.error });
           return;
         }
         res.status(400).json({ error: result.error || 'Erro ao processar solicitação de verificação' });
@@ -45,11 +49,10 @@ export class EmailVerificationController {
 
       res.status(200).json({
         success: true,
-        message: 'Código de verificação enviado com sucesso para o seu e-mail'
+        message: 'Se o e-mail informado for elegível, o código de verificação de 6 dígitos foi enviado com sucesso.'
       });
-    } catch (err: any) {
-      console.error('[EmailVerificationController.requestCode] Erro inesperado:', err?.message || err);
-      res.status(500).json({ error: 'Erro interno ao solicitar código de verificação de e-mail' });
+    } catch {
+      res.status(500).json({ error: 'Erro interno ao processar verificação de e-mail' });
     }
   }
 
@@ -76,6 +79,10 @@ export class EmailVerificationController {
       const result = EmailService.verifyCode(email, code, purpose);
 
       if (!result.success) {
+        if (result.error?.includes('indisponível')) {
+          res.status(503).json({ error: result.error });
+          return;
+        }
         res.status(400).json({ error: result.error || 'Código de verificação inválido' });
         return;
       }
@@ -84,8 +91,7 @@ export class EmailVerificationController {
         success: true,
         emailVerificationToken: result.emailVerificationToken
       });
-    } catch (err: any) {
-      console.error('[EmailVerificationController.verifyCode] Erro inesperado:', err?.message || err);
+    } catch {
       res.status(500).json({ error: 'Erro interno ao validar código de verificação' });
     }
   }

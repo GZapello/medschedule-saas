@@ -84,13 +84,6 @@ export class TenantController {
         return;
       }
 
-      // Verifica se o e-mail já existe
-      const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
-      if (existingUser) {
-        res.status(409).json({ error: 'Este e-mail já está cadastrado na plataforma' });
-        return;
-      }
-
       // Gera slug único a partir do nome da clínica
       let baseSlug = clinicName
         .toLowerCase()
@@ -116,133 +109,170 @@ export class TenantController {
         res.status(403).json({ error: 'Esta clínica está banida. Somente o Administrador do Sistema pode liberar seu cadastro.' }); return;
       }
 
-      // Insere o tenant com status PENDENTE e registro dos termos aceitos
-      const insertTenant = db.prepare(`
-        INSERT INTO tenants (
-          id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
-          city, state, responsible_name, responsible_email, responsible_phone,
-          manager_profession, manager_practice_areas,
-          status, onboarding_completed, onboarding_step, manager_confirmed,
-          terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
-          terms_version, privacy_version,
-          created_at, updated_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?,
-          ?, ?,
-          'pending', 0, 1, 0,
-          1, datetime('now'), 1, datetime('now'),
-          ?, ?,
-          datetime('now'), datetime('now')
-        )
-      `);
-
-      insertTenant.run(
-        tenantId,
-        slug,
-        clinicName,
-        clinicName,
-        tradeName || clinicName,
-        cnpjCpf || null,
-        cleanEmail,
-        phone || null,
-        city || null,
-        state || null,
-        responsibleName,
-        cleanEmail,
-        phone || null,
-        managerProfession || null,
-        managerPracticeAreas || null,
-        CURRENT_TERMS_VERSION,
-        CURRENT_PRIVACY_VERSION
-      );
-
-      // Insere o usuário gestor com status PENDENTE, role 'clinic_admin' e termos aceitos
-      const insertUser = db.prepare(`
-        INSERT INTO users (
-          id, tenant_id, name, email, password_hash, role, phone, status,
-          profession_name, practice_areas, registration_type, registration_number,
-          terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
-          created_at, updated_at
-        ) VALUES (
-          ?, ?, ?, ?, ?, 'clinic_admin', ?, 'pending',
-          ?, ?, ?, ?,
-          ?, ?, datetime('now'), datetime('now'),
-          datetime('now'), datetime('now')
-        )
-      `);
-
-      insertUser.run(
-        userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null,
-        managerProfession || null, managerPracticeAreas || null, managerRegistrationType || null, managerRegistrationNumber || null,
-        CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION
-      );
-
-      // Salva a prova documental do aceite legal na tabela legal_acceptances
+      // Preparação dos dados auxiliares antes da transação
       const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || null;
       const userAgent = (req.headers['user-agent'] as string) || null;
       const optInMarketing = (marketingAccepted || marketingOptIn) ? 1 : 0;
-      db.prepare(`
-        INSERT INTO legal_acceptances (
-          id, user_id, clinic_id, terms_version, privacy_version, marketing_opt_in, accepted_at, ip_address, user_agent, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
-      `).run(
-        'la-' + uuidv4().slice(0, 8),
-        userId,
-        tenantId,
-        CURRENT_TERMS_VERSION,
-        CURRENT_PRIVACY_VERSION,
-        optInMarketing,
-        ipAddress,
-        userAgent
-      );
-
       const isZemdaBodyOpted = zemdaBodyEnabled === true || zemdaBodyEnabled === 1 || zemdaBodyEnabled === 'true';
       const initialPermissions = isZemdaBodyOpted ? JSON.stringify(['access_zemda_body']) : JSON.stringify([]);
+      const verificationId = tokenValidation.payload?.verificationId;
 
-      // Associa em clinic_users com a profissão e área clínica do gestor
-      db.prepare(`
-        INSERT INTO clinic_users (
-          id, tenant_id, user_id, role, status, is_manager,
-          profession_custom, practice_areas, permissions_json, zemda_body_enabled, created_at
-        ) VALUES (
-          ?, ?, ?, 'clinic_admin', 'pending', 1,
-          ?, ?, ?, ?, datetime('now')
-        )
-      `).run(
-        'cu-' + uuidv4().slice(0, 8),
-        tenantId,
-        userId,
-        managerProfession || null,
-        managerPracticeAreas || null,
-        initialPermissions,
-        isZemdaBodyOpted ? 1 : 0
-      );
+      // Execução transacional atômica única: se qualquer etapa falhar, executa rollback integral
+      const executeRegistrationTransaction = db.transaction(() => {
+        // 1. Consumo atômico da verificação de e-mail (exige rigorosamente changes === 1)
+        if (!verificationId) {
+          throw new Error('VERIFICATION_ID_MISSING');
+        }
 
-      // Se o gestor também for profissional de saúde clínico, cria o registro em professionals
-      if (managerProfession && managerProfession !== 'Gestor / Administrador') {
-        const profId = 'pro-' + uuidv4().slice(0, 8);
+        const consumeRes = db.prepare(`
+          UPDATE email_verifications
+          SET status = 'consumed', consumed_at = datetime('now')
+          WHERE id = ? AND status = 'verified' AND consumed_at IS NULL
+        `).run(verificationId);
+
+        if (consumeRes.changes !== 1) {
+          throw new Error('VERIFICATION_ALREADY_CONSUMED_OR_INVALID');
+        }
+
+        // 2. Verificação de unicidade do e-mail dentro da transação para isolamento perfeito
+        const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+        if (existingUser) {
+          throw new Error('EMAIL_ALREADY_EXISTS');
+        }
+
+        // 3. Insere o tenant com status PENDENTE e registro dos termos aceitos
         db.prepare(`
-          INSERT INTO professionals (
-            id, tenant_id, user_id, name, registration_type, registration_number,
-            practice_areas, bio, active
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+          INSERT INTO tenants (
+            id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
+            city, state, responsible_name, responsible_email, responsible_phone,
+            manager_profession, manager_practice_areas,
+            status, onboarding_completed, onboarding_step, manager_confirmed,
+            terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
+            terms_version, privacy_version,
+            created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?,
+            'pending', 0, 1, 0,
+            1, datetime('now'), 1, datetime('now'),
+            ?, ?,
+            datetime('now'), datetime('now')
+          )
         `).run(
-          profId,
+          tenantId,
+          slug,
+          clinicName,
+          clinicName,
+          tradeName || clinicName,
+          cnpjCpf || null,
+          cleanEmail,
+          phone || null,
+          city || null,
+          state || null,
+          responsibleName,
+          cleanEmail,
+          phone || null,
+          managerProfession || null,
+          managerPracticeAreas || null,
+          CURRENT_TERMS_VERSION,
+          CURRENT_PRIVACY_VERSION
+        );
+
+        // 4. Insere o usuário gestor com status PENDENTE, role 'clinic_admin' e termos aceitos
+        db.prepare(`
+          INSERT INTO users (
+            id, tenant_id, name, email, password_hash, role, phone, status,
+            profession_name, practice_areas, registration_type, registration_number,
+            terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
+            created_at, updated_at
+          ) VALUES (
+            ?, ?, ?, ?, ?, 'clinic_admin', ?, 'pending',
+            ?, ?, ?, ?,
+            ?, ?, datetime('now'), datetime('now'),
+            datetime('now'), datetime('now')
+          )
+        `).run(
+          userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null,
+          managerProfession || null, managerPracticeAreas || null, managerRegistrationType || null, managerRegistrationNumber || null,
+          CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION
+        );
+
+        // 5. Salva a prova documental do aceite legal na tabela legal_acceptances
+        db.prepare(`
+          INSERT INTO legal_acceptances (
+            id, user_id, clinic_id, terms_version, privacy_version, marketing_opt_in, accepted_at, ip_address, user_agent, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
+        `).run(
+          'la-' + uuidv4().slice(0, 8),
+          userId,
+          tenantId,
+          CURRENT_TERMS_VERSION,
+          CURRENT_PRIVACY_VERSION,
+          optInMarketing,
+          ipAddress,
+          userAgent
+        );
+
+        // 6. Associa em clinic_users com a profissão e área clínica do gestor
+        db.prepare(`
+          INSERT INTO clinic_users (
+            id, tenant_id, user_id, role, status, is_manager,
+            profession_custom, practice_areas, permissions_json, zemda_body_enabled, created_at
+          ) VALUES (
+            ?, ?, ?, 'clinic_admin', 'pending', 1,
+            ?, ?, ?, ?, datetime('now')
+          )
+        `).run(
+          'cu-' + uuidv4().slice(0, 8),
           tenantId,
           userId,
-          responsibleName,
-          managerRegistrationType || 'Registro',
-          managerRegistrationNumber || null,
+          managerProfession || null,
           managerPracticeAreas || null,
-          managerPracticeAreas || null
+          initialPermissions,
+          isZemdaBodyOpted ? 1 : 0
         );
-      }
 
-      db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
-      
-      // Criação automática e idempotente do serviço inicial padrão 'Atendimento / Consulta' (R$ 180,00)
-      ensureDefaultClinicService(tenantId);
+        // 7. Se o gestor também for profissional de saúde clínico, cria o registro em professionals
+        if (managerProfession && managerProfession !== 'Gestor / Administrador') {
+          const profId = 'pro-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO professionals (
+              id, tenant_id, user_id, name, registration_type, registration_number,
+              practice_areas, bio, active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+          `).run(
+            profId,
+            tenantId,
+            userId,
+            responsibleName,
+            managerRegistrationType || 'Registro',
+            managerRegistrationNumber || null,
+            managerPracticeAreas || null,
+            managerPracticeAreas || null
+          );
+        }
+
+        // 8. Marca cobrança obrigatória
+        db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
+
+        // 9. Criação automática e idempotente do serviço inicial padrão
+        ensureDefaultClinicService(tenantId);
+      });
+
+      try {
+        executeRegistrationTransaction();
+      } catch (txErr: any) {
+        if (txErr.message === 'VERIFICATION_ALREADY_CONSUMED_OR_INVALID') {
+          res.status(400).json({ error: 'Esta verificação de e-mail já foi utilizada ou não é mais válida. Solicite um novo código.' });
+          return;
+        }
+        if (txErr.message === 'EMAIL_ALREADY_EXISTS') {
+          res.status(409).json({ error: 'Este e-mail já está cadastrado na plataforma' });
+          return;
+        }
+        throw txErr;
+      }
 
       logAudit(req, 'REGISTER_CLINIC_REQUEST', 'tenants', tenantId, {
         clinicName,
@@ -251,11 +281,6 @@ export class TenantController {
         termsVersion: CURRENT_TERMS_VERSION,
         privacyVersion: CURRENT_PRIVACY_VERSION
       });
-
-      // Marca a verificação de e-mail como consumida
-      if (tokenValidation.payload?.verificationId) {
-        EmailService.markVerificationConsumed(tokenValidation.payload.verificationId);
-      }
 
       // Criação automática de sessão autenticada segura
       const token = generateToken({

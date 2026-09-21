@@ -72,6 +72,11 @@ class SafeDatabase {
 export const db = new SafeDatabase();
 
 export function initializeDatabase(): void {
+  // Migrações prévias seguras para tabelas existentes
+  try {
+    rawDb.exec("ALTER TABLE email_verifications ADD COLUMN ip_address TEXT;");
+  } catch (_) {}
+
   let schemaPath = path.resolve(__dirname, 'schema.sql');
   if (!fs.existsSync(schemaPath)) {
     schemaPath = path.resolve(__dirname, '../../src/config/schema.sql');
@@ -184,14 +189,17 @@ export function initializeDatabase(): void {
           verified_at TEXT,
           consumed_at TEXT,
           last_sent_at TEXT,
+          ip_address TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX IF NOT EXISTS idx_email_verif_email_purpose ON email_verifications(email, purpose);
         CREATE INDEX IF NOT EXISTS idx_email_verif_status ON email_verifications(status);
+        CREATE INDEX IF NOT EXISTS idx_email_verif_ip_created ON email_verifications(ip_address, created_at);
       `);
     } catch (e) {
       console.warn('[Migration] Erro ao criar tabela email_verifications:', e);
     }
+    addColIfMissing('email_verifications', 'ip_address', 'TEXT');
 
     // Controle Administrativo Global (Banimento e Bloqueio de Cadastros)
     addColIfMissing('tenants', 'registrations_blocked', 'INTEGER DEFAULT 0');
