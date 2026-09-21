@@ -10,9 +10,9 @@ let sdkLoadingPromise: Promise<any> | null = null;
 /**
  * Carrega e inicializa de forma segura e assíncrona o Facebook JavaScript SDK oficial.
  * @param appId ID do aplicativo Meta retornado pelo backend ou variável de ambiente
- * @param version Versão da Graph API (padrão v21.0)
+ * @param version Versão da Graph API (padrão v25.0)
  */
-export function loadFacebookSdk(appId: string, version: string = 'v21.0'): Promise<any> {
+export function loadFacebookSdk(appId: string, version: string = 'v25.0'): Promise<any> {
   if (typeof window === 'undefined') {
     return Promise.reject(new Error('Window não disponível (SSR)'));
   }

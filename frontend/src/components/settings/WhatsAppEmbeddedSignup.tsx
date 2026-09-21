@@ -12,7 +12,9 @@ import {
   Layers,
   PowerOff,
   ShieldCheck,
-  Info
+  Info,
+  Calendar,
+  AlertTriangle
 } from 'lucide-react';
 
 interface CapturedSessionData {
@@ -24,7 +26,6 @@ interface CapturedSessionData {
 
 interface IntegrationInfo {
   id: string;
-  tenantId: string;
   wabaId: string;
   phoneNumberId: string;
   businessId?: string | null;
@@ -32,6 +33,7 @@ interface IntegrationInfo {
   displayPhoneNumber?: string | null;
   coexistenceMode: boolean;
   status: 'connected' | 'disconnected' | 'pending' | 'error';
+  tokenExpiresAt?: string | null;
   connectedAt: string;
   updatedAt: string;
 }
@@ -45,6 +47,7 @@ interface StatusApiResponse {
     config: {
       appId: string;
       configId: string;
+      apiVersion: string;
       isConfigured: boolean;
     };
   };
@@ -62,10 +65,12 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
   const [serverConfig, setServerConfig] = useState<{
     appId: string;
     configId: string;
+    apiVersion: string;
     isConfigured: boolean;
   }>({
     appId: '',
     configId: '',
+    apiVersion: 'v25.0',
     isConfigured: false
   });
 
@@ -84,31 +89,35 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
     }
   };
 
-  // Carrega status atual da integração e configurações do backend
+  // Carrega status atual da integração central do SaaS
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const res = await ApiClient.get<StatusApiResponse>('/v1/whatsapp-cloud/status');
+      const res = await ApiClient.get<StatusApiResponse>('/v1/admin/whatsapp-cloud/status');
       if (res && res.data) {
         setIsConnected(Boolean(res.data.connected));
         setCoexistenceActive(Boolean(res.data.coexistenceActive));
         setIntegration(res.data.integration);
         setServerConfig(res.data.config);
 
-        // Se o backend tiver appId configurado, pré-carrega o SDK
         const appIdToUse =
           res.data.config?.appId ||
           (import.meta.env.VITE_META_APP_ID as string) ||
           '';
 
+        const apiVersionToUse =
+          res.data.config?.apiVersion ||
+          (import.meta.env.VITE_META_GRAPH_API_VERSION as string) ||
+          'v25.0';
+
         if (appIdToUse) {
-          loadFacebookSdk(appIdToUse).catch(() => {
-            // SDK será tentado novamente no momento do clique se necessário
+          loadFacebookSdk(appIdToUse, apiVersionToUse).catch(() => {
+            // SDK será pré-carregado ou inicializado na ação
           });
         }
       }
     } catch (err: any) {
-      console.warn('[WhatsAppEmbeddedSignup] Erro ao carregar status:', err.message || err);
+      console.warn('[WhatsAppEmbeddedSignup] Erro ao carregar status do WhatsApp central:', err.message || err);
     } finally {
       setLoading(false);
     }
@@ -117,7 +126,7 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
   useEffect(() => {
     fetchStatus();
 
-    // Listener estrito para window.postMessage de origens oficiais da Meta
+    // Listener ESTRITO para window.postMessage de origens oficiais da Meta
     const handlePostMessage = (event: MessageEvent) => {
       if (!isOfficialMetaOrigin(event.origin)) {
         return;
@@ -136,11 +145,27 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
         return;
       }
 
-      const eventType = messageData.type || messageData.event;
+      // Aceita estritamente mensagens com type 'WA_EMBEDDED_SIGNUP'
+      if (messageData.type !== 'WA_EMBEDDED_SIGNUP') {
+        return;
+      }
+
+      const eventName = messageData.event;
+      // Ignora expressamente CANCEL, ERROR e eventos intermediários
       if (
-        eventType === 'WA_EMBEDDED_SIGNUP' ||
-        eventType === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ||
-        eventType === 'FINISH'
+        !eventName ||
+        eventName === 'CANCEL' ||
+        eventName === 'ERROR' ||
+        eventName.includes('CANCEL') ||
+        eventName.includes('ERROR')
+      ) {
+        return;
+      }
+
+      // Processa apenas eventos de conclusão válidos, especialmente FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING
+      if (
+        eventName === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING' ||
+        eventName === 'FINISH'
       ) {
         const payload = messageData.data || messageData;
         if (payload.waba_id) capturedRef.current.wabaId = String(payload.waba_id);
@@ -158,7 +183,7 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
     };
   }, []);
 
-  // Troca server-to-server do code por access token permanente
+  // Troca server-to-server do code pelo access token permanente
   const handleExchangeCode = async (code: string) => {
     try {
       setConnecting(true);
@@ -170,19 +195,19 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
         displayPhoneNumber: capturedRef.current.displayPhoneNumber
       };
 
-      const res = await ApiClient.post<any>('/v1/whatsapp-cloud/exchange-code', payload);
+      const res = await ApiClient.post<any>('/v1/admin/whatsapp-cloud/exchange-code', payload);
       if (res && res.success) {
         showToast(
-          'WhatsApp Business conectado com sucesso em modo de coexistência!',
+          'WhatsApp Central Oficial Zemda conectado com sucesso em modo de coexistência!',
           'success'
         );
         capturedRef.current = {};
         await fetchStatus();
       } else {
-        throw new Error(res.error || 'Falha ao salvar a integração');
+        throw new Error(res.error || 'Falha ao salvar a integração central');
       }
     } catch (err: any) {
-      showToast(err.message || 'Erro ao validar autorização com a Meta', 'error');
+      showToast(err.message || 'Erro ao validar autorização central com a Meta', 'error');
     } finally {
       setConnecting(false);
     }
@@ -200,9 +225,14 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
       (import.meta.env.VITE_META_APP_ID as string) ||
       '';
 
+    const apiVersion =
+      serverConfig.apiVersion ||
+      (import.meta.env.VITE_META_GRAPH_API_VERSION as string) ||
+      'v25.0';
+
     if (!configId) {
       showToast(
-        'Config ID da Meta não encontrado. Defina META_WHATSAPP_CONFIG_ID nas variáveis de ambiente.',
+        'Config ID da Meta não encontrado. Defina META_WHATSAPP_CONFIG_ID no ambiente.',
         'error'
       );
       return;
@@ -212,14 +242,12 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
       setConnecting(true);
       capturedRef.current = {};
 
-      // Garante carregamento do SDK
-      const fb = await loadFacebookSdk(appId);
+      const fb = await loadFacebookSdk(appId, apiVersion);
 
       if (!fb || typeof fb.login !== 'function') {
-        throw new Error('SDK do Facebook não disponível no navegador');
+        throw new Error('SDK do Facebook indisponível no navegador.');
       }
 
-      // Disparo com os parâmetros oficiais de coexistência
       fb.login(
         (response: any) => {
           if (response?.authResponse && response.authResponse.code) {
@@ -228,7 +256,7 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
           } else {
             setConnecting(false);
             if (response?.status === 'unknown') {
-              showToast('Janela de conexão da Meta foi fechada.', 'info');
+              showToast('Janela de conexão da Meta foi cancelada ou fechada.', 'info');
             }
           }
         },
@@ -250,36 +278,45 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
     }
   };
 
-  // Desconecta a integração
+  // Desconecta a integração central e apaga credenciais locais
   const handleDisconnect = async () => {
-    if (!window.confirm('Deseja realmente desconectar a integração com a WhatsApp Cloud API?')) {
+    if (!window.confirm('Deseja realmente desconectar o número central do Zemda da Cloud API? Os tokens locais serão apagados imediatamente.')) {
       return;
     }
 
     try {
       setDisconnecting(true);
-      await ApiClient.post('/v1/whatsapp-cloud/disconnect', {});
-      showToast('WhatsApp Cloud API desconectado com sucesso.', 'info');
+      await ApiClient.post('/v1/admin/whatsapp-cloud/disconnect', {});
+      showToast('WhatsApp Central desconectado e credenciais apagadas.', 'info');
       await fetchStatus();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao desconectar WhatsApp', 'error');
+      showToast(err.message || 'Erro ao desconectar WhatsApp central', 'error');
     } finally {
       setDisconnecting(false);
     }
+  };
+
+  // Determina se o token está próximo do vencimento (menos de 7 dias)
+  const isExpiringSoon = (): boolean => {
+    if (!integration?.tokenExpiresAt) return false;
+    const expires = new Date(integration.tokenExpiresAt).getTime();
+    const now = Date.now();
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    return expires - now < sevenDaysMs;
   };
 
   if (loading) {
     return (
       <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-center space-x-3 text-slate-500 text-sm">
         <RefreshCw className="w-5 h-5 animate-spin text-indigo-600" />
-        <span>Carregando configurações do WhatsApp Cloud...</span>
+        <span>Carregando status do WhatsApp Central Zemda...</span>
       </div>
     );
   }
 
   return (
     <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
-      {/* Cabeçalho da Seção */}
+      {/* Cabeçalho de Governança Global */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
@@ -288,13 +325,13 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                WhatsApp Business Cloud API
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  Modo de Coexistência
+                WhatsApp Central Oficial Zemda — Infraestrutura Cloud API
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                  SaaS Global • Meta Graph {serverConfig.apiVersion || 'v25.0'}
                 </span>
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Conexão oficial via Meta Embedded Signup mantendo o uso simultâneo no app móvel.
+                Número único central do Zemda conectado via Embedded Signup com coexistência no app móvel.
               </p>
             </div>
           </div>
@@ -311,31 +348,46 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
         </button>
       </div>
 
-      {/* Alerta explicativo do Modo de Coexistência */}
-      <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-100 text-xs text-emerald-900 space-y-2">
-        <div className="flex items-center gap-2 font-bold uppercase text-[11px] tracking-wider text-emerald-800">
-          <Layers className="w-4 h-4 text-emerald-600" />
-          Como funciona a Coexistência no Zemda
+      {/* Alerta Arquitetural */}
+      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-2">
+        <div className="flex items-center gap-2 font-bold uppercase text-[11px] tracking-wider text-slate-900">
+          <Layers className="w-4 h-4 text-indigo-600" />
+          Arquitetura Centralizada do Sistema
         </div>
-        <p className="text-emerald-800 leading-relaxed">
-          Com a coexistência ativa (<code className="font-mono text-emerald-900 font-bold">featureType: whatsapp_business_app_onboarding</code>),
-          o seu número comercial <strong>continua funcionando normalmente no aplicativo móvel WhatsApp Business</strong> no celular da clínica.
-          Ao mesmo tempo, o Zemda conecta-se à Cloud API oficial da Meta de forma segura e paralela, sem risco de desativação do app do seu celular.
+        <p className="text-slate-600 leading-relaxed">
+          O Zemda opera com <strong>um único número oficial central</strong> para toda a plataforma. As clínicas não conectam números próprios;
+          todas utilizam essa infraestrutura oficial via carteira de créditos e preferências de notificação.
+          O aplicativo móvel WhatsApp Business no celular da central Zemda continua funcionando normalmente graças ao <strong>modo de coexistência</strong>.
         </p>
-        <div className="flex flex-wrap items-center gap-4 pt-1 text-[11px] font-medium text-emerald-700">
+        <div className="flex flex-wrap items-center gap-4 pt-1 text-[11px] font-medium text-slate-700">
           <span className="flex items-center gap-1.5">
-            <Smartphone className="w-3.5 h-3.5 text-emerald-600" /> App Móvel Mantido
+            <Smartphone className="w-3.5 h-3.5 text-emerald-600" /> WhatsApp Móvel Central Mantido
           </span>
           <span className="flex items-center gap-1.5">
-            <Cloud className="w-3.5 h-3.5 text-emerald-600" /> Cloud API Meta Conectada
+            <Cloud className="w-3.5 h-3.5 text-indigo-600" /> Meta Cloud API Ativa
           </span>
           <span className="flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Tokens Criptografados (AES-256)
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> AES-256-GCM Autenticado
           </span>
         </div>
       </div>
 
-      {/* Card de Status: Conectado */}
+      {/* Alerta de Expiração de Token, se aplicável */}
+      {isConnected && integration?.tokenExpiresAt && isExpiringSoon() && (
+        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <span className="font-bold block">Atenção: Renovação de Token Recomendada</span>
+            <p className="leading-relaxed">
+              O token de acesso da Meta expira em{' '}
+              <strong>{new Date(integration.tokenExpiresAt).toLocaleString('pt-BR')}</strong>.
+              Reconecte o WhatsApp Business preventivamente antes dessa data para evitar interrupções nos disparos centrais.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Card: Central Conectada */}
       {isConnected && integration ? (
         <div className="p-6 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -345,10 +397,10 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
               </div>
               <div>
                 <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider block">
-                  Status: Conectado
+                  Status: Conectado Centralmente
                 </span>
                 <p className="text-sm font-bold text-slate-800">
-                  {integration.displayPhoneNumber || integration.phoneNumber || 'Número Conectado'}
+                  {integration.displayPhoneNumber || integration.phoneNumber || 'Número Central Oficial'}
                 </p>
               </div>
             </div>
@@ -366,15 +418,15 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
                 className="px-3.5 py-1.5 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <PowerOff className="w-3.5 h-3.5" />
-                {disconnecting ? 'Desconectando...' : 'Desconectar'}
+                {disconnecting ? 'Desconectando...' : 'Desconectar e Limpar'}
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 text-xs">
             <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
               <span className="text-[11px] text-slate-400 font-medium block uppercase tracking-wider">
-                WhatsApp Business Account ID (WABA)
+                WABA ID
               </span>
               <p className="font-mono text-slate-800 font-bold break-all">
                 {integration.wabaId}
@@ -390,20 +442,21 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
               </p>
             </div>
 
-            {integration.businessId && (
-              <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
-                <span className="text-[11px] text-slate-400 font-medium block uppercase tracking-wider">
-                  Meta Business ID
-                </span>
-                <p className="font-mono text-slate-800 font-bold break-all">
-                  {integration.businessId}
-                </p>
-              </div>
-            )}
+            <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+              <span className="text-[11px] text-slate-400 font-medium block uppercase tracking-wider">
+                Validade do Token
+              </span>
+              <p className="text-slate-800 font-semibold flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-slate-400" />
+                {integration.tokenExpiresAt
+                  ? new Date(integration.tokenExpiresAt).toLocaleString('pt-BR')
+                  : 'Longa Duração (Meta)'}
+              </p>
+            </div>
 
             <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
               <span className="text-[11px] text-slate-400 font-medium block uppercase tracking-wider">
-                Data de Conexão
+                Data da Conexão
               </span>
               <p className="text-slate-800 font-semibold">
                 {new Date(integration.connectedAt).toLocaleString('pt-BR')}
@@ -412,16 +465,16 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
           </div>
         </div>
       ) : (
-        /* Card de Status: Não Conectado */
+        /* Card: Não Conectado */
         <div className="p-6 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-5">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <h4 className="font-bold text-slate-900 text-sm">
-                Conectar WhatsApp Business da Clínica
+                Conectar Número Oficial Central Zemda
               </h4>
               <p className="text-xs text-slate-600 max-w-xl leading-relaxed">
-                Clique no botão abaixo para abrir a janela oficial da Meta e autenticar o seu número corporativo.
-                O processo é executado pelo fluxo oficial de <strong>Embedded Signup</strong> com preservação do seu app de celular.
+                Abra a autenticação oficial da Meta para vincular o número corporativo da plataforma com <strong>coexistência ativa</strong>.
+                O token será validado e criptografado com AES-256-GCM antes de ser ativado.
               </p>
             </div>
 
@@ -439,23 +492,23 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
               ) : (
                 <>
                   <MessageSquare className="w-4 h-4" />
-                  Conectar WhatsApp Business
+                  Conectar WhatsApp Oficial Central
                 </>
               )}
             </button>
           </div>
 
-          {/* Avisos de Configuração do Ambiente */}
           {!serverConfig.isConfigured && (
             <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <span className="font-bold block">Variáveis de Ambiente da Meta</span>
+                <span className="font-bold block">Configuração Obrigatória no Servidor</span>
                 <p className="text-amber-800 leading-relaxed text-[11px]">
-                  Para ativar a integração em produção no Railway, certifique-se de preencher as variáveis:
+                  Defina as variáveis no Railway / servidor:
                   <code className="mx-1 px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">META_APP_ID</code>,
-                  <code className="mx-1 px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">META_APP_SECRET</code> e
-                  <code className="mx-1 px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">META_WHATSAPP_CONFIG_ID</code>.
+                  <code className="mx-1 px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">META_APP_SECRET</code>,
+                  <code className="mx-1 px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">META_WHATSAPP_CONFIG_ID</code> e
+                  <code className="mx-1 px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">WHATSAPP_TOKEN_ENCRYPTION_KEY</code>.
                 </p>
               </div>
             </div>
@@ -463,11 +516,11 @@ export const WhatsAppEmbeddedSignup: React.FC = () => {
         </div>
       )}
 
-      {/* Rodapé Informativo */}
+      {/* Rodapé */}
       <div className="pt-2 text-xs text-slate-500 flex items-center gap-2">
         <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         <span>
-          O envio de notificações automatizadas continuará desacoplado até ativação expressa no painel administrativo.
+          O envio de mensagens pelas clínicas continuará utilizando o simulador desacoplado até ativação expressa no painel do SuperAdmin.
         </span>
       </div>
     </div>

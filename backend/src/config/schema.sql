@@ -651,10 +651,9 @@ CREATE INDEX IF NOT EXISTS idx_email_verif_email_purpose ON email_verifications(
 CREATE INDEX IF NOT EXISTS idx_email_verif_status ON email_verifications(status);
 CREATE INDEX IF NOT EXISTS idx_email_verif_ip_created ON email_verifications(ip_address, created_at);
 
--- 29. WhatsApp Business Cloud API (Embedded Signup com Coexistência)
-CREATE TABLE IF NOT EXISTS whatsapp_cloud_integrations (
+-- 29. WhatsApp Business Cloud API — Infraestrutura Central Oficial Zemda (SaaS SuperAdmin)
+CREATE TABLE IF NOT EXISTS whatsapp_cloud_system_integrations (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
   waba_id TEXT NOT NULL,
   phone_number_id TEXT NOT NULL,
   business_id TEXT,
@@ -666,9 +665,5 @@ CREATE TABLE IF NOT EXISTS whatsapp_cloud_integrations (
   token_expires_at TEXT,
   connected_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  created_by TEXT,
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-  UNIQUE(tenant_id, phone_number_id)
+  created_by TEXT
 );
-
-CREATE INDEX IF NOT EXISTS idx_whatsapp_cloud_tenant ON whatsapp_cloud_integrations(tenant_id);

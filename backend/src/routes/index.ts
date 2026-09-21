@@ -876,10 +876,16 @@ api.get('/v1/external-tests', requireTenant, ExternalTestsController.list);
 api.post('/v1/external-tests', requireTenant, ExternalTestsController.save);
 api.delete('/v1/external-tests/:id', requireTenant, ExternalTestsController.delete);
 
-// WhatsApp Business Cloud API (Embedded Signup com Coexistência)
-api.get('/v1/whatsapp-cloud/config', requireTenant, WhatsAppCloudController.getConfig);
-api.get('/v1/whatsapp-cloud/status', requireTenant, WhatsAppCloudController.getStatus);
-api.post('/v1/whatsapp-cloud/exchange-code', requireTenant, requireRole('clinic_admin'), WhatsAppCloudController.exchangeCode);
-api.post('/v1/whatsapp-cloud/disconnect', requireTenant, requireRole('clinic_admin'), WhatsAppCloudController.disconnect);
+// WhatsApp Business Cloud API — Infraestrutura Central Oficial Zemda (Exclusivo SuperAdmin do SaaS)
+api.get('/v1/admin/whatsapp-cloud/config', requireRole('superadmin'), WhatsAppCloudController.getConfig);
+api.get('/v1/admin/whatsapp-cloud/status', requireRole('superadmin'), WhatsAppCloudController.getStatus);
+api.post('/v1/admin/whatsapp-cloud/exchange-code', requireRole('superadmin'), WhatsAppCloudController.exchangeCode);
+api.post('/v1/admin/whatsapp-cloud/disconnect', requireRole('superadmin'), WhatsAppCloudController.disconnect);
+
+// Aliases protegidos: bloqueio estrito para qualquer papel não-superadmin
+api.get('/v1/whatsapp-cloud/config', requireRole('superadmin'), WhatsAppCloudController.getConfig);
+api.get('/v1/whatsapp-cloud/status', requireRole('superadmin'), WhatsAppCloudController.getStatus);
+api.post('/v1/whatsapp-cloud/exchange-code', requireRole('superadmin'), WhatsAppCloudController.exchangeCode);
+api.post('/v1/whatsapp-cloud/disconnect', requireRole('superadmin'), WhatsAppCloudController.disconnect);
 
 export default api;

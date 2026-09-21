@@ -27,10 +27,8 @@ import {
   Scale,
   ExternalLink,
   Cookie,
-  ShieldCheck,
-  MessageSquare
+  ShieldCheck
 } from 'lucide-react';
-import { WhatsAppEmbeddedSignup } from './WhatsAppEmbeddedSignup';
 
 export const COMMON_INSURANCE_PRESETS = [
   { name: 'Unimed', ansCode: '305146', phone: '0800 014 5555' },
@@ -55,7 +53,7 @@ export const SettingsView: React.FC = () => {
   const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession } = useAuth();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal' | 'whatsapp'>(
+  const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal'>(
     isClinicAdmin ? 'clinic' : 'profile'
   );
 
@@ -445,16 +443,6 @@ export const SettingsView: React.FC = () => {
               >
                 <CreditCard className="w-3.5 h-3.5" />
                 Convênios
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('whatsapp')}
-                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'whatsapp' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                WhatsApp Business
               </button>
             </>
           )}
@@ -1468,11 +1456,6 @@ export const SettingsView: React.FC = () => {
             </p>
           </div>
         </div>
-      )}
-
-      {/* ABA: WHATSAPP BUSINESS CLOUD API COM COEXISTÊNCIA */}
-      {isClinicAdmin && activeTab === 'whatsapp' && (
-        <WhatsAppEmbeddedSignup />
       )}
     </div>
   );

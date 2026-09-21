@@ -23,16 +23,18 @@ import {
   ToggleLeft,
   ToggleRight,
   Sparkles,
-  Gift
+  Gift,
+  MessageSquare
 } from 'lucide-react';
 import { FreeTrialsAdminView } from './FreeTrialsAdminView';
+import { WhatsAppEmbeddedSignup } from '../settings/WhatsAppEmbeddedSignup';
 
 export const SuperAdminView: React.FC = () => {
   const { switchTenant, currentUser: user } = useAuth();
   const { showToast } = useToast();
 
   // Navegação Principal do SuperAdmin
-  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials'>('tenants');
+  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp'>('tenants');
 
   // Clínicas
   const [metrics, setMetrics] = useState<any>(null);
@@ -417,15 +419,28 @@ export const SuperAdminView: React.FC = () => {
             <Gift className="w-3.5 h-3.5" />
             Testes Grátis
           </button>
+
+          <button
+            onClick={() => setMainSection('whatsapp')}
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              mainSection === 'whatsapp'
+                ? 'bg-emerald-500 text-white font-black shadow-md'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            WhatsApp Central
+          </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* SEÇÃO 1: CLÍNICAS & MODERAÇÃO */}
+      {/* SEÇÕES GLOBAIS DE GOVERNANÇA DO SAAS */}
       {/* ========================================================================= */}
       {mainSection === 'subscriptions' && <GlobalBillingView />}
       {mainSection === 'integrations' && <GlobalBillingView integration />}
       {mainSection === 'free_trials' && <FreeTrialsAdminView />}
+      {mainSection === 'whatsapp' && <WhatsAppEmbeddedSignup />}
       {mainSection === 'tenants' && (
         <div className="space-y-6">
           {/* Alertas do Sistema */}

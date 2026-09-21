@@ -5,12 +5,12 @@ import { db } from '../config/database';
 export interface WhatsAppCloudConfig {
   appId: string;
   configId: string;
+  apiVersion: string;
   isConfigured: boolean;
 }
 
-export interface WhatsAppCloudIntegrationView {
+export interface WhatsAppCloudSystemIntegrationView {
   id: string;
-  tenantId: string;
   wabaId: string;
   phoneNumberId: string;
   businessId?: string | null;
@@ -18,6 +18,7 @@ export interface WhatsAppCloudIntegrationView {
   displayPhoneNumber?: string | null;
   coexistenceMode: boolean;
   status: 'connected' | 'disconnected' | 'pending' | 'error';
+  tokenExpiresAt?: string | null;
   connectedAt: string;
   updatedAt: string;
 }
@@ -25,7 +26,7 @@ export interface WhatsAppCloudIntegrationView {
 export interface WhatsAppCloudStatusResponse {
   connected: boolean;
   coexistenceActive: boolean;
-  integration: WhatsAppCloudIntegrationView | null;
+  integration: WhatsAppCloudSystemIntegrationView | null;
 }
 
 export class WhatsAppCloudService {
@@ -49,65 +50,84 @@ export class WhatsAppCloudService {
     ).trim();
   }
 
+  public static getGraphApiVersion(): string {
+    return (process.env.META_GRAPH_API_VERSION || 'v25.0').trim();
+  }
+
   /**
-   * Retorna os identificadores públicos para inicialização segura do Meta JS SDK no frontend.
-   * NUNCA expõe o App Secret ou access tokens.
+   * Obtém a chave estrita para AES-256-GCM via WHATSAPP_TOKEN_ENCRYPTION_KEY.
+   * FALHA DE FORMA SEGURA sem qualquer fallback quando não configurada.
+   */
+  public static getEncryptionKey(): Buffer {
+    const rawKey = (process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || '').trim();
+    if (!rawKey) {
+      throw new Error(
+        'WHATSAPP_TOKEN_ENCRYPTION_KEY não configurada no ambiente. Criptografia segura indisponível.'
+      );
+    }
+    // Deriva chave de 32 bytes (256 bits)
+    return crypto.createHash('sha256').update(rawKey).digest();
+  }
+
+  /**
+   * Criptografia autenticada AES-256-GCM com IV aleatório (12 bytes) e authentication tag (16 bytes).
+   * Retorna no formato: `${ivHex}:${authTagHex}:${cipherHex}`.
+   */
+  public static encryptToken(plainText: string): string {
+    if (!plainText) return '';
+    const key = this.getEncryptionKey();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    let encrypted = cipher.update(plainText, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag();
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+  }
+
+  /**
+   * Decriptografia autenticada AES-256-GCM.
+   * Valida a tag de autenticação e falha se houver adulteração.
+   */
+  public static decryptToken(encryptedPayload: string): string {
+    if (!encryptedPayload) return '';
+    const key = this.getEncryptionKey();
+    const parts = encryptedPayload.split(':');
+    if (parts.length !== 3) {
+      throw new Error('Payload criptografado inválido para AES-256-GCM.');
+    }
+    const [ivHex, authTagHex, cipherHex] = parts;
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(cipherHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  }
+
+  /**
+   * Retorna os identificadores públicos para inicialização do Meta SDK no SuperAdmin.
+   * NUNCA expõe o App Secret, tokens ou chaves criptográficas.
    */
   public static getConfig(): WhatsAppCloudConfig {
     const appId = this.getAppId();
     const configId = this.getConfigId();
     const appSecret = this.getAppSecret();
+    const apiVersion = this.getGraphApiVersion();
+    const hasKey = Boolean((process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || '').trim());
 
     return {
       appId,
       configId,
-      isConfigured: Boolean(appId && configId && appSecret)
+      apiVersion,
+      isConfigured: Boolean(appId && configId && appSecret && hasKey)
     };
   }
 
   /**
-   * Derivação de chave AES-256 a partir do META_APP_SECRET
-   */
-  private static getDerivedKey(): Buffer {
-    const secret = this.getAppSecret() || 'zemda-cloud-api-internal-encryption-seed';
-    return crypto.createHash('sha256').update(secret).digest();
-  }
-
-  /**
-   * Criptografia simétrica AES-256-CBC para armazenamento seguro do access token.
-   */
-  public static encryptToken(plainText: string): string {
-    if (!plainText) return '';
-    const iv = crypto.randomBytes(16);
-    const key = this.getDerivedKey();
-    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-    let encrypted = cipher.update(plainText, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return `${iv.toString('hex')}:${encrypted}`;
-  }
-
-  /**
-   * Decriptografia segura do access token para operações server-to-server.
-   */
-  public static decryptToken(encryptedText: string): string {
-    if (!encryptedText || !encryptedText.includes(':')) return '';
-    try {
-      const [ivHex, cipherHex] = encryptedText.split(':');
-      const iv = Buffer.from(ivHex, 'hex');
-      const key = this.getDerivedKey();
-      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-      let decrypted = decipher.update(cipherHex, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-      return decrypted;
-    } catch {
-      return '';
-    }
-  }
-
-  /**
-   * Troca segura server-to-server do authorization code recebido do Embedded Signup
-   * por um token de acesso de longa duração na Meta Graph API.
-   * Não emite logs com tokens ou segredos.
+   * Troca segura server-to-server do authorization code pelo access token na Meta Graph API.
+   * Utiliza a versão configurada em META_GRAPH_API_VERSION (v25.0 padrão).
    */
   public static async exchangeCodeForToken(code: string): Promise<{
     accessToken: string;
@@ -116,26 +136,27 @@ export class WhatsAppCloudService {
   }> {
     const appId = this.getAppId();
     const appSecret = this.getAppSecret();
+    const apiVersion = this.getGraphApiVersion();
 
     if (!appId || !appSecret) {
       throw new Error(
-        'Credenciais da Meta Cloud API (META_APP_ID e META_APP_SECRET) não configuradas nas variáveis de ambiente do servidor.'
+        'Credenciais da Meta Cloud API (META_APP_ID e META_APP_SECRET) não configuradas no servidor.'
       );
     }
 
     if (!code || typeof code !== 'string') {
-      throw new Error('Código de autorização inválido ou ausente fornecido pelo Embedded Signup.');
+      throw new Error('Código de autorização inválido ou ausente do Embedded Signup.');
     }
 
-    const url = `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${encodeURIComponent(
-      appId
-    )}&client_secret=${encodeURIComponent(appSecret)}&code=${encodeURIComponent(code)}`;
+    const url = `https://graph.facebook.com/${encodeURIComponent(
+      apiVersion
+    )}/oauth/access_token?client_id=${encodeURIComponent(appId)}&client_secret=${encodeURIComponent(
+      appSecret
+    )}&code=${encodeURIComponent(code)}`;
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        Accept: 'application/json'
-      }
+      headers: { Accept: 'application/json' }
     });
 
     const data: any = await response.json();
@@ -143,9 +164,9 @@ export class WhatsAppCloudService {
     if (!response.ok || data.error) {
       const errorMessage =
         data.error?.message ||
-        `Erro ${response.status} ao trocar authorization code na Meta Graph API.`;
+        `Erro ${response.status} ao trocar authorization code na Meta Graph API ${apiVersion}.`;
       console.error(
-        `[WhatsAppCloud] Falha na troca do code Meta (status ${response.status}, code ${data.error?.code}): ${errorMessage}`
+        `[WhatsAppCloud] Falha na troca do code Meta: ${errorMessage}`
       );
       throw new Error(`Falha na autorização Meta: ${errorMessage}`);
     }
@@ -158,68 +179,141 @@ export class WhatsAppCloudService {
   }
 
   /**
-   * Consulta os metadados do número de telefone conectado (display_phone_number, verified_name)
+   * Descoberta e validação server-to-server de WABA ID e Phone Number ID.
+   * NUNCA permite valores 'pending_waba' ou 'pending_phone_id'.
+   * Se o frontend não capturou o Phone Number ID, descobre diretamente via recursos autorizados da WABA.
    */
-  public static async fetchPhoneNumberDetails(
-    phoneNumberId: string,
-    accessToken: string
-  ): Promise<{ displayPhoneNumber?: string; verifiedName?: string }> {
-    try {
-      const url = `https://graph.facebook.com/v21.0/${encodeURIComponent(
-        phoneNumberId
-      )}?fields=display_phone_number,verified_name`;
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json'
+  public static async discoverAndValidateIds(
+    accessToken: string,
+    candidateWabaId?: string,
+    candidatePhoneNumberId?: string
+  ): Promise<{
+    wabaId: string;
+    phoneNumberId: string;
+    displayPhoneNumber?: string;
+    verifiedName?: string;
+  }> {
+    const apiVersion = this.getGraphApiVersion();
+    let resolvedWabaId = candidateWabaId && candidateWabaId !== 'pending_waba' ? candidateWabaId.trim() : '';
+    let resolvedPhoneNumberId = candidatePhoneNumberId && candidatePhoneNumberId !== 'pending_phone_id' ? candidatePhoneNumberId.trim() : '';
+    let displayPhoneNumber: string | undefined;
+    let verifiedName: string | undefined;
+
+    // 1. Se WABA ID não foi fornecido, tenta descobrir via debug_token ou me/whatsapp_business_accounts
+    if (!resolvedWabaId) {
+      try {
+        const wabaRes = await fetch(`https://graph.facebook.com/${apiVersion}/me/whatsapp_business_accounts`, {
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+        });
+        if (wabaRes.ok) {
+          const wabaData: any = await wabaRes.json();
+          if (wabaData.data && wabaData.data.length > 0) {
+            resolvedWabaId = String(wabaData.data[0].id);
+          }
         }
-      });
-      if (response.ok) {
-        const data: any = await response.json();
-        return {
-          displayPhoneNumber: data.display_phone_number,
-          verifiedName: data.verified_name
-        };
-      }
-    } catch {
-      // Ignora erro silenciosamente para não travar o fluxo de salvamento
+      } catch (_) {}
     }
-    return {};
+
+    // 2. Se Phone Number ID não foi fornecido mas temos WABA ID, descobre via WABA phone_numbers
+    if (resolvedWabaId && !resolvedPhoneNumberId) {
+      try {
+        const phoneListRes = await fetch(
+          `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(resolvedWabaId)}/phone_numbers?fields=id,display_phone_number,verified_name,status`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+          }
+        );
+        if (phoneListRes.ok) {
+          const phoneListData: any = await phoneListRes.json();
+          if (phoneListData.data && phoneListData.data.length > 0) {
+            // Seleciona o primeiro número registrado
+            const phoneItem = phoneListData.data[0];
+            resolvedPhoneNumberId = String(phoneItem.id);
+            displayPhoneNumber = phoneItem.display_phone_number;
+            verifiedName = phoneItem.verified_name;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Valida os detalhes do número se temos Phone Number ID
+    if (resolvedPhoneNumberId) {
+      try {
+        const detailsRes = await fetch(
+          `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(resolvedPhoneNumberId)}?fields=display_phone_number,verified_name,status`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+          }
+        );
+        if (detailsRes.ok) {
+          const detailsData: any = await detailsRes.json();
+          displayPhoneNumber = detailsData.display_phone_number || displayPhoneNumber;
+          verifiedName = detailsData.verified_name || verifiedName;
+        }
+      } catch (_) {}
+    }
+
+    // Validação estrita: NUNCA aceitar pending ou vazio
+    if (!resolvedWabaId || resolvedWabaId === 'pending_waba') {
+      throw new Error(
+        'WABA ID (WhatsApp Business Account ID) não identificado ou inválido. Conexão não autorizada.'
+      );
+    }
+
+    if (!resolvedPhoneNumberId || resolvedPhoneNumberId === 'pending_phone_id') {
+      throw new Error(
+        'Phone Number ID não identificado na Meta Graph API. Verifique se o número foi configurado no WhatsApp Business Manager.'
+      );
+    }
+
+    return {
+      wabaId: resolvedWabaId,
+      phoneNumberId: resolvedPhoneNumberId,
+      displayPhoneNumber,
+      verifiedName
+    };
   }
 
   /**
-   * Salva com segurança a integração do tenant em modo de coexistência.
-   * O access token é persistido criptografado e jamais exposto nas consultas.
+   * Salva com segurança a integração central única do SaaS com AES-256-GCM e coexistência ativa.
+   * NUNCA persiste 'pending_waba' ou 'pending_phone_id'.
    */
-  public static async saveIntegration(
-    tenantId: string,
-    params: {
-      wabaId: string;
-      phoneNumberId: string;
-      businessId?: string;
-      accessToken: string;
-      expiresIn?: number;
-      displayPhoneNumber?: string;
-      phoneNumber?: string;
-      createdBy?: string;
-    }
-  ): Promise<WhatsAppCloudIntegrationView> {
-    const encryptedToken = this.encryptToken(params.accessToken);
-    let expiresAt: string | null = null;
-    if (params.expiresIn) {
-      expiresAt = new Date(Date.now() + params.expiresIn * 1000).toISOString();
+  public static async saveSystemIntegration(params: {
+    wabaId: string;
+    phoneNumberId: string;
+    businessId?: string;
+    accessToken: string;
+    expiresIn?: number;
+    displayPhoneNumber?: string;
+    phoneNumber?: string;
+    createdBy?: string;
+  }): Promise<WhatsAppCloudSystemIntegrationView> {
+    if (
+      !params.wabaId ||
+      params.wabaId === 'pending_waba' ||
+      !params.phoneNumberId ||
+      params.phoneNumberId === 'pending_phone_id'
+    ) {
+      throw new Error(
+        'Tentativa inválida de salvar integração com identificadores pendentes. Apenas conexões confirmadas podem ser salvas.'
+      );
     }
 
-    // Busca se já existe registro prévio para o tenant
+    const encryptedToken = this.encryptToken(params.accessToken);
+    let expiresAt: string | null = null;
+    if (params.expiresIn && Number(params.expiresIn) > 0) {
+      expiresAt = new Date(Date.now() + Number(params.expiresIn) * 1000).toISOString();
+    }
+
     const existing = db
-      .prepare('SELECT id FROM whatsapp_cloud_integrations WHERE tenant_id = ? LIMIT 1')
-      .get(tenantId) as any;
+      .prepare('SELECT id FROM whatsapp_cloud_system_integrations LIMIT 1')
+      .get() as any;
 
     const id = existing?.id || uuidv4();
 
     if (existing) {
       db.prepare(
-        `UPDATE whatsapp_cloud_integrations 
+        `UPDATE whatsapp_cloud_system_integrations
          SET waba_id = ?,
              phone_number_id = ?,
              business_id = COALESCE(?, business_id),
@@ -243,15 +337,14 @@ export class WhatsAppCloudService {
       );
     } else {
       db.prepare(
-        `INSERT INTO whatsapp_cloud_integrations (
-           id, tenant_id, waba_id, phone_number_id, business_id,
+        `INSERT INTO whatsapp_cloud_system_integrations (
+           id, waba_id, phone_number_id, business_id,
            phone_number, display_phone_number, coexistence_mode,
            status, encrypted_access_token, token_expires_at,
            connected_at, updated_at, created_by
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'connected', ?, ?, datetime('now'), datetime('now'), ?)`
+         ) VALUES (?, ?, ?, ?, ?, ?, 1, 'connected', ?, ?, datetime('now'), datetime('now'), ?)`
       ).run(
         id,
-        tenantId,
         params.wabaId,
         params.phoneNumberId,
         params.businessId || null,
@@ -265,17 +358,16 @@ export class WhatsAppCloudService {
 
     const saved = db
       .prepare(
-        `SELECT id, tenant_id, waba_id, phone_number_id, business_id,
+        `SELECT id, waba_id, phone_number_id, business_id,
                 phone_number, display_phone_number, coexistence_mode,
-                status, connected_at, updated_at
-         FROM whatsapp_cloud_integrations
+                status, token_expires_at, connected_at, updated_at
+         FROM whatsapp_cloud_system_integrations
          WHERE id = ?`
       )
       .get(id) as any;
 
     return {
       id: saved.id,
-      tenantId: saved.tenant_id,
       wabaId: saved.waba_id,
       phoneNumberId: saved.phone_number_id,
       businessId: saved.business_id,
@@ -283,26 +375,27 @@ export class WhatsAppCloudService {
       displayPhoneNumber: saved.display_phone_number,
       coexistenceMode: Boolean(saved.coexistence_mode),
       status: saved.status,
+      tokenExpiresAt: saved.token_expires_at,
       connectedAt: saved.connected_at,
       updatedAt: saved.updated_at
     };
   }
 
   /**
-   * Consulta o status da integração do tenant sem vazar credenciais ou segredos.
+   * Consulta o status da integração central única do SaaS.
+   * Não expõe tokens ou credenciais.
    */
-  public static getIntegration(tenantId: string): WhatsAppCloudStatusResponse {
+  public static getSystemIntegration(): WhatsAppCloudStatusResponse {
     const record = db
       .prepare(
-        `SELECT id, tenant_id, waba_id, phone_number_id, business_id,
+        `SELECT id, waba_id, phone_number_id, business_id,
                 phone_number, display_phone_number, coexistence_mode,
-                status, connected_at, updated_at
-         FROM whatsapp_cloud_integrations
-         WHERE tenant_id = ? AND status = 'connected'
-         ORDER BY connected_at DESC
+                status, token_expires_at, connected_at, updated_at
+         FROM whatsapp_cloud_system_integrations
+         WHERE status = 'connected'
          LIMIT 1`
       )
-      .get(tenantId) as any;
+      .get() as any;
 
     if (!record) {
       return {
@@ -317,7 +410,6 @@ export class WhatsAppCloudService {
       coexistenceActive: Boolean(record.coexistence_mode),
       integration: {
         id: record.id,
-        tenantId: record.tenant_id,
         wabaId: record.waba_id,
         phoneNumberId: record.phone_number_id,
         businessId: record.business_id,
@@ -325,6 +417,7 @@ export class WhatsAppCloudService {
         displayPhoneNumber: record.display_phone_number,
         coexistenceMode: Boolean(record.coexistence_mode),
         status: record.status,
+        tokenExpiresAt: record.token_expires_at,
         connectedAt: record.connected_at,
         updatedAt: record.updated_at
       }
@@ -332,16 +425,20 @@ export class WhatsAppCloudService {
   }
 
   /**
-   * Desconecta a integração do tenant de forma segura.
+   * Desconecta a integração central e APAGA IMEDIATAMENTE o token criptografado
+   * e a data de expiração, garantindo que nenhum segredo permaneça utilizável localmente.
    */
-  public static disconnectIntegration(tenantId: string): boolean {
+  public static disconnectSystemIntegration(): boolean {
     const res = db
       .prepare(
-        `UPDATE whatsapp_cloud_integrations
-         SET status = 'disconnected', updated_at = datetime('now')
-         WHERE tenant_id = ? AND status = 'connected'`
+        `UPDATE whatsapp_cloud_system_integrations
+         SET encrypted_access_token = NULL,
+             token_expires_at = NULL,
+             status = 'disconnected',
+             updated_at = datetime('now')
+         WHERE status = 'connected'`
       )
-      .run(tenantId);
+      .run();
     return res.changes > 0;
   }
 }
