@@ -18,52 +18,26 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleNavClick = (href: string) => {
+  const handleNavClick = (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     setMobileMenuOpen(false);
-
-    if (href === '/planos' || href === '#planos') {
-      window.history.pushState(null, '', '/planos');
-      window.dispatchEvent(new PopStateEvent('popstate'));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    if (href === '/' || href === '#inicio') {
-      if (isLegalOrAuxiliary) {
-        if (onNavigateHome) onNavigateHome();
-        else window.location.assign('/');
-      } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-      return;
-    }
-
-    const anchorId = href.replace(/^\/?#/, '');
-    if (isLegalOrAuxiliary) {
-      if (onNavigateHome) {
-        onNavigateHome();
-        setTimeout(() => {
-          const target = document.getElementById(anchorId);
-          if (target) target.scrollIntoView({ behavior: 'smooth' });
-        }, 150);
-      } else {
-        window.location.assign(`/#${anchorId}`);
-      }
-      return;
-    }
-
-    const target = document.getElementById(anchorId);
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    // Keep real hrefs for auxiliary pages, direct links and new tabs.
+    if (isLegalOrAuxiliary || window.location.pathname !== '/') return;
+    const anchorId = href.startsWith('/#') ? href.slice(2) : href === '/' ? 'inicio' : null;
+    const target = anchorId ? document.getElementById(anchorId) : null;
     if (target) {
-      target.scrollIntoView({ behavior: 'smooth' });
+      event.preventDefault();
+      window.history.pushState(null, '', href);
+      target.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     }
   };
 
   const navLinks = [
-    { label: 'Início', href: '/' },
+    { label: 'Produto', href: '/#produto' },
+    { label: 'Módulos', href: '/#profissoes' },
     { label: 'Funcionalidades', href: '/#funcionalidades' },
-    { label: 'Áreas profissionais', href: '/#profissoes' },
     { label: 'Planos', href: '/planos' },
-    { label: 'FAQ', href: '/#faq' }
+    { label: 'Segurança', href: '/#seguranca' }
   ];
 
   return (
@@ -73,8 +47,7 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
         <a
           href="/"
           onClick={(e) => {
-            e.preventDefault();
-            handleNavClick('/');
+            handleNavClick(e, '/');
           }}
           className="flex items-center gap-3 cursor-pointer group select-none"
         >
@@ -90,7 +63,7 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
               <span className="text-2xl font-black tracking-tight text-slate-900">
                 Zemda
               </span>
-              <span className="inline-block w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+              <span className="inline-block w-2 h-2 rounded-full bg-teal-500" />
             </div>
             <span className="text-[10px] uppercase font-bold tracking-widest text-teal-600">
               Saúde e Gestão
@@ -99,7 +72,7 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
         </a>
 
         {/* Desktop Navigation Links (Links HTML Rastreáveis) */}
-        <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-slate-600">
+        <nav className="hidden lg:flex items-center gap-7 text-xs font-semibold text-slate-600">
           {navLinks.map(link => {
             const isActive = activeSection === link.href.replace(/^\/?#/, '');
             return (
@@ -107,8 +80,7 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
                 key={link.label}
                 href={link.href}
                 onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick(link.href);
+                  handleNavClick(e, link.href);
                 }}
                 className={`hover:text-teal-600 transition-colors py-1 cursor-pointer font-medium ${
                   isActive ? 'text-teal-600 font-bold' : ''
@@ -121,7 +93,7 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
         </nav>
 
         {/* Action Buttons: Entrar & Começar agora */}
-        <div className="hidden sm:flex items-center gap-3">
+        <div className="hidden lg:flex items-center gap-3">
           {onLogin && (
             <button
               type="button"
@@ -144,7 +116,7 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
         </div>
 
         {/* Mobile Hamburger Toggle */}
-        <div className="flex sm:hidden items-center gap-2">
+        <div className="flex lg:hidden items-center gap-2">
           {onRegisterClinic && (
             <button
               type="button"
@@ -158,7 +130,10 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
-            aria-label="Abrir menu"
+            aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="public-mobile-menu"
+            onKeyDown={(event) => { if (event.key === 'Escape') setMobileMenuOpen(false); }}
           >
             {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
@@ -167,15 +142,14 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
 
       {/* Mobile Drawer Menu (Links HTML Rastreáveis) */}
       {mobileMenuOpen && (
-        <div className="sm:hidden border-t border-slate-100 bg-white/95 backdrop-blur-md px-4 pt-3 pb-6 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div id="public-mobile-menu" onKeyDown={(event) => { if (event.key === 'Escape') setMobileMenuOpen(false); }} className="lg:hidden border-t border-slate-100 bg-white/95 backdrop-blur-md px-4 pt-3 pb-6 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex flex-col space-y-2">
             {navLinks.map(link => (
               <a
                 key={link.label}
                 href={link.href}
                 onClick={(e) => {
-                  e.preventDefault();
-                  handleNavClick(link.href);
+                  handleNavClick(e, link.href);
                 }}
                 className="text-left px-3 py-2 text-sm font-medium text-slate-700 hover:text-teal-600 hover:bg-teal-50/50 rounded-lg transition-colors cursor-pointer block"
               >
