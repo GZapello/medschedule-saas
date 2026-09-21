@@ -926,3 +926,200 @@ export function filterTourByPermissions(
     steps: validSteps
   };
 }
+
+// ----------------------------------------------------
+// 3. IDENTIFICAÇÃO CANÔNICA DE MÓDULOS CLÍNICOS DO USUÁRIO
+// ----------------------------------------------------
+
+export interface ClinicalModuleInfo {
+  id: string;
+  name: string;
+  route: string;
+  professionLabel: string;
+}
+
+export const ALL_CLINICAL_MODULES: ClinicalModuleInfo[] = [
+  { id: 'zemda_fono', name: 'ZemdaFono (Fonoaudiologia)', route: 'zemda-fono', professionLabel: 'Fonoaudiologia' },
+  { id: 'zemda_psico', name: 'ZemdaPsico (Psicologia)', route: 'zemda-psico', professionLabel: 'Psicologia' },
+  { id: 'zemda_odonto', name: 'ZemdaOdonto (Odontologia)', route: 'zemda-odonto', professionLabel: 'Odontologia' },
+  { id: 'zemda_nutri', name: 'ZemdaNutri (Nutrição)', route: 'zemda-nutri', professionLabel: 'Nutrição' },
+  { id: 'zemda_fisio', name: 'ZemdaFisio (Fisioterapia)', route: 'zemda-fisio', professionLabel: 'Fisioterapia' },
+  { id: 'zemda_to', name: 'ZemdaTO (Terapia Ocupacional)', route: 'zemda-to', professionLabel: 'Terapia Ocupacional' },
+  { id: 'zemda_personal', name: 'ZemdaPersonal (Educação Física)', route: 'zemda-personal', professionLabel: 'Educação Física' },
+  { id: 'zemda_pp', name: 'ZemdaPP (Psicopedagogia)', route: 'zemda-pp', professionLabel: 'Psicopedagogia' }
+];
+
+export interface AuthFlagsInput {
+  isSpeechTherapist?: boolean;
+  isPsychologist?: boolean;
+  isDentist?: boolean;
+  isNutritionist?: boolean;
+  isPhysiotherapist?: boolean;
+  isOccupationalTherapist?: boolean;
+  isPersonalTrainer?: boolean;
+  isPsychopedagogue?: boolean;
+  [key: string]: any;
+}
+
+export function getUserAuthorizedClinicalModules(
+  user?: any,
+  permissions: string[] = [],
+  authFlags?: AuthFlagsInput
+): ClinicalModuleInfo[] {
+  if (!user && !authFlags) return [];
+
+  const authorized = new Set<string>();
+
+  // 1. Verificação via flags de autenticação ativas (com mútua exclusividade do AuthContext)
+  if (authFlags) {
+    if (authFlags.isSpeechTherapist || authFlags.isZemdaFono) authorized.add('zemda_fono');
+    if (authFlags.isPsychologist || authFlags.isZemdaPsico) authorized.add('zemda_psico');
+    if (authFlags.isDentist || authFlags.isZemdaOdonto) authorized.add('zemda_odonto');
+    if (authFlags.isNutritionist || authFlags.isZemdaNutri) authorized.add('zemda_nutri');
+    if (authFlags.isPhysiotherapist || authFlags.isZemdaFisio) authorized.add('zemda_fisio');
+    if (authFlags.isOccupationalTherapist || authFlags.isZemdaTO) authorized.add('zemda_to');
+    if (authFlags.isPersonalTrainer || authFlags.isZemdaPersonal) authorized.add('zemda_personal');
+    if (authFlags.isPsychopedagogue || authFlags.isZemdaPP) authorized.add('zemda_pp');
+  }
+
+  // 2. Flags explícitas de módulos habilitados no perfil do usuário / clínica
+  if (user) {
+    if (user.zemdaFonoEnabled || user.zemda_fono_enabled) authorized.add('zemda_fono');
+    if (user.zemdaPsicoEnabled || user.zemda_psico_enabled) authorized.add('zemda_psico');
+    if (user.zemdaOdontoEnabled || user.zemda_odonto_enabled) authorized.add('zemda_odonto');
+    if (user.zemdaNutriEnabled || user.zemda_nutri_enabled) authorized.add('zemda_nutri');
+    if (user.zemdaFisioEnabled || user.zemda_fisio_enabled) authorized.add('zemda_fisio');
+    if (user.zemdaToEnabled || user.zemda_to_enabled) authorized.add('zemda_to');
+    if (user.zemdaPersonalEnabled || user.zemda_personal_enabled) authorized.add('zemda_personal');
+    if (user.zemdaPPEnabled || user.zemda_pp_enabled) authorized.add('zemda_pp');
+  }
+
+  // 3. Permissões granulares de acesso a módulos
+  if (permissions && permissions.length > 0) {
+    if (permissions.includes('access_zemda_fono') || permissions.includes('module_fono')) authorized.add('zemda_fono');
+    if (permissions.includes('access_zemda_psico') || permissions.includes('module_psico')) authorized.add('zemda_psico');
+    if (permissions.includes('access_zemda_odonto') || permissions.includes('module_odonto')) authorized.add('zemda_odonto');
+    if (permissions.includes('access_zemda_nutri') || permissions.includes('module_nutri')) authorized.add('zemda_nutri');
+    if (permissions.includes('access_zemda_fisio') || permissions.includes('module_fisio')) authorized.add('zemda_fisio');
+    if (permissions.includes('access_zemda_to') || permissions.includes('module_to')) authorized.add('zemda_to');
+    if (permissions.includes('access_zemda_personal') || permissions.includes('module_personal')) authorized.add('zemda_personal');
+    if (permissions.includes('access_zemda_pp') || permissions.includes('module_pp')) authorized.add('zemda_pp');
+  }
+
+  // 4. Se ainda não há módulo autorizado por flag ou permissão direta, inspecionar profissão e conselho
+  if (user && authorized.size === 0) {
+    const profId = (user.professionId || user.profession_id || '').toLowerCase();
+    const profSlug = (user.professionSlug || user.profession_slug || '').toLowerCase();
+    const profName = (user.professionName || user.profession_name || '').toLowerCase();
+    const regType = (user.registrationType || user.registration_type || '').toUpperCase();
+    const practiceAreas = (
+      Array.isArray(user.practiceAreas || user.practice_areas)
+        ? (user.practiceAreas || user.practice_areas).join(' ')
+        : (user.practiceAreas || user.practice_areas || '')
+    ).toLowerCase();
+
+    const combined = `${profId} ${profSlug} ${profName} ${practiceAreas}`.toLowerCase();
+
+    // Psicopedagogia
+    if (
+      profId.includes('psicopedag') ||
+      profSlug.includes('psicopedag') ||
+      combined.includes('psicopedag') ||
+      regType === 'ABPP'
+    ) {
+      authorized.add('zemda_pp');
+    }
+    // Fonoaudiologia
+    else if (
+      profId.includes('fono') ||
+      profSlug.includes('fono') ||
+      combined.includes('fono') ||
+      regType === 'CRFA'
+    ) {
+      authorized.add('zemda_fono');
+    }
+    // Psicologia
+    else if (
+      profId.includes('psicolog') ||
+      profId.includes('psicanal') ||
+      profId.includes('neuropsicolog') ||
+      profSlug.includes('psicolog') ||
+      profSlug.includes('psicanal') ||
+      profSlug.includes('neuropsicolog') ||
+      combined.includes('psicólog') ||
+      combined.includes('psicolog') ||
+      combined.includes('neuropsicól') ||
+      combined.includes('neuropsicol') ||
+      combined.includes('psicanal') ||
+      regType === 'CRP'
+    ) {
+      authorized.add('zemda_psico');
+    }
+    // Odontologia
+    else if (
+      profId.includes('odonto') ||
+      profId.includes('dentis') ||
+      profSlug.includes('odonto') ||
+      profSlug.includes('dentis') ||
+      combined.includes('odonto') ||
+      combined.includes('dentis') ||
+      regType === 'CRO'
+    ) {
+      authorized.add('zemda_odonto');
+    }
+    // Nutrição
+    else if (
+      profId.includes('nutri') ||
+      profSlug.includes('nutri') ||
+      combined.includes('nutri') ||
+      regType === 'CRN'
+    ) {
+      authorized.add('zemda_nutri');
+    }
+    // Fisioterapia
+    else if (
+      profId.includes('fisio') ||
+      profSlug.includes('fisio') ||
+      combined.includes('fisio') ||
+      combined.includes('fisioterap') ||
+      combined.includes('physio')
+    ) {
+      authorized.add('zemda_fisio');
+    }
+    // Terapia Ocupacional
+    else if (
+      profId.includes('ocupacional') ||
+      profSlug.includes('ocupacional') ||
+      combined.includes('terapia ocupacional') ||
+      combined.includes('terapeuta ocupacional') ||
+      combined.includes('ocupacional')
+    ) {
+      authorized.add('zemda_to');
+    }
+    // Personal Trainer / Educação Física
+    else if (
+      profId.includes('personal') ||
+      profId.includes('educador-fisico') ||
+      profId.includes('educacao-fisica') ||
+      profSlug.includes('personal') ||
+      profSlug.includes('educacao-fisica') ||
+      combined.includes('personal trainer') ||
+      combined.includes('educação física') ||
+      combined.includes('educacao fisica') ||
+      regType === 'CREF'
+    ) {
+      authorized.add('zemda_personal');
+    }
+  }
+
+  return ALL_CLINICAL_MODULES.filter(m => authorized.has(m.id));
+}
+
+export function getClinicalModuleForUser(
+  user?: any,
+  permissions: string[] = [],
+  authFlags?: AuthFlagsInput
+): ClinicalModuleInfo | null {
+  const modules = getUserAuthorizedClinicalModules(user, permissions, authFlags);
+  return modules.length > 0 ? modules[0] : null;
+}

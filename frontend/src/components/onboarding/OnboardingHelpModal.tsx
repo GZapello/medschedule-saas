@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useOnboarding } from './OnboardingContext';
+import { useToast } from '../../context/ToastContext';
 import {
   HelpCircle,
   Compass,
@@ -10,7 +11,9 @@ import {
   X,
   ChevronRight,
   CheckCircle2,
-  ArrowLeft
+  ArrowLeft,
+  Briefcase,
+  Activity
 } from 'lucide-react';
 
 export const OnboardingHelpModal: React.FC = () => {
@@ -22,22 +25,43 @@ export const OnboardingHelpModal: React.FC = () => {
     openWhatsNew,
     openShortcuts,
     availableModules,
+    isPureAdmin,
+    isZemdaBody,
     onboardingData
   } = useOnboarding();
 
+  const { showToast } = useToast();
   const [selectingModule, setSelectingModule] = useState<boolean>(false);
 
   if (!isHelpOpen) return null;
 
   const handleModuleClick = () => {
-    if (availableModules.length === 1) {
-      startModuleTour(availableModules[0].id);
+    // Caso 1: Gestor Puramente Administrativo (sem especialidade clínica)
+    if (isPureAdmin) {
       closeHelp();
-    } else if (availableModules.length > 1) {
-      setSelectingModule(true);
-    } else {
-      startTour();
+      startTour('clinic_admin');
+      return;
     }
+
+    // Caso 2: Usuário com exatamente 1 módulo clínico (fluxo normal - sem modal de seleção)
+    if (availableModules.length === 1) {
+      closeHelp();
+      startModuleTour(availableModules[0].id);
+      return;
+    }
+
+    // Caso 3: Usuário com múltiplos módulos autorizados
+    if (availableModules.length > 1) {
+      setSelectingModule(true);
+      return;
+    }
+
+    // Caso 4: Fallback quando não há módulo clínico identificado
+    closeHelp();
+    showToast(
+      'Nenhum módulo profissional foi identificado para esta conta. Verifique sua profissão em Configurações.',
+      'info'
+    );
   };
 
   const handleSupportClick = () => {
@@ -91,7 +115,7 @@ export const OnboardingHelpModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Seleção de Módulo Específico */}
+        {/* Seleção de Módulo Específico (apenas exibido quando há mais de 1 módulo autorizado) */}
         {selectingModule ? (
           <div className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
             {availableModules.map(mod => {
@@ -101,6 +125,7 @@ export const OnboardingHelpModal: React.FC = () => {
                   key={mod.id}
                   onClick={() => {
                     setSelectingModule(false);
+                    closeHelp();
                     startModuleTour(mod.id);
                   }}
                   className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
@@ -114,7 +139,7 @@ export const OnboardingHelpModal: React.FC = () => {
                         {mod.name}
                       </span>
                       <span className="text-[10px] text-slate-500">
-                        {isCompleted ? 'Concluído anteriormente' : 'Tour especializado do módulo'}
+                        {isCompleted ? 'Concluído anteriormente (clique para refazer)' : 'Tour especializado do módulo'}
                       </span>
                     </div>
                   </div>
@@ -156,7 +181,7 @@ export const OnboardingHelpModal: React.FC = () => {
               <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-600 shrink-0" />
             </button>
 
-            {/* 2. Conhecer meu módulo */}
+            {/* 2. Conhecer meu módulo OU Conhecer recursos de gestão */}
             <button
               type="button"
               onClick={handleModuleClick}
@@ -164,15 +189,19 @@ export const OnboardingHelpModal: React.FC = () => {
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 border border-sky-100 flex items-center justify-center shadow-xs">
-                  <Layers className="w-4 h-4" />
+                  {isPureAdmin ? <Briefcase className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
                 </div>
                 <div>
                   <span className="text-xs font-bold text-slate-800 group-hover:text-sky-900 block">
-                    Conhecer meu módulo
+                    {isPureAdmin ? 'Conhecer recursos de gestão' : 'Conhecer meu módulo'}
                   </span>
                   <span className="text-[11px] text-slate-500">
-                    {availableModules.length > 1
-                      ? 'Escolha entre seus módulos profissionais'
+                    {isPureAdmin
+                      ? 'Visão executiva, agenda e relatórios'
+                      : availableModules.length === 1
+                      ? availableModules[0].name
+                      : availableModules.length > 1
+                      ? 'Escolha entre seus módulos profissionais liberados'
                       : 'Tour específico do seu ambiente clínico'}
                   </span>
                 </div>
@@ -180,7 +209,34 @@ export const OnboardingHelpModal: React.FC = () => {
               <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 shrink-0" />
             </button>
 
-            {/* 3. Ver novidades */}
+            {/* 3. Mapa Corporal ZemdaBody (Transversal) */}
+            {isZemdaBody && (
+              <button
+                type="button"
+                onClick={() => {
+                  closeHelp();
+                  startModuleTour('zemda_body');
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-200 transition-all text-left cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shadow-xs">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-900 block">
+                      Conhecer o Mapa Corporal (ZemdaBody)
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Marcação anatômica 360° e planos corporais
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 shrink-0" />
+              </button>
+            )}
+
+            {/* 4. Ver novidades */}
             <button
               type="button"
               onClick={() => {
@@ -210,7 +266,7 @@ export const OnboardingHelpModal: React.FC = () => {
               <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 shrink-0" />
             </button>
 
-            {/* 4. Atalhos de Teclado */}
+            {/* 5. Atalhos de Teclado */}
             <button
               type="button"
               onClick={() => {
@@ -235,7 +291,7 @@ export const OnboardingHelpModal: React.FC = () => {
               <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 shrink-0" />
             </button>
 
-            {/* 5. Central de Suporte */}
+            {/* 6. Central de Suporte */}
             <button
               type="button"
               onClick={handleSupportClick}

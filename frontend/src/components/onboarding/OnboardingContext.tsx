@@ -6,7 +6,10 @@ import {
   TourStep,
   TOURS_BY_PROFILE,
   MODULE_TOURS,
-  filterTourByPermissions
+  filterTourByPermissions,
+  ClinicalModuleInfo,
+  getUserAuthorizedClinicalModules,
+  getClinicalModuleForUser
 } from './tourRegistry';
 
 export const CURRENT_ONBOARDING_VERSION = 'v1.1';
@@ -63,7 +66,10 @@ interface OnboardingContextType {
   closeModuleSelector: () => void;
 
   // Módulos disponíveis ao usuário
-  availableModules: { id: string; name: string; icon?: string }[];
+  availableModules: ClinicalModuleInfo[];
+  clinicalModule: ClinicalModuleInfo | null;
+  isPureAdmin: boolean;
+  isZemdaBody: boolean;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
@@ -123,20 +129,21 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isModuleSelectorOpen, setIsModuleSelectorOpen] = useState<boolean>(false);
 
-  // Lista dinâmica de módulos clínicos aos quais o usuário tem permissão
+  // Lista canônica de módulos clínicos aos quais o usuário tem permissão
   const availableModules = React.useMemo(() => {
-    const list: { id: string; name: string }[] = [];
-    if (isSpeechTherapist || isClinicAdmin) list.push({ id: 'zemda_fono', name: 'ZemdaFono (Fonoaudiologia)' });
-    if (isPsychologist || isClinicAdmin) list.push({ id: 'zemda_psico', name: 'ZemdaPsico (Psicologia)' });
-    if (isDentist || isClinicAdmin) list.push({ id: 'zemda_odonto', name: 'ZemdaOdonto (Odontologia)' });
-    if (isNutritionist || isClinicAdmin) list.push({ id: 'zemda_nutri', name: 'ZemdaNutri (Nutrição)' });
-    if (isPhysiotherapist || isClinicAdmin) list.push({ id: 'zemda_fisio', name: 'ZemdaFisio (Fisioterapia)' });
-    if (isOccupationalTherapist || isClinicAdmin) list.push({ id: 'zemda_to', name: 'ZemdaTO (Terapia Ocupacional)' });
-    if (isPersonalTrainer || isClinicAdmin) list.push({ id: 'zemda_personal', name: 'ZemdaPersonal (Educação Física)' });
-    if (isPsychopedagogue || isClinicAdmin) list.push({ id: 'zemda_pp', name: 'ZemdaPP (Psicopedagogia)' });
-    if (isZemdaBody || isClinicAdmin || isProfessional) list.push({ id: 'zemda_body', name: 'ZemdaBody (Mapa Corporal)' });
-    return list;
+    return getUserAuthorizedClinicalModules(currentUser, userPermissions, {
+      isSpeechTherapist,
+      isPsychologist,
+      isDentist,
+      isNutritionist,
+      isPhysiotherapist,
+      isOccupationalTherapist,
+      isPersonalTrainer,
+      isPsychopedagogue
+    });
   }, [
+    currentUser,
+    userPermissions,
     isSpeechTherapist,
     isPsychologist,
     isDentist,
@@ -144,11 +151,36 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
     isPhysiotherapist,
     isOccupationalTherapist,
     isPersonalTrainer,
-    isPsychopedagogue,
-    isZemdaBody,
-    isClinicAdmin,
-    isProfessional
+    isPsychopedagogue
   ]);
+
+  const clinicalModule = React.useMemo(() => {
+    return getClinicalModuleForUser(currentUser, userPermissions, {
+      isSpeechTherapist,
+      isPsychologist,
+      isDentist,
+      isNutritionist,
+      isPhysiotherapist,
+      isOccupationalTherapist,
+      isPersonalTrainer,
+      isPsychopedagogue
+    });
+  }, [
+    currentUser,
+    userPermissions,
+    isSpeechTherapist,
+    isPsychologist,
+    isDentist,
+    isNutritionist,
+    isPhysiotherapist,
+    isOccupationalTherapist,
+    isPersonalTrainer,
+    isPsychopedagogue
+  ]);
+
+  const isPureAdmin = React.useMemo(() => {
+    return (isClinicAdmin || isSuperAdmin) && availableModules.length === 0;
+  }, [isClinicAdmin, isSuperAdmin, availableModules.length]);
 
   // Carrega preferências do backend
   useEffect(() => {
@@ -459,7 +491,10 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
         closeShortcuts: () => setIsShortcutsOpen(false),
         openModuleSelector: () => setIsModuleSelectorOpen(true),
         closeModuleSelector: () => setIsModuleSelectorOpen(false),
-        availableModules
+        availableModules,
+        clinicalModule,
+        isPureAdmin,
+        isZemdaBody
       }}
     >
       {children}
