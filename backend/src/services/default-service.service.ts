@@ -15,8 +15,12 @@ import { v4 as uuidv4 } from 'uuid';
  * - Pertence exclusivamente à nova clínica (tenant_id)
  * - Se a clínica já possuir um serviço com este nome, não duplica.
  */
-export function ensureDefaultClinicService(tenantId: string): { id: string; name: string; price: number; created: boolean } | null {
+export function ensureDefaultClinicService(
+  tenantId: string,
+  strict: boolean = false
+): { id: string; name: string; price: number; created: boolean } | null {
   if (!tenantId || typeof tenantId !== 'string') {
+    if (strict) throw new Error('TENANT_ID_REQUIRED_FOR_DEFAULT_SERVICE');
     return null;
   }
 
@@ -27,6 +31,7 @@ export function ensureDefaultClinicService(tenantId: string): { id: string; name
     const tenantExists = db.prepare('SELECT id FROM tenants WHERE id = ?').get(trimmedTenantId) as { id: string } | undefined;
     if (!tenantExists) {
       console.warn(`[ensureDefaultClinicService] Clínica ${trimmedTenantId} não encontrada.`);
+      if (strict) throw new Error(`Clínica ${trimmedTenantId} não encontrada ao provisionar serviço padrão.`);
       return null;
     }
 
@@ -80,6 +85,9 @@ export function ensureDefaultClinicService(tenantId: string): { id: string; name
     };
   } catch (err) {
     console.error(`[ensureDefaultClinicService] Erro ao provisionar serviço padrão para a clínica ${tenantId}:`, err);
+    if (strict) {
+      throw err;
+    }
     return null;
   }
 }

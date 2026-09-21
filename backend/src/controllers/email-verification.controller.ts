@@ -21,9 +21,8 @@ export class EmailVerificationController {
         return;
       }
 
-      // Extração robusta do endereço IP do cliente para rate limiting
-      const rawIp = (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || '';
-      const clientIp = rawIp.split(',')[0].trim() || '127.0.0.1';
+      // Obtenção segura do endereço IP via proxy confiável (app.set('trust proxy', 1))
+      const clientIp = (req.ip || req.socket?.remoteAddress || '127.0.0.1').replace(/^::ffff:/, '');
 
       const result = await EmailService.requestVerificationCode(email, purpose, clientIp);
 

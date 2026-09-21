@@ -18,6 +18,10 @@ if (process.env.NODE_ENV === 'production' && !process.env.ZEMDA_FILES_SIGNING_SE
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Configuração segura de proxy reverso (Railway / Edge)
+// Permite que req.ip obtenha o IP real do cliente sem confiar em cabeçalhos forjados diretamente
+app.set('trust proxy', 1);
+
 // Configurações de Middleware
 app.use(cors({
   origin: '*',

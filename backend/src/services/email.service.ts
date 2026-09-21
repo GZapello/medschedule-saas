@@ -72,8 +72,17 @@ export class EmailService {
   /**
    * Template HTML responsivo nos padrões de design do Zemda
    */
-  private static buildOtpHtml(code: string): string {
+  private static buildOtpHtml(code: string, isExistingAccount: boolean = false): string {
     const formattedCode = code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+    const existingAccountNotice = isExistingAccount
+      ? `
+              <div style="background-color: #f8fafc; border-left: 3px solid #0d9488; padding: 12px 16px; margin: 0 0 20px; border-radius: 6px;">
+                <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #334155;">
+                  <strong>Aviso de Segurança:</strong> Identificamos que este e-mail já possui uma conta ativa no Zemda. Caso já seja usuário, você pode acessar seu painel diretamente em <a href="https://zemda.com.br" style="color: #0d9488; text-decoration: underline;">zemda.com.br</a>. Se você não solicitou este código, ignore esta mensagem.
+                </p>
+              </div>`
+      : '';
+
     return `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -106,7 +115,7 @@ export class EmailService {
                 Confirme seu e-mail
               </h1>
               <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.6; color: #475569;">
-                Para continuar seu cadastro no Zemda, utilize o código de verificação abaixo:
+                ${isExistingAccount ? 'Recebemos uma solicitação de verificação para o seu e-mail:' : 'Para continuar seu cadastro no Zemda, utilize o código de verificação abaixo:'}
               </p>
 
               <!-- OTP Display Box -->
@@ -119,8 +128,10 @@ export class EmailService {
                 </div>
               </div>
 
+              ${existingAccountNotice}
+
               <p style="margin: 0 0 16px; font-size: 13px; line-height: 1.5; color: #64748b;">
-                O código expira em 10 minutos. Se você não solicitou este cadastro, ignore esta mensagem com segurança.
+                O código expira em 10 minutos. Se você não solicitou este código, ignore esta mensagem com segurança.
               </p>
 
               <div style="border-top: 1px solid #f1f5f9; padding-top: 20px; margin-top: 24px;">
@@ -155,8 +166,8 @@ export class EmailService {
    * Regras estritas:
    * - Exige EMAIL_OTP_SECRET presente;
    * - Exige RESEND_API_KEY presente (não retorna sucesso falso);
-   * - Evita enumeração de contas (não expõe se e-mail já existe);
-   * - Rate limit por IP e por e-mail;
+   * - Elimina enumeração de contas (fluxo idêntico com OTP e mensagens uniformes);
+   * - Registros 'failed' não penalizam as cotas horárias por e-mail ou IP;
    * - Invalida códigos pending e verificações verified não consumidas;
    * - Código gerado com crypto.randomInt;
    * - Se o envio via Resend falhar, marca o registro como 'failed'.
@@ -195,20 +206,17 @@ export class EmailService {
       };
     }
 
-    // 3. Prevenção contra enumeração de contas
-    // Se o e-mail já pertence a uma conta existente, retorna sucesso genérico sem vazar informações
+    // 3. Verificação de conta existente para estratégia de comunicação segura
     const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existingUser) {
-      return { success: true };
-    }
+    const isExistingAccount = Boolean(existingUser);
 
-    // 4. Rate limit por IP: máximo de 10 envios por hora por IP
+    // 4. Rate limit por IP: máximo de 10 envios por hora por IP (desconsidera status='failed')
     const normalizedIp = (clientIp || '').trim() || null;
     if (normalizedIp) {
       const hourlyIpCountRow = db.prepare(`
         SELECT count(*) as total
         FROM email_verifications
-        WHERE ip_address = ? AND datetime(created_at) >= datetime('now', '-1 hour')
+        WHERE ip_address = ? AND status != 'failed' AND datetime(created_at) >= datetime('now', '-1 hour')
       `).get(normalizedIp) as { total: number } | undefined;
 
       if (hourlyIpCountRow && hourlyIpCountRow.total >= 10) {
@@ -219,7 +227,7 @@ export class EmailService {
       }
     }
 
-    // 5. Cooldown de 60 segundos por e-mail
+    // 5. Cooldown de 60 segundos por e-mail (apenas status='pending')
     const recentVerification = db.prepare(`
       SELECT id, last_sent_at, strftime('%s', 'now') - strftime('%s', last_sent_at) as seconds_since_last
       FROM email_verifications
@@ -237,11 +245,11 @@ export class EmailService {
       };
     }
 
-    // 6. Limite de segurança: máximo de 5 envios por hora para o mesmo e-mail
+    // 6. Limite de segurança: máximo de 5 envios por hora para o mesmo e-mail (desconsidera status='failed')
     const hourlyEmailCountRow = db.prepare(`
       SELECT count(*) as total
       FROM email_verifications
-      WHERE email = ? AND datetime(created_at) >= datetime('now', '-1 hour')
+      WHERE email = ? AND status != 'failed' AND datetime(created_at) >= datetime('now', '-1 hour')
     `).get(email) as { total: number } | undefined;
 
     if (hourlyEmailCountRow && hourlyEmailCountRow.total >= 5) {
@@ -263,7 +271,6 @@ export class EmailService {
     const codeHash = this.hashCode(email, code, purpose);
     const verificationId = 'ev_' + uuidv4().replace(/-/g, '').slice(0, 16);
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    const nowIso = new Date().toISOString();
 
     const previousCountRow = db.prepare(`
       SELECT COALESCE(MAX(resend_count), 0) as last_count
@@ -278,8 +285,8 @@ export class EmailService {
       INSERT INTO email_verifications (
         id, email, purpose, code_hash, status, attempts, resend_count,
         expires_at, verified_at, consumed_at, last_sent_at, ip_address, created_at
-      ) VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, NULL, NULL, ?, ?, datetime('now'))
-    `).run(verificationId, email, purpose, codeHash, resendCount, expiresAt, nowIso, normalizedIp);
+      ) VALUES (?, ?, ?, ?, 'pending', 0, ?, ?, NULL, NULL, datetime('now'), ?, datetime('now'))
+    `).run(verificationId, email, purpose, codeHash, resendCount, expiresAt, normalizedIp);
 
     // 10. Envio via Resend
     const resend = this.getResendClient();
@@ -296,8 +303,8 @@ export class EmailService {
         from: this.getFromAddress(),
         replyTo: this.getReplyToAddress(),
         to: email,
-        subject: 'Seu código de verificação Zemda',
-        html: this.buildOtpHtml(code)
+        subject: isExistingAccount ? 'Notificação de segurança e código de verificação Zemda' : 'Seu código de verificação Zemda',
+        html: this.buildOtpHtml(code, isExistingAccount)
       });
 
       if (sendResult.error) {

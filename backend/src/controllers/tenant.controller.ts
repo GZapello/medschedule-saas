@@ -109,8 +109,8 @@ export class TenantController {
         res.status(403).json({ error: 'Esta clínica está banida. Somente o Administrador do Sistema pode liberar seu cadastro.' }); return;
       }
 
-      // Preparação dos dados auxiliares antes da transação
-      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket?.remoteAddress || null;
+      // Preparação dos dados auxiliares antes da transação (obtém IP seguro via req.ip/trust proxy)
+      const ipAddress = (req.ip || req.socket?.remoteAddress || null)?.replace(/^::ffff:/, '') || null;
       const userAgent = (req.headers['user-agent'] as string) || null;
       const optInMarketing = (marketingAccepted || marketingOptIn) ? 1 : 0;
       const isZemdaBodyOpted = zemdaBodyEnabled === true || zemdaBodyEnabled === 1 || zemdaBodyEnabled === 'true';
@@ -256,8 +256,8 @@ export class TenantController {
         // 8. Marca cobrança obrigatória
         db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
 
-        // 9. Criação automática e idempotente do serviço inicial padrão
-        ensureDefaultClinicService(tenantId);
+        // 9. Criação automática e idempotente do serviço inicial padrão em modo estrito (falhas geram rollback)
+        ensureDefaultClinicService(tenantId, true);
       });
 
       try {
