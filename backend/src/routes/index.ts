@@ -50,6 +50,7 @@ import { PsychologyController } from '../controllers/psychology.controller';
 import { ExternalTestsController } from '../controllers/external-tests.controller';
 import { EmailVerificationController } from '../controllers/email-verification.controller';
 import { WhatsAppCloudController } from '../controllers/whatsapp-cloud.controller';
+import { ClinicalDraftController } from '../controllers/clinical-draft.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -527,7 +528,37 @@ api.get('/v1/speech-therapy/aac/:patientId', requireTenant, requireRole('clinic_
 api.post('/v1/speech-therapy/aac', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAacRecord);
 api.post('/v1/speech-therapy/analyze-language', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.analyzeLanguageSample);
 
+// Melhorias Clínicas ZemdaFono (FOIS, IDV-10, Rastreio Leitura/Escrita, ABFW, PAC, Fonologia Longitudinal)
+api.get('/v1/speech-therapy/fois/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getFoisList);
+api.post('/v1/speech-therapy/fois', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveFois);
+
+api.get('/v1/speech-therapy/idv10/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getIdv10List);
+api.post('/v1/speech-therapy/idv10', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveIdv10);
+
+api.get('/v1/speech-therapy/reading-screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getReadingScreenings);
+api.get('/v1/speech-therapy/reading-screening/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getReadingScreenings);
+api.post('/v1/speech-therapy/reading-screenings', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveReadingScreening);
+api.post('/v1/speech-therapy/reading-screening', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveReadingScreening);
+
+api.get('/v1/speech-therapy/abfw/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getAbfwRecords);
+api.post('/v1/speech-therapy/abfw', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAbfwRecord);
+
+api.get('/v1/speech-therapy/auditory-screenings/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getAuditoryScreenings);
+api.get('/v1/speech-therapy/auditory-screening/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getAuditoryScreenings);
+api.post('/v1/speech-therapy/auditory-screenings', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAuditoryScreening);
+api.post('/v1/speech-therapy/auditory-screening', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAuditoryScreening);
+
+api.get('/v1/speech-therapy/phonemes/history/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonemesHistory);
+api.get('/v1/speech-therapy/phonemes/:patientId/history', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonemesHistory);
+
 api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.finishConsultation);
+
+// ==========================================
+// RASCUNHOS CLÍNICOS UNIVERSAIS (AUTOSAVE EM TODOS OS MÓDULOS)
+// ==========================================
+api.get('/v1/clinical/draft/:moduleType/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalDraftController.getDraft);
+api.post('/v1/clinical/draft', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalDraftController.saveDraft);
+api.delete('/v1/clinical/draft/:moduleType/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalDraftController.deleteDraft);
 
 // ==========================================
 // MÓDULO ZEMDAPP (PSICOPEDAGOGIA CLÍNICA E INSTITUCIONAL - CBO 2394-25)

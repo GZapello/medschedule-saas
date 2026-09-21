@@ -41,6 +41,9 @@ import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsM
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 
 interface NutritionWorkspaceProps {
   initialPatientId?: string;
@@ -249,6 +252,68 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         ]
       }
     ]
+  });
+
+  // Payload do Autosave Universal Clínico (ZemdaNutri)
+  const autosavePayload = useMemo(() => ({
+    consultationTitle,
+    consultationEvolution,
+    consultationConducts,
+    clinicalComplaints,
+    digestiveSymptoms,
+    anamnesisData,
+    anthroForm,
+    bioForm,
+    recallForm,
+    planForm,
+    calcFormula,
+    activityFactor,
+    carbPercent,
+    proteinPercent,
+    fatPercent
+  }), [
+    consultationTitle,
+    consultationEvolution,
+    consultationConducts,
+    clinicalComplaints,
+    digestiveSymptoms,
+    anamnesisData,
+    anthroForm,
+    bioForm,
+    recallForm,
+    planForm,
+    calcFormula,
+    activityFactor,
+    carbPercent,
+    proteinPercent,
+    fatPercent
+  ]);
+
+  const handleRestoreDraft = (data: any) => {
+    if (!data) return;
+    if (data.consultationTitle !== undefined) setConsultationTitle(data.consultationTitle);
+    if (data.consultationEvolution !== undefined) setConsultationEvolution(data.consultationEvolution);
+    if (data.consultationConducts !== undefined) setConsultationConducts(data.consultationConducts);
+    if (data.clinicalComplaints !== undefined) setClinicalComplaints(data.clinicalComplaints);
+    if (data.digestiveSymptoms !== undefined) setDigestiveSymptoms(data.digestiveSymptoms);
+    if (data.anamnesisData) setAnamnesisData(prev => ({ ...prev, ...data.anamnesisData }));
+    if (data.anthroForm) setAnthroForm(prev => ({ ...prev, ...data.anthroForm }));
+    if (data.bioForm) setBioForm(prev => ({ ...prev, ...data.bioForm }));
+    if (data.recallForm) setRecallForm(prev => ({ ...prev, ...data.recallForm }));
+    if (data.planForm) setPlanForm(prev => ({ ...prev, ...data.planForm }));
+    if (data.calcFormula) setCalcFormula(data.calcFormula);
+    if (data.activityFactor) setActivityFactor(data.activityFactor);
+    if (data.carbPercent) setCarbPercent(data.carbPercent);
+    if (data.proteinPercent) setProteinPercent(data.proteinPercent);
+    if (data.fatPercent) setFatPercent(data.fatPercent);
+  };
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaNutri',
+    patientId: selectedPatientId,
+    appointmentId: initialAppointmentId,
+    payload: autosavePayload,
+    onRestoreDraft: handleRestoreDraft
   });
 
   // Carrega pacientes
@@ -831,6 +896,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         bioimpedanceData: bioForm,
         recallData: recallForm
       });
+      await autosave.clearDraft();
       showToast('Consulta nutricional finalizada e gravada com sucesso!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar consulta nutricional', 'error');
@@ -904,15 +970,14 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
           {selectedPatientId && (
             <>
-              <button
-                type="button"
-                onClick={() => setShowPreviousRecordsModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                title="Visualizar histórico completo de prontuários anteriores"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Prontuários Anteriores</span>
-              </button>
+              <ClinicalQuickHeaderActions
+                autosaveStatus={autosave.autosaveStatus}
+                lastSavedTime={autosave.lastSavedTime}
+                onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+                onFinishConsultation={() => setActiveTab('finish')}
+                finishLabel="Finalizar Atendimento"
+                isSubmitting={saving}
+              />
 
               <button
                 type="button"
@@ -2341,6 +2406,14 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         />
       )}
 
+      <ClinicalDraftRecoveryModal
+        isOpen={autosave.conflictModalOpen}
+        onClose={() => autosave.resolveConflict('local')}
+        serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+        localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+        onRecoverServer={() => autosave.resolveConflict('server')}
+        onKeepCurrent={() => autosave.resolveConflict('local')}
+      />
     </div>
   );
 };

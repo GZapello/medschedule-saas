@@ -46,6 +46,9 @@ import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 
 interface OccupationalTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -199,6 +202,53 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   const [consultationTitle, setConsultationTitle] = useState<string>('Atendimento de Terapia Ocupacional');
   const [consultationEvolution, setConsultationEvolution] = useState<string>('');
   const [consultationConducts, setConsultationConducts] = useState<string>('');
+
+  // Payload do Autosave Universal Clínico (ZemdaTO)
+  const autosavePayload = React.useMemo(() => ({
+    consultationTitle,
+    consultationEvolution,
+    consultationConducts,
+    profileData,
+    adlItems,
+    sensorySystems,
+    sensoryNotes,
+    motorCognitiveData,
+    planForm,
+    assistiveForm
+  }), [
+    consultationTitle,
+    consultationEvolution,
+    consultationConducts,
+    profileData,
+    adlItems,
+    sensorySystems,
+    sensoryNotes,
+    motorCognitiveData,
+    planForm,
+    assistiveForm
+  ]);
+
+  const handleRestoreDraft = (data: any) => {
+    if (!data) return;
+    if (data.consultationTitle !== undefined) setConsultationTitle(data.consultationTitle);
+    if (data.consultationEvolution !== undefined) setConsultationEvolution(data.consultationEvolution);
+    if (data.consultationConducts !== undefined) setConsultationConducts(data.consultationConducts);
+    if (data.profileData) setProfileData((prev: any) => ({ ...prev, ...data.profileData }));
+    if (Array.isArray(data.adlItems)) setAdlItems(data.adlItems);
+    if (Array.isArray(data.sensorySystems)) setSensorySystems(data.sensorySystems);
+    if (data.sensoryNotes !== undefined) setSensoryNotes(data.sensoryNotes);
+    if (data.motorCognitiveData) setMotorCognitiveData((prev: any) => ({ ...prev, ...data.motorCognitiveData }));
+    if (data.planForm) setPlanForm((prev: any) => ({ ...prev, ...data.planForm }));
+    if (data.assistiveForm) setAssistiveForm((prev: any) => ({ ...prev, ...data.assistiveForm }));
+  };
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaTO',
+    patientId: selectedPatientId,
+    appointmentId: initialAppointmentId,
+    payload: autosavePayload,
+    onRestoreDraft: handleRestoreDraft
+  });
 
   // Carrega pacientes
   useEffect(() => {
@@ -436,6 +486,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
         motorCognitiveData,
         treatmentPlanData: planForm, assistiveTechnologyData: assistiveForm
       });
+      await autosave.clearDraft();
 
 
     } catch (err: any) {
@@ -557,15 +608,14 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
           )}
 
           {selectedPatientId && (
-            <button
-              type="button"
-              onClick={() => setShowPreviousRecordsModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
-              title="Visualizar histórico de prontuários anteriores deste paciente"
-            >
-              <FileText className="w-3.5 h-3.5 text-teal-600" />
-              <span>Ver Prontuários Anteriores</span>
-            </button>
+            <ClinicalQuickHeaderActions
+              autosaveStatus={autosave.autosaveStatus}
+              lastSavedTime={autosave.lastSavedTime}
+              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+              onFinishConsultation={() => setActiveTab('finish')}
+              finishLabel="Finalizar Atendimento"
+              isSubmitting={saving}
+            />
           )}
         </div>
       </div>
@@ -1382,6 +1432,14 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
               homeActivitiesText="1. Utilizar os recursos de tecnologia assistiva indicados.\n2. Estimular a autonomia nas atividades diárias respeitando o tempo do paciente.\n3. Registrar em diário de bordo os momentos de maior facilidade ou desafio."
             />
           )}
+          <ClinicalDraftRecoveryModal
+            isOpen={autosave.conflictModalOpen}
+            onClose={() => autosave.resolveConflict('local')}
+            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+            onRecoverServer={() => autosave.resolveConflict('server')}
+            onKeepCurrent={() => autosave.resolveConflict('local')}
+          />
         </>
       )}
     </div>

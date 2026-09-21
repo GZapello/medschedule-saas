@@ -31,6 +31,9 @@ import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsM
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 
 interface PhysiotherapyWorkspaceProps {
   initialPatientId?: string;
@@ -219,6 +222,125 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     }
   ]);
 
+  // Payload do Autosave Universal Clínico (ZemdaFisio)
+  const autosavePayload = React.useMemo(() => ({
+    consultationTitle,
+    clinicalEvolution,
+    conducts,
+    treatmentResponse,
+    chiefComplaint,
+    hpi,
+    pastMedicalHistory,
+    medicalDiagnosis,
+    medicationsInUse,
+    physioDiagnosis,
+    inspectionPalpation,
+    functionalLimitations,
+    painScore,
+    painLocation,
+    painCharacteristics,
+    painBehavior,
+    bodyMapJson,
+    goniometryList,
+    muscleStrengthList,
+    postureAnterior,
+    postureLateral,
+    posturePosterior,
+    gaitAnalysis,
+    functionalTests,
+    cbdfBodyFunction,
+    cbdfBodyStructure,
+    cbdfActivityParticipation,
+    cbdfContextualFactors,
+    cbdfDiagnosticSummary,
+    treatmentResources,
+    sessionFrequency,
+    estimatedSessions,
+    reassessmentDate,
+    homeExercises
+  }), [
+    consultationTitle,
+    clinicalEvolution,
+    conducts,
+    treatmentResponse,
+    chiefComplaint,
+    hpi,
+    pastMedicalHistory,
+    medicalDiagnosis,
+    medicationsInUse,
+    physioDiagnosis,
+    inspectionPalpation,
+    functionalLimitations,
+    painScore,
+    painLocation,
+    painCharacteristics,
+    painBehavior,
+    bodyMapJson,
+    goniometryList,
+    muscleStrengthList,
+    postureAnterior,
+    postureLateral,
+    posturePosterior,
+    gaitAnalysis,
+    functionalTests,
+    cbdfBodyFunction,
+    cbdfBodyStructure,
+    cbdfActivityParticipation,
+    cbdfContextualFactors,
+    cbdfDiagnosticSummary,
+    treatmentResources,
+    sessionFrequency,
+    estimatedSessions,
+    reassessmentDate,
+    homeExercises
+  ]);
+
+  const handleRestoreDraft = (data: any) => {
+    if (!data) return;
+    if (data.consultationTitle !== undefined) setConsultationTitle(data.consultationTitle);
+    if (data.clinicalEvolution !== undefined) setClinicalEvolution(data.clinicalEvolution);
+    if (data.conducts !== undefined) setConducts(data.conducts);
+    if (data.treatmentResponse !== undefined) setTreatmentResponse(data.treatmentResponse);
+    if (data.chiefComplaint !== undefined) setChiefComplaint(data.chiefComplaint);
+    if (data.hpi !== undefined) setHpi(data.hpi);
+    if (data.pastMedicalHistory !== undefined) setPastMedicalHistory(data.pastMedicalHistory);
+    if (data.medicalDiagnosis !== undefined) setMedicalDiagnosis(data.medicalDiagnosis);
+    if (data.medicationsInUse !== undefined) setMedicationsInUse(data.medicationsInUse);
+    if (data.physioDiagnosis !== undefined) setPhysioDiagnosis(data.physioDiagnosis);
+    if (data.inspectionPalpation !== undefined) setInspectionPalpation(data.inspectionPalpation);
+    if (data.functionalLimitations !== undefined) setFunctionalLimitations(data.functionalLimitations);
+    if (data.painScore !== undefined) setPainScore(data.painScore);
+    if (data.painLocation !== undefined) setPainLocation(data.painLocation);
+    if (data.painCharacteristics !== undefined) setPainCharacteristics(data.painCharacteristics);
+    if (data.painBehavior !== undefined) setPainBehavior(data.painBehavior);
+    if (data.bodyMapJson !== undefined) setBodyMapJson(data.bodyMapJson);
+    if (Array.isArray(data.goniometryList)) setGoniometryList(data.goniometryList);
+    if (Array.isArray(data.muscleStrengthList)) setMuscleStrengthList(data.muscleStrengthList);
+    if (data.postureAnterior !== undefined) setPostureAnterior(data.postureAnterior);
+    if (data.postureLateral !== undefined) setPostureLateral(data.postureLateral);
+    if (data.posturePosterior !== undefined) setPosturePosterior(data.posturePosterior);
+    if (data.gaitAnalysis !== undefined) setGaitAnalysis(data.gaitAnalysis);
+    if (Array.isArray(data.functionalTests)) setFunctionalTests(data.functionalTests);
+    if (data.cbdfBodyFunction !== undefined) setCbdfBodyFunction(data.cbdfBodyFunction);
+    if (data.cbdfBodyStructure !== undefined) setCbdfBodyStructure(data.cbdfBodyStructure);
+    if (data.cbdfActivityParticipation !== undefined) setCbdfActivityParticipation(data.cbdfActivityParticipation);
+    if (data.cbdfContextualFactors !== undefined) setCbdfContextualFactors(data.cbdfContextualFactors);
+    if (data.cbdfDiagnosticSummary !== undefined) setCbdfDiagnosticSummary(data.cbdfDiagnosticSummary);
+    if (data.treatmentResources !== undefined) setTreatmentResources(data.treatmentResources);
+    if (data.sessionFrequency !== undefined) setSessionFrequency(data.sessionFrequency);
+    if (data.estimatedSessions !== undefined) setEstimatedSessions(data.estimatedSessions);
+    if (data.reassessmentDate !== undefined) setReassessmentDate(data.reassessmentDate);
+    if (Array.isArray(data.homeExercises)) setHomeExercises(data.homeExercises);
+  };
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaFisio',
+    patientId: selectedPatientId,
+    appointmentId: initialAppointmentId,
+    payload: autosavePayload,
+    onRestoreDraft: handleRestoreDraft
+  });
+
   // Carrega pacientes
   useEffect(() => {
     async function loadPatients() {
@@ -333,6 +455,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
         },
         homeExercisesData: homeExercises
       });
+      await autosave.clearDraft();
       showToast('Atendimento de fisioterapia finalizado com sucesso no prontuário!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar atendimento de fisioterapia', 'error');
@@ -399,15 +522,14 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
           {selectedPatientId && (
             <>
-              <button
-                type="button"
-                onClick={() => setShowPreviousRecordsModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                title="Visualizar histórico completo de prontuários anteriores"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Prontuários Anteriores</span>
-              </button>
+              <ClinicalQuickHeaderActions
+                autosaveStatus={autosave.autosaveStatus}
+                lastSavedTime={autosave.lastSavedTime}
+                onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+                onFinishConsultation={() => setActiveTab('finish')}
+                finishLabel="Finalizar Atendimento"
+                isSubmitting={saving}
+              />
 
               <button
                 type="button"
@@ -1268,6 +1390,15 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           homeExercisesText={homeExercisesText}
         />
       )}
+
+      <ClinicalDraftRecoveryModal
+        isOpen={autosave.conflictModalOpen}
+        onClose={() => autosave.resolveConflict('local')}
+        serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+        localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+        onRecoverServer={() => autosave.resolveConflict('server')}
+        onKeepCurrent={() => autosave.resolveConflict('local')}
+      />
     </div>
   );
 };

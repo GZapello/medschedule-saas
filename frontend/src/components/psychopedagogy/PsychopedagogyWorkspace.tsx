@@ -6,6 +6,9 @@ import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsM
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PsychopedagogyDocumentModal, PsychopedagogyDocType } from './PsychopedagogyDocumentModal';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import {
   GraduationCap,
   BookOpen,
@@ -236,6 +239,41 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     next_steps: '',
     guidance_summary: '',
     signature_mode: 'sha256' as 'sha256' | 'pades'
+  });
+
+  // Payload do Autosave Universal Clínico (ZemdaPP)
+  const autosavePayload = useMemo(() => ({
+    finishForm,
+    currentSession,
+    learningForm,
+    assessment,
+    profile,
+    currentPlan
+  }), [
+    finishForm,
+    currentSession,
+    learningForm,
+    assessment,
+    profile,
+    currentPlan
+  ]);
+
+  const handleRestoreDraft = (data: any) => {
+    if (!data) return;
+    if (data.finishForm) setFinishForm(prev => ({ ...prev, ...data.finishForm }));
+    if (data.currentSession) setCurrentSession(prev => ({ ...prev, ...data.currentSession }));
+    if (data.learningForm) setLearningForm(prev => ({ ...prev, ...data.learningForm }));
+    if (data.assessment) setAssessment(prev => ({ ...prev, ...data.assessment }));
+    if (data.profile) setProfile(prev => ({ ...prev, ...data.profile }));
+    if (data.currentPlan) setCurrentPlan(prev => ({ ...prev, ...data.currentPlan }));
+  };
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaPP',
+    patientId: selectedPatientId,
+    appointmentId: initialAppointmentId,
+    payload: autosavePayload,
+    onRestoreDraft: handleRestoreDraft
   });
 
   // Modal Pós-Atendimento e Modal de Documentos
@@ -724,6 +762,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
         }
       });
 
+      await autosave.clearDraft();
       showToast('Atendimento psicopedagógico finalizado e selado com sucesso!', 'success');
       setPostConsultationReceipt(res);
       setShowPostConsultationModal(true);
@@ -809,15 +848,14 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
           {selectedPatientId && (
             <>
-              <button
-                type="button"
-                onClick={() => setShowPreviousRecordsModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-all shadow-xs cursor-pointer whitespace-nowrap"
-                title="Consultar histórico de evoluções e prontuários anteriores"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Prontuários Anteriores</span>
-              </button>
+              <ClinicalQuickHeaderActions
+                autosaveStatus={autosave.autosaveStatus}
+                lastSavedTime={autosave.lastSavedTime}
+                onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+                onFinishConsultation={() => setActiveTab('finish')}
+                finishLabel="Finalizar Atendimento"
+                isSubmitting={saving}
+              />
 
               <button
                 type="button"
@@ -2722,6 +2760,14 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
         />
       )}
 
+      <ClinicalDraftRecoveryModal
+        isOpen={autosave.conflictModalOpen}
+        onClose={() => autosave.resolveConflict('local')}
+        serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+        localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+        onRecoverServer={() => autosave.resolveConflict('server')}
+        onKeepCurrent={() => autosave.resolveConflict('local')}
+      />
     </div>
   );
 };

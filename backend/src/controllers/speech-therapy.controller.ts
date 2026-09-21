@@ -1486,4 +1486,575 @@ export class SpeechTherapyController {
       res.status(500).json({ error: 'Erro ao remover teste complementar' });
     }
   }
+
+  // 12. FOIS — FUNCTIONAL ORAL INTAKE SCALE (Item 1)
+  static getFoisList(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+      const versionFilter = req.query.version ? String(req.query.version) : null;
+
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      let query = `
+        SELECT f.*, p.name as professional_name
+        FROM fono_fois_assessments f
+        LEFT JOIN professionals p ON p.id = f.professional_id
+        WHERE f.patient_id = ? AND f.tenant_id = ?
+      `;
+      const params: any[] = [patientId, tenantId];
+
+      if (versionFilter) {
+        query += ` AND f.version = ?`;
+        params.push(versionFilter);
+      }
+
+      query += ` ORDER BY f.assessment_date ASC, f.created_at ASC`;
+
+      const rows = db.prepare(query).all(...params) as any[];
+      res.json(rows.map(r => ({
+        id: r.id,
+        patientId: r.patient_id,
+        appointmentId: r.appointment_id,
+        professionalId: r.professional_id,
+        professionalName: r.professional_name,
+        version: r.version,
+        assessmentDate: r.assessment_date,
+        level: Number(r.level),
+        notes: r.notes || '',
+        createdAt: r.created_at
+      })));
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.getFoisList]', err);
+      res.status(500).json({ error: 'Erro ao buscar histórico FOIS' });
+    }
+  }
+
+  static saveFois(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const {
+        patientId: p1,
+        patient_id: p2,
+        appointmentId: a1,
+        appointment_id: a2,
+        version: v1,
+        assessment_type: v2,
+        assessmentDate: d1,
+        assessment_date: d2,
+        level: l1,
+        fois_level: l2,
+        notes: n1,
+        clinical_notes: n2,
+        iddsi_food_level,
+        iddsi_fluid_level,
+        tube_dependency
+      } = req.body;
+
+      const patientId = p1 || p2;
+      const appointmentId = a1 || a2 || null;
+      const version = v1 || v2 || 'adult';
+      const assessmentDate = d1 || d2;
+      const rawLevel = l1 !== undefined && l1 !== null ? l1 : l2;
+      let notes = n1 || n2 || '';
+
+      if (iddsi_food_level !== undefined || iddsi_fluid_level !== undefined || tube_dependency !== undefined) {
+        const extraInfo = [];
+        if (tube_dependency) extraInfo.push('Uso de via alternativa');
+        if (iddsi_food_level !== undefined) extraInfo.push(`IDDSI Alimento: ${iddsi_food_level}`);
+        if (iddsi_fluid_level !== undefined) extraInfo.push(`IDDSI Líquido: ${iddsi_fluid_level}`);
+        if (extraInfo.length > 0) {
+          notes = notes ? `${notes} [${extraInfo.join(' | ')}]` : `[${extraInfo.join(' | ')}]`;
+        }
+      }
+
+      if (!patientId || rawLevel === undefined || rawLevel === null) {
+        res.status(400).json({ error: 'patientId e level são obrigatórios' });
+        return;
+      }
+
+      const numLevel = parseInt(rawLevel, 10);
+      if (isNaN(numLevel) || numLevel < 1 || numLevel > 7) {
+        res.status(400).json({ error: 'Nível FOIS deve ser um número entre 1 e 7' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const dateStr = assessmentDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const id = 'f-fois-' + uuidv4().slice(0, 8);
+
+      db.prepare(`
+        INSERT INTO fono_fois_assessments (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          version, assessment_date, level, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, tenantId, patientId, profId, appointmentId, version, dateStr, numLevel, notes || null);
+
+      res.status(201).json({ id, level: numLevel, version, message: 'Avaliação FOIS registrada com sucesso' });
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.saveFois]', err);
+      res.status(500).json({ error: 'Erro ao salvar avaliação FOIS' });
+    }
+  }
+
+  // 13. IDV-10 — ÍNDICE DE DESVANTAGEM VOCAL (Item 2)
+  static getIdv10List(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT v.*, p.name as professional_name
+        FROM fono_idv10_assessments v
+        LEFT JOIN professionals p ON p.id = v.professional_id
+        WHERE v.patient_id = ? AND v.tenant_id = ?
+        ORDER BY v.assessment_date ASC, v.created_at ASC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows.map(r => ({
+        id: r.id,
+        patientId: r.patient_id,
+        appointmentId: r.appointment_id,
+        professionalId: r.professional_id,
+        professionalName: r.professional_name,
+        assessmentDate: r.assessment_date,
+        answers: (() => { try { return JSON.parse(r.answers_json); } catch { return []; } })(),
+        totalScore: Number(r.total_score),
+        total_score: Number(r.total_score),
+        cutoff_exceeded: Number(r.total_score) > 7 ? 1 : 0,
+        notes: r.notes || '',
+        createdAt: r.created_at
+      })));
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.getIdv10List]', err);
+      res.status(500).json({ error: 'Erro ao buscar histórico IDV-10' });
+    }
+  }
+
+  static saveIdv10(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const {
+        patientId: p1,
+        patient_id: p2,
+        appointmentId: a1,
+        appointment_id: a2,
+        assessmentDate: d1,
+        assessment_date: d2,
+        answers,
+        totalScore: s1,
+        total_score: s2,
+        notes: n1,
+        clinical_notes: n2
+      } = req.body;
+
+      const patientId = p1 || p2;
+      const appointmentId = a1 || a2 || null;
+      const assessmentDate = d1 || d2;
+      let calculatedScore = s1 !== undefined && s1 !== null ? Number(s1) : (s2 !== undefined && s2 !== null ? Number(s2) : NaN);
+
+      if (isNaN(calculatedScore) && answers) {
+        if (Array.isArray(answers)) {
+          calculatedScore = answers.reduce((acc, curr) => acc + (Number(curr) || 0), 0);
+        } else if (typeof answers === 'object') {
+          calculatedScore = Object.values(answers).reduce((acc: number, curr: any) => acc + (Number(curr) || 0), 0);
+        }
+      }
+
+      if (!patientId || !answers || isNaN(calculatedScore)) {
+        res.status(400).json({ error: 'patientId, answers e totalScore são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const dateStr = assessmentDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const id = 'f-idv-' + uuidv4().slice(0, 8);
+      const notes = n1 || n2;
+
+      db.prepare(`
+        INSERT INTO fono_idv10_assessments (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          assessment_date, answers_json, total_score, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, tenantId, patientId, profId, appointmentId, dateStr, JSON.stringify(answers), calculatedScore, notes || null);
+
+      res.status(201).json({
+        id,
+        totalScore: calculatedScore,
+        total_score: calculatedScore,
+        cutoff_exceeded: calculatedScore > 7 ? 1 : 0,
+        message: 'Avaliação IDV-10 salva com sucesso'
+      });
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.saveIdv10]', err);
+      res.status(500).json({ error: 'Erro ao salvar avaliação IDV-10' });
+    }
+  }
+
+  // 14. RASTREIO DE LEITURA, ESCRITA E APRENDIZAGEM (Item 3)
+  static getReadingScreenings(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM fono_reading_screenings r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ?
+        ORDER BY r.screening_date DESC, r.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows.map(r => ({
+        id: r.id,
+        patientId: r.patient_id,
+        appointmentId: r.appointment_id,
+        professionalId: r.professional_id,
+        professionalName: r.professional_name,
+        screeningDate: r.screening_date,
+        referralReason: r.referral_reason || '',
+        schoolHistory: r.school_history || '',
+        familyHistory: r.family_history || '',
+        readingNotes: r.reading_notes || '',
+        writingNotes: r.writing_notes || '',
+        phonologicalAwareness: r.phonological_awareness || '',
+        phonologicalMemory: r.phonological_memory || '',
+        rapidNaming: r.rapid_naming || '',
+        graphemePhoneme: r.grapheme_phoneme || '',
+        fluencyAccuracy: r.fluency_accuracy || '',
+        comprehension: r.comprehension || '',
+        observedErrors: r.observed_errors || '',
+        clinicalNotes: r.clinical_notes || '',
+        externalInstruments: r.external_instruments || '',
+        professionalConclusion: r.professional_conclusion || '',
+        classification: r.classification,
+        conduct: r.conduct || '',
+        createdAt: r.created_at
+      })));
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.getReadingScreenings]', err);
+      res.status(500).json({ error: 'Erro ao buscar rastreio de leitura e escrita' });
+    }
+  }
+
+  static saveReadingScreening(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const {
+        patientId, appointmentId, screeningDate, referralReason, schoolHistory,
+        familyHistory, readingNotes, writingNotes, phonologicalAwareness,
+        phonologicalMemory, rapidNaming, graphemePhoneme, fluencyAccuracy,
+        comprehension, observedErrors, clinicalNotes, externalInstruments,
+        professionalConclusion, classification, conduct
+      } = req.body;
+
+      if (!patientId || !classification) {
+        res.status(400).json({ error: 'patientId e classificação profissional são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const dateStr = screeningDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const id = 'f-rdg-' + uuidv4().slice(0, 8);
+
+      db.prepare(`
+        INSERT INTO fono_reading_screenings (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          screening_date, referral_reason, school_history, family_history,
+          reading_notes, writing_notes, phonological_awareness, phonological_memory,
+          rapid_naming, grapheme_phoneme, fluency_accuracy, comprehension,
+          observed_errors, clinical_notes, external_instruments, professional_conclusion,
+          classification, conduct
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, appointmentId || null,
+        dateStr, referralReason || null, schoolHistory || null, familyHistory || null,
+        readingNotes || null, writingNotes || null, phonologicalAwareness || null, phonologicalMemory || null,
+        rapidNaming || null, graphemePhoneme || null, fluencyAccuracy || null, comprehension || null,
+        observedErrors || null, clinicalNotes || null, externalInstruments || null, professionalConclusion || null,
+        classification, conduct || null
+      );
+
+      res.status(201).json({ id, message: 'Rastreio de leitura e escrita salvo com sucesso' });
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.saveReadingScreening]', err);
+      res.status(500).json({ error: 'Erro ao salvar rastreio de leitura e escrita' });
+    }
+  }
+
+  // 15. ABFW — REGISTRO DE RESULTADOS INFORMADOS (Item 4)
+  static getAbfwRecords(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+      const domainFilter = req.query.domain ? String(req.query.domain) : null;
+
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      let query = `
+        SELECT a.*, p.name as professional_name
+        FROM fono_abfw_records a
+        LEFT JOIN professionals p ON p.id = a.professional_id
+        WHERE a.patient_id = ? AND a.tenant_id = ?
+      `;
+      const params: any[] = [patientId, tenantId];
+
+      if (domainFilter) {
+        query += ` AND a.domain = ?`;
+        params.push(domainFilter);
+      }
+
+      query += ` ORDER BY a.record_date DESC, a.created_at DESC`;
+
+      const rows = db.prepare(query).all(...params) as any[];
+      res.json(rows.map(r => ({
+        id: r.id,
+        patientId: r.patient_id,
+        appointmentId: r.appointment_id,
+        professionalId: r.professional_id,
+        professionalName: r.professional_name,
+        recordDate: r.record_date,
+        version: r.version,
+        domain: r.domain,
+        scoresData: (() => { try { return JSON.parse(r.scores_data_json); } catch { return {}; } })(),
+        notes: r.notes || '',
+        conclusion: r.conclusion || '',
+        createdAt: r.created_at
+      })));
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.getAbfwRecords]', err);
+      res.status(500).json({ error: 'Erro ao buscar registros ABFW' });
+    }
+  }
+
+  static saveAbfwRecord(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const { patientId, appointmentId, recordDate, version = 'ABFW-Revisado', domain, scoresData, notes, conclusion } = req.body;
+      if (!patientId || !domain || !scoresData) {
+        res.status(400).json({ error: 'patientId, domain e scoresData são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const dateStr = recordDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const id = 'f-abfw-' + uuidv4().slice(0, 8);
+
+      db.prepare(`
+        INSERT INTO fono_abfw_records (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          record_date, version, domain, scores_data_json, notes, conclusion
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, appointmentId || null,
+        dateStr, version, domain, JSON.stringify(scoresData), notes || null, conclusion || null
+      );
+
+      res.status(201).json({ id, message: 'Registro ABFW cadastrado com sucesso' });
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.saveAbfwRecord]', err);
+      res.status(500).json({ error: 'Erro ao salvar registro ABFW' });
+    }
+  }
+
+  // 16. TRIAGEM DO PROCESSAMENTO AUDITIVO - PAC (Item 5)
+  static getAuditoryScreenings(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT s.*, p.name as professional_name
+        FROM fono_auditory_screenings s
+        LEFT JOIN professionals p ON p.id = s.professional_id
+        WHERE s.patient_id = ? AND s.tenant_id = ?
+        ORDER BY s.screening_date DESC, s.created_at DESC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows.map(r => ({
+        id: r.id,
+        patientId: r.patient_id,
+        appointmentId: r.appointment_id,
+        professionalId: r.professional_id,
+        professionalName: r.professional_name,
+        screeningDate: r.screening_date,
+        speechInNoise: r.speech_in_noise || '',
+        followCommands: r.follow_commands || '',
+        localization: r.localization || '',
+        figureGround: r.figure_ground || '',
+        auditoryClosure: r.auditory_closure || '',
+        temporalOrdering: r.temporal_ordering || '',
+        temporalResolution: r.temporal_resolution || '',
+        binauralIntegration: r.binaural_integration || '',
+        auditoryMemory: r.auditory_memory || '',
+        otitisHistory: r.otitis_history || '',
+        schoolPerformance: r.school_performance || '',
+        familyComplaints: r.family_complaints || '',
+        clinicalNotes: r.clinical_notes || '',
+        externalInstruments: r.external_instruments || '',
+        conduct: r.conduct || '',
+        classification: r.classification,
+        createdAt: r.created_at
+      })));
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.getAuditoryScreenings]', err);
+      res.status(500).json({ error: 'Erro ao buscar triagens de processamento auditivo' });
+    }
+  }
+
+  static saveAuditoryScreening(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isSpeechTherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const {
+        patientId, appointmentId, screeningDate, speechInNoise, followCommands,
+        localization, figureGround, auditoryClosure, temporalOrdering,
+        temporalResolution, binauralIntegration, auditoryMemory, otitisHistory,
+        schoolPerformance, familyComplaints, clinicalNotes, externalInstruments,
+        conduct, classification
+      } = req.body;
+
+      if (!patientId || !classification) {
+        res.status(400).json({ error: 'patientId e classificação profissional são obrigatórios' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      }
+
+      const dateStr = screeningDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const id = 'f-pac-' + uuidv4().slice(0, 8);
+
+      db.prepare(`
+        INSERT INTO fono_auditory_screenings (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          screening_date, speech_in_noise, follow_commands, localization,
+          figure_ground, auditory_closure, temporal_ordering, temporal_resolution,
+          binaural_integration, auditory_memory, otitis_history, school_performance,
+          family_complaints, clinical_notes, external_instruments, conduct, classification
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, tenantId, patientId, profId, appointmentId || null,
+        dateStr, speechInNoise || null, followCommands || null, localization || null,
+        figureGround || null, auditoryClosure || null, temporalOrdering || null, temporalResolution || null,
+        binauralIntegration || null, auditoryMemory || null, otitisHistory || null, schoolPerformance || null,
+        familyComplaints || null, clinicalNotes || null, externalInstruments || null, conduct || null, classification
+      );
+
+      res.status(201).json({ id, message: 'Triagem do processamento auditivo salva com sucesso' });
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.saveAuditoryScreening]', err);
+      res.status(500).json({ error: 'Erro ao salvar triagem auditiva' });
+    }
+  }
+
+  // 17. HISTÓRICO LONGITUDINAL DE FONOLOGIA (Item 6)
+  static getPhonemesHistory(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso restrito' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT s.*, p.name as professional_name
+        FROM fono_speech_phonology s
+        LEFT JOIN professionals p ON p.id = s.professional_id
+        WHERE s.patient_id = ? AND s.tenant_id = ?
+        ORDER BY s.created_at ASC
+      `).all(patientId, tenantId) as any[];
+
+      res.json(rows.map(r => ({
+        id: r.id,
+        patientId: r.patient_id,
+        appointmentId: r.appointment_id,
+        professionalId: r.professional_id,
+        professionalName: r.professional_name,
+        phonemes: (() => { try { return JSON.parse(r.phonemes_json); } catch { return []; } })(),
+        phonologicalProcesses: r.phonological_processes || '',
+        intelligibility: r.intelligibility || '',
+        articulationNotes: r.articulation_notes || '',
+        spontaneousSpeech: r.spontaneous_speech || '',
+        repetition: r.repetition || '',
+        referredBy: r.referred_by || '',
+        coarticulationBreakdown: r.coarticulation_breakdown || '',
+        createdAt: r.created_at
+      })));
+    } catch (err: any) {
+      console.error('[SpeechTherapyController.getPhonemesHistory]', err);
+      res.status(500).json({ error: 'Erro ao buscar histórico de fonologia' });
+    }
+  }
 }
+

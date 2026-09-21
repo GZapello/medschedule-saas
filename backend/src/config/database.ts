@@ -3285,5 +3285,142 @@ function repairLegacyPhotoUrls(rawDb: any): void {
       FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_psico_drafts_unique ON psychology_drafts(tenant_id, patient_id, COALESCE(appointment_id, 'none'));
+
+    -- Infraestrutura Universal de Autosave e Rascunhos Clínicos
+    CREATE TABLE IF NOT EXISTS clinical_drafts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      module_type TEXT NOT NULL,
+      draft_data_json TEXT NOT NULL,
+      client_updated_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_clinical_drafts_unique 
+      ON clinical_drafts(tenant_id, patient_id, module_type, COALESCE(appointment_id, 'none'));
+
+    -- ZemdaFono: FOIS - Functional Oral Intake Scale
+    CREATE TABLE IF NOT EXISTS fono_fois_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      version TEXT NOT NULL DEFAULT 'adult',
+      assessment_date TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_fois_patient ON fono_fois_assessments(tenant_id, patient_id, assessment_date);
+
+    -- ZemdaFono: IDV-10 - Índice de Desvantagem Vocal
+    CREATE TABLE IF NOT EXISTS fono_idv10_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      assessment_date TEXT NOT NULL,
+      answers_json TEXT NOT NULL,
+      total_score INTEGER NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_idv10_patient ON fono_idv10_assessments(tenant_id, patient_id, assessment_date);
+
+    -- ZemdaFono: Rastreio de Leitura, Escrita e Indicadores de Dislexia
+    CREATE TABLE IF NOT EXISTS fono_reading_screenings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      screening_date TEXT NOT NULL,
+      referral_reason TEXT,
+      school_history TEXT,
+      family_history TEXT,
+      reading_notes TEXT,
+      writing_notes TEXT,
+      phonological_awareness TEXT,
+      phonological_memory TEXT,
+      rapid_naming TEXT,
+      grapheme_phoneme TEXT,
+      fluency_accuracy TEXT,
+      comprehension TEXT,
+      observed_errors TEXT,
+      clinical_notes TEXT,
+      external_instruments TEXT,
+      professional_conclusion TEXT,
+      classification TEXT NOT NULL,
+      conduct TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_reading_patient ON fono_reading_screenings(tenant_id, patient_id, screening_date);
+
+    -- ZemdaFono: ABFW - Registro de Resultados Informados
+    CREATE TABLE IF NOT EXISTS fono_abfw_records (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      record_date TEXT NOT NULL,
+      version TEXT NOT NULL DEFAULT 'ABFW-Revisado',
+      domain TEXT NOT NULL,
+      scores_data_json TEXT NOT NULL,
+      notes TEXT,
+      conclusion TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_abfw_patient ON fono_abfw_records(tenant_id, patient_id, domain, record_date);
+
+    -- ZemdaFono: Triagem do Processamento Auditivo (PAC)
+    CREATE TABLE IF NOT EXISTS fono_auditory_screenings (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      patient_id TEXT NOT NULL,
+      professional_id TEXT,
+      appointment_id TEXT,
+      screening_date TEXT NOT NULL,
+      speech_in_noise TEXT,
+      follow_commands TEXT,
+      localization TEXT,
+      figure_ground TEXT,
+      auditory_closure TEXT,
+      temporal_ordering TEXT,
+      temporal_resolution TEXT,
+      binaural_integration TEXT,
+      auditory_memory TEXT,
+      otitis_history TEXT,
+      school_performance TEXT,
+      family_complaints TEXT,
+      clinical_notes TEXT,
+      external_instruments TEXT,
+      conduct TEXT,
+      classification TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_fono_auditory_patient ON fono_auditory_screenings(tenant_id, patient_id, screening_date);
   `);
 }

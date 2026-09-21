@@ -1,3 +1,4 @@
+import { LANDING_HERO } from './landingContent';
 // Fonte Única de Verdade para Rotas SEO, Metadados e Arquitetura Pública do Zemda
 
 export const OFFICIAL_DOMAIN = 'https://zemda.com.br';
@@ -83,16 +84,16 @@ export const SEO_ROUTES: SeoRoute[] = [
   // 1. Home Principal
   {
     path: '/',
-    title: 'Zemda • Sistema de Gestão para Clínicas, Consultórios e Saúde',
-    metaDescription: 'Software completo para clínicas, consultórios médicos e terapêuticos. Agenda online inteligente, prontuário eletrônico seguro, gestão financeira, controle de caixa, emissão de recibos e aplicativo integrado para médicos, psicólogos, fonoaudiólogos e fisioterapeutas.',
+    title: 'Zemda • Ecossistema de Saúde e Gestão Multiprofissional',
+    metaDescription: LANDING_HERO.description,
     keywords: 'sistema para clinicas, software para clinica, prontuario eletronico, agenda medica, gestao para psicologos, fonoaudiologia, fisioterapia, recibos medicos, clinica medica, zemda',
     canonical: `${OFFICIAL_DOMAIN}/`,
     indexable: true,
     inSitemap: true,
-    badge: 'Saúde e Gestão',
-    h1: 'Saúde e Gestão em Harmonia',
-    h2: 'Tudo o que sua clínica precisa em uma única plataforma integrada',
-    summary: 'Software completo de prontuário eletrônico, agenda online com confirmação automática, gestão financeira com controle de caixa e módulos especializados para a área da saúde.'
+    badge: 'Ecossistema de Saúde & Gestão',
+    h1: LANDING_HERO.title,
+    h2: 'Gestão unificada, ferramentas para cada profissão',
+    summary: LANDING_HERO.description
   },
 
   // 2. Planos e Preços

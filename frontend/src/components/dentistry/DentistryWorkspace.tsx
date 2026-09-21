@@ -43,6 +43,9 @@ import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
@@ -181,6 +184,53 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   // Finalização Rápida de Atendimento Odontológico
   const [consultationEvolution, setConsultationEvolution] = useState<string>('');
   const [consultationProcedures, setConsultationProcedures] = useState<string>('');
+
+  // Payload do Autosave Universal Clínico (ZemdaOdonto)
+  const autosavePayload = React.useMemo(() => ({
+    consultationEvolution,
+    consultationProcedures,
+    anamnesis,
+    perioForm,
+    endoForm,
+    planForm,
+    prostheticForm,
+    hofForm,
+    odontogramData,
+    pendingToothChanges
+  }), [
+    consultationEvolution,
+    consultationProcedures,
+    anamnesis,
+    perioForm,
+    endoForm,
+    planForm,
+    prostheticForm,
+    hofForm,
+    odontogramData,
+    pendingToothChanges
+  ]);
+
+  const handleRestoreDraft = (data: any) => {
+    if (!data) return;
+    if (data.consultationEvolution !== undefined) setConsultationEvolution(data.consultationEvolution);
+    if (data.consultationProcedures !== undefined) setConsultationProcedures(data.consultationProcedures);
+    if (data.anamnesis) setAnamnesis((prev: any) => ({ ...prev, ...data.anamnesis }));
+    if (data.perioForm) setPerioForm((prev: any) => ({ ...prev, ...data.perioForm }));
+    if (data.endoForm) setEndoForm((prev: any) => ({ ...prev, ...data.endoForm }));
+    if (data.planForm) setPlanForm((prev: any) => ({ ...prev, ...data.planForm }));
+    if (data.prostheticForm) setProstheticForm((prev: any) => ({ ...prev, ...data.prostheticForm }));
+    if (data.hofForm) setHofForm((prev: any) => ({ ...prev, ...data.hofForm }));
+    if (data.odontogramData && Object.keys(data.odontogramData).length > 0) setOdontogramData(data.odontogramData);
+    if (Array.isArray(data.pendingToothChanges)) setPendingToothChanges(data.pendingToothChanges);
+  };
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaOdonto',
+    patientId: selectedPatientId,
+    appointmentId: initialAppointmentId,
+    payload: autosavePayload,
+    onRestoreDraft: handleRestoreDraft
+  });
 
   // Carrega lista de pacientes da clínica
   useEffect(() => {
@@ -428,6 +478,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         toothChanges: pendingToothChanges,
         isSealed: true
       });
+      await autosave.clearDraft();
 
       // Detecção de procedimentos para sugestão de atualização no odontograma
       const textCombined = `${consultationEvolution} ${consultationProcedures}`;
@@ -588,15 +639,14 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowPreviousRecordsModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 shadow-xs transition-colors cursor-pointer"
-              title="Visualizar histórico de prontuários anteriores deste paciente"
-            >
-              <FileText className="w-3.5 h-3.5 text-cyan-600" />
-              <span>Ver Prontuários Anteriores</span>
-            </button>
+            <ClinicalQuickHeaderActions
+              autosaveStatus={autosave.autosaveStatus}
+              lastSavedTime={autosave.lastSavedTime}
+              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+              onFinishConsultation={handleFinishConsultation}
+              finishLabel="Finalizar Atendimento"
+              isSubmitting={saving}
+            />
             <span className="px-3 py-1 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-full text-xs font-bold">
               Prontuário Ativo
             </span>
@@ -1742,6 +1792,14 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           patientName={selectedPatient?.full_name || selectedPatient?.name}
         />
       )}
+      <ClinicalDraftRecoveryModal
+        isOpen={autosave.conflictModalOpen}
+        onClose={() => autosave.resolveConflict('local')}
+        serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+        localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+        onRecoverServer={() => autosave.resolveConflict('server')}
+        onKeepCurrent={() => autosave.resolveConflict('local')}
+      />
     </div>
   );
 };

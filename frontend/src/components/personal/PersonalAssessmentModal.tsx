@@ -21,6 +21,8 @@ import { Student, TavProtocol, StrengthTestItem, EnduranceTestItem } from './typ
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { FileImageUploader } from '../common/FileImageUploader';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 
 interface PersonalAssessmentModalProps {
   isOpen: boolean;
@@ -140,6 +142,166 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const [notes, setNotes] = useState('');
 
   const [saving, setSaving] = useState(false);
+
+  const autosavePayload = React.useMemo(() => ({
+    weight,
+    height,
+    neckCm,
+    shoulderCm,
+    chestCm,
+    waistCm,
+    abdomenCm,
+    hipCm,
+    armRightRelaxed,
+    armLeftRelaxed,
+    armRightFlexed,
+    armLeftFlexed,
+    forearmRight,
+    forearmLeft,
+    wristRight,
+    wristLeft,
+    thighRightProx,
+    thighLeftProx,
+    thighRightMed,
+    thighLeftMed,
+    thighRightDist,
+    thighLeftDist,
+    calfRight,
+    calfLeft,
+    compositionMethod,
+    manualFatPct,
+    manualMuscleMass,
+    bodyWaterLiters,
+    bmrKcal,
+    tavValue,
+    skinfoldsProtocol,
+    foldTriceps,
+    foldSubscapular,
+    foldBiceps,
+    foldChest,
+    foldAxillary,
+    foldSuprailiac,
+    foldAbdominal,
+    foldThigh,
+    foldCalf,
+    restingHeartRate,
+    bloodPressureSystolic,
+    bloodPressureDiastolic,
+    vo2Max,
+    flexibilityWellsCm,
+    strengthTests,
+    enduranceTests,
+    notes
+  }), [
+    weight,
+    height,
+    neckCm,
+    shoulderCm,
+    chestCm,
+    waistCm,
+    abdomenCm,
+    hipCm,
+    armRightRelaxed,
+    armLeftRelaxed,
+    armRightFlexed,
+    armLeftFlexed,
+    forearmRight,
+    forearmLeft,
+    wristRight,
+    wristLeft,
+    thighRightProx,
+    thighLeftProx,
+    thighRightMed,
+    thighLeftMed,
+    thighRightDist,
+    thighLeftDist,
+    calfRight,
+    calfLeft,
+    compositionMethod,
+    manualFatPct,
+    manualMuscleMass,
+    bodyWaterLiters,
+    bmrKcal,
+    tavValue,
+    skinfoldsProtocol,
+    foldTriceps,
+    foldSubscapular,
+    foldBiceps,
+    foldChest,
+    foldAxillary,
+    foldSuprailiac,
+    foldAbdominal,
+    foldThigh,
+    foldCalf,
+    restingHeartRate,
+    bloodPressureSystolic,
+    bloodPressureDiastolic,
+    vo2Max,
+    flexibilityWellsCm,
+    strengthTests,
+    enduranceTests,
+    notes
+  ]);
+
+  const handleRestoreDraft = (data: any) => {
+    if (!data) return;
+    if (data.weight !== undefined) setWeight(data.weight);
+    if (data.height !== undefined) setHeight(data.height);
+    if (data.neckCm !== undefined) setNeckCm(data.neckCm);
+    if (data.shoulderCm !== undefined) setShoulderCm(data.shoulderCm);
+    if (data.chestCm !== undefined) setChestCm(data.chestCm);
+    if (data.waistCm !== undefined) setWaistCm(data.waistCm);
+    if (data.abdomenCm !== undefined) setAbdomenCm(data.abdomenCm);
+    if (data.hipCm !== undefined) setHipCm(data.hipCm);
+    if (data.armRightRelaxed !== undefined) setArmRightRelaxed(data.armRightRelaxed);
+    if (data.armLeftRelaxed !== undefined) setArmLeftRelaxed(data.armLeftRelaxed);
+    if (data.armRightFlexed !== undefined) setArmRightFlexed(data.armRightFlexed);
+    if (data.armLeftFlexed !== undefined) setArmLeftFlexed(data.armLeftFlexed);
+    if (data.forearmRight !== undefined) setForearmRight(data.forearmRight);
+    if (data.forearmLeft !== undefined) setForearmLeft(data.forearmLeft);
+    if (data.wristRight !== undefined) setWristRight(data.wristRight);
+    if (data.wristLeft !== undefined) setWristLeft(data.wristLeft);
+    if (data.thighRightProx !== undefined) setThighRightProx(data.thighRightProx);
+    if (data.thighLeftProx !== undefined) setThighLeftProx(data.thighLeftProx);
+    if (data.thighRightMed !== undefined) setThighRightMed(data.thighRightMed);
+    if (data.thighLeftMed !== undefined) setThighLeftMed(data.thighLeftMed);
+    if (data.thighRightDist !== undefined) setThighRightDist(data.thighRightDist);
+    if (data.thighLeftDist !== undefined) setThighLeftDist(data.thighLeftDist);
+    if (data.calfRight !== undefined) setCalfRight(data.calfRight);
+    if (data.calfLeft !== undefined) setCalfLeft(data.calfLeft);
+    if (data.compositionMethod !== undefined) setCompositionMethod(data.compositionMethod);
+    if (data.manualFatPct !== undefined) setManualFatPct(data.manualFatPct);
+    if (data.manualMuscleMass !== undefined) setManualMuscleMass(data.manualMuscleMass);
+    if (data.bodyWaterLiters !== undefined) setBodyWaterLiters(data.bodyWaterLiters);
+    if (data.bmrKcal !== undefined) setBmrKcal(data.bmrKcal);
+    if (data.tavValue !== undefined) setTavValue(data.tavValue);
+    if (data.skinfoldsProtocol !== undefined) setSkinfoldsProtocol(data.skinfoldsProtocol);
+    if (data.foldTriceps !== undefined) setFoldTriceps(data.foldTriceps);
+    if (data.foldSubscapular !== undefined) setFoldSubscapular(data.foldSubscapular);
+    if (data.foldBiceps !== undefined) setFoldBiceps(data.foldBiceps);
+    if (data.foldChest !== undefined) setFoldChest(data.foldChest);
+    if (data.foldAxillary !== undefined) setFoldAxillary(data.foldAxillary);
+    if (data.foldSuprailiac !== undefined) setFoldSuprailiac(data.foldSuprailiac);
+    if (data.foldAbdominal !== undefined) setFoldAbdominal(data.foldAbdominal);
+    if (data.foldThigh !== undefined) setFoldThigh(data.foldThigh);
+    if (data.foldCalf !== undefined) setFoldCalf(data.foldCalf);
+    if (data.restingHeartRate !== undefined) setRestingHeartRate(data.restingHeartRate);
+    if (data.bloodPressureSystolic !== undefined) setBloodPressureSystolic(data.bloodPressureSystolic);
+    if (data.bloodPressureDiastolic !== undefined) setBloodPressureDiastolic(data.bloodPressureDiastolic);
+    if (data.vo2Max !== undefined) setVo2Max(data.vo2Max);
+    if (data.flexibilityWellsCm !== undefined) setFlexibilityWellsCm(data.flexibilityWellsCm);
+    if (Array.isArray(data.strengthTests)) setStrengthTests(data.strengthTests);
+    if (Array.isArray(data.enduranceTests)) setEnduranceTests(data.enduranceTests);
+    if (data.notes !== undefined) setNotes(data.notes);
+  };
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaPersonal_Assessment',
+    patientId: selectedStudentId,
+    payload: autosavePayload,
+    onRestoreDraft: handleRestoreDraft,
+    enabled: isOpen && !!selectedStudentId
+  });
 
   // Carregar protocolos TAV na abertura
   useEffect(() => {
@@ -479,6 +641,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         await ApiClient.post('/v1/personal/assessments', payload);
         showToast('Avaliação física completa registrada com sucesso!', 'success');
       }
+      await autosave.clearDraft();
       onSaved();
       onClose();
     } catch (err) {
@@ -509,12 +672,18 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            <ClinicalAutosaveIndicator
+              status={autosave.autosaveStatus}
+              lastSavedTime={autosave.lastSavedTime}
+            />
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Top Info Strip: Aluno e Data */}

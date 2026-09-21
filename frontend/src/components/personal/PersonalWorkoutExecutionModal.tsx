@@ -17,6 +17,8 @@ import { Workout, WorkoutExercise } from './types';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { SecureFileImage } from '../common/SecureFileImage';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 
 interface PersonalWorkoutExecutionModalProps {
   isOpen: boolean;
@@ -55,6 +57,32 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
 
   // Zoom de Foto/Ilustração do Exercício
   const [zoomedPhoto, setZoomedPhoto] = useState<{ fileId?: string; url?: string; name?: string } | null>(null);
+
+  const autosavePayload = React.useMemo(() => ({
+    durationMinutes,
+    rpe,
+    feedback,
+    completedSets,
+    exerciseLoads
+  }), [durationMinutes, rpe, feedback, completedSets, exerciseLoads]);
+
+  const handleRestoreDraft = (data: any) => {
+    if (!data) return;
+    if (data.durationMinutes !== undefined) setDurationMinutes(data.durationMinutes);
+    if (data.rpe !== undefined) setRpe(data.rpe);
+    if (data.feedback !== undefined) setFeedback(data.feedback);
+    if (data.completedSets) setCompletedSets(data.completedSets);
+    if (data.exerciseLoads) setExerciseLoads(data.exerciseLoads);
+  };
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaPersonal_Workout',
+    patientId: workout?.patient_id,
+    appointmentId: workout?.id,
+    payload: autosavePayload,
+    onRestoreDraft: handleRestoreDraft,
+    enabled: isOpen
+  });
 
   useEffect(() => {
     if (workout && workout.exercises) {
@@ -128,6 +156,8 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
         exercises_performed: performed
       });
 
+      await autosave.clearDraft();
+
       if (res.newPRs && res.newPRs.length > 0) {
         setAchievedPRs(res.newPRs);
       } else {
@@ -163,12 +193,15 @@ export const PersonalWorkoutExecutionModal: React.FC<PersonalWorkoutExecutionMod
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* BARRA DO CRONÔMETRO DE DESCANSO INTERATIVO */}

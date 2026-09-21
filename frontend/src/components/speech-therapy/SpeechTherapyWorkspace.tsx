@@ -51,6 +51,15 @@ import { FileImageUploader, FileUploadedInfo } from '../common/FileImageUploader
 import { SecureFileImage } from '../common/SecureFileImage';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalQuickHeaderActions } from '../clinical/ClinicalQuickHeaderActions';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
+import { FoisAssessmentSection } from './FoisAssessmentSection';
+import { Idv10AssessmentSection } from './Idv10AssessmentSection';
+import { ReadingWritingScreening } from './ReadingWritingScreening';
+import { AbfwRecordsSection } from './AbfwRecordsSection';
+import { AuditoryProcessingScreening } from './AuditoryProcessingScreening';
+import { PhonologyComparisonView } from './PhonologyComparisonView';
 
 export interface StructuredGoalItem {
   id: string;
@@ -301,6 +310,68 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   const [consultationTitle, setConsultationTitle] = useState<string>('Consulta Fonoaudiológica');
   const [consultationEvolution, setConsultationEvolution] = useState<string>('');
   const [consultationConducts, setConsultationConducts] = useState<string>('');
+
+  // Payload do Autosave Universal Clínico (ZemdaFono)
+  const autosavePayload = React.useMemo(() => ({
+    consultationTitle,
+    consultationEvolution,
+    consultationConducts,
+    anamnesisData,
+    languageData,
+    phonemesList,
+    speechReferredBy,
+    coarticulationBreakdown,
+    orofacialData,
+    voiceData,
+    fluencyData,
+    dysphagiaData,
+    audiologyData,
+    planForm,
+    structuredGoals
+  }), [
+    consultationTitle,
+    consultationEvolution,
+    consultationConducts,
+    anamnesisData,
+    languageData,
+    phonemesList,
+    speechReferredBy,
+    coarticulationBreakdown,
+    orofacialData,
+    voiceData,
+    fluencyData,
+    dysphagiaData,
+    audiologyData,
+    planForm,
+    structuredGoals
+  ]);
+
+  const handleRestoreDraft = (data: any) => {
+    if (!data) return;
+    if (data.consultationTitle !== undefined) setConsultationTitle(data.consultationTitle);
+    if (data.consultationEvolution !== undefined) setConsultationEvolution(data.consultationEvolution);
+    if (data.consultationConducts !== undefined) setConsultationConducts(data.consultationConducts);
+    if (data.anamnesisData) setAnamnesisData((prev: any) => ({ ...prev, ...data.anamnesisData }));
+    if (data.languageData) setLanguageData((prev: any) => ({ ...prev, ...data.languageData }));
+    if (Array.isArray(data.phonemesList) && data.phonemesList.length > 0) setPhonemesList(data.phonemesList);
+    if (data.speechReferredBy !== undefined) setSpeechReferredBy(data.speechReferredBy);
+    if (data.coarticulationBreakdown !== undefined) setCoarticulationBreakdown(data.coarticulationBreakdown);
+    if (data.orofacialData) setOrofacialData((prev: any) => ({ ...prev, ...data.orofacialData }));
+    if (data.voiceData) setVoiceData((prev: any) => ({ ...prev, ...data.voiceData }));
+    if (data.fluencyData) setFluencyData((prev: any) => ({ ...prev, ...data.fluencyData }));
+    if (data.dysphagiaData) setDysphagiaData((prev: any) => ({ ...prev, ...data.dysphagiaData }));
+    if (data.audiologyData) setAudiologyData((prev: any) => ({ ...prev, ...data.audiologyData }));
+    if (data.planForm) setPlanForm((prev: any) => ({ ...prev, ...data.planForm }));
+    if (Array.isArray(data.structuredGoals) && data.structuredGoals.length > 0) setStructuredGoals(data.structuredGoals);
+  };
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaFono',
+    patientId: selectedPatientId,
+    appointmentId: initialAppointmentId,
+    payload: autosavePayload,
+    onRestoreDraft: handleRestoreDraft
+  });
 
   // Relação s/z calculada
   const calculatedSzRatio = React.useMemo(() => {
@@ -621,6 +692,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
         audiologyRecordId: currentAudiologyRecordId || undefined,
         audioData: audioBlobUrl
       });
+      await autosave.clearDraft();
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar atendimento de Fono', 'error');
     } finally {
@@ -696,26 +768,14 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
           )}
 
           {selectedPatientId && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowPreviousRecordsModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-xs transition-all cursor-pointer whitespace-nowrap"
-                title="Visualizar histórico de prontuários anteriores deste paciente"
-              >
-                <FileText className="w-3.5 h-3.5 text-sky-600" />
-                <span>Ver Prontuários Anteriores</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('finish')}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-500/25 transition-all cursor-pointer whitespace-nowrap"
-              >
-                <CheckCircle2 className="w-4 h-4 text-white" />
-                <span>Finalizar Atendimento</span>
-              </button>
-            </>
+            <ClinicalQuickHeaderActions
+              autosaveStatus={autosave.autosaveStatus}
+              lastSavedTime={autosave.lastSavedTime}
+              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+              onFinishConsultation={() => setActiveTab('finish')}
+              finishLabel="Finalizar Atendimento"
+              isSubmitting={saving}
+            />
           )}
         </div>
       </div>
@@ -1013,12 +1073,16 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                     {saving ? 'Salvando...' : 'Salvar Mapeamento Fonêmico'}
                   </button>
                 </div>
+
+                {/* Comparativo Longitudinal Fonético-Fonológico */}
+                <PhonologyComparisonView patientId={selectedPatientId} currentPhonemes={phonemesList} />
               </div>
             )}
 
             {/* ABA 2: VOZ & AMOSTRA DE ÁUDIO */}
             {activeTab === 'voice' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+              <div className="space-y-6">
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -1138,6 +1202,10 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* IDV-10: Índice de Desvantagem Vocal & Comparativo */}
+              <Idv10AssessmentSection patientId={selectedPatientId} />
+              </div>
             )}
 
             {/* ABA 3: MOTRICIDADE OROFACIAL */}
@@ -1218,66 +1286,74 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
             {/* ABA 4: AVALIAÇÃO DE LINGUAGEM */}
             {activeTab === 'language' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-sky-600" />
-                      Avaliação Completa de Linguagem
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Níveis compreensivo, expressivo, pragmático e discurso narrativo.
-                    </p>
+              <div className="space-y-6">
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-sky-600" />
+                        Avaliação Completa de Linguagem
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Níveis compreensivo, expressivo, pragmático e discurso narrativo.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsLanguageSampleModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-xl border border-sky-200 transition-colors cursor-pointer"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Analisar Amostra (TTR & MLU)</span>
+                    </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsLanguageSampleModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 rounded-xl border border-sky-200 transition-colors cursor-pointer"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-sky-600" />
-                    <span>Analisar Amostra (TTR & MLU)</span>
-                  </button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Linguagem Compreensiva</label>
+                      <textarea
+                        rows={2}
+                        value={languageData.comprehensiveLanguage}
+                        onChange={e => setLanguageData({ ...languageData, comprehensiveLanguage: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Linguagem Expressiva</label>
+                      <textarea
+                        rows={2}
+                        value={languageData.expressiveLanguage}
+                        onChange={e => setLanguageData({ ...languageData, expressiveLanguage: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Pragmática (Uso Social da Comunicação)</label>
+                      <textarea
+                        rows={2}
+                        value={languageData.pragmatics}
+                        onChange={e => setLanguageData({ ...languageData, pragmatics: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Discurso Narrativo</label>
+                      <textarea
+                        rows={2}
+                        value={languageData.narrativeDiscourse}
+                        onChange={e => setLanguageData({ ...languageData, narrativeDiscourse: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Linguagem Compreensiva</label>
-                    <textarea
-                      rows={2}
-                      value={languageData.comprehensiveLanguage}
-                      onChange={e => setLanguageData({ ...languageData, comprehensiveLanguage: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Linguagem Expressiva</label>
-                    <textarea
-                      rows={2}
-                      value={languageData.expressiveLanguage}
-                      onChange={e => setLanguageData({ ...languageData, expressiveLanguage: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Pragmática (Uso Social da Comunicação)</label>
-                    <textarea
-                      rows={2}
-                      value={languageData.pragmatics}
-                      onChange={e => setLanguageData({ ...languageData, pragmatics: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Discurso Narrativo</label>
-                    <textarea
-                      rows={2}
-                      value={languageData.narrativeDiscourse}
-                      onChange={e => setLanguageData({ ...languageData, narrativeDiscourse: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                </div>
+                {/* Rastreio de Leitura, Escrita e Aprendizagem */}
+                <ReadingWritingScreening patientId={selectedPatientId} />
+
+                {/* Registro de Resultados do Teste de Linguagem Infantil (ABFW) */}
+                <AbfwRecordsSection patientId={selectedPatientId} />
               </div>
             )}
 
@@ -1330,63 +1406,73 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
             {/* ABA 6: DISFAGIA */}
             {activeTab === 'dysphagia' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-sky-600" />
-                      Disfagia e Deglutição Funcional
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Rastreio de risco de broncoaspiração, sinais clínicos e matriz IDDSI.
-                    </p>
+              <div className="space-y-6">
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-sky-600" />
+                        Disfagia e Deglutição Funcional
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Rastreio de risco de broncoaspiração, sinais clínicos e matriz IDDSI.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsDysphagiaModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 transition-colors cursor-pointer"
+                    >
+                      <Activity className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Matriz de Consistências IDDSI</span>
+                    </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsDysphagiaModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl border border-amber-200 transition-colors cursor-pointer"
-                  >
-                    <Activity className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Matriz de Consistências IDDSI</span>
-                  </button>
-                </div>
-
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                  <span className="text-xs font-bold text-slate-700">Sinais Clínicos de Penetração / Aspiração Laringotraqueal:</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                    {Object.entries(dysphagiaData.penetrationAspirationSigns).map(([key, val]) => (
-                      <label key={key} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
-                        <input
-                          type="checkbox"
-                          checked={val as boolean}
-                          onChange={e => {
-                            setDysphagiaData({
-                              ...dysphagiaData,
-                              penetrationAspirationSigns: {
-                                ...dysphagiaData.penetrationAspirationSigns,
-                                [key]: e.target.checked
-                              }
-                            });
-                          }}
-                        />
-                        <span className="capitalize">{key === 'cough' ? 'Tosse' : key === 'choking' ? 'Engasgo' : key === 'throatClearing' ? 'Pigarro' : key === 'wetVoice' ? 'Voz Molhada' : 'Cianose'}</span>
-                      </label>
-                    ))}
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                    <span className="text-xs font-bold text-slate-700">Sinais Clínicos de Penetração / Aspiração Laringotraqueal:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                      {Object.entries(dysphagiaData.penetrationAspirationSigns).map(([key, val]) => (
+                        <label key={key} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={val as boolean}
+                            onChange={e => {
+                              setDysphagiaData({
+                                ...dysphagiaData,
+                                penetrationAspirationSigns: {
+                                  ...dysphagiaData.penetrationAspirationSigns,
+                                  [key]: e.target.checked
+                                }
+                              });
+                            }}
+                          />
+                          <span className="capitalize">{key === 'cough' ? 'Tosse' : key === 'choking' ? 'Engasgo' : key === 'throatClearing' ? 'Pigarro' : key === 'wetVoice' ? 'Voz Molhada' : 'Cianose'}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 </div>
+
+                {/* FOIS — Escala de Ingestão Oral Funcional & Comparativo Longitudinal */}
+                <FoisAssessmentSection patientId={selectedPatientId} />
               </div>
             )}
 
             {/* ABA 7: AUDIOLOGIA COM AUDIOGRAMA INTERATIVO SVG E GUIA CFFA 2023 */}
             {activeTab === 'audiology' && (
-              <AudiologyWorkspaceSection
-                patientId={selectedPatientId}
-                patient={selectedPatient}
-                onRecordSaved={(savedId) => {
-                  setCurrentAudiologyRecordId(savedId);
-                }}
-              />
+              <div className="space-y-6">
+                <AudiologyWorkspaceSection
+                  patientId={selectedPatientId}
+                  patient={selectedPatient}
+                  onRecordSaved={(savedId) => {
+                    setCurrentAudiologyRecordId(savedId);
+                  }}
+                />
+
+                {/* Triagem do Processamento Auditivo Central (PAC) */}
+                <AuditoryProcessingScreening patientId={selectedPatientId} />
+              </div>
             )}
 
             {/* ABA: COMUNICAÇÃO AUMENTATIVA E ALTERNATIVA (CAA / AAC) */}
@@ -1844,6 +1930,14 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               homeActivitiesText="1. Manter boa hidratação ao longo do dia.\n2. Realizar os treinos vocais ou miofuncionais em ambiente tranquilo e em frente ao espelho.\n3. Anotar dúvidas e percepções do paciente para alinhamento no próximo atendimento."
             />
           )}
+          <ClinicalDraftRecoveryModal
+            isOpen={autosave.conflictModalOpen}
+            onClose={() => autosave.resolveConflict('local')}
+            serverDraftTime={autosave.serverDraftData?.updated_at || autosave.serverDraftData?.client_updated_at}
+            localDraftTime={autosave.localDraftData?.clientUpdatedAt}
+            onRecoverServer={() => autosave.resolveConflict('server')}
+            onKeepCurrent={() => autosave.resolveConflict('local')}
+          />
         </>
       )}
     </div>

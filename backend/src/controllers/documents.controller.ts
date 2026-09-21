@@ -1045,6 +1045,16 @@ export class DocumentsController {
         console.warn('[finishConsultation] Aviso ao gravar historico de status:', historyErr);
       }
 
+      // 9. Remove rascunho clínico persistido deste atendimento após persistência confirmada
+      try {
+        db.prepare('DELETE FROM clinical_drafts WHERE tenant_id = ? AND patient_id = ? AND (appointment_id = ? OR appointment_id IS NULL OR appointment_id = \'\' OR appointment_id = \'none\')')
+          .run(tenantId, appt.patient_id, appointmentId);
+        db.prepare('DELETE FROM psychology_drafts WHERE tenant_id = ? AND patient_id = ? AND (appointment_id = ? OR appointment_id IS NULL OR appointment_id = \'\' OR appointment_id = \'none\')')
+          .run(tenantId, appt.patient_id, appointmentId);
+      } catch (draftCleanupErr) {
+        console.warn('[finishConsultation] Aviso ao limpar rascunho:', draftCleanupErr);
+      }
+
       // Comita a transação com êxito total
       db.exec('COMMIT');
 
