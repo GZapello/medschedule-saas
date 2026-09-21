@@ -260,12 +260,12 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
   const handleRestoreDraft = (data: any) => {
     if (!data) return;
-    if (data.finishForm) setFinishForm(prev => ({ ...prev, ...data.finishForm }));
-    if (data.currentSession) setCurrentSession(prev => ({ ...prev, ...data.currentSession }));
-    if (data.learningForm) setLearningForm(prev => ({ ...prev, ...data.learningForm }));
-    if (data.assessment) setAssessment(prev => ({ ...prev, ...data.assessment }));
-    if (data.profile) setProfile(prev => ({ ...prev, ...data.profile }));
-    if (data.currentPlan) setCurrentPlan(prev => ({ ...prev, ...data.currentPlan }));
+    if (data.finishForm) setFinishForm((prev: any) => ({ ...prev, ...data.finishForm }));
+    if (data.currentSession) setCurrentSession((prev: any) => ({ ...prev, ...data.currentSession }));
+    if (data.learningForm) setLearningForm((prev: any) => ({ ...prev, ...data.learningForm }));
+    if (data.assessment) setAssessment((prev: any) => ({ ...prev, ...data.assessment }));
+    if (data.profile) setProfile((prev: any) => ({ ...prev, ...data.profile }));
+    if (data.currentPlan) setCurrentPlan((prev: any) => ({ ...prev, ...data.currentPlan }));
   };
 
   const autosave = useClinicalAutosave({
