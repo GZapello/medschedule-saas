@@ -16,7 +16,7 @@ export class EmailVerificationController {
         return;
       }
 
-      if (purpose !== 'clinic_registration') {
+      if (purpose !== 'clinic_registration' && purpose !== 'password_reset') {
         res.status(400).json({ error: 'Finalidade de verificação não suportada' });
         return;
       }
@@ -46,9 +46,13 @@ export class EmailVerificationController {
         return;
       }
 
+      const successMessage = purpose === 'password_reset'
+        ? 'Se existir uma conta vinculada a este e-mail, enviaremos um código de recuperação.'
+        : 'Se o e-mail informado for elegível, o código de verificação de 6 dígitos foi enviado com sucesso.';
+
       res.status(200).json({
         success: true,
-        message: 'Se o e-mail informado for elegível, o código de verificação de 6 dígitos foi enviado com sucesso.'
+        message: successMessage
       });
     } catch {
       res.status(500).json({ error: 'Erro interno ao processar verificação de e-mail' });
@@ -67,6 +71,11 @@ export class EmailVerificationController {
 
       if (!email) {
         res.status(400).json({ error: 'O e-mail é obrigatório' });
+        return;
+      }
+
+      if (purpose !== 'clinic_registration' && purpose !== 'password_reset') {
+        res.status(400).json({ error: 'Finalidade de verificação não suportada' });
         return;
       }
 

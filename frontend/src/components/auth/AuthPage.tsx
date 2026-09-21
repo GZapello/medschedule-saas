@@ -4,6 +4,7 @@ import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { CreateClinicModal } from './CreateClinicModal';
 import { RegisterUserModal } from './RegisterUserModal';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 import {
   Lock,
   Mail,
@@ -14,7 +15,6 @@ import {
   Clock,
   XCircle,
   Monitor,
-  Server,
   CheckCircle2,
   RefreshCw,
   X,
@@ -40,60 +40,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [isCreateClinicOpen, setIsCreateClinicOpen] = useState<boolean>(initialAction === 'create-clinic');
   const [isRegisterUserOpen, setIsRegisterUserOpen] = useState<boolean>(initialAction === 'register-user');
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState<boolean>(false);
   const [loginError, setLoginError] = useState<{ message: string; code?: string } | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ email?: string; password?: string }>({});
-
-  // Configuração personalizada de Servidor (útil para desenvolvimento, testes ou rede local)
-  const [isServerConfigOpen, setIsServerConfigOpen] = useState<boolean>(false);
-  const [serverUrlInput, setServerUrlInput] = useState<string>(ApiClient.getBaseUrl());
-  const [isTestingServer, setIsTestingServer] = useState<boolean>(false);
-  const [testServerFeedback, setTestServerFeedback] = useState<{ success: boolean; message: string } | null>(null);
-
-  const testConnection = async (targetUrl: string) => {
-    setIsTestingServer(true);
-    setTestServerFeedback(null);
-    try {
-      const cleanUrl = targetUrl.trim().replace(/\/+$/, '');
-      const healthUrl = cleanUrl.endsWith('/api') ? cleanUrl.replace(/\/api$/, '/health') : `${cleanUrl}/health`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-      const res = await fetch(healthUrl, { method: 'GET', signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        setTestServerFeedback({ success: true, message: 'Conexão estabelecida com sucesso com o servidor Zemda!' });
-      } else {
-        setTestServerFeedback({ success: false, message: `Servidor alcançado, mas retornou status ${res.status}.` });
-      }
-    } catch {
-      setTestServerFeedback({
-        success: false,
-        message: 'Não foi possível alcançar o servidor. Verifique o IP, porta (4000) e se o firewall permite conexões.'
-      });
-    } finally {
-      setIsTestingServer(false);
-    }
-  };
-
-  const handleSaveServerConfig = () => {
-    if (serverUrlInput.trim()) {
-      ApiClient.setCustomBaseUrl(serverUrlInput.trim());
-      showToast('Configuração de servidor salva!', 'success');
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
-    }
-  };
-
-  const handleResetServerConfig = () => {
-    ApiClient.setCustomBaseUrl(null);
-    setServerUrlInput(ApiClient.getBaseUrl());
-    showToast('Configuração de servidor restaurada para o padrão', 'info');
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,6 +187,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-xs font-bold text-slate-700">Senha</label>
+                <button
+                  type="button"
+                  onClick={() => setIsForgotPasswordOpen(true)}
+                  className="text-[11px] font-semibold text-teal-600 hover:text-teal-700 hover:underline cursor-pointer transition-colors"
+                >
+                  Esqueci minha senha
+                </button>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -311,23 +267,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </a>
           </div>
 
-          {/* Configuração de Servidor de Rede / IP */}
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-center">
-            <button
-              type="button"
-              onClick={() => {
-                setServerUrlInput(ApiClient.getBaseUrl());
-                setTestServerFeedback(null);
-                setIsServerConfigOpen(true);
-              }}
-              className="text-[11px] font-semibold text-slate-500 hover:text-teal-600 flex items-center gap-1.5 transition-colors cursor-pointer py-1"
-              title="Configurar IP ou endereço do servidor Zemda"
-            >
-              <Server className="w-3.5 h-3.5 text-teal-600" />
-              <span>Servidor: <span className="font-mono text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">{ApiClient.getBaseUrl()}</span></span>
-            </button>
-          </div>
-
           {/* Versão e LGPD */}
           <div className="pt-1 text-center space-y-0.5">
             <p className="text-[10px] text-slate-400 font-medium">
@@ -337,7 +276,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         </div>
       </div>
 
-      {/* Modais de Cadastro */}
+      {/* Modais de Autenticação e Cadastro */}
       <RegisterUserModal
         isOpen={isRegisterUserOpen}
         onClose={() => setIsRegisterUserOpen(false)}
@@ -348,142 +287,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         onClose={() => setIsCreateClinicOpen(false)}
       />
 
-      {/* Modal de Configuração de Servidor Zemda */}
-      {isServerConfigOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200/80 space-y-4 animate-in fade-in zoom-in duration-200">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-teal-50 text-teal-700 rounded-xl border border-teal-100">
-                  <Server className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Configuração do Servidor Zemda</h3>
-                  <p className="text-[11px] text-slate-500">Defina o endereço da API para conectar este aplicativo</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsServerConfigOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-2xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Endereço da API do Servidor
-                </label>
-                <input
-                  type="text"
-                  value={serverUrlInput}
-                  onChange={(e) => setServerUrlInput(e.target.value)}
-                  placeholder="http://192.168.0.100:4000/api"
-                  className="w-full text-xs font-mono border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 focus:outline-hidden bg-slate-50"
-                />
-              </div>
-
-              {/* Atalhos Rápidos de Conexão */}
-              <div>
-                <p className="text-[11px] font-semibold text-slate-600 mb-1.5">Atalhos rápidos para conexão:</p>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setServerUrlInput('https://zemda.com.br/api');
-                      testConnection('https://zemda.com.br/api');
-                    }}
-                    className="text-[11px] py-1 px-2.5 rounded-lg bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-200 transition-colors font-mono cursor-pointer"
-                  >
-                    ☁️ Nuvem Zemda (Oficial)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setServerUrlInput('/api');
-                      testConnection('/api');
-                    }}
-                    className="text-[11px] py-1 px-2.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors font-mono cursor-pointer"
-                  >
-                    ⚡ Padrão Web (/api)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setServerUrlInput('http://192.168.0.100:4000/api');
-                      testConnection('http://192.168.0.100:4000/api');
-                    }}
-                    className="text-[11px] py-1 px-2.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors font-mono cursor-pointer"
-                  >
-                    192.168.0.100:4000 (Wi-Fi)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setServerUrlInput('http://localhost:4000/api');
-                      testConnection('http://localhost:4000/api');
-                    }}
-                    className="text-[11px] py-1 px-2.5 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors font-mono cursor-pointer"
-                  >
-                    localhost:4000
-                  </button>
-                </div>
-              </div>
-
-              {/* Resultado do Teste de Conexão */}
-              {testServerFeedback && (
-                <div
-                  className={`p-3 rounded-xl text-xs flex items-start gap-2 border ${
-                    testServerFeedback.success
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                      : 'bg-rose-50 border-rose-200 text-rose-800'
-                  }`}
-                >
-                  {testServerFeedback.success ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  )}
-                  <p className="text-[11px] leading-relaxed">{testServerFeedback.message}</p>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => testConnection(serverUrlInput)}
-                  disabled={isTestingServer || !serverUrlInput.trim()}
-                  className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isTestingServer ? 'animate-spin' : ''}`} />
-                  <span>{isTestingServer ? 'Testando...' : 'Testar Conexão'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSaveServerConfig}
-                  disabled={!serverUrlInput.trim()}
-                  className="flex-1 py-2 px-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  Salvar e Conectar
-                </button>
-              </div>
-
-              <div className="pt-2 text-center border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleResetServerConfig}
-                  className="text-[11px] text-slate-500 hover:text-slate-700 cursor-pointer underline"
-                >
-                  Restaurar endereço padrão
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+        onSuccess={(userEmail) => {
+          setIsForgotPasswordOpen(false);
+          if (userEmail) setEmail(userEmail);
+        }}
+      />
     </div>
   );
 };

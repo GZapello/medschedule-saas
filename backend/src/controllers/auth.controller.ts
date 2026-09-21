@@ -10,6 +10,7 @@ import { generateToken } from '../utils/jwt';
 import { logAudit } from '../middlewares/audit.middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
+import { EmailService } from '../services/email.service';
 
 export class AuthController {
   static async login(req: Request, res: Response): Promise<void> {
@@ -1202,6 +1203,68 @@ export class AuthController {
       if (respondBillingError(res, err)) return;
       console.error('[AuthController.registerWithInvite] Erro:', err);
       res.status(500).json({ error: 'Erro ao concluir cadastro por convite' });
+    }
+  }
+
+  /**
+   * POST /v1/public/auth/reset-password
+   * Body: { email: string, emailVerificationToken: string, newPassword: string }
+   */
+  static async resetPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const email = (req.body.email || '').trim().toLowerCase();
+      const token = (req.body.emailVerificationToken || '').trim();
+      const newPassword = (req.body.newPassword || '').toString();
+
+      if (!email || !token || !newPassword) {
+        res.status(400).json({ error: 'E-mail, token de verificação e nova senha são obrigatórios.' });
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        res.status(400).json({ error: 'A nova senha deve ter no mínimo 6 caracteres.' });
+        return;
+      }
+
+      // Validação criptográfica e temporal do token para o propósito 'password_reset'
+      const tokenValidation = EmailService.verifyVerificationToken(token, email, 'password_reset');
+      if (!tokenValidation.valid || !tokenValidation.payload) {
+        res.status(400).json({ error: tokenValidation.error || 'Token de verificação inválido ou expirado.' });
+        return;
+      }
+
+      // Localiza o usuário correspondente
+      const user = db.prepare('SELECT id, email, status FROM users WHERE email = ?').get(email) as {
+        id: string;
+        email: string;
+        status: string;
+      } | undefined;
+
+      if (!user) {
+        res.status(404).json({ error: 'Usuário não encontrado no sistema.' });
+        return;
+      }
+
+      // Consome atomicamente o token (garante uso único contra repetição)
+      const consumed = EmailService.consumeVerificationToken(tokenValidation.payload.verificationId);
+      if (!consumed) {
+        res.status(400).json({ error: 'Esta solicitação de redefinição já foi utilizada ou expirou. Solicite um novo código.' });
+        return;
+      }
+
+      // Atualiza a senha do usuário
+      const hashedPassword = await hashPassword(newPassword.trim());
+      db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(hashedPassword, user.id);
+
+      logAudit(req, 'RESET_PASSWORD_PUBLIC', 'users', user.id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Senha alterada com sucesso. Faça login com sua nova senha.'
+      });
+    } catch (err: any) {
+      console.error('[AuthController.resetPassword] Erro:', err);
+      res.status(500).json({ error: 'Erro interno ao redefinir a senha. Tente novamente mais tarde.' });
     }
   }
 }

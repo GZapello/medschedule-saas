@@ -78,6 +78,8 @@ api.post('/v1/public/email/verify-code', EmailVerificationController.verifyCode)
 // Autenticação e Registro Público
 api.post('/v1/auth/login', AuthController.login);
 api.post('/v1/auth/register', AuthController.register);
+api.post('/v1/public/auth/reset-password', AuthController.resetPassword);
+api.post('/v1/auth/reset-password', AuthController.resetPassword);
 api.post('/v1/public/tenants/register', TenantController.registerPublic);
 api.post('/v1/tenants/register-public', TenantController.registerPublic);
 api.get('/v1/public/tenants', TenantController.listPublic);

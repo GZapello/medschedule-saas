@@ -674,11 +674,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
             </div>
           ) : (
             <form onSubmit={handleRequestOtp} className="space-y-6">
-              {/* Informação sobre aprovação */}
+              {/* Informação sobre ambiente exclusivo e configuração inicial */}
               <div className="p-3.5 bg-teal-50/80 border border-teal-100 rounded-2xl text-xs text-teal-950 flex items-start gap-2.5">
                 <ShieldCheck className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
                 <p>
-                  Cada clínica possui ambiente 100% isolado. Após enviar seus dados, sua solicitação ficará com status <strong>"Pendente de aprovação"</strong> até validação pelo administrador da plataforma.
+                  Cada clínica possui um ambiente exclusivo e protegido. Após confirmar seu e-mail, você poderá escolher o plano e concluir a configuração inicial da sua clínica.
                 </p>
               </div>
 

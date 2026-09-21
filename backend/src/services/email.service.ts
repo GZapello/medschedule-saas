@@ -72,16 +72,30 @@ export class EmailService {
   /**
    * Template HTML responsivo nos padrões de design do Zemda
    */
-  private static buildOtpHtml(code: string, isExistingAccount: boolean = false): string {
+  private static buildOtpHtml(code: string, purpose: string = 'clinic_registration', isExistingAccount: boolean = false): string {
     const formattedCode = code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
-    const existingAccountNotice = isExistingAccount
-      ? `
+
+    const isPasswordReset = purpose === 'password_reset';
+
+    let headline = 'Confirme seu e-mail';
+    let leadText = isExistingAccount
+      ? 'Recebemos uma solicitação de verificação para o seu e-mail:'
+      : 'Para continuar seu cadastro no Zemda, utilize o código de verificação abaixo:';
+    let noteText = 'O código expira em 10 minutos. Se você não solicitou este código, ignore esta mensagem com segurança.';
+    let existingAccountNotice = '';
+
+    if (isPasswordReset) {
+      headline = 'Recuperação de Senha';
+      leadText = 'Recebemos uma solicitação para redefinir a senha da sua conta no Zemda. Utilize o código de verificação abaixo:';
+      noteText = 'O código expira em 10 minutos. Se você não solicitou a recuperação da sua senha, desconsidere esta mensagem. Sua conta permanece totalmente protegida.';
+    } else if (isExistingAccount) {
+      existingAccountNotice = `
               <div style="background-color: #f8fafc; border-left: 3px solid #0d9488; padding: 12px 16px; margin: 0 0 20px; border-radius: 6px;">
                 <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #334155;">
                   <strong>Aviso de Segurança:</strong> Identificamos que este e-mail já possui uma conta ativa no Zemda. Caso já seja usuário, você pode acessar seu painel diretamente em <a href="https://zemda.com.br" style="color: #0d9488; text-decoration: underline;">zemda.com.br</a>. Se você não solicitou este código, ignore esta mensagem.
                 </p>
-              </div>`
-      : '';
+              </div>`;
+    }
 
     return `
 <!DOCTYPE html>
@@ -89,7 +103,7 @@ export class EmailService {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Seu código de verificação Zemda</title>
+  <title>${isPasswordReset ? 'Recuperação de senha Zemda' : 'Seu código de verificação Zemda'}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; padding: 40px 16px;">
@@ -112,10 +126,10 @@ export class EmailService {
           <tr>
             <td style="padding: 36px 32px 28px; text-align: left;">
               <h1 style="margin: 0 0 12px; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px;">
-                Confirme seu e-mail
+                ${headline}
               </h1>
               <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.6; color: #475569;">
-                ${isExistingAccount ? 'Recebemos uma solicitação de verificação para o seu e-mail:' : 'Para continuar seu cadastro no Zemda, utilize o código de verificação abaixo:'}
+                ${leadText}
               </p>
 
               <!-- OTP Display Box -->
@@ -131,7 +145,7 @@ export class EmailService {
               ${existingAccountNotice}
 
               <p style="margin: 0 0 16px; font-size: 13px; line-height: 1.5; color: #64748b;">
-                O código expira em 10 minutos. Se você não solicitou este código, ignore esta mensagem com segurança.
+                ${noteText}
               </p>
 
               <div style="border-top: 1px solid #f1f5f9; padding-top: 20px; margin-top: 24px;">
@@ -183,7 +197,7 @@ export class EmailService {
       return { success: false, error: 'E-mail informado é inválido' };
     }
 
-    if (purpose !== 'clinic_registration') {
+    if (purpose !== 'clinic_registration' && purpose !== 'password_reset') {
       return { success: false, error: 'Finalidade de verificação não suportada' };
     }
 
@@ -206,9 +220,15 @@ export class EmailService {
       };
     }
 
-    // 3. Verificação de conta existente para estratégia de comunicação segura
+    // 3. Verificação de conta existente para estratégia de comunicação segura e anti-enumeração
     const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     const isExistingAccount = Boolean(existingUser);
+
+    // Se for recuperação de senha e o e-mail não existir na base de usuários:
+    // Anti-enumeração: responde com sucesso idêntico sem registrar e sem consumir provedor
+    if (purpose === 'password_reset' && !isExistingAccount) {
+      return { success: true };
+    }
 
     // 4. Rate limit por IP: máximo de 10 envios por hora por IP (desconsidera status='failed')
     const normalizedIp = (clientIp || '').trim() || null;
@@ -299,12 +319,17 @@ export class EmailService {
     }
 
     try {
+      let emailSubject = isExistingAccount ? 'Notificação de segurança e código de verificação Zemda' : 'Seu código de verificação Zemda';
+      if (purpose === 'password_reset') {
+        emailSubject = 'Recuperação de senha - Seu código Zemda';
+      }
+
       const sendResult = await resend.emails.send({
         from: this.getFromAddress(),
         replyTo: this.getReplyToAddress(),
         to: email,
-        subject: isExistingAccount ? 'Notificação de segurança e código de verificação Zemda' : 'Seu código de verificação Zemda',
-        html: this.buildOtpHtml(code, isExistingAccount)
+        subject: emailSubject,
+        html: this.buildOtpHtml(code, purpose, isExistingAccount)
       });
 
       if (sendResult.error) {
@@ -350,6 +375,10 @@ export class EmailService {
       return { success: false, error: 'Código de verificação deve conter 6 dígitos' };
     }
 
+    if (purpose !== 'clinic_registration' && purpose !== 'password_reset') {
+      return { success: false, error: 'Finalidade de verificação não suportada' };
+    }
+
     try {
       this.getOtpSecret();
     } catch {
@@ -371,7 +400,7 @@ export class EmailService {
     if (!record) {
       return {
         success: false,
-        error: 'Nenhum código pendente encontrado para este e-mail. Solicite um novo código.'
+        error: 'Código de verificação inválido ou expirado. Solicite um novo código.'
       };
     }
 
