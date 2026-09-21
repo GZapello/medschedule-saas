@@ -47,8 +47,30 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
       <section id="inicio" className="zl-hero">
         <div className="zl-container">
           <RevealItem autoAnimate distancePx={14} durationMs={650}>
-            <div className="zl-hero-top"><span className="zl-pill"><span />Ecossistema de Saúde &amp; Gestão</span><span className="zl-hero-note">Profissionais solo, consultórios, equipes e clínicas.</span></div>
-            <div className="zl-hero-grid"><h1>Gestão e atendimento em saúde.<br /><span>Do profissional solo à clínica.</span></h1><div className="zl-hero-copy"><p>O sistema completo para quem atende individualmente ou em equipe: agenda inteligente, prontuário eletrônico, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.</p><div className="zl-actions"><button className="zl-button" onClick={() => onRegisterClinic()}>Começar agora <ArrowRight size={17} /></button><a className="zl-link" href="#profissoes">Conhecer os módulos <ArrowDown size={16} /></a></div><p className="zl-small">Feito para consultórios individuais, equipes em crescimento e clínicas multiprofissionais.</p></div></div>
+            <div className="zl-hero-top">
+              <div className="zl-hero-badges">
+                <span className="zl-pill"><span />Ecossistema de Saúde &amp; Gestão</span>
+                <span className="zl-hero-badge"><Sparkles size={13} /> 7 dias grátis</span>
+              </div>
+              <span className="zl-hero-note">Profissionais solo, consultórios, equipes e clínicas.</span>
+            </div>
+            <div className="zl-hero-grid">
+              <h1>Gestão e atendimento em saúde.<br /><span>Do profissional solo à clínica.</span></h1>
+              <div className="zl-hero-copy">
+                <p>O sistema completo para quem atende individualmente ou em equipe: agenda inteligente, prontuário eletrônico, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.</p>
+                <div className="zl-actions">
+                  <button className="zl-button" onClick={() => onRegisterClinic('SOLO', true)}>
+                    Testar grátis por 7 dias <ArrowRight size={17} />
+                  </button>
+                  <a className="zl-link" href="#profissoes">Conhecer os módulos <ArrowDown size={16} /></a>
+                </div>
+                <div className="zl-hero-trial-copy">
+                  <p className="zl-hero-trial-highlight">7 dias grátis no Zemda Solo. Sem compromisso.</p>
+                  <p className="zl-hero-trial-sub">Precisa dos planos Equipe ou Clínica? Fale com <a href="mailto:suporte@zemda.com.br">suporte@zemda.com.br</a>.</p>
+                </div>
+                <p className="zl-small">Feito para consultórios individuais, equipes em crescimento e clínicas multiprofissionais.</p>
+              </div>
+            </div>
           </RevealItem>
           <RevealItem autoAnimate delayMs={100} distancePx={16} durationMs={700}>
             <LandingProductDemo />
