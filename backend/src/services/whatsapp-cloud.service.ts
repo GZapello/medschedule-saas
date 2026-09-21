@@ -179,9 +179,14 @@ export class WhatsAppCloudService {
   }
 
   /**
-   * Descoberta e validação server-to-server de WABA ID e Phone Number ID.
-   * NUNCA permite valores 'pending_waba' ou 'pending_phone_id'.
-   * Se o frontend não capturou o Phone Number ID, descobre diretamente via recursos autorizados da WABA.
+   * Valida e descobre server-to-server WABA ID e Phone Number ID diretamente na Meta Graph API.
+   * Regras estritas:
+   * 1. NUNCA considera IDs válidos apenas porque vieram do frontend.
+   * 2. Consulta server-to-server /{wabaId}/phone_numbers com o token autorizado.
+   * 3. Se a Graph API retornar erro, timeout, 401/403/404 ou resposta inválida, aborta e lança exceção.
+   * 4. Confirma obrigatoriamente que o phoneNumberId está presente na lista de números da WABA.
+   * 5. Se houver múltiplos números na WABA e nenhum phoneNumberId tiver sido fornecido, NÃO seleciona data[0]; exige identificação inequívoca ou lança erro.
+   * 6. Confirma os detalhes individuais do número via Graph API /{phoneNumberId}.
    */
   public static async discoverAndValidateIds(
     accessToken: string,
@@ -195,76 +200,106 @@ export class WhatsAppCloudService {
   }> {
     const apiVersion = this.getGraphApiVersion();
     let resolvedWabaId = candidateWabaId && candidateWabaId !== 'pending_waba' ? candidateWabaId.trim() : '';
-    let resolvedPhoneNumberId = candidatePhoneNumberId && candidatePhoneNumberId !== 'pending_phone_id' ? candidatePhoneNumberId.trim() : '';
-    let displayPhoneNumber: string | undefined;
-    let verifiedName: string | undefined;
+    const providedPhoneNumberId = candidatePhoneNumberId && candidatePhoneNumberId !== 'pending_phone_id' ? candidatePhoneNumberId.trim() : '';
 
-    // 1. Se WABA ID não foi fornecido, tenta descobrir via debug_token ou me/whatsapp_business_accounts
+    // 1. Se WABA ID não foi fornecido, tenta descobrir via /me/whatsapp_business_accounts
     if (!resolvedWabaId) {
+      let wabaRes: Response;
       try {
-        const wabaRes = await fetch(`https://graph.facebook.com/${apiVersion}/me/whatsapp_business_accounts`, {
+        wabaRes = await fetch(`https://graph.facebook.com/${apiVersion}/me/whatsapp_business_accounts`, {
           headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
         });
-        if (wabaRes.ok) {
-          const wabaData: any = await wabaRes.json();
-          if (wabaData.data && wabaData.data.length > 0) {
-            resolvedWabaId = String(wabaData.data[0].id);
-          }
-        }
-      } catch (_) {}
+      } catch (netErr: any) {
+        throw new Error(`Falha de comunicação com a Meta Graph API ao buscar WABA: ${netErr.message || netErr}`);
+      }
+
+      const wabaData: any = await wabaRes.json().catch(() => ({}));
+      if (!wabaRes.ok || wabaData.error) {
+        const errMsg = wabaData.error?.message || `Status HTTP ${wabaRes.status}`;
+        throw new Error(`Falha na validação de WABA com a Meta Graph API (${wabaRes.status}): ${errMsg}`);
+      }
+
+      if (!wabaData.data || !Array.isArray(wabaData.data) || wabaData.data.length === 0) {
+        throw new Error('Nenhuma conta de WhatsApp Business (WABA) encontrada associada a este token na Meta.');
+      }
+
+      resolvedWabaId = String(wabaData.data[0].id).trim();
     }
 
-    // 2. Se Phone Number ID não foi fornecido mas temos WABA ID, descobre via WABA phone_numbers
-    if (resolvedWabaId && !resolvedPhoneNumberId) {
-      try {
-        const phoneListRes = await fetch(
-          `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(resolvedWabaId)}/phone_numbers?fields=id,display_phone_number,verified_name,status`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
-          }
-        );
-        if (phoneListRes.ok) {
-          const phoneListData: any = await phoneListRes.json();
-          if (phoneListData.data && phoneListData.data.length > 0) {
-            // Seleciona o primeiro número registrado
-            const phoneItem = phoneListData.data[0];
-            resolvedPhoneNumberId = String(phoneItem.id);
-            displayPhoneNumber = phoneItem.display_phone_number;
-            verifiedName = phoneItem.verified_name;
-          }
+    // 2. Consulta server-to-server /{wabaId}/phone_numbers com o token autorizado
+    let phoneListRes: Response;
+    try {
+      phoneListRes = await fetch(
+        `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(resolvedWabaId)}/phone_numbers?fields=id,display_phone_number,verified_name,status,quality_rating`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
         }
-      } catch (_) {}
-    }
-
-    // 3. Valida os detalhes do número se temos Phone Number ID
-    if (resolvedPhoneNumberId) {
-      try {
-        const detailsRes = await fetch(
-          `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(resolvedPhoneNumberId)}?fields=display_phone_number,verified_name,status`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
-          }
-        );
-        if (detailsRes.ok) {
-          const detailsData: any = await detailsRes.json();
-          displayPhoneNumber = detailsData.display_phone_number || displayPhoneNumber;
-          verifiedName = detailsData.verified_name || verifiedName;
-        }
-      } catch (_) {}
-    }
-
-    // Validação estrita: NUNCA aceitar pending ou vazio
-    if (!resolvedWabaId || resolvedWabaId === 'pending_waba') {
-      throw new Error(
-        'WABA ID (WhatsApp Business Account ID) não identificado ou inválido. Conexão não autorizada.'
       );
+    } catch (netErr: any) {
+      throw new Error(`Falha de comunicação com a Meta Graph API ao consultar números da WABA: ${netErr.message || netErr}`);
     }
 
-    if (!resolvedPhoneNumberId || resolvedPhoneNumberId === 'pending_phone_id') {
-      throw new Error(
-        'Phone Number ID não identificado na Meta Graph API. Verifique se o número foi configurado no WhatsApp Business Manager.'
-      );
+    const phoneListData: any = await phoneListRes.json().catch(() => ({}));
+
+    // Se a Graph API retornar erro, timeout, 401/403/404 ou resposta inválida, aborta imediatamente
+    if (!phoneListRes.ok || phoneListData.error) {
+      const errMsg = phoneListData.error?.message || `Status HTTP ${phoneListRes.status}`;
+      throw new Error(`WABA ID (${resolvedWabaId}) inválida ou não autorizada na Meta Graph API (${phoneListRes.status}): ${errMsg}`);
     }
+
+    const phoneList: any[] = Array.isArray(phoneListData.data) ? phoneListData.data : [];
+
+    if (phoneList.length === 0) {
+      throw new Error(`Nenhum número de telefone registrado na WABA (${resolvedWabaId}) na Meta Graph API.`);
+    }
+
+    let resolvedPhoneNumberId = '';
+    let matchedItem: any = null;
+
+    if (providedPhoneNumberId) {
+      // 3. Confirmar OBRIGATORIAMENTE que phoneNumberId está presente na lista de números pertencentes à WABA informada
+      matchedItem = phoneList.find(p => String(p.id) === String(providedPhoneNumberId));
+      if (!matchedItem) {
+        throw new Error(
+          `O Phone Number ID (${providedPhoneNumberId}) não pertence à WABA informada (${resolvedWabaId}) ou não está associado a esta conta na Meta Graph API.`
+        );
+      }
+      resolvedPhoneNumberId = String(matchedItem.id);
+    } else {
+      // 4. Se não foi fornecido phoneNumberId:
+      // Se houver mais de um número na WABA e nenhum phoneNumberId tiver sido fornecido pelo Embedded Signup,
+      // NÃO selecionar automaticamente data[0]. Exigir identificação inequívoca do número correto ou retornar erro.
+      if (phoneList.length > 1) {
+        throw new Error(
+          `A WABA (${resolvedWabaId}) possui múltiplos números de telefone (${phoneList.length}) e nenhum Phone Number ID foi selecionado no onboarding. Conclua novamente o fluxo selecionando o número específico.`
+        );
+      }
+      // Se houver exatamente um número, a identificação é inequívoca
+      matchedItem = phoneList[0];
+      resolvedPhoneNumberId = String(matchedItem.id);
+    }
+
+    // 5. Confirmar também os detalhes do número pela Graph API /{phoneNumberId} antes de salvar
+    let detailsRes: Response;
+    try {
+      detailsRes = await fetch(
+        `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(resolvedPhoneNumberId)}?fields=id,display_phone_number,verified_name,status,quality_rating`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+        }
+      );
+    } catch (netErr: any) {
+      throw new Error(`Falha de comunicação ao validar os detalhes do número na Meta Graph API: ${netErr.message || netErr}`);
+    }
+
+    const detailsData: any = await detailsRes.json().catch(() => ({}));
+    if (!detailsRes.ok || detailsData.error) {
+      const errMsg = detailsData.error?.message || `Status HTTP ${detailsRes.status}`;
+      throw new Error(`Falha ao validar Phone Number ID (${resolvedPhoneNumberId}) na Meta Graph API (${detailsRes.status}): ${errMsg}`);
+    }
+
+    const displayPhoneNumber = detailsData.display_phone_number || matchedItem.display_phone_number;
+    const verifiedName = detailsData.verified_name || matchedItem.verified_name;
 
     return {
       wabaId: resolvedWabaId,

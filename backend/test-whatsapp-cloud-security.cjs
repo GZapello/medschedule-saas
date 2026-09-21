@@ -204,52 +204,152 @@ async function runTests() {
   console.log('✓ PASSOU: Política Zero Pending bloqueou identificadores incompletos.\n');
 
   // --------------------------------------------------------------------------
-  // TESTE 6: Descoberta Server-Side de Phone Number ID e Validação
+  // TESTE 6: Validação Server-to-Server Estrita de WABA e Phone Number
   // --------------------------------------------------------------------------
-  console.log('TESTE 6: Descoberta Server-Side de Phone Number ID via Graph API');
-  // Intercepta fetch temporariamente para simular respostas da Graph API Meta v25.0
+  console.log('TESTE 6: Validação Server-to-Server Estrita de WABA e Phone Number');
   const realFetch = global.fetch;
-  global.fetch = async (url, opts) => {
+
+  // 6A: WABA Inexistente (Graph API retorna 404)
+  global.fetch = async (url) => {
     const urlStr = String(url);
-    if (urlStr.includes('/1029384756/phone_numbers')) {
+    if (urlStr.includes('/waba_inexistente/phone_numbers')) {
+      return new Response(JSON.stringify({
+        error: { message: "Object with ID 'waba_inexistente' does not exist", code: 803 }
+      }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(url);
+  };
+  await assert.rejects(
+    async () => {
+      await WhatsAppCloudService.discoverAndValidateIds(sampleToken, 'waba_inexistente', 'phone_123');
+    },
+    /WABA ID \(waba_inexistente\) inválida ou não autorizada na Meta Graph API \(404\)/,
+    'Deve abortar e rejeitar WABA inexistente (404)'
+  );
+  console.log('  ✓ 6A: WABA inexistente rejeitada com sucesso (404).');
+
+  // 6B: Phone Number ID Inexistente (detalhes retornam 404)
+  global.fetch = async (url) => {
+    const urlStr = String(url);
+    if (urlStr.includes('/waba_valida/phone_numbers')) {
+      return new Response(JSON.stringify({
+        data: [{ id: 'phone_inexistente_detalhes', display_phone_number: '+55 11 9999-0000', verified_name: 'Zemda' }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (urlStr.includes('/phone_inexistente_detalhes')) {
+      return new Response(JSON.stringify({
+        error: { message: "Phone number not found", code: 100 }
+      }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(url);
+  };
+  await assert.rejects(
+    async () => {
+      await WhatsAppCloudService.discoverAndValidateIds(sampleToken, 'waba_valida', 'phone_inexistente_detalhes');
+    },
+    /Falha ao validar Phone Number ID \(phone_inexistente_detalhes\) na Meta Graph API \(404\)/,
+    'Deve abortar quando o Phone Number ID não existe nos detalhes da Graph API'
+  );
+  console.log('  ✓ 6B: Phone Number ID inexistente rejeitado com sucesso (404).');
+
+  // 6C: Phone ID pertencente a outra WABA
+  global.fetch = async (url) => {
+    const urlStr = String(url);
+    if (urlStr.includes('/waba_A/phone_numbers')) {
       return new Response(JSON.stringify({
         data: [
-          {
-            id: '9900112233',
-            display_phone_number: '+55 11 91111-2222',
-            verified_name: 'Zemda Saúde Central',
-            status: 'CONNECTED'
-          }
+          { id: 'phone_A_1', display_phone_number: '+55 11 9111-1111', verified_name: 'Zemda A' }
         ]
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    if (urlStr.includes('/9900112233')) {
+    return realFetch(url);
+  };
+  await assert.rejects(
+    async () => {
+      // Passa phone_B_99 que NÃO consta na waba_A
+      await WhatsAppCloudService.discoverAndValidateIds(sampleToken, 'waba_A', 'phone_B_99');
+    },
+    /O Phone Number ID \(phone_B_99\) não pertence à WABA informada \(waba_A\)/,
+    'Deve abortar quando o Phone Number ID informado pertencer a outra WABA'
+  );
+  console.log('  ✓ 6C: Phone ID pertencente a outra WABA rejeitado obrigatoriamente.');
+
+  // 6D: Graph API retornando 401/403 (token inválido ou sem escopo)
+  global.fetch = async (url) => {
+    const urlStr = String(url);
+    if (urlStr.includes('/waba_auth_error/phone_numbers')) {
       return new Response(JSON.stringify({
-        id: '9900112233',
-        display_phone_number: '+55 11 91111-2222',
-        verified_name: 'Zemda Saúde Central',
+        error: { message: "Invalid OAuth access token - Cannot parse access token", code: 190 }
+      }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(url);
+  };
+  await assert.rejects(
+    async () => {
+      await WhatsAppCloudService.discoverAndValidateIds(sampleToken, 'waba_auth_error', 'any_phone');
+    },
+    /WABA ID \(waba_auth_error\) inválida ou não autorizada na Meta Graph API \(401\)/,
+    'Deve abortar imediatamente quando a Graph API retorna 401/403'
+  );
+  console.log('  ✓ 6D: Erro 401/403 da Graph API aborta conexão imediatamente.');
+
+  // 6E: WABA com múltiplos números sem identificação específica
+  global.fetch = async (url) => {
+    const urlStr = String(url);
+    if (urlStr.includes('/waba_multi_num/phone_numbers')) {
+      return new Response(JSON.stringify({
+        data: [
+          { id: 'phone_multi_1', display_phone_number: '+55 11 9111-1111', verified_name: 'Zemda 1' },
+          { id: 'phone_multi_2', display_phone_number: '+55 11 9222-2222', verified_name: 'Zemda 2' }
+        ]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(url);
+  };
+  await assert.rejects(
+    async () => {
+      // Não passa candidatePhoneNumberId em WABA com 2 números
+      await WhatsAppCloudService.discoverAndValidateIds(sampleToken, 'waba_multi_num', undefined);
+    },
+    /possui múltiplos números de telefone \(2\) e nenhum Phone Number ID foi selecionado/,
+    'Não deve selecionar automaticamente data[0] se houver múltiplos números sem seleção explícita'
+  );
+  console.log('  ✓ 6E: Múltiplos números sem seleção explícita rejeitados sem assumir data[0].');
+
+  // 6F: WABA + Phone Number Corretos (Validação Server-to-Server Completa)
+  global.fetch = async (url) => {
+    const urlStr = String(url);
+    if (urlStr.includes('/waba_oficial_correta/phone_numbers')) {
+      return new Response(JSON.stringify({
+        data: [
+          { id: 'phone_central_oficial', display_phone_number: '+55 11 95555-4444', verified_name: 'Zemda Saúde Oficial' }
+        ]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (urlStr.includes('/phone_central_oficial')) {
+      return new Response(JSON.stringify({
+        id: 'phone_central_oficial',
+        display_phone_number: '+55 11 95555-4444',
+        verified_name: 'Zemda Saúde Oficial',
         status: 'CONNECTED'
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
-    return realFetch(url, opts);
+    return realFetch(url);
   };
+  const verifiedOk = await WhatsAppCloudService.discoverAndValidateIds(
+    sampleToken,
+    'waba_oficial_correta',
+    'phone_central_oficial'
+  );
+  assert.equal(verifiedOk.wabaId, 'waba_oficial_correta');
+  assert.equal(verifiedOk.phoneNumberId, 'phone_central_oficial');
+  assert.equal(verifiedOk.displayPhoneNumber, '+55 11 95555-4444');
+  assert.equal(verifiedOk.verifiedName, 'Zemda Saúde Oficial');
+  console.log('  ✓ 6F: WABA + Phone Number corretos validados e associados com sucesso.');
 
-  try {
-    // Chamada sem phoneNumberId - deve descobrir via WABA phone_numbers
-    const discovered = await WhatsAppCloudService.discoverAndValidateIds(
-      sampleToken,
-      '1029384756',
-      undefined
-    );
-
-    assert.equal(discovered.wabaId, '1029384756', 'WABA ID deve corresponder ao fornecido');
-    assert.equal(discovered.phoneNumberId, '9900112233', 'Phone Number ID deve ser descoberto via Graph API');
-    assert.equal(discovered.displayPhoneNumber, '+55 11 91111-2222');
-    assert.equal(discovered.verifiedName, 'Zemda Saúde Central');
-  } finally {
-    global.fetch = realFetch;
-  }
-  console.log('✓ PASSOU: Descoberta server-side de Phone Number ID executada com sucesso.\n');
+  // Restaura o fetch original
+  global.fetch = realFetch;
+  console.log('✓ PASSOU: Todos os 6 testes de validação estrita da Graph API aprovados.\n');
 
   // --------------------------------------------------------------------------
   // TESTE 7: Tenant Comum Bloqueado (403 Forbidden)
