@@ -170,6 +170,41 @@ let server,eventCounter=0;
   failCheckout=true;r=await call('/subscriptions/checkout',{planCode:'TEAM'},cancelToken);assert.equal(r.status,502);
   const count=calls.filter(c=>c.resource==='/checkouts').length;
   r=await call('/subscriptions/checkout',{planCode:'TEAM'},cancelToken);assert.equal(r.status,409);assert.equal(calls.filter(c=>c.resource==='/checkouts').length,count);
+  // Public final plan selection: persisted intent never grants paid access.
+  failCheckout=false;
+  require('./dist/services/trial-notification.service').TrialNotificationService.notifyTrialStarted=async()=>{};
+  for(const plan of BillingService.plans()) {
+    const email=`signup-${plan.code.toLowerCase()}@test.invalid`,vid=`verify-${plan.code}`;
+    db.prepare("INSERT INTO email_verifications(id,email,purpose,code_hash,status,expires_at) VALUES(?,?,'clinic_registration','test','verified',datetime('now','+1 hour'))").run(vid,email);
+    const verificationToken=jwt.sign({email,purpose:'clinic_registration',verified:true,verificationId:vid},process.env.EMAIL_OTP_SECRET,{expiresIn:'15m'});
+    const created=await call('/v1/public/tenants/register',{responsibleName:'Plan QA',email,password:'Synthetic123',phone:'11999999999',professionId:'prof-fonoaudiologo',profession:'Fonoaudiólogo',termsAccepted:true,privacyAccepted:true,emailVerificationToken:verificationToken,planCode:plan.code,startTrial:plan.code==='SOLO'});
+    assert.equal(created.status,201,JSON.stringify(created));
+    const cid=created.body.clinicId,auth=created.body.token;
+    assert.equal(db.prepare('SELECT plan_id FROM tenants WHERE id=?').get(cid).plan_id,plan.id);
+    assert.equal(db.prepare('SELECT profession_id FROM users WHERE id=?').get(created.body.user.id).profession_id,'prof-fonoaudiologo');
+    if(plan.code==='SOLO') {
+      assert.equal(created.body.isTrial,true);assert.equal(canOperate(cid),true);
+      const trial=db.prepare('SELECT * FROM subscriptions WHERE clinic_id=? AND is_current=1').get(cid);
+      assert.equal(trial.status,'TRIAL');assert.equal(Date.parse(trial.trial_ends_at)-Date.parse(trial.trial_started_at),7*86400000);
+      assert.equal(db.prepare('SELECT COUNT(*) n FROM billing_checkouts WHERE clinic_id=?').get(cid).n,0);continue;
+    }
+    assert.equal(created.body.isTrial,false);assert.equal(canOperate(cid),false);
+    assert.equal(BillingService.summary(cid).selectedPlan.id,plan.id);assert.equal(BillingService.summary(cid).confirmedPurchase,null);
+    assert.equal((await call('/subscriptions/profile',{...profile,email},auth,'PUT')).status,200);
+    rejectCheckout=true;assert.equal((await call('/subscriptions/checkout',{planCode:plan.code},auth)).status,422);rejectCheckout=false;
+    assert.equal(canOperate(cid),false);assert.ok(db.prepare('SELECT id FROM users WHERE id=?').get(created.body.user.id));
+    assert.equal((await call('/subscriptions/checkout',{planCode:plan.code},auth)).status,200);
+    let pendingSub=db.prepare('SELECT * FROM subscriptions WHERE clinic_id=? AND is_current=1').get(cid);
+    await event('CHECKOUT_CANCELED',{checkout:{id:pendingSub.asaas_checkout_id,customer:pendingSub.asaas_customer_id}});
+    assert.equal(canOperate(cid),false);assert.equal(BillingService.summary(cid).confirmedPurchase,null);
+    assert.equal((await call('/subscriptions/checkout',{planCode:plan.code},auth)).status,200);
+    pendingSub=db.prepare('SELECT * FROM subscriptions WHERE clinic_id=? AND is_current=1').get(cid);
+    const remote={id:'remote-'+plan.code,customer:pendingSub.asaas_customer_id,value:plan.monthly_price,status:'ACTIVE',cycle:'MONTHLY',externalReference:pendingSub.external_reference};remoteSubscriptions.set(remote.id,remote);
+    const paid={id:'payment-'+plan.code,customer:remote.customer,subscription:remote.id,checkoutSession:pendingSub.asaas_checkout_id,status:'PENDING',billingType:'CREDIT_CARD',value:plan.monthly_price,dueDate:currentDay()};payments.set(paid.id,paid);
+    await event('PAYMENT_CREDIT_CARD_CAPTURE_REFUSED',{payment:paid});assert.equal(canOperate(cid),false);assert.equal(BillingService.summary(cid).confirmedPurchase,null);
+    paid.status='CONFIRMED';await event('PAYMENT_CONFIRMED',{payment:paid});assert.equal(canOperate(cid),true);
+    const confirmed=BillingService.summary(cid);assert.equal(confirmed.plan.code,plan.code);assert.equal(confirmed.confirmedPurchase.value,plan.monthly_price);assert.deepEqual(Object.keys(confirmed.confirmedPurchase).sort(),['transaction_id','value']);
+  }
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length,0);
   console.log('PASS: registration → hosted checkout → authenticated webhook → activation; prices, 1/5/20 seats, duplicate events, grace/suspension/reactivation, next-cycle upgrade, downgrade, cancellation, ban isolation, ambiguous retries, admin metrics, environment and secret isolation. Sandbox live validation remains required.');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{global.fetch=actualFetch;global.Date=OriginalDate;BillingWebhookService.stop();server?.close();});

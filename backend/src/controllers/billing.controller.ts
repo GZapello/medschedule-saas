@@ -89,7 +89,7 @@ export function mountBillingRoutes(api:Router) {
     const member=db.prepare('SELECT is_manager,permissions_json FROM clinic_users WHERE tenant_id=? AND user_id=?').get(req.tenantId,req.user?.userId);
     let permissions:string[]=[];try {permissions=JSON.parse(member?.permissions_json || '[]');} catch {}
     const canManage=['superadmin','clinic_admin'].includes(req.user!.role) || !!member?.is_manager || permissions.includes('manage_subscription');
-    if(!canManage) summary.payments=[];
+    if(!canManage) { summary.payments=[]; summary.confirmedPurchase=null; }
     res.json({...summary,canManage});
   }));
   api.post(['/subscriptions/checkout','/v1/subscriptions/checkout'],...guard,manager,handler(async(req,res)=>res.json(await BillingService.checkout(req.tenantId!,req.body.planCode,req.user!.userId))));

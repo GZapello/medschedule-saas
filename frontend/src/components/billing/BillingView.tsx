@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { BILLING_BENEFITS } from './billingBenefits';
+import { trackConfirmedPurchase } from '../../utils/purchaseAnalytics';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { CreditCard, Users, CheckCircle2, AlertCircle, ArrowUpRight, ArrowLeft, Sparkles } from 'lucide-react';
@@ -27,6 +29,9 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
   const [plans,setPlans]=useState<any[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [showPlans,setShowPlans]=useState(publicPage),[cancelOpen,setCancelOpen]=useState(false),[confirmation,setConfirmation]=useState(''),[reason,setReason]=useState('');
   const [historyOpen,setHistoryOpen]=useState(false);
+  const checkoutRequested=useRef(new URLSearchParams(window.location.search).get('checkout')==='1');
+  const [registrationCheckout,setRegistrationCheckout]=useState(false);
+  useEffect(()=>{if(callback==='sucesso' && summary?.canManage && summary.status==='ACTIVE') trackConfirmedPurchase(summary.confirmedPurchase);},[callback,summary]);
   const [profileOpen,setProfileOpen]=useState(false),[profile,setProfile]=useState(emptyProfile);
   const canManage=summary?.canManage ?? (!currentUser || ['superadmin','clinic_admin'].includes(currentUser.role) || (currentUser as any).permissions?.includes('manage_subscription'));
   useEffect(()=>{ApiClient.get<any[]>('/v1/plans').then(setPlans).catch((e:any)=>setError(e.message));},[]);
@@ -41,6 +46,11 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
       setShowPlans(false);
     } catch(e:any){setError(e.message);}finally{setBusy(false);}
   };
+  const openCheckout=async(code:string)=>{
+    const result=await ApiClient.post<{url:string}>('/v1/subscriptions/checkout',{planCode:code});
+    // The backend validates and returns only an Asaas HTTPS URL.
+    window.location.assign(result.url);
+  };
   const choose=async(code:string)=>{
     if(!currentUser){window.location.assign('/assinatura?plan='+encodeURIComponent(code));return;}
     if(summary?.isTrial && code!=='SOLO') {
@@ -52,9 +62,7 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
       if(summary?.managed && summary.status==='ACTIVE') {
         const result=await ApiClient.post<any>('/v1/subscriptions/change-plan',{planCode:code});setNotice(result.message);await refresh();setShowPlans(false);
       } else {
-        const result=await ApiClient.post<{url:string}>('/v1/subscriptions/checkout',{planCode:code});
-        // Backend validates and returns only an Asaas HTTPS URL.
-        window.location.assign(result.url);
+        await openCheckout(code);
       }
     }catch(e:any){setError(e.message);if(['BILLING_ADDRESS_REQUIRED','ASAAS_VALIDATION_ERROR'].includes(e.code))setProfileOpen(true);}finally{setBusy(false);}
   };
@@ -63,7 +71,26 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
     try {const result=await ApiClient.post<any>('/v1/subscriptions/cancel',{confirmation,reason});setNotice(result.message);setCancelOpen(false);setConfirmation('');setReason('');await refresh();}
     catch(e:any){setError(e.message);}finally{setBusy(false);}
   };
-  const saveProfile=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setError('');try{const r=await ApiClient.put<any>('/v1/subscriptions/profile',profile);setNotice(r.message);setProfileOpen(false);}catch(e:any){setError(e.message);}finally{setBusy(false);}};
+  const saveProfile=async(e:React.FormEvent)=>{
+    e.preventDefault();
+    if(busy)return;
+    setBusy(true);setError('');
+    try {
+      const result=await ApiClient.put<any>('/v1/subscriptions/profile',profile);
+      setNotice(result.message);setProfileOpen(false);
+      if(registrationCheckout && summary?.selectedPlan) await openCheckout(summary.selectedPlan.code);
+    } catch(e:any) {
+      setError(e.message);setProfileOpen(true);
+    } finally {setBusy(false);}
+  };
+  useEffect(()=>{
+    if(!summary || !currentUser || !checkoutRequested.current)return;
+    checkoutRequested.current=false;
+    if(summary.status==='NOT_SUBSCRIBED' && summary.selectedPlan && summary.selectedPlan.code!=='SOLO') {
+      setRegistrationCheckout(true);setProfileOpen(true);setShowPlans(false);
+      setNotice('Plano escolhido: '+summary.selectedPlan.name+'. Complete os dados do pagador para continuar ao pagamento.');
+    }
+  },[summary,currentUser]);
   const pending=summary?.status==='PAST_DUE';
 
   const handleBack = () => {
@@ -110,6 +137,7 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
     {(error || summaryError) && <p className="rounded-xl p-4 bg-red-50 text-red-800" role="alert">{error || summaryError} <button onClick={()=>void refresh()} className="underline">Atualizar</button></p>}
     {notice && <p className="rounded-xl p-4 bg-emerald-50 text-emerald-800" role="status">{notice}</p>}
     {summary?.status==='ACTIVE' && callback==='sucesso' && <div className="p-4 rounded-xl bg-emerald-50 text-emerald-800 flex gap-3 items-center"><CheckCircle2 />Assinatura ativada com sucesso.<button className="underline ml-auto" onClick={async()=>{await reloadSession();window.location.assign('/');}}>Acessar Zemda</button></div>}
+    {summary?.selectedPlan && !summary?.managed && !registrationCheckout && canManage && <div className="p-4 bg-teal-50 rounded-xl text-sm">Plano escolhido: <strong>{summary.selectedPlan.name}</strong><button className="ml-3 underline" onClick={()=>{setRegistrationCheckout(true);setProfileOpen(true);}}>Continuar contratação</button></div>}
     {pending && <div className="bg-amber-50 text-amber-900 p-4 rounded-xl flex gap-3"><AlertCircle className="shrink-0"/><p>Há uma pendência na sua assinatura. Regularize o pagamento para evitar a suspensão do acesso. Prazo: {date(summary.gracePeriodUntil)}.</p></div>}
     {summary?.isTrial && (
       <div className="bg-gradient-to-r from-teal-50 via-emerald-50/50 to-teal-50 border border-teal-200/90 text-teal-950 p-5 rounded-3xl flex flex-wrap items-center justify-between gap-4 shadow-xs">
@@ -178,15 +206,15 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
       </div>
       {summary.pendingPlan && <p className="text-teal-800 bg-teal-50 border border-teal-200/60 rounded-xl p-3 text-sm">Mudança para {summary.pendingPlan.name} no ciclo de {date(summary.changeEffectiveOn)}, após confirmação do pagamento.</p>}
       {summary.status==='CANCELED' && summary.currentPeriodEnd && <p>Acesso pago até {date(summary.currentPeriodEnd)}. Seus dados serão preservados.</p>}
-      {canManage && <div className="flex flex-wrap gap-3"><button className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all" onClick={()=>setShowPlans(v=>!v)}>Alterar plano</button>
+      {canManage && <div className="flex flex-wrap gap-3"><button className="px-4 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all" onClick={()=>{setRegistrationCheckout(false);setShowPlans(v=>!v);}}>Alterar plano</button>
         <button className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl cursor-pointer transition-all" onClick={()=>setProfileOpen(v=>!v)}>Dados de cobrança</button>
         {summary.managed && <button className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl cursor-pointer transition-all" onClick={()=>setCancelOpen(true)}>Gerenciar assinatura</button>}
         <button className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl cursor-pointer transition-all" onClick={()=>setHistoryOpen(v=>!v)}>Histórico de cobranças</button></div>}
       {!canManage && <p className="text-slate-600 text-sm">Solicite ao responsável da clínica a regularização ou alteração do plano.</p>}
     </div>}
     {currentUser && canManage && profileOpen && <form onSubmit={saveProfile} className="bg-white border border-slate-200/80 shadow-xs rounded-3xl p-6 sm:p-8 space-y-4"><h2 className="font-bold text-slate-900">Dados de cobrança</h2><p className="text-sm text-slate-600">Esses dados identificam o pagador no Asaas. Os dados do cartão são informados somente no checkout hospedado.</p><div className="grid sm:grid-cols-2 gap-4">
-      {([['name','Nome do pagador'],['cpfCnpj','CPF/CNPJ'],['email','E-mail'],['phone','Telefone'],['postalCode','CEP'],['address','Logradouro'],['addressNumber','Número'],['province','Bairro'],['complement','Complemento (opcional)']] as const).map(([key,label])=><label key={key} className="text-xs font-semibold text-slate-700">{label}<input required={key!=='phone' && key!=='complement'} type={key==='email'?'email':'text'} maxLength={key==='email'?200:key==='postalCode'?9:['phone','cpfCnpj','addressNumber'].includes(key)?30:160} value={profile[key]} onChange={e=>setProfile({...profile,[key]:e.target.value})} className="w-full block border border-slate-200 rounded-xl p-2.5 mt-1 bg-slate-50 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden" /></label>)}</div><p className="text-xs text-slate-500">Informe o endereço do pagador. A cidade é identificada pelo Asaas a partir do CEP.</p><button disabled={busy} className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all disabled:opacity-50">Salvar dados de cobrança</button></form>}
-    {canManage && (showPlans || !summary?.managed || summary?.status==='PENDING_PAYMENT' || summary?.status==='TRIAL_EXPIRED' || summary?.isTrial) && (
+      {([['name','Nome do pagador'],['cpfCnpj','CPF/CNPJ'],['email','E-mail'],['phone','Telefone'],['postalCode','CEP'],['address','Logradouro'],['addressNumber','Número'],['province','Bairro'],['complement','Complemento (opcional)']] as const).map(([key,label])=><label key={key} className="text-xs font-semibold text-slate-700">{label}<input required={key!=='phone' && key!=='complement'} type={key==='email'?'email':'text'} maxLength={key==='email'?200:key==='postalCode'?9:['phone','cpfCnpj','addressNumber'].includes(key)?30:160} value={profile[key]} onChange={e=>setProfile({...profile,[key]:e.target.value})} className="w-full block border border-slate-200 rounded-xl p-2.5 mt-1 bg-slate-50 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden" /></label>)}</div><p className="text-xs text-slate-500">Informe o endereço do pagador. A cidade é identificada pelo Asaas a partir do CEP.</p><button disabled={busy} className="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs cursor-pointer transition-all disabled:opacity-50">{registrationCheckout ? 'Salvar e ir para pagamento' : 'Salvar dados de cobrança'}</button></form>}
+    {canManage && !registrationCheckout && (showPlans || !summary?.managed || summary?.status==='PENDING_PAYMENT' || summary?.status==='TRIAL_EXPIRED' || summary?.isTrial) && (
       <div className="space-y-6 pt-2">
         {/* Banner de recursos inclusos em todos os planos */}
         <div className="bg-white border border-teal-200/80 rounded-3xl p-6 sm:p-7 shadow-xs space-y-4">
@@ -205,15 +233,7 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-slate-700 font-medium pt-1">
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agenda Interativa</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Prontuário eletrônico</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Financeiro</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Documentos</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Estoque</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Equipe e permissões</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Agendamento online</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>Inteligência Artificial</span></div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>ZemdaBody</span></div>
+            {BILLING_BENEFITS.map(benefit => <div key={benefit} className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-teal-600 shrink-0" /><span>{benefit}</span></div>)}
           </div>
 
           <div className="p-3.5 bg-gradient-to-r from-teal-50 via-emerald-50/60 to-teal-50 rounded-2xl border border-teal-200/70 text-xs text-teal-950 flex items-start gap-2.5">

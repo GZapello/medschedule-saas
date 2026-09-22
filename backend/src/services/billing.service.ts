@@ -3,6 +3,9 @@ import { randomUUID } from 'crypto';
 import { AsaasService, AsaasError } from './asaas.service';
 import { TrialNotificationService } from './trial-notification.service';
 
+export const SOLO_TRIAL_DAYS = 7;
+const BILLING_CYCLE = 'MONTHLY';
+
 export class BillingError extends Error {
   constructor(public code: string, message: string, public httpStatus = 409) { super(message); }
 }
@@ -96,12 +99,13 @@ async function customer(t: any): Promise<string> {
 }
 
 export class BillingService {
-  static plans() { return db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE code IS NOT NULL AND active=1 ORDER BY monthly_price').all(); }
+  static plans() { return db.prepare('SELECT id,code,name,monthly_price,max_users FROM plans WHERE code IS NOT NULL AND active=1 ORDER BY monthly_price').all().map(p=>({...p,cycle:BILLING_CYCLE,trial_days:p.code==='SOLO'?SOLO_TRIAL_DAYS:0})); }
   static summary(clinic: string) {
     this.expireGrace();
     this.expireTrials();
     const s=currentSubscription(clinic);
-    const tenant=db.prepare('SELECT name, trial_used FROM tenants WHERE id=?').get(clinic);
+    const tenant=db.prepare('SELECT name, trial_used, plan_id FROM tenants WHERE id=?').get(clinic);
+    const selectedPlan=tenant?.plan_id ? this.plans().find(p=>p.id===tenant.plan_id) || null : null;
     const plan=s?.managed ? db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE id=?').get(s.plan_id) : null;
     const pending=s?.pending_plan_id ? db.prepare('SELECT code,name,monthly_price,max_users FROM plans WHERE id=?').get(s.pending_plan_id) : null;
     const isTrial = s?.managed && s.status === 'TRIAL';
@@ -110,7 +114,8 @@ export class BillingService {
       const diffMs = new Date(s.trial_ends_at).getTime() - Date.now();
       trialDaysRemaining = Math.max(0, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
     }
-    return {clinicName:tenant?.name,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:plan?.max_users || null,
+    const confirmedPurchase=s?.managed && s.status==='ACTIVE' ? db.prepare("SELECT id AS transaction_id,amount AS value FROM subscription_payments WHERE subscription_id=? AND status IN ('CONFIRMED','RECEIVED') ORDER BY due_date DESC LIMIT 1").get(s.id) : null;
+    return {clinicName:tenant?.name,selectedPlan,confirmedPurchase,plan,status:s?.managed?s.status:'NOT_SUBSCRIBED',activeUsers:activeUsers(clinic),maxUsers:plan?.max_users || null,
       nextDueDate:s?.next_due_date || null,gracePeriodUntil:s?.grace_period_until || null,currentPeriodEnd:s?.current_period_end || null,
       pendingPlan:pending,changeEffectiveOn:s?.pending_plan_effective_on || null,canOperate:canOperate(clinic),
       environment:s?.gateway_environment || AsaasService.getEnvironment(),managed:!!s?.managed,
@@ -156,7 +161,7 @@ export class BillingService {
       })();
       try {
         const result=await AsaasService.request('/checkouts',{method:'POST',body:{customer:customerId,externalReference:reference,billingTypes:['CREDIT_CARD'],chargeTypes:['RECURRENT'],minutesToExpire:60,
-          subscription:{cycle:'MONTHLY',nextDueDate:start+' 12:00:00'},
+          subscription:{cycle:BILLING_CYCLE,nextDueDate:start+' 12:00:00'},
           items:[{name:plan.name,description:`Assinatura mensal Zemda - até ${plan.max_users} usuários`,quantity:1,value:plan.monthly_price}],
           callback:{successUrl:app+'/assinatura/sucesso',cancelUrl:app+'/assinatura/cancelada',expiredUrl:app+'/assinatura/expirada'}}});
         if (typeof result.id!=='string') throw new AsaasError(0,true);
@@ -329,9 +334,9 @@ export class BillingService {
       const sid = randomUUID();
       const now = new Date();
       const trialStartedAt = now.toISOString();
-      const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const trialEndsAt = new Date(now.getTime() + SOLO_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
       const startDay = today();
-      const endDay = addDays(startDay, 7);
+      const endDay = addDays(startDay, SOLO_TRIAL_DAYS);
 
       db.transaction(() => {
         if (s) {

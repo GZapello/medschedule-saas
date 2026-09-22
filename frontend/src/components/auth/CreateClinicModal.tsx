@@ -1,3 +1,4 @@
+import { RegistrationPlans, RegistrationPlan } from './RegistrationPlans';
 import { RegistrationProfessionSelect } from './RegistrationProfessionSelect';
 import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
 import React, { useState, useRef, useEffect } from 'react';
@@ -31,9 +32,21 @@ interface CreateClinicModalProps {
 export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, onClose, initialPlan, isTrial }) => {
   const { showToast } = useToast();
   const { loginWithToken } = useAuth();
-  const isSoloTrial = Boolean(isTrial || initialPlan === 'SOLO');
+  const [selectedPlanCode, setSelectedPlanCode] = useState(initialPlan || (isTrial ? 'SOLO' : ''));
+  const [plans, setPlans] = useState<RegistrationPlan[]>([]);
+  const [planError, setPlanError] = useState('');
+  const [verification, setVerification] = useState<{email: string; token: string} | null>(null);
+  const registrationBusy = useRef(false);
+  const accountCreated = useRef(false);
+  const loadPlans = () => {
+    setPlanError('');
+    ApiClient.get<RegistrationPlan[]>('/v1/plans').then(setPlans).catch(() => setPlanError('Não foi possível carregar os planos. Tente novamente.'));
+  };
+  useEffect(() => { if (isOpen) loadPlans(); }, [isOpen]);
 
-  const [step, setStep] = useState<'form' | 'verify_email'>('form');
+  const [step, setStep] = useState<'form' | 'verify_email' | 'plans'>('form');
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (contentRef.current) contentRef.current.scrollTop = 0; }, [step, isOpen]);
   const [loading, setLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -73,10 +86,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
   };
 
   const handleModalClose = () => {
-    setStep('form');
-    setOtpDigits(['', '', '', '', '', '']);
-    setCooldownSeconds(0);
-    setSuccessData(null);
+    if (registrationBusy.current || isVerifying || loading) return;
     onClose();
   };
 
@@ -188,6 +198,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
       return;
     }
 
+    if (verification?.email === formData.email.trim().toLowerCase()) { setStep('plans'); return; }
     try {
       setLoading(true);
       const res = await ApiClient.post<{ success: boolean; message: string; cooldownSeconds?: number }>(
@@ -260,7 +271,21 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         throw new Error('Falha ao autenticar verificação de e-mail.');
       }
 
-      // 2. Realizar cadastro definitivo da conta com nome padrão invisível
+      setVerification({ email: formData.email.trim().toLowerCase(), token: verifyRes.emailVerificationToken });
+      setStep('plans');
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao validar e-mail.', 'error');
+    } finally { setIsVerifying(false); }
+  };
+
+  const handleRegister = async (plan: RegistrationPlan) => {
+    if (registrationBusy.current || accountCreated.current) return;
+    if (!verification || verification.email !== formData.email.trim().toLowerCase()) { setStep('form'); return; }
+    registrationBusy.current = true;
+    setLoading(true);
+    setSelectedPlanCode(plan.code);
+    try {
+      // Cadastro definitivo somente depois da escolha do plano e da verificação de e-mail.
       const fallbackClinicName = formData.responsibleName.trim()
         ? `Consultório ${formData.responsibleName.trim()}`
         : 'Meu Consultório';
@@ -284,53 +309,58 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         termsAccepted: formData.termsAccepted,
         privacyAccepted: formData.privacyAccepted,
         marketingAccepted: marketingAccepted,
-        emailVerificationToken: verifyRes.emailVerificationToken,
-        startTrial: isSoloTrial,
-        planCode: isSoloTrial ? 'SOLO' : (initialPlan || undefined)
+        emailVerificationToken: verification.token,
+        startTrial: plan.trial_days > 0,
+        planCode: plan.code
       });
 
+      if (data.success === false) throw new Error(data.message || 'Não foi possível criar a conta.');
       if (data.token && data.user) {
+        accountCreated.current = true;
         // The backend has committed account creation; never infer trial activation from the CTA.
         if (data.success !== false) {
-          trackCompletedRegistration(data.user.id, data.isTrial === true ? 7 : undefined);
+          trackCompletedRegistration(data.user.id, data.isTrial === true ? plan.trial_days : undefined);
         }
         // Autenticação automática imediata através do token de sessão
         loginWithToken(data.token, data.user, data.tenant);
-        if (isSoloTrial || data.trialStarted) {
+        if (data.isTrial === true) {
           showToast('E-mail verificado! Seu teste grátis de 7 dias do Zemda Solo está ativo.', 'success');
-          handleModalClose();
+          onClose();
           window.history.pushState(null, '', '/');
           window.dispatchEvent(new PopStateEvent('popstate'));
           window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
           return;
         }
-        showToast('E-mail verificado e conta cadastrada com sucesso! Redirecionando para escolha do plano...', 'success');
-        handleModalClose();
-        window.history.pushState(null, '', '/assinatura');
+        showToast('Conta criada! Complete os dados do pagador para continuar ao checkout.', 'success');
+        onClose();
+        window.history.pushState(null, '', '/assinatura?checkout=1');
         window.dispatchEvent(new PopStateEvent('popstate'));
         window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'subscription' } }));
         return;
       }
 
       // Fallback
-      setSuccessData(data);
+      if (data.success === true || data.clinicId) { accountCreated.current = true; setSuccessData(data); }
+      else throw new Error('Resposta de cadastro inválida. Verifique seu acesso antes de tentar novamente.');
       showToast('Cadastro realizado com sucesso! Faça login para continuar.', 'info');
     } catch (err: any) {
+      if (err.code === 'EMAIL_VERIFICATION_EXPIRED') { setVerification(null); setStep('form'); }
       showToast(err.message || 'Código incorreto ou erro ao validar e-mail.', 'error');
     } finally {
-      setIsVerifying(false);
+      registrationBusy.current = false;
+      setLoading(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 my-8">
+      <div className={`bg-white rounded-3xl w-full max-h-[90dvh] flex flex-col ${step === 'plans' ? 'max-w-3xl' : 'max-w-lg'} overflow-hidden shadow-2xl border border-slate-100 my-8`}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-teal-950 via-slate-900 to-teal-900 p-6 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-teal-950 via-slate-900 to-teal-900 p-6 text-white flex items-center justify-between shrink-0">
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-[11px] font-bold tracking-wider uppercase mb-1">
               <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-              {step === 'verify_email' ? 'Etapa 2: Validação de Segurança' : 'Começar no Zemda'}
+              {step === 'plans' ? 'Etapa 3 de 3: Plano' : step === 'verify_email' ? 'Etapa 2 de 3: E-mail' : 'Etapa 1 de 3: Seus dados'}
             </div>
             <h2 className="text-xl font-extrabold tracking-tight">
               {step === 'verify_email' ? 'Confirmar E-mail de Acesso' : 'Criar Minha Conta'}
@@ -350,7 +380,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         </div>
 
         {/* Content */}
-        <div className="p-6 sm:p-8 max-h-[75vh] overflow-y-auto">
+        <div ref={contentRef} className="p-6 sm:p-8 min-h-0 overflow-y-auto">
           {successData ? (
             <div className="text-center py-6 space-y-4">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
@@ -381,13 +411,19 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                 Entrar e escolher o plano
               </button>
             </div>
+          ) : step === 'plans' ? (
+            <>
+              {planError && <p role="alert" className="text-sm text-red-700 mb-4">{planError} <button onClick={loadPlans} className="underline">Tentar novamente</button></p>}
+              {!plans.length && !planError && <p role="status">Carregando planos...</p>}
+              <RegistrationPlans plans={plans} selectedCode={selectedPlanCode} busy={loading} onChoose={handleRegister} onBack={() => setStep('form')} />
+            </>
           ) : step === 'verify_email' ? (
             <div className="py-2 space-y-6">
               {/* Stepper info */}
               <div className="flex items-center justify-between p-3.5 bg-teal-50/80 border border-teal-100 rounded-2xl">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
-                    2/2
+                    2/3
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-800">Confirmação de Titularidade</h4>
@@ -501,12 +537,12 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                   {isVerifying ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      Validando e criando conta...
+                      Validando e-mail...
                     </>
                   ) : (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      Confirmar e Começar
+                      Confirmar e escolher plano
                     </>
                   )}
                 </button>
@@ -514,27 +550,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
             </div>
           ) : (
             <form onSubmit={handleRequestOtp} className="space-y-4">
-              {/* Informação sobre plano e acesso */}
-              {isSoloTrial ? (
-                <div className="p-3.5 bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 border border-teal-200 rounded-2xl text-xs text-teal-950 flex items-start gap-3 shadow-xs">
-                  <Sparkles className="w-5 h-5 text-teal-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-extrabold text-teal-900 block text-sm">
-                      Teste Grátis de 7 Dias — Zemda Solo
-                    </span>
-                    <p className="text-teal-800/90 mt-0.5 leading-relaxed text-[11px]">
-                      Acesso imediato a todas as funcionalidades: agenda, prontuário, documentos, financeiro, IA e ZemdaBody. Sem cobrança hoje.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-teal-50/80 border border-teal-100 rounded-2xl text-xs text-teal-950 flex items-start gap-2.5">
-                  <ShieldCheck className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-[11px] leading-relaxed">
-                    Crie sua conta para começar. Dados fiscais e profissionais podem ser preenchidos tranquilamente mais tarde nas configurações.
-                  </p>
-                </div>
-              )}
+              <p className="text-xs text-slate-600">Preencha seus dados e confirme seu e-mail. Você escolherá o plano na última etapa.</p>
 
               {/* Formulário Simplificado */}
               <div className="space-y-3">

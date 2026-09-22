@@ -1,6 +1,6 @@
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { respondBillingError } from './billing.controller';
-import { requireCapacity, pendingBillingManager, BillingService, today, addDays } from '../services/billing.service';
+import { requireCapacity, pendingBillingManager, BillingService, today, addDays, SOLO_TRIAL_DAYS } from '../services/billing.service';
 import { Request, Response } from 'express';
 import { db, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION } from '../config/database';
 import { logAudit } from '../middlewares/audit.middleware';
@@ -104,7 +104,7 @@ export class TenantController {
       );
 
       if (!tokenValidation.valid) {
-        res.status(400).json({ error: tokenValidation.error || 'Token de verificação de e-mail inválido ou expirado' });
+        res.status(400).json({ code: 'EMAIL_VERIFICATION_EXPIRED', error: tokenValidation.error || 'Token de verificação de e-mail inválido ou expirado' });
         return;
       }
 
@@ -136,6 +136,10 @@ export class TenantController {
       // Validação de Teste Grátis Solo (7 dias)
       const startTrial = req.body.startTrial === true || req.body.startTrial === 'true';
       const planCode = req.body.planCode ? String(req.body.planCode).toUpperCase() : null;
+      const selectedPlan = planCode ? BillingService.plans().find(p => p.code === planCode) : null;
+      if (planCode && !selectedPlan) {
+        res.status(400).json({ error: 'Selecione um plano válido.' }); return;
+      }
 
       if (startTrial) {
         if (planCode && planCode !== 'SOLO') {
@@ -159,10 +163,13 @@ export class TenantController {
 
       const now = new Date();
       const trialStartedAt = now.toISOString();
-      const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const trialEndsAt = new Date(now.getTime() + SOLO_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
       const trialStartDay = today();
-      const trialEndDay = addDays(trialStartDay, 7);
+      const trialEndDay = addDays(trialStartDay, SOLO_TRIAL_DAYS);
       const soloPlan = startTrial ? db.prepare("SELECT id, code, name FROM plans WHERE code = 'SOLO' AND active = 1").get() as any : null;
+      if (startTrial && !soloPlan) {
+        res.status(400).json({ error: 'O plano Solo não está disponível para cadastro.' }); return;
+      }
       const subId = 'sub-' + uuidv4().slice(0, 8);
 
       // Preparação dos dados auxiliares antes da transação (obtém IP seguro via req.ip/trust proxy)
@@ -238,7 +245,7 @@ export class TenantController {
           initialTenantStatus,
           CURRENT_TERMS_VERSION,
           CURRENT_PRIVACY_VERSION,
-          startTrial ? soloPlan?.id : null,
+          startTrial ? soloPlan?.id : selectedPlan?.id || null,
           startTrial ? 1 : 0
         );
 
