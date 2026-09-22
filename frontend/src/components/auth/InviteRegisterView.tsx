@@ -1,3 +1,4 @@
+import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -298,6 +299,9 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
         }
       );
 
+      if (res.token && res.user?.id) {
+        trackCompletedRegistration(res.user.id);
+      }
       setIsSuccess(true);
       showToast(res.message || 'Cadastro realizado com sucesso!', 'success');
 

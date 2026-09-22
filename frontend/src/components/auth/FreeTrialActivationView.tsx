@@ -1,3 +1,4 @@
+import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -184,6 +185,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
         tenant: any;
         trialEndAt: string;
         durationLabel: string;
+        durationDays: number;
       }>(`/v1/public/free-trials/activate/${token}`, {
         clinicName: clinicName.trim(),
         managerName: managerName.trim(),
@@ -195,6 +197,9 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
         privacyAccepted: true
       });
 
+      if (res.success === true && res.token && res.user?.id) {
+        trackCompletedRegistration(res.user.id, res.durationDays);
+      }
       setActivationSuccess(true);
       showToast('Teste grátis ativado com sucesso!', 'success');
 

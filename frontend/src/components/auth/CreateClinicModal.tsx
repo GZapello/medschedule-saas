@@ -1,3 +1,4 @@
+import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
 import React, { useState, useRef, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -288,6 +289,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
       });
 
       if (data.token && data.user) {
+        // The backend has committed account creation; never infer trial activation from the CTA.
+        if (data.success !== false) {
+          trackCompletedRegistration(data.user.id, data.isTrial === true ? 7 : undefined);
+        }
         // Autenticação automática imediata através do token de sessão
         loginWithToken(data.token, data.user, data.tenant);
         if (isSoloTrial || data.trialStarted) {
