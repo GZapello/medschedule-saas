@@ -1,4 +1,5 @@
 import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { generateRobotsTxt, generateSitemapXml, generateSitemapIndexXml, normalizePath, isPublicRoute, isValidInternalRoute } from './seoRoutes';
@@ -6,30 +7,32 @@ import { renderPreRenderedHtml } from './preRender';
 
 /** Public infrastructure only; does not initialize a database or register API routes. */
 export function registerPublicSite(app: express.Express, frontendDist?: string): void {
- app.use((req, res, next) => {
-   if (req.hostname === 'www.zemda.com.br') return res.redirect(301, 'https://zemda.com.br' + req.originalUrl);
-   next();
- });
-// Rota pública para robots.txt com cabeçalho text/plain
-app.get('/robots.txt', (req, res) => {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.send(generateRobotsTxt());
-});
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.hostname === 'www.zemda.com.br') return res.redirect(301, 'https://zemda.com.br' + req.originalUrl);
+    next();
+  });
+  // Rota pública para robots.txt com cabeçalho text/plain
+  app.get('/robots.txt', (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(generateRobotsTxt());
+  });
 
-// Rota pública para sitemap.xml com cabeçalho rigoroso application/xml
-const handleSitemap = (req: express.Request, res: express.Response) => {
-  res.status(200);
-  res.type('application/xml');
-  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
-  res.send(generateSitemapXml());
-};
+  // Rota pública para sitemap.xml com cabeçalho rigoroso application/xml
+  const handleSitemap = (req: Request, res: Response) => {
+    res.status(200);
+    res.type('application/xml');
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+    res.send(generateSitemapXml());
+  };
 
-app.get('/sitemap.xml', handleSitemap);
-app.get('/sitemap', handleSitemap);
-app.get('/sitemap_index.xml', (_req, res) => { res.type('application/xml').send(generateSitemapIndexXml()); });
+  app.get('/sitemap.xml', handleSitemap);
+  app.get('/sitemap', handleSitemap);
+  app.get('/sitemap_index.xml', (_req: Request, res: Response) => {
+    res.type('application/xml').send(generateSitemapIndexXml());
+  });
 
 
 
@@ -37,7 +40,7 @@ if (!frontendDist) return;
   app.use(express.static(frontendDist, { index: false }));
 
   // Qualquer rota da interface web que não seja API ou health check retorna o index.html com SSR / pré-renderização de SEO
-  app.get('*', (req, res, next) => {
+  app.get('*', (req: Request, res: Response, next: NextFunction) => {
     if (
       req.path.startsWith('/api') ||
       req.path.startsWith('/v1') ||
