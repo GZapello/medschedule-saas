@@ -26,14 +26,21 @@ export function AppointmentConsultation({
 }) {
   const {
     isNutritionist,
+    isZemdaNutri,
     isOccupationalTherapist,
+    isZemdaTO,
     isSpeechTherapist,
+    isZemdaFono,
     isDentist,
+    isZemdaOdonto,
     isPsychologist,
     isZemdaPsico,
     isPsychopedagogue,
     isZemdaPP,
     isPhysiotherapist,
+    isZemdaFisio,
+    isPersonalTrainer,
+    isZemdaPersonal,
     isZemdaBody,
     currentUser
   } = useAuth();
@@ -43,11 +50,12 @@ export function AppointmentConsultation({
   const deducedModuleFromProfession =
     (isPsychopedagogue || isZemdaPP || (currentUser?.professionName || '').toLowerCase().includes('psicopedag') || (appointment.service_name || '').toLowerCase().includes('psicopedag')) ? 'ZemdaPP' :
     (isPsychologist || isZemdaPsico || (currentUser?.professionName || '').toLowerCase().includes('psicolog')) ? 'ZemdaPsico' :
-    (isSpeechTherapist || (currentUser?.professionName || '').toLowerCase().includes('fono')) ? 'ZemdaFono' :
-    (isDentist || (currentUser?.professionName || '').toLowerCase().includes('odonto') || (currentUser?.professionName || '').toLowerCase().includes('dentis')) ? 'ZemdaOdonto' :
-    (isOccupationalTherapist || (currentUser?.professionName || '').toLowerCase().includes('ocupacional')) ? 'ZemdaTO' :
-    (isNutritionist || (currentUser?.professionName || '').toLowerCase().includes('nutri')) ? 'ZemdaNutri' :
-    (isPhysiotherapist || (currentUser?.professionName || '').toLowerCase().includes('fisio') || (appointment.service_name || '').toLowerCase().includes('fisio')) ? 'ZemdaFisio' :
+    (isSpeechTherapist || isZemdaFono || (currentUser?.professionName || '').toLowerCase().includes('fono')) ? 'ZemdaFono' :
+    (isDentist || isZemdaOdonto || (currentUser?.professionName || '').toLowerCase().includes('odonto') || (currentUser?.professionName || '').toLowerCase().includes('dentis')) ? 'ZemdaOdonto' :
+    (isOccupationalTherapist || isZemdaTO || (currentUser?.professionName || '').toLowerCase().includes('ocupacional')) ? 'ZemdaTO' :
+    (isNutritionist || isZemdaNutri || (currentUser?.professionName || '').toLowerCase().includes('nutri')) ? 'ZemdaNutri' :
+    (isPersonalTrainer || isZemdaPersonal || (currentUser?.professionName || '').toLowerCase().includes('personal') || (currentUser?.professionName || '').toLowerCase().includes('educa')) ? 'ZemdaPersonal' :
+    (isPhysiotherapist || isZemdaFisio || (currentUser?.professionName || '').toLowerCase().includes('fisio') || (appointment.service_name || '').toLowerCase().includes('fisio')) ? 'ZemdaFisio' :
     undefined;
 
   const effectiveModuleType =

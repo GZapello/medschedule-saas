@@ -1,0 +1,60 @@
+warning: in the working copy of 'Dockerfile', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/Dockerfile b/Dockerfile[m
+[1mindex 92cd5ef..5466861 100644[m
+[1m--- a/Dockerfile[m
+[1m+++ b/Dockerfile[m
+[36m@@ -1,15 +1,15 @@[m
+[31m-# Stage 1: Compilação do Frontend SPA[m
+[32m+[m[32m# Stage 1: CompilaÃ§Ã£o do Frontend SPA[m
+ FROM node:22-slim AS frontend-builder[m
+ WORKDIR /app/frontend[m
+ [m
+ COPY frontend/package*.json ./[m
+ RUN npm install[m
+ [m
+[31m-COPY backend/src/seo ../backend/src/seo[m
+[32m+[m[32mCOPY backend/src/seo/landingContent.ts ../backend/src/seo/landingContent.ts`r`nCOPY backend/src/seo/blogContent.ts ../backend/src/seo/blogContent.ts`r`nCOPY backend/src/seo/seoRoutes.ts ../backend/src/seo/seoRoutes.ts`r`nCOPY backend/src/seo/seoPresentation.ts ../backend/src/seo/seoPresentation.ts[m
+ COPY frontend/ ./[m
+ RUN npm run build[m
+ [m
+[31m-# Stage 2: Compilação do Backend TypeScript[m
+[32m+[m[32m# Stage 2: CompilaÃ§Ã£o do Backend TypeScript[m
+ FROM node:22-slim AS backend-builder[m
+ WORKDIR /app/backend[m
+ [m
+[36m@@ -19,7 +19,7 @@[m [mRUN npm install[m
+ COPY backend/ ./[m
+ RUN npm run build[m
+ [m
+[31m-# Stage 3: Imagem de Produção Otimizada[m
+[32m+[m[32m# Stage 3: Imagem de ProduÃ§Ã£o Otimizada[m
+ FROM node:22-slim AS runner[m
+ WORKDIR /app[m
+ [m
+[36m@@ -27,11 +27,11 @@[m [mENV NODE_ENV=production[m
+ ENV PORT=4000[m
+ ENV DATABASE_PATH=/data/saas_schedule.db[m
+ [m
+[31m-# Instala apenas as dependências de produção do backend[m
+[32m+[m[32m# Instala apenas as dependÃªncias de produÃ§Ã£o do backend[m
+ COPY backend/package*.json ./[m
+ RUN npm install --omit=dev[m
+ [m
+[31m-# Copia código compilado do backend e o schema de banco de dados[m
+[32m+[m[32m# Copia cÃ³digo compilado do backend e o schema de banco de dados[m
+ COPY --from=backend-builder /app/backend/dist ./dist[m
+ COPY --from=backend-builder /app/backend/src/config/schema.sql ./dist/config/schema.sql[m
+ COPY --from=backend-builder /app/backend/src/config/schema.sql ./src/config/schema.sql[m
+[36m@@ -39,10 +39,10 @@[m [mCOPY --from=backend-builder /app/backend/src/config/schema.sql ./src/config/sche[m
+ # Copia os assets compilados do frontend SPA[m
+ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist[m
+ [m
+[31m-# Copia arquivos públicos de downloads (APK Android)[m
+[32m+[m[32m# Copia arquivos pÃºblicos de downloads (APK Android)[m
+ COPY backend/public ./public[m
+ [m
+[31m-# Garante o diretório de dados persistente para o banco SQLite[m
+[32m+[m[32m# Garante o diretÃ³rio de dados persistente para o banco SQLite[m
+ RUN mkdir -p /data[m
+ [m
+ EXPOSE 4000[m

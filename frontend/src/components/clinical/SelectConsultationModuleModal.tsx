@@ -6,12 +6,15 @@ import {
   Hand,
   MessageCircle,
   Stethoscope,
+  Brain,
+  GraduationCap,
+  Dumbbell,
   X,
   ChevronRight
 } from 'lucide-react';
 
 export interface ClinicalModuleOption {
-  id: 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'general';
+  id: 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general';
   name: string;
   badge: string;
   profession: string;
@@ -120,6 +123,60 @@ export const ALL_CLINICAL_MODULES: Record<string, ClinicalModuleOption> = {
       iconColor: 'text-purple-600'
     }
   },
+  ZemdaPsico: {
+    id: 'ZemdaPsico',
+    name: 'ZemdaPsico',
+    badge: 'Psicologia',
+    profession: 'Psicologia Clínica & Saúde Mental',
+    description: 'Anamnese psicológica, hipótese diagnóstica, plano terapêutico e evolução de sessões.',
+    icon: Brain,
+    colorTheme: {
+      border: 'border-violet-200 hover:border-violet-500',
+      bg: 'bg-white hover:bg-violet-50/50',
+      hoverBg: 'hover:bg-violet-50',
+      text: 'text-violet-900',
+      badgeBg: 'bg-violet-100',
+      badgeText: 'text-violet-800',
+      iconBg: 'bg-violet-100 text-violet-700',
+      iconColor: 'text-violet-600'
+    }
+  },
+  ZemdaPP: {
+    id: 'ZemdaPP',
+    name: 'ZemdaPP',
+    badge: 'Psicopedagogia',
+    profession: 'Psicopedagogia & Aprendizagem',
+    description: 'Avaliação psicopedagógica, queixa escolar, provas operatórias e plano de intervenção.',
+    icon: GraduationCap,
+    colorTheme: {
+      border: 'border-amber-200 hover:border-amber-500',
+      bg: 'bg-white hover:bg-amber-50/50',
+      hoverBg: 'hover:bg-amber-50',
+      text: 'text-amber-900',
+      badgeBg: 'bg-amber-100',
+      badgeText: 'text-amber-800',
+      iconBg: 'bg-amber-100 text-amber-700',
+      iconColor: 'text-amber-600'
+    }
+  },
+  ZemdaPersonal: {
+    id: 'ZemdaPersonal',
+    name: 'ZemdaPersonal',
+    badge: 'Treinamento',
+    profession: 'Personal Trainer & Ed. Física',
+    description: 'Periodização de treino, volume muscular, acompanhamento de cargas e metas físicas.',
+    icon: Dumbbell,
+    colorTheme: {
+      border: 'border-orange-200 hover:border-orange-500',
+      bg: 'bg-white hover:bg-orange-50/50',
+      hoverBg: 'hover:bg-orange-50',
+      text: 'text-orange-900',
+      badgeBg: 'bg-orange-100',
+      badgeText: 'text-orange-800',
+      iconBg: 'bg-orange-100 text-orange-700',
+      iconColor: 'text-orange-600'
+    }
+  },
   general: {
     id: 'general',
     name: 'Atendimento Geral',
@@ -167,29 +224,36 @@ export function getModuleForProfession(auth: {
   isDentist?: boolean;
   isNutritionist?: boolean;
   isOccupationalTherapist?: boolean;
+  isPsychologist?: boolean;
+  isPsychopedagogue?: boolean;
+  isPersonalTrainer?: boolean;
+  isZemdaPsico?: boolean;
+  isZemdaPP?: boolean;
+  isZemdaPersonal?: boolean;
+  isZemdaFisio?: boolean;
+  isZemdaFono?: boolean;
+  isZemdaOdonto?: boolean;
+  isZemdaNutri?: boolean;
+  isZemdaTO?: boolean;
   currentUser?: any;
   currentTenant?: any;
-}): 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'general' {
-  if (auth.isSpeechTherapist) return 'ZemdaFono';
-  if (auth.isPhysiotherapist) return 'ZemdaFisio';
-  if (auth.isOccupationalTherapist) return 'ZemdaTO';
-  if (auth.isNutritionist) return 'ZemdaNutri';
-  if (auth.isDentist) return 'ZemdaOdonto';
+}): 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general' {
+  if (auth.isSpeechTherapist || auth.isZemdaFono) return 'ZemdaFono';
+  if (auth.isPsychologist || auth.isZemdaPsico) return 'ZemdaPsico';
+  if (auth.isPsychopedagogue || auth.isZemdaPP) return 'ZemdaPP';
+  if (auth.isPersonalTrainer || auth.isZemdaPersonal) return 'ZemdaPersonal';
+  if (auth.isPhysiotherapist || auth.isZemdaFisio) return 'ZemdaFisio';
+  if (auth.isOccupationalTherapist || auth.isZemdaTO) return 'ZemdaTO';
+  if (auth.isNutritionist || auth.isZemdaNutri) return 'ZemdaNutri';
+  if (auth.isDentist || auth.isZemdaOdonto) return 'ZemdaOdonto';
   return 'general';
 }
 
 /**
  * Retorna os módulos compatíveis com a atuação do usuário logado.
  */
-export function getCompatibleClinicalModules(auth: {
-  isPhysiotherapist?: boolean;
-  isSpeechTherapist?: boolean;
-  isDentist?: boolean;
-  isNutritionist?: boolean;
-  isOccupationalTherapist?: boolean;
+export function getCompatibleClinicalModules(auth: Parameters<typeof getModuleForProfession>[0] & {
   isClinicAdmin?: boolean;
-  currentUser?: any;
-  currentTenant?: any;
 }): ClinicalModuleOption[] {
   const modId = getModuleForProfession(auth);
   return [ALL_CLINICAL_MODULES[modId] || ALL_CLINICAL_MODULES.general];

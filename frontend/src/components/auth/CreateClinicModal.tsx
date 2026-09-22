@@ -14,8 +14,10 @@ import {
   ArrowLeft,
   RefreshCw,
   KeyRound,
-  Sparkles
+  Sparkles,
+  Briefcase
 } from 'lucide-react';
+import { REGISTRATION_PROFESSIONS } from '../../types/professions';
 
 interface CreateClinicModalProps {
   isOpen: boolean;
@@ -44,6 +46,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
     responsibleName: '',
     email: '',
     phone: '',
+    profession: '',
+    customProfession: '',
     password: '',
     confirmPassword: '',
     termsAccepted: false,
@@ -142,6 +146,16 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
 
     if (!formData.responsibleName.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.password) {
       showToast('Preencha os campos obrigatórios marcados com *', 'error');
+      return;
+    }
+
+    if (!formData.profession) {
+      showToast('Selecione sua profissão para continuar', 'error');
+      return;
+    }
+
+    if (formData.profession === 'other_health' && !formData.customProfession.trim()) {
+      showToast('Por favor, especifique sua profissão da saúde', 'error');
       return;
     }
 
@@ -249,11 +263,20 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         ? `Consultório ${formData.responsibleName.trim()}`
         : 'Meu Consultório';
 
+      const selectedOption = REGISTRATION_PROFESSIONS.find(p => p.id === formData.profession);
+      const professionNameToSend = formData.profession === 'other_health' && formData.customProfession.trim()
+        ? formData.customProfession.trim()
+        : (selectedOption?.label || formData.profession);
+
       const data = await ApiClient.post<any>('/v1/public/tenants/register', {
         responsibleName: formData.responsibleName.trim(),
         email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim(),
         password: formData.password,
+        profession: professionNameToSend,
+        professionId: selectedOption?.id || undefined,
+        professionName: professionNameToSend,
+        registrationType: selectedOption?.boardLabel || undefined,
         clinicName: fallbackClinicName,
         tradeName: fallbackClinicName,
         termsAccepted: formData.termsAccepted,
@@ -558,6 +581,38 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Profissão *
+                  </label>
+                  <div className="relative">
+                    <Briefcase className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    <select
+                      required
+                      value={formData.profession}
+                      onChange={e => setFormData({ ...formData, profession: e.target.value })}
+                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-800"
+                    >
+                      <option value="">Selecione sua profissão...</option>
+                      {REGISTRATION_PROFESSIONS.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {formData.profession === 'other_health' && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Especifique sua profissão da saúde *"
+                      value={formData.customProfession}
+                      onChange={e => setFormData({ ...formData, customProfession: e.target.value })}
+                      className="w-full mt-2 px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500"
+                    />
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

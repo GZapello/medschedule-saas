@@ -96,3 +96,24 @@ export function findProfessionById(id: string): ProfessionItem | undefined {
   }
   return undefined;
 }
+
+export interface RegistrationProfessionOption {
+  id: string;
+  label: string;
+  boardLabel?: string;
+  module?: string;
+  slug?: string;
+}
+
+export const REGISTRATION_PROFESSIONS: RegistrationProfessionOption[] = [
+  { id: 'prof-fonoaudiologo', label: 'Fonoaudiólogo(a)', boardLabel: 'CRFa', module: 'ZemdaFono', slug: 'fonoaudiologo' },
+  { id: 'prof-fisioterapeuta', label: 'Fisioterapeuta', boardLabel: 'CREFITO', module: 'ZemdaFisio', slug: 'fisioterapeuta' },
+  { id: 'prof-psicologo', label: 'Psicólogo(a)', boardLabel: 'CRP', module: 'ZemdaPsico', slug: 'psicologo' },
+  { id: 'prof-nutricionista', label: 'Nutricionista', boardLabel: 'CRN', module: 'ZemdaNutri', slug: 'nutricionista' },
+  { id: 'prof-terapeuta-ocupacional', label: 'Terapeuta Ocupacional', boardLabel: 'CREFITO', module: 'ZemdaTO', slug: 'terapeuta-ocupacional' },
+  { id: 'prof-dentista', label: 'Dentista', boardLabel: 'CRO', module: 'ZemdaOdonto', slug: 'dentista' },
+  { id: 'prof-personal-trainer', label: 'Personal Trainer', boardLabel: 'CREF', module: 'ZemdaPersonal', slug: 'personal-trainer' },
+  { id: 'prof-psicopedagogo', label: 'Psicopedagogo(a)', boardLabel: 'ABPp', module: 'ZemdaPP', slug: 'psicopedagogo' },
+  { id: 'prof-medico', label: 'Médico(a)', boardLabel: 'CRM', slug: 'medico' },
+  { id: 'other_health', label: 'Outra profissão da saúde', boardLabel: 'Conselho/Registro', slug: 'outra-profissao-da-saude' }
+];

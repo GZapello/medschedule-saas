@@ -10,6 +10,8 @@ import { globalAudit, purgeClinic } from '../services/clinic-control.service';
 import { ensureDefaultClinicService } from '../services/default-service.service';
 import { EmailService } from '../services/email.service';
 import { TrialNotificationService } from '../services/trial-notification.service';
+import { resolveProfessionModule } from '../utils/profession-module';
+import { REGISTRATION_PROFESSIONS } from '../types/professions';
 
 
 
@@ -49,11 +51,27 @@ export class TenantController {
       const marketingAccepted = req.body.marketingAccepted;
       const marketingOptIn = req.body.marketingOptIn;
 
-      const managerProfession = req.body.managerProfession || req.body.profession || null;
+      const rawProfession = (req.body.profession || req.body.managerProfession || req.body.professionName || '').trim();
+      const professionIdInput = (req.body.professionId || req.body.managerProfessionId || '').trim();
+
+      const matchedCatalogProf = REGISTRATION_PROFESSIONS.find(
+        p => p.id === professionIdInput || p.label.toLowerCase() === rawProfession.toLowerCase()
+      );
+
+      const resolvedProfId = matchedCatalogProf?.id || (professionIdInput ? professionIdInput : null);
+      const resolvedProfName = rawProfession || matchedCatalogProf?.label || null;
+      const resolvedProfSlug = matchedCatalogProf?.slug || (resolvedProfName ? resolvedProfName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-') : null);
+      const resolvedBoardLabel = req.body.registrationType || req.body.managerRegistrationType || matchedCatalogProf?.boardLabel || 'Registro';
       const managerPracticeAreas = req.body.managerPracticeAreas || req.body.practiceAreas || null;
-      const managerRegistrationType = req.body.managerRegistrationType || req.body.registrationType || null;
       const managerRegistrationNumber = req.body.managerRegistrationNumber || req.body.registrationNumber || null;
       const zemdaBodyEnabled = req.body.zemdaBodyEnabled;
+
+      const { module: activeModule, flags: modFlags } = resolveProfessionModule({
+        id: resolvedProfId,
+        name: resolvedProfName,
+        slug: resolvedProfSlug,
+        registrationType: resolvedBoardLabel
+      });
 
       if (!responsibleName || !email || !password) {
         res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios' });
@@ -150,6 +168,7 @@ export class TenantController {
       const initialPermissions = isZemdaBodyOpted ? JSON.stringify(['access_zemda_body']) : JSON.stringify([]);
       const verificationId = tokenValidation.payload?.verificationId;
 
+      let createdProfId: string | null = null;
       // Execução transacional atômica única: se qualquer etapa falhar, executa rollback integral
       const executeRegistrationTransaction = db.transaction(() => {
         // 1. Consumo atômico da verificação de e-mail (exige rigorosamente changes === 1)
@@ -209,7 +228,7 @@ export class TenantController {
           responsibleName,
           cleanEmail,
           phone || null,
-          managerProfession || null,
+          resolvedProfName || null,
           managerPracticeAreas || null,
           initialTenantStatus,
           CURRENT_TERMS_VERSION,
@@ -222,19 +241,25 @@ export class TenantController {
         db.prepare(`
           INSERT INTO users (
             id, tenant_id, name, email, password_hash, role, phone, status,
-            profession_name, practice_areas, registration_type, registration_number,
+            profession_id, profession_name, practice_areas, registration_type, registration_number,
             terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
+            zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
             created_at, updated_at
           ) VALUES (
             ?, ?, ?, ?, ?, 'clinic_admin', ?, ?,
-            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, datetime('now'), datetime('now'),
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
             datetime('now'), datetime('now')
           )
         `).run(
           userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null, initialUserStatus,
-          managerProfession || null, managerPracticeAreas || null, managerRegistrationType || null, managerRegistrationNumber || null,
-          CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION
+          resolvedProfId, resolvedProfName, managerPracticeAreas || null, resolvedBoardLabel, managerRegistrationNumber || null,
+          CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION,
+          modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
+          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled
         );
 
         // 5. Salva a prova documental do aceite legal na tabela legal_acceptances
@@ -257,9 +282,13 @@ export class TenantController {
         db.prepare(`
           INSERT INTO clinic_users (
             id, tenant_id, user_id, role, status, is_manager,
-            profession_custom, practice_areas, permissions_json, zemda_body_enabled, created_at
+            profession_id, profession_name, profession_custom, practice_areas, permissions_json,
+            zemda_body_enabled, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, created_at
           ) VALUES (
             ?, ?, ?, 'clinic_admin', ?, 1,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?, ?, datetime('now')
           )
         `).run(
@@ -267,29 +296,45 @@ export class TenantController {
           tenantId,
           userId,
           initialUserStatus,
-          managerProfession || null,
+          resolvedProfId,
+          resolvedProfName,
+          resolvedProfName,
           managerPracticeAreas || null,
           initialPermissions,
-          isZemdaBodyOpted ? 1 : 0
+          isZemdaBodyOpted ? 1 : 0,
+          modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
+          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled
         );
 
         // 7. Se o gestor também for profissional de saúde clínico, cria o registro em professionals
-        if (managerProfession && managerProfession !== 'Gestor / Administrador') {
-          const profId = 'pro-' + uuidv4().slice(0, 8);
+        if (resolvedProfName && resolvedProfName !== 'Gestor / Administrador') {
+          createdProfId = 'pro-' + uuidv4().slice(0, 8);
           db.prepare(`
             INSERT INTO professionals (
-              id, tenant_id, user_id, name, registration_type, registration_number,
-              practice_areas, bio, active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+              id, tenant_id, user_id, name, profession_id, profession_name,
+              registration_type, registration_number, practice_areas, bio, active,
+              zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
-            profId,
+            createdProfId,
             tenantId,
             userId,
             responsibleName,
-            managerRegistrationType || 'Registro',
+            resolvedProfId,
+            resolvedProfName,
+            resolvedBoardLabel,
             managerRegistrationNumber || null,
             managerPracticeAreas || null,
-            managerPracticeAreas || null
+            managerPracticeAreas || null,
+            modFlags.zemda_fisio_enabled,
+            modFlags.zemda_odonto_enabled,
+            modFlags.zemda_nutri_enabled,
+            modFlags.zemda_to_enabled,
+            modFlags.zemda_fono_enabled,
+            modFlags.zemda_pp_enabled,
+            modFlags.zemda_psico_enabled,
+            modFlags.zemda_personal_enabled
           );
         }
 
@@ -365,13 +410,6 @@ export class TenantController {
         WHERE id = ?
       `).get(tenantId);
 
-      const checkProfText = [managerProfession, managerPracticeAreas].filter(Boolean).join(' ').toLowerCase();
-      const isPhysioUser = checkProfText.includes('fisio');
-      const isDentistUser = checkProfText.includes('odonto') || checkProfText.includes('dentis');
-      const isNutriUser = checkProfText.includes('nutri');
-      const isTOUser = checkProfText.includes('ocupacional');
-      const isFonoUser = checkProfText.includes('fono');
-
       const userPayload = {
         id: userId,
         name: responsibleName,
@@ -383,19 +421,25 @@ export class TenantController {
         tenantId: tenantId,
         needsOnboarding: false,
         needsLegalAcceptance: false,
-        professionName: managerProfession || null,
+        professionalId: createdProfId,
+        professionId: resolvedProfId,
+        professionName: resolvedProfName,
+        professionSlug: resolvedProfSlug,
         practiceAreas: managerPracticeAreas || '',
-        registrationType: managerRegistrationType || null,
+        registrationType: resolvedBoardLabel,
         registrationNumber: managerRegistrationNumber || null,
         termsVersionAccepted: CURRENT_TERMS_VERSION,
         privacyVersionAccepted: CURRENT_PRIVACY_VERSION,
         permissions: isZemdaBodyOpted ? ['access_zemda_body'] : [],
         zemdaBodyEnabled: isZemdaBodyOpted,
-        zemdaFisioEnabled: isPhysioUser,
-        zemdaOdontoEnabled: isDentistUser,
-        zemdaNutriEnabled: isNutriUser,
-        zemdaToEnabled: isTOUser,
-        zemdaFonoEnabled: isFonoUser
+        zemdaFisioEnabled: modFlags.zemda_fisio_enabled === 1,
+        zemdaOdontoEnabled: modFlags.zemda_odonto_enabled === 1,
+        zemdaNutriEnabled: modFlags.zemda_nutri_enabled === 1,
+        zemdaToEnabled: modFlags.zemda_to_enabled === 1,
+        zemdaFonoEnabled: modFlags.zemda_fono_enabled === 1,
+        zemdaPsicoEnabled: modFlags.zemda_psico_enabled === 1,
+        zemdaPPEnabled: modFlags.zemda_pp_enabled === 1,
+        zemdaPersonalEnabled: modFlags.zemda_personal_enabled === 1
       };
 
       res.status(201).json({

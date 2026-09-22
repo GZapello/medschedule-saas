@@ -27,7 +27,7 @@ export class ProfessionalController {
           p.profession_change_used, p.profession_changed_at,
           u.email, u.phone,
           COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name, spec.color as specialty_color,
-          prof.name as profession_name
+          COALESCE(prof.name, p.profession_name) as profession_name
         FROM professionals p
         LEFT JOIN users u ON u.id = p.user_id
         LEFT JOIN specialties spec ON spec.id = p.specialty_id
@@ -58,7 +58,7 @@ export class ProfessionalController {
           p.profession_change_used, p.profession_changed_at,
           u.email, u.phone,
           COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
-          prof.name as profession_name
+          COALESCE(prof.name, p.profession_name) as profession_name
         FROM professionals p
         LEFT JOIN users u ON u.id = p.user_id
         LEFT JOIN specialties spec ON spec.id = p.specialty_id
