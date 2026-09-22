@@ -5,7 +5,10 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm install
 
-COPY backend/src/seo ../backend/src/seo
+COPY backend/src/seo/landingContent.ts ../backend/src/seo/landingContent.ts
+COPY backend/src/seo/blogContent.ts ../backend/src/seo/blogContent.ts
+COPY backend/src/seo/seoRoutes.ts ../backend/src/seo/seoRoutes.ts
+COPY backend/src/seo/seoPresentation.ts ../backend/src/seo/seoPresentation.ts
 COPY frontend/ ./
 RUN npm run build
 
