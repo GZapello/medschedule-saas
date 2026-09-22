@@ -1,3 +1,4 @@
+import { RegistrationProfessionSelect } from './RegistrationProfessionSelect';
 import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
 import React, { useState, useRef, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
@@ -155,7 +156,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
       return;
     }
 
-    if (formData.profession === 'other_health' && !formData.customProfession.trim()) {
+    if (formData.profession === 'prof-outro-saude' && !formData.customProfession.trim()) {
       showToast('Por favor, especifique sua profissão da saúde', 'error');
       return;
     }
@@ -265,9 +266,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         : 'Meu Consultório';
 
       const selectedOption = REGISTRATION_PROFESSIONS.find(p => p.id === formData.profession);
-      const professionNameToSend = formData.profession === 'other_health' && formData.customProfession.trim()
+      const professionNameToSend = formData.profession === 'prof-outro-saude' && formData.customProfession.trim()
         ? formData.customProfession.trim()
-        : (selectedOption?.label || formData.profession);
+        : (selectedOption?.canonicalName || selectedOption?.label || formData.profession);
 
       const data = await ApiClient.post<any>('/v1/public/tenants/register', {
         responsibleName: formData.responsibleName.trim(),
@@ -589,24 +590,15 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="registration-profession" className="block text-xs font-bold text-slate-700 mb-1">
                     Profissão *
                   </label>
                   <div className="relative">
                     <Briefcase className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <select
-                      required
+                    <RegistrationProfessionSelect
                       value={formData.profession}
-                      onChange={e => setFormData({ ...formData, profession: e.target.value })}
-                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-800 truncate"
-                    >
-                      <option value="">Selecione sua profissão...</option>
-                      {REGISTRATION_PROFESSIONS.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.displayOption || `${p.label} — ${p.modules.join(' + ')}`}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={profession => setFormData({ ...formData, profession })}
+                    />
                   </div>
 
                   {/* Bloco informativo dinâmico dos módulos da área selecionada */}
@@ -629,7 +621,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                     </div>
                   )}
 
-                  {formData.profession === 'other_health' && (
+                  {formData.profession === 'prof-outro-saude' && (
                     <div className="mt-2">
                       <input
                         type="text"

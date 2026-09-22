@@ -9,6 +9,8 @@ COPY backend/src/seo/landingContent.ts ../backend/src/seo/landingContent.ts
 COPY backend/src/seo/blogContent.ts ../backend/src/seo/blogContent.ts
 COPY backend/src/seo/seoRoutes.ts ../backend/src/seo/seoRoutes.ts
 COPY backend/src/seo/seoPresentation.ts ../backend/src/seo/seoPresentation.ts
+COPY backend/src/types/registration-professions.ts ../backend/src/types/registration-professions.ts
+COPY backend/src/utils/profession-module.ts ../backend/src/utils/profession-module.ts
 COPY frontend/ ./
 RUN npm run build
 

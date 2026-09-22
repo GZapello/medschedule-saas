@@ -1,3 +1,4 @@
+import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService, today, addDays } from '../services/billing.service';
 import { Request, Response } from 'express';
@@ -55,10 +56,10 @@ export class TenantController {
       const professionIdInput = (req.body.professionId || req.body.managerProfessionId || '').trim();
 
       const matchedCatalogProf = REGISTRATION_PROFESSIONS.find(
-        p => p.id === professionIdInput ||
-             (p.id === 'prof-cirurgiao-dentista' && (professionIdInput === 'prof-dentista' || rawProfession.toLowerCase() === 'dentista')) ||
+        p => p.id === (REGISTRATION_PROFESSION_ALIASES[professionIdInput] || professionIdInput) ||
+             (p.id === 'prof-dentista' && (professionIdInput === 'prof-dentista' || rawProfession.toLowerCase() === 'dentista')) ||
              (p.id === 'prof-personal-trainer' && (professionIdInput === 'prof-personal-trainer' || rawProfession.toLowerCase() === 'personal trainer')) ||
-             (p.id === 'other_health' && (professionIdInput === 'other_health' || rawProfession.toLowerCase() === 'outra profissão da saúde')) ||
+             (p.id === 'prof-outro-saude' && (professionIdInput === 'other_health' || rawProfession.toLowerCase() === 'outra profissão da saúde')) ||
              p.label.toLowerCase() === rawProfession.toLowerCase()
       );
 
@@ -311,7 +312,7 @@ export class TenantController {
         );
 
         // 7. Se o gestor também for profissional de saúde clínico, cria o registro em professionals
-        if (resolvedProfName && resolvedProfName !== 'Gestor / Administrador') {
+        if (resolvedProfName && resolvedProfName !== 'Gestor / Administrador' && !matchedCatalogProf?.administrative) {
           createdProfId = 'pro-' + uuidv4().slice(0, 8);
           db.prepare(`
             INSERT INTO professionals (
