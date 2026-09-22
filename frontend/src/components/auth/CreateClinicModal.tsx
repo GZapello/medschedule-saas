@@ -593,25 +593,48 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                       required
                       value={formData.profession}
                       onChange={e => setFormData({ ...formData, profession: e.target.value })}
-                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-800"
+                      className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-800 truncate"
                     >
                       <option value="">Selecione sua profissão...</option>
                       {REGISTRATION_PROFESSIONS.map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.label}
+                          {p.displayOption || `${p.label} — ${p.modules.join(' + ')}`}
                         </option>
                       ))}
                     </select>
                   </div>
+
+                  {/* Bloco informativo dinâmico dos módulos da área selecionada */}
+                  {REGISTRATION_PROFESSIONS.find(p => p.id === formData.profession) && (
+                    <div className="mt-2 p-2.5 rounded-xl bg-teal-50/70 border border-teal-200/80 text-xs text-teal-950 animate-in fade-in duration-200">
+                      <div className="flex items-center gap-1.5 font-bold text-teal-900 mb-1">
+                        <Sparkles className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                        <span>Módulos da sua área:</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        {REGISTRATION_PROFESSIONS.find(p => p.id === formData.profession)?.modules.map((m, idx) => (
+                          <React.Fragment key={m}>
+                            {idx > 0 && <span className="text-teal-400 font-bold">•</span>}
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-teal-200/90 text-teal-950 font-semibold shadow-2xs">
+                              {m}
+                            </span>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {formData.profession === 'other_health' && (
-                    <input
-                      type="text"
-                      required
-                      placeholder="Especifique sua profissão da saúde *"
-                      value={formData.customProfession}
-                      onChange={e => setFormData({ ...formData, customProfession: e.target.value })}
-                      className="w-full mt-2 px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500"
-                    />
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        required
+                        placeholder="Especifique sua profissão da saúde *"
+                        value={formData.customProfession}
+                        onChange={e => setFormData({ ...formData, customProfession: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500"
+                      />
+                    </div>
                   )}
                 </div>
 

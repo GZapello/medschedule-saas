@@ -55,7 +55,11 @@ export class TenantController {
       const professionIdInput = (req.body.professionId || req.body.managerProfessionId || '').trim();
 
       const matchedCatalogProf = REGISTRATION_PROFESSIONS.find(
-        p => p.id === professionIdInput || p.label.toLowerCase() === rawProfession.toLowerCase()
+        p => p.id === professionIdInput ||
+             (p.id === 'prof-cirurgiao-dentista' && (professionIdInput === 'prof-dentista' || rawProfession.toLowerCase() === 'dentista')) ||
+             (p.id === 'prof-personal-trainer' && (professionIdInput === 'prof-personal-trainer' || rawProfession.toLowerCase() === 'personal trainer')) ||
+             (p.id === 'other_health' && (professionIdInput === 'other_health' || rawProfession.toLowerCase() === 'outra profissão da saúde')) ||
+             p.label.toLowerCase() === rawProfession.toLowerCase()
       );
 
       const resolvedProfId = matchedCatalogProf?.id || (professionIdInput ? professionIdInput : null);

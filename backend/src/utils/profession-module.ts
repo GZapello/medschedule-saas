@@ -127,11 +127,14 @@ export function resolveProfessionModule(input: ResolveProfessionInput): { module
   // 7. Cirurgião-Dentista / Odontologia
   else if (
     pId === 'prof-dentista' ||
+    pId === 'prof-cirurgiao-dentista' ||
     pId === 'prof-odontologia' ||
     pSlug === 'dentista' ||
+    pSlug === 'cirurgiao-dentista' ||
     pSlug === 'odontologia' ||
     combined.includes('odonto') ||
     combined.includes('dentis') ||
+    combined.includes('cirurgi') ||
     regType === 'CRO'
   ) {
     matchedModule = 'ZemdaOdonto';

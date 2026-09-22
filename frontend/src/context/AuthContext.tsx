@@ -250,11 +250,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     activeModule = 'ZemdaFisio';
   } else if (
     profId === 'prof-dentista' ||
+    profId === 'prof-cirurgiao-dentista' ||
     profId === 'prof-odontologia' ||
     profSlug === 'dentista' ||
+    profSlug === 'cirurgiao-dentista' ||
     profSlug === 'odontologia' ||
     combinedProf.includes('odonto') ||
     combinedProf.includes('dentis') ||
+    combinedProf.includes('cirurgi') ||
     regType === 'CRO'
   ) {
     activeModule = 'ZemdaOdonto';
