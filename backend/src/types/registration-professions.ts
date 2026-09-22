@@ -3,6 +3,7 @@ import { resolveProfessionModule } from '../utils/profession-module';
 export interface RegistrationProfessionOption {
   id: string;
   label: string;
+  name?: string;
   canonicalName: string;
   accessLabel: string;
   displayOption: string;

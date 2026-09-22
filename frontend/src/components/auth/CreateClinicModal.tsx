@@ -71,6 +71,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
   const [step, setStep] = useState<'form' | 'verify_email' | 'plans'>('form');
   const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (contentRef.current) contentRef.current.scrollTop = 0; }, [step, isOpen]);
+  const [loading, setLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
@@ -313,10 +314,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         ? `Consultório ${formData.responsibleName.trim()}`
         : 'Meu Consultório';
 
-      const selectedOption = REGISTRATION_PROFESSIONS.find(p => p.id === formData.profession);
+      const currentProfessionOptions = professionOptions.length > 0 ? professionOptions : REGISTRATION_PROFESSIONS;
+      const selectedOption = currentProfessionOptions.find(p => p.id === formData.profession);
       const professionNameToSend = formData.profession === 'prof-outro-saude' && formData.customProfession.trim()
         ? formData.customProfession.trim()
-        : (selectedOption?.canonicalName || selectedOption?.label || formData.profession);
+        : (selectedOption?.canonicalName || selectedOption?.label || (selectedOption as any)?.name || formData.profession);
 
       const data = await ApiClient.post<any>('/v1/public/tenants/register', {
         responsibleName: formData.responsibleName.trim(),
@@ -637,28 +639,35 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
                     <RegistrationProfessionSelect
                       value={formData.profession}
                       onChange={profession => setFormData({ ...formData, profession })}
+                      options={professionOptions}
+                      loading={loadingProfessions}
                     />
                   </div>
 
                   {/* Bloco informativo dinâmico dos módulos da área selecionada */}
-                  {REGISTRATION_PROFESSIONS.find(p => p.id === formData.profession) && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-teal-50/70 border border-teal-200/80 text-xs text-teal-950 animate-in fade-in duration-200">
-                      <div className="flex items-center gap-1.5 font-bold text-teal-900 mb-1">
-                        <Sparkles className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                        <span>Módulos da sua área:</span>
+                  {(() => {
+                    const currentList = professionOptions.length > 0 ? professionOptions : REGISTRATION_PROFESSIONS;
+                    const selected = currentList.find(p => p.id === formData.profession);
+                    if (!selected) return null;
+                    return (
+                      <div className="mt-2 p-2.5 rounded-xl bg-teal-50/70 border border-teal-200/80 text-xs text-teal-950 animate-in fade-in duration-200">
+                        <div className="flex items-center gap-1.5 font-bold text-teal-900 mb-1">
+                          <Sparkles className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                          <span>Módulos da sua área:</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          {selected.modules.map((m, idx) => (
+                            <React.Fragment key={m}>
+                              {idx > 0 && <span className="text-teal-400 font-bold">•</span>}
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-teal-200/90 text-teal-950 font-semibold shadow-2xs">
+                                {m}
+                              </span>
+                            </React.Fragment>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                        {REGISTRATION_PROFESSIONS.find(p => p.id === formData.profession)?.modules.map((m, idx) => (
-                          <React.Fragment key={m}>
-                            {idx > 0 && <span className="text-teal-400 font-bold">•</span>}
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-white border border-teal-200/90 text-teal-950 font-semibold shadow-2xs">
-                              {m}
-                            </span>
-                          </React.Fragment>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {formData.profession === 'prof-outro-saude' && (
                     <div className="mt-2">
