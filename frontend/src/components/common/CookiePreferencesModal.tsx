@@ -42,7 +42,7 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
       const stored = getStoredCookieConsent();
       if (stored) {
         setAnalyticsEnabled(Boolean(stored.analytics));
-        setMarketingEnabled(false);
+        setMarketingEnabled(stored.marketing === true);
       } else {
         setAnalyticsEnabled(false);
         setMarketingEnabled(false);
@@ -62,7 +62,7 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
       const stored = getStoredCookieConsent();
       if (stored) {
         setAnalyticsEnabled(Boolean(stored.analytics));
-        setMarketingEnabled(false);
+        setMarketingEnabled(stored.marketing === true);
       } else {
         setAnalyticsEnabled(false);
         setMarketingEnabled(false);
@@ -78,7 +78,7 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
   const handleSaveCustom = () => {
     saveCookieConsent({
       analytics: analyticsEnabled,
-      marketing: false
+      marketing: marketingEnabled
     });
     handleClose();
   };
@@ -133,7 +133,7 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
         {/* Content */}
         <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto text-xs text-slate-600">
           <p className="text-slate-600 leading-relaxed">
-            Utilizamos cookies para assegurar o funcionamento da plataforma e compreender o tráfego técnico de forma anônima. Abaixo, você pode escolher quais categorias deseja autorizar. Suas escolhas podem ser revistas a qualquer momento no rodapé ou no painel de configurações.
+            Utilizamos cookies para assegurar o funcionamento da plataforma, analisar o tráfego e, com autorização separada, medir visitas públicas para publicidade. Abaixo, você pode escolher quais categorias deseja autorizar. Suas escolhas podem ser revistas a qualquer momento no rodapé ou no painel de configurações.
           </p>
 
           {/* Categoria 1: Cookies Necessários */}
@@ -167,6 +167,7 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
+                  aria-label="Cookies de Análise (Google Analytics)"
                   checked={analyticsEnabled}
                   onChange={e => setAnalyticsEnabled(e.target.checked)}
                   className="sr-only peer"
@@ -183,7 +184,7 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
           </div>
 
           {/* Categoria 3: Cookies de Marketing / Publicidade */}
-          <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 opacity-85 space-y-2">
+          <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Megaphone className="w-4 h-4 text-slate-400" />
@@ -191,12 +192,12 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
                   3. Cookies de Marketing / Publicidade
                 </h3>
               </div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 py-0.5 rounded-md bg-slate-100">
-                Inativo
-              </span>
+              <input type="checkbox" aria-label="Cookies de Marketing / Publicidade"
+                checked={marketingEnabled} onChange={e => setMarketingEnabled(e.target.checked)}
+                className="w-5 h-5 accent-teal-600 cursor-pointer" />
             </div>
             <p className="text-slate-500 leading-relaxed">
-              O Zemda não veicula anúncios comerciais nem compartilha perfis para fins de remarketing publicitário dentro da plataforma. Esta categoria permanece desativada.
+              Meta Pixel: com sua autorização, registra visitas às páginas públicas institucionais para medir anúncios e permitir remarketing. A Meta pode receber identificadores do navegador, endereço IP e a URL pública visitada. Não enviamos dados de pacientes, formulários ou informações clínicas. Desativado por padrão; não funciona na área autenticada.
             </p>
           </div>
         </div>

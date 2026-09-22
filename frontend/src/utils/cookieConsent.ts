@@ -71,7 +71,7 @@ export function saveCookieConsent(choices: { analytics: boolean; marketing?: boo
   const consent: CookieConsentState = {
     necessary: true,
     analytics: Boolean(choices.analytics),
-    marketing: false, // Inativo no Zemda
+    marketing: choices.marketing === true,
     timestamp: new Date().toISOString(),
     version: COOKIE_CONSENT_VERSION
   };
@@ -90,10 +90,10 @@ export function saveCookieConsent(choices: { analytics: boolean; marketing?: boo
 }
 
 /**
- * Aceitar todos os cookies aplicáveis (Necessários + Analytics).
+ * Aceitar todos os cookies aplicáveis (Necessários + Analytics + Marketing).
  */
 export function acceptAllCookies(): CookieConsentState {
-  return saveCookieConsent({ analytics: true, marketing: false });
+  return saveCookieConsent({ analytics: true, marketing: true });
 }
 
 /**

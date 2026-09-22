@@ -1,3 +1,5 @@
+import { useLayoutEffect } from 'react';
+import { updateMetaPixelContext } from './utils/metaPixel';
 import { BillingView, BillingBanner, useBillingSummary } from './components/billing/BillingView';
 import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -193,6 +195,13 @@ const AppContent: React.FC = () => {
     return match ? match[1] : null;
   };
   const [activeVerificationToken, setActiveVerificationToken] = useState<string | null>(getInitialVerificationToken);
+
+  useLayoutEffect(() => {
+    const publicScreen = !loading && !currentUser && publicView === 'landing'
+      && currentView !== 'public_preview' && !activeProfSlug && !activeInvite
+      && !activeTrialToken && !activeVerificationToken;
+    updateMetaPixelContext(publicScreen ? window.location.pathname : null);
+  });
 
   const navigateToSeoPage = (slug: string) => {
     if (SEO_PAGES[slug]) {

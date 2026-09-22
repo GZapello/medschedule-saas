@@ -270,7 +270,7 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
                 </button>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Você pode ativar ou desativar os cookies analíticos do Google Analytics a qualquer momento sem qualquer restrição de acesso às funcionalidades do sistema.
+                Você pode ativar ou desativar os cookies analíticos do Google Analytics e, separadamente, os cookies de marketing do Meta Pixel a qualquer momento sem restrição de acesso às funcionalidades do sistema. Com consentimento de marketing, a Meta recebe visitas às páginas públicas institucionais, URL pública, endereço IP e identificadores do navegador para mensuração de anúncios e remarketing. O Pixel não é utilizado na área autenticada, em agendamentos, convites ou formulários de cadastro e não recebe dados de pacientes ou informações clínicas.
               </p>
             </section>
 
