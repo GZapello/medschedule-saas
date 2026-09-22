@@ -1,3 +1,4 @@
+import { renderSeoHead, renderEditorialContent } from './seoPresentation';
 import { LANDING_HERO, LANDING_MODULES, LANDING_PLANS, LANDING_STEPS, LANDING_LAYERS, LANDING_FAQS, moduleHref } from './landingContent';
 // Motor de Pré-renderização e SEO para Googlebot e Web Crawlers da Plataforma Zemda
 import {
@@ -47,7 +48,7 @@ function setTitleTag(html: string, title: string): string {
 }
 
 export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): string {
-  let html = baseIndexHtml;
+  let html = baseIndexHtml.replace(/<script\s+[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, '');
   const normPath = normalizePath(reqPath);
 
   // 1. Injeta Google Site Verification se a variável estiver definida
@@ -109,19 +110,7 @@ export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): s
     return html;
   }
 
-  // Metatags de cabeçalho específicas para essa página
-  html = setTitleTag(html, seoData.title);
-  html = setMetaTag(html, 'name', 'description', seoData.metaDescription);
-  if (seoData.keywords) {
-    html = setMetaTag(html, 'name', 'keywords', seoData.keywords);
-  }
-  html = setMetaTag(html, 'name', 'robots', 'index, follow');
-  html = setCanonicalTag(html, seoData.canonical);
-  html = setMetaTag(html, 'property', 'og:title', seoData.title);
-  html = setMetaTag(html, 'property', 'og:description', seoData.metaDescription);
-  html = setMetaTag(html, 'property', 'og:url', seoData.canonical);
-  html = setMetaTag(html, 'name', 'twitter:title', seoData.title);
-  html = setMetaTag(html, 'name', 'twitter:description', seoData.metaDescription);
+  html = renderSeoHead(html, seoData);
 
   // Monta links de navegação para o ecossistema de saúde
   const allNichesLinks = Object.values(PUBLIC_NICHE_PAGES)
@@ -150,55 +139,8 @@ export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): s
         <section id="faq"><h2>Perguntas frequentes</h2>${LANDING_FAQS.map(faq => `<h3>${faq.question}</h3><p>${faq.answer}</p>`).join('')}</section>
         <section><h2>Sua clínica não precisa de vários sistemas.</h2><p>Precisa de um sistema que entenda como você trabalha.</p><a href="/login">Começar agora</a> <a href="/login">Entrar no Zemda</a></section>
       </article>`;
-  } else if (seoData.features && seoData.features.length > 0) {
-    // Páginas de nicho ricas
-    const featuresHtml = (seoData.features || [])
-      .map(f => `<div><h3>${f.title}</h3><p>${f.description}</p></div>`)
-      .join('\n');
-
-    const benefitsHtml = (seoData.benefits || [])
-      .map(b => `<li>${b}</li>`)
-      .join('\n');
-
-    const faqsHtml = (seoData.faqs || [])
-      .map(faq => `<div><h3>${faq.question}</h3><p>${faq.answer}</p></div>`)
-      .join('\n');
-
-    bodyContent = `
-    <article>
-      <header>
-        ${seoData.badge ? `<span>${seoData.badge}</span>` : ''}
-        <h1>${seoData.h1 || seoData.title}</h1>
-        ${seoData.h2 ? `<h2>${seoData.h2}</h2>` : ''}
-        <p>${seoData.summary || seoData.metaDescription}</p>
-        <p><a href="/planos">Conheça os Planos e Valores do Zemda</a></p>
-      </header>
-      <section>
-        <h2>Principais Recursos do Sistema</h2>
-        ${featuresHtml}
-      </section>
-      <section>
-        <h2>Benefícios para Profissionais e Clínicas</h2>
-        <ul>${benefitsHtml}</ul>
-      </section>
-      <section>
-        <h2>Perguntas Frequentes (FAQ)</h2>
-        ${faqsHtml}
-      </section>
-    </article>
-    `;
   } else {
-    // Páginas institucionais (Home, Planos, Termos, Privacidade)
-    bodyContent = `
-    <article>
-      <header>
-        ${seoData.badge ? `<span>${seoData.badge}</span>` : ''}
-        <h1>${seoData.h1 || seoData.title}</h1>
-        ${seoData.h2 ? `<h2>${seoData.h2}</h2>` : ''}
-        <p>${seoData.summary || seoData.metaDescription}</p>
-      </header>
-    </article>
-    `;
+    bodyContent = renderEditorialContent(seoData);
   }
 
   const semanticContent = `
@@ -211,7 +153,7 @@ export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): s
       </ul>
     </nav>
   </header>
-  <main>
+  <main class="${normPath === '/' ? '' : 'seo-editorial'}">
     ${bodyContent}
   </main>
   <footer>

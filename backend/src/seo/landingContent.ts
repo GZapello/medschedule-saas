@@ -1,17 +1,18 @@
 /** Conteúdo público compartilhado entre a landing e sua pré-renderização. */
+export const LANDING_HERO_TITLE_LINES = ['Gestão e atendimento em saúde.', 'Do profissional solo à clínica.'];
 export const LANDING_HERO = {
-  title: 'Gestão e atendimento em saúde: do profissional solo à clínica multiprofissional.',
-  description: 'Agenda, prontuário, documentos, financeiro, equipe e módulos clínicos especializados conectados em uma única plataforma.'
+  title: LANDING_HERO_TITLE_LINES.join(' '),
+  description: 'O sistema completo para quem atende individualmente ou em equipe: agenda inteligente, prontuário eletrônico, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.'
 };
 
 export const LANDING_MODULES = [
   { id: 'fono', name: 'ZemdaFono', profession: 'Fonoaudiologia', slug: 'sistema-para-fonoaudiologos', features: ['Fonologia e painel fonêmico', 'Linguagem, voz e gravações', 'Audiologia, disfagia e IDDSI', 'CAA, metas e histórico clínico'] },
   { id: 'psico', name: 'ZemdaPsico', profession: 'Psicologia', slug: 'sistema-para-psicologos', features: ['Sessões, evolução e autosave', 'Estado mental e avaliação de risco', 'Triagens, escalas e metas', 'Documentos psicológicos e histórico'] },
-  { id: 'odonto', name: 'ZemdaOdonto', profession: 'Odontologia', slug: null, features: ['Odontograma e periodontograma', 'Endodontia e prótese', 'Harmonização orofacial (HOF)', 'Planos de tratamento e prontuário'] },
+  { id: 'odonto', name: 'ZemdaOdonto', profession: 'Odontologia', slug: 'sistema-para-dentistas', features: ['Odontograma e periodontograma', 'Endodontia e prótese', 'Harmonização orofacial (HOF)', 'Planos de tratamento e prontuário'] },
   { id: 'nutri', name: 'ZemdaNutri', profession: 'Nutrição', slug: 'sistema-para-nutricionistas', features: ['Anamnese e antropometria', 'Bioimpedância e recordatório 24h', 'Plano alimentar', 'Evolução longitudinal'] },
   { id: 'fisio', name: 'ZemdaFisio', profession: 'Fisioterapia', slug: 'sistema-para-fisioterapeutas', features: ['Avaliação funcional', 'Evolução e mapa corporal', 'Plano terapêutico', 'Histórico longitudinal'] },
-  { id: 'to', name: 'ZemdaTO', profession: 'Terapia Ocupacional', slug: null, features: ['Perfil ocupacional e AVDs', 'Perfil sensorial e análise de tarefa', 'Tecnologia assistiva', 'Planos terapêuticos'] },
-  { id: 'personal', name: 'ZemdaPersonal', profession: 'Educação Física', slug: null, features: ['Avaliação física, composição e TAV', 'Prescrição de treinos', 'Histórico e evolução', 'Fotos comparativas'] },
+  { id: 'to', name: 'ZemdaTO', profession: 'Terapia Ocupacional', slug: 'sistema-para-terapeutas-ocupacionais', features: ['Perfil ocupacional e AVDs', 'Perfil sensorial e análise de tarefa', 'Tecnologia assistiva', 'Planos terapêuticos'] },
+  { id: 'personal', name: 'ZemdaPersonal', profession: 'Educação Física', slug: 'sistema-para-personal-trainers', features: ['Avaliação física, composição e TAV', 'Prescrição de treinos', 'Histórico e evolução', 'Fotos comparativas'] },
   { id: 'pp', name: 'ZemdaPP', profession: 'Psicopedagogia', slug: 'sistema-para-psicopedagogos', features: ['Perfil, anamnese e evolução', 'Avaliação psicopedagógica', 'Análise de aprendizagem e PIP', 'Histórico de acompanhamento'] }
 ];
 export const moduleHref = (module: typeof LANDING_MODULES[number]) => module.slug ? `/${module.slug}` : `/#produto`;

@@ -1,3 +1,4 @@
+import { registerPublicSite } from './seo/publicSite';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -105,15 +106,6 @@ app.all(['/api', '/api/*', '/v1', '/v1/*'], (req, res) => {
   });
 });
 
-import { renderPreRenderedHtml } from './seo/preRender';
-import {
-  generateSitemapXml,
-  generateRobotsTxt,
-  isPublicRoute,
-  isValidInternalRoute,
-  isValidApplicationRoute,
-  normalizePath
-} from './seo/seoRoutes';
 
 // Servir downloads de executáveis oficiais (Windows e Android)
 const downloadsDir = path.resolve(__dirname, '../public/downloads');
@@ -122,29 +114,6 @@ if (fs.existsSync(downloadsDir)) {
   app.use('/downloads', express.static(downloadsDir));
 }
 
-// Rota pública para robots.txt com cabeçalho text/plain
-app.get('/robots.txt', (req, res) => {
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.send(generateRobotsTxt());
-});
-
-// Rota pública para sitemap.xml com cabeçalho rigoroso application/xml
-const handleSitemap = (req: express.Request, res: express.Response) => {
-  res.status(200);
-  res.type('application/xml');
-  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
-  res.send(generateSitemapXml());
-};
-
-app.get('/sitemap.xml', handleSitemap);
-app.get('/sitemap', handleSitemap);
-app.get('/sitemap_index.xml', handleSitemap);
-
-
-// Servir arquivos estáticos do frontend em produção (Single Page Application unificada)
 const possibleFrontendDistPaths = [
   process.env.FRONTEND_DIST_PATH,
   path.resolve(__dirname, '../../frontend/dist'),
@@ -154,65 +123,7 @@ const possibleFrontendDistPaths = [
   path.resolve(process.cwd(), 'public')
 ].filter((p): p is string => Boolean(p && fs.existsSync(p)));
 
-if (possibleFrontendDistPaths.length > 0) {
-  const frontendDist = possibleFrontendDistPaths[0];
-  console.log(`[Frontend SPA] Servindo aplicação estática a partir de: ${frontendDist}`);
-  app.use(express.static(frontendDist, { index: false }));
-
-  // Qualquer rota da interface web que não seja API ou health check retorna o index.html com SSR / pré-renderização de SEO
-  app.get('*', (req, res, next) => {
-    if (
-      req.path.startsWith('/api') ||
-      req.path.startsWith('/v1') ||
-      req.path.startsWith('/health')
-    ) {
-      return res.status(404).json({
-        error: `Endpoint ${req.method} ${req.path} não encontrado na API Zemda.`,
-        code: 'ROUTE_NOT_FOUND'
-      });
-    }
-
-    // Padronização estrita de trailing slash para SEO: subpáginas não devem ter barra no final
-    if (req.path.length > 1 && req.path.endsWith('/')) {
-      const cleanPath = req.path.replace(/\/+$/, '');
-      const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-      return res.redirect(301, cleanPath + query);
-    }
-
-    const indexPath = path.join(frontendDist, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      try {
-        const rawHtml = fs.readFileSync(indexPath, 'utf-8');
-        const normPath = normalizePath(req.path);
-        const isPublic = isPublicRoute(normPath);
-        const isInternal = isValidInternalRoute(normPath);
-        const isLegit = isPublic || isInternal;
-
-        if (isInternal && !isPublic) {
-          // Páginas privadas / autenticadas recebem cabeçalho noindex estrito
-          res.setHeader('X-Robots-Tag', 'noindex, nofollow');
-        }
-
-        if (!isLegit) {
-          // URLs verdadeiramente inexistentes retornam status HTTP 404 real
-          res.setHeader('X-Robots-Tag', 'noindex, nofollow');
-          res.status(404);
-          const renderedHtml = renderPreRenderedHtml(rawHtml, req.path);
-          res.setHeader('Content-Type', 'text/html; charset=utf-8');
-          return res.send(renderedHtml);
-        }
-
-        const renderedHtml = renderPreRenderedHtml(rawHtml, req.path);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.status(200).send(renderedHtml);
-      } catch (e) {
-        res.sendFile(indexPath);
-      }
-    } else {
-      next();
-    }
-  });
-}
+registerPublicSite(app, possibleFrontendDistPaths[0]);
 
 // Middleware de tratamento centralizado de erros
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

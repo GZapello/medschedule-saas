@@ -63,7 +63,7 @@ export const CookieBanner: React.FC = () => {
               <span>Sua Privacidade e Gestão de Cookies — LGPD</span>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              O Zemda utiliza cookies necessários para autenticação, segurança e funcionamento regular da plataforma. Com o seu consentimento, utilizamos cookies de análise (Google Analytics de métricas anônimas de uso). <strong>Nunca coletamos ou enviamos ao Analytics dados clínicos, prontuários ou informações pessoais sensíveis.</strong> Com autorização de marketing, o Meta Pixel registra visitas públicas e identificadores do navegador para mensuração de anúncios e remarketing, sem dados clínicos. Você pode personalizar suas escolhas ou alterá-las a qualquer momento.
+              O Zemda utiliza cookies necessários para autenticação, segurança e funcionamento regular da plataforma. Com o seu consentimento, utilizamos cookies de análise (Google Analytics de métricas de uso). <strong>Nunca coletamos ou enviamos ao Analytics dados clínicos, prontuários ou informações pessoais sensíveis.</strong> Com autorização de marketing, o Meta Pixel registra visitas públicas e identificadores do navegador para mensuração de anúncios e remarketing, sem dados clínicos. Você pode personalizar suas escolhas ou alterá-las a qualquer momento.
             </p>
             <div className="flex items-center gap-3 text-[11px] text-teal-700 pt-0.5 font-medium">
               <a

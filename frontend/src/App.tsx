@@ -1,69 +1,71 @@
+import { updatePublicSeo, clearPublicSeo } from './utils/publicSeo';
+import { getRouteByPath } from './data/seoPagesData';
 import { useLayoutEffect } from 'react';
 import { updateMetaPixelContext } from './utils/metaPixel';
 import { BillingView, BillingBanner, useBillingSummary } from './components/billing/BillingView';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
-import { Navbar } from './components/common/Navbar';
-import { Sidebar } from './components/common/Sidebar';
-import { AuthPage } from './components/auth/AuthPage';
-import { DashboardView } from './components/dashboard/DashboardView';
-import { CalendarView } from './components/calendar/CalendarView';
-import { PatientsView } from './components/patients/PatientsView';
-import { ClinicalRecordsView } from './components/clinical/ClinicalRecordsView';
-import { ZemdaBodyRecordsView } from './components/zemda-body/ZemdaBodyRecordsView';
-import { ZemdaPersonalView } from './components/personal/ZemdaPersonalView';
-import { PhysiotherapyWorkspace } from './components/physiotherapy/PhysiotherapyWorkspace';
-import { DentistryWorkspace } from './components/dentistry/DentistryWorkspace';
-import { NutritionWorkspace } from './components/nutrition/NutritionWorkspace';
-import { OccupationalTherapyWorkspace } from './components/occupational-therapy/OccupationalTherapyWorkspace';
-import { SpeechTherapyWorkspace } from './components/speech-therapy/SpeechTherapyWorkspace';
-import { PsychologyWorkspace } from './components/psychology/PsychologyWorkspace';
-import { PsychopedagogyWorkspace } from './components/psychopedagogy/PsychopedagogyWorkspace';
-import { VerifyDocumentView } from './components/public/VerifyDocumentView';
-import { ProfessionalsView } from './components/professionals/ProfessionalsView';
-import { ServicesView } from './components/services/ServicesView';
-import { FinancialView } from './components/financial/FinancialView';
-import { ReceiptsView } from './components/receipts/ReceiptsView';
-import { StaffManagementView } from './components/staff/StaffManagementView';
-import { TaxonomyView } from './components/taxonomy/TaxonomyView';
-import { ReportsView } from './components/reports/ReportsView';
-import { ImportDataView } from './components/import/ImportDataView';
-import { AuditView } from './components/audit/AuditView';
-import { SettingsView } from './components/settings/SettingsView';
-import { SuperAdminView } from './components/superadmin/SuperAdminView';
-import { PublicBookingView } from './components/public-booking/PublicBookingView';
-import { PublicProfessionalBookingView } from './components/public-booking/PublicProfessionalBookingView';
-import { InviteRegisterView } from './components/auth/InviteRegisterView';
-import { FreeTrialActivationView } from './components/auth/FreeTrialActivationView';
-import { WorkSchedulesView } from './components/schedules/WorkSchedulesView';
-import { SupportTicketsView } from './components/support/SupportTicketsView';
-import { PendingExamsView } from './components/exams/PendingExamsView';
-import { InventoryView } from './components/inventory/InventoryView';
-import { BudgetsView } from './components/budgets/BudgetsView';
-import { ProfessionalPayrollView } from './components/payroll/ProfessionalPayrollView';
+const Navbar = lazy(() => import('./components/common/Navbar').then(module => ({ default: module.Navbar })));
+const Sidebar = lazy(() => import('./components/common/Sidebar').then(module => ({ default: module.Sidebar })));
+const AuthPage = lazy(() => import('./components/auth/AuthPage').then(module => ({ default: module.AuthPage })));
+const DashboardView = lazy(() => import('./components/dashboard/DashboardView').then(module => ({ default: module.DashboardView })));
+const CalendarView = lazy(() => import('./components/calendar/CalendarView').then(module => ({ default: module.CalendarView })));
+const PatientsView = lazy(() => import('./components/patients/PatientsView').then(module => ({ default: module.PatientsView })));
+const ClinicalRecordsView = lazy(() => import('./components/clinical/ClinicalRecordsView').then(module => ({ default: module.ClinicalRecordsView })));
+const ZemdaBodyRecordsView = lazy(() => import('./components/zemda-body/ZemdaBodyRecordsView').then(module => ({ default: module.ZemdaBodyRecordsView })));
+const ZemdaPersonalView = lazy(() => import('./components/personal/ZemdaPersonalView').then(module => ({ default: module.ZemdaPersonalView })));
+const PhysiotherapyWorkspace = lazy(() => import('./components/physiotherapy/PhysiotherapyWorkspace').then(module => ({ default: module.PhysiotherapyWorkspace })));
+const DentistryWorkspace = lazy(() => import('./components/dentistry/DentistryWorkspace').then(module => ({ default: module.DentistryWorkspace })));
+const NutritionWorkspace = lazy(() => import('./components/nutrition/NutritionWorkspace').then(module => ({ default: module.NutritionWorkspace })));
+const OccupationalTherapyWorkspace = lazy(() => import('./components/occupational-therapy/OccupationalTherapyWorkspace').then(module => ({ default: module.OccupationalTherapyWorkspace })));
+const SpeechTherapyWorkspace = lazy(() => import('./components/speech-therapy/SpeechTherapyWorkspace').then(module => ({ default: module.SpeechTherapyWorkspace })));
+const PsychologyWorkspace = lazy(() => import('./components/psychology/PsychologyWorkspace').then(module => ({ default: module.PsychologyWorkspace })));
+const PsychopedagogyWorkspace = lazy(() => import('./components/psychopedagogy/PsychopedagogyWorkspace').then(module => ({ default: module.PsychopedagogyWorkspace })));
+const VerifyDocumentView = lazy(() => import('./components/public/VerifyDocumentView').then(module => ({ default: module.VerifyDocumentView })));
+const ProfessionalsView = lazy(() => import('./components/professionals/ProfessionalsView').then(module => ({ default: module.ProfessionalsView })));
+const ServicesView = lazy(() => import('./components/services/ServicesView').then(module => ({ default: module.ServicesView })));
+const FinancialView = lazy(() => import('./components/financial/FinancialView').then(module => ({ default: module.FinancialView })));
+const ReceiptsView = lazy(() => import('./components/receipts/ReceiptsView').then(module => ({ default: module.ReceiptsView })));
+const StaffManagementView = lazy(() => import('./components/staff/StaffManagementView').then(module => ({ default: module.StaffManagementView })));
+const TaxonomyView = lazy(() => import('./components/taxonomy/TaxonomyView').then(module => ({ default: module.TaxonomyView })));
+const ReportsView = lazy(() => import('./components/reports/ReportsView').then(module => ({ default: module.ReportsView })));
+const ImportDataView = lazy(() => import('./components/import/ImportDataView').then(module => ({ default: module.ImportDataView })));
+const AuditView = lazy(() => import('./components/audit/AuditView').then(module => ({ default: module.AuditView })));
+const SettingsView = lazy(() => import('./components/settings/SettingsView').then(module => ({ default: module.SettingsView })));
+const SuperAdminView = lazy(() => import('./components/superadmin/SuperAdminView').then(module => ({ default: module.SuperAdminView })));
+const PublicBookingView = lazy(() => import('./components/public-booking/PublicBookingView').then(module => ({ default: module.PublicBookingView })));
+const PublicProfessionalBookingView = lazy(() => import('./components/public-booking/PublicProfessionalBookingView').then(module => ({ default: module.PublicProfessionalBookingView })));
+const InviteRegisterView = lazy(() => import('./components/auth/InviteRegisterView').then(module => ({ default: module.InviteRegisterView })));
+const FreeTrialActivationView = lazy(() => import('./components/auth/FreeTrialActivationView').then(module => ({ default: module.FreeTrialActivationView })));
+const WorkSchedulesView = lazy(() => import('./components/schedules/WorkSchedulesView').then(module => ({ default: module.WorkSchedulesView })));
+const SupportTicketsView = lazy(() => import('./components/support/SupportTicketsView').then(module => ({ default: module.SupportTicketsView })));
+const PendingExamsView = lazy(() => import('./components/exams/PendingExamsView').then(module => ({ default: module.PendingExamsView })));
+const InventoryView = lazy(() => import('./components/inventory/InventoryView').then(module => ({ default: module.InventoryView })));
+const BudgetsView = lazy(() => import('./components/budgets/BudgetsView').then(module => ({ default: module.BudgetsView })));
+const ProfessionalPayrollView = lazy(() => import('./components/payroll/ProfessionalPayrollView').then(module => ({ default: module.ProfessionalPayrollView })));
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
 import { PublicHeader } from './components/public/PublicHeader';
 import { PublicFooter } from './components/public/PublicFooter';
 import { SEO_PAGES, isValidApplicationRoute, buildCanonical } from './data/seoPagesData';
-import { NewAppointmentModal } from './components/calendar/NewAppointmentModal';
-import { NewPatientModal } from './components/patients/NewPatientModal';
-import { AICopilotDrawer } from './components/ai-copilot/AICopilotDrawer';
-import { QuickAIAssistantShortcut } from './components/ai-copilot/QuickAIAssistantShortcut';
+const NewAppointmentModal = lazy(() => import('./components/calendar/NewAppointmentModal').then(module => ({ default: module.NewAppointmentModal })));
+const NewPatientModal = lazy(() => import('./components/patients/NewPatientModal').then(module => ({ default: module.NewPatientModal })));
+const AICopilotDrawer = lazy(() => import('./components/ai-copilot/AICopilotDrawer').then(module => ({ default: module.AICopilotDrawer })));
+const QuickAIAssistantShortcut = lazy(() => import('./components/ai-copilot/QuickAIAssistantShortcut').then(module => ({ default: module.QuickAIAssistantShortcut })));
 import { NetworkOfflineModal } from './components/common/NetworkOfflineModal';
 import { UpdateNotificationModal } from './components/common/UpdateNotificationModal';
 import { TermsOfUseView } from './components/public/TermsOfUseView';
 import { PrivacyPolicyView } from './components/public/PrivacyPolicyView';
 import { CookieBanner } from './components/common/CookieBanner';
 import { CookiePreferencesModal } from './components/common/CookiePreferencesModal';
-import { LegalReacceptanceModal } from './components/common/LegalReacceptanceModal';
+const LegalReacceptanceModal = lazy(() => import('./components/common/LegalReacceptanceModal').then(module => ({ default: module.LegalReacceptanceModal })));
 import { OnboardingProvider } from './components/onboarding/OnboardingContext';
-import { OnboardingSpotlight } from './components/onboarding/OnboardingSpotlight';
-import { OnboardingWelcomeModal } from './components/onboarding/OnboardingWelcomeModal';
-import { OnboardingHelpModal } from './components/onboarding/OnboardingHelpModal';
-import { WhatsNewModal } from './components/onboarding/WhatsNewModal';
-import { KeyboardShortcutsModal } from './components/onboarding/KeyboardShortcutsModal';
+const OnboardingSpotlight = lazy(() => import('./components/onboarding/OnboardingSpotlight').then(module => ({ default: module.OnboardingSpotlight })));
+const OnboardingWelcomeModal = lazy(() => import('./components/onboarding/OnboardingWelcomeModal').then(module => ({ default: module.OnboardingWelcomeModal })));
+const OnboardingHelpModal = lazy(() => import('./components/onboarding/OnboardingHelpModal').then(module => ({ default: module.OnboardingHelpModal })));
+const WhatsNewModal = lazy(() => import('./components/onboarding/WhatsNewModal').then(module => ({ default: module.WhatsNewModal })));
+const KeyboardShortcutsModal = lazy(() => import('./components/onboarding/KeyboardShortcutsModal').then(module => ({ default: module.KeyboardShortcutsModal })));
 import { trackPageView } from './utils/analytics';
 import { Sparkles, AlertCircle } from 'lucide-react';
 
@@ -296,39 +298,17 @@ const AppContent: React.FC = () => {
 
   // Sincronização dinâmica de Metadados de SEO, Canonical e Google Analytics 4 na SPA
   useEffect(() => {
-    if (activeLegalPage === 'terms') {
-      updateDocumentSeo({
-        title: 'Termos de Uso | Zemda',
-        description: 'Termos e condições gerais de uso da plataforma Zemda de gestão para saúde.',
-        canonical: 'https://zemda.com.br/termos-de-uso',
-        robots: 'index, follow'
-      });
-      trackPageView('/termos-de-uso', 'Zemda • Termos de Uso');
+    if (loading) return;
+    const path = window.location.pathname;
+    const route = getRouteByPath(path);
+    const sensitiveScreen = activeProfSlug || activeInvite || activeTrialToken || activeVerificationToken || currentView === 'public_preview';
+    const publicScreen = !currentUser && !sensitiveScreen && (publicView === 'landing' || activeSeoSlug || activeLegalPage || path === '/planos');
+    if (publicScreen && route) {
+      updatePublicSeo(route);
+      trackPageView(route.path, route.title);
       return;
     }
-    if (activeLegalPage === 'privacy') {
-      updateDocumentSeo({
-        title: 'Política de Privacidade e Proteção de Dados (LGPD) | Zemda',
-        description: 'Conheça nossa política de privacidade, tratamento e proteção de dados em conformidade rigorosa com a LGPD.',
-        canonical: 'https://zemda.com.br/privacidade',
-        robots: 'index, follow'
-      });
-      trackPageView('/privacidade', 'Zemda • Política de Privacidade e LGPD');
-      return;
-    }
-
-    if (window.location.pathname === '/planos') {
-      updateDocumentSeo({
-        title: 'Planos e Preços Transparentes | Zemda',
-        description: 'Conheça os planos do Zemda para consultórios, profissionais autônomos e clínicas multiprofissionais. Sem fidelidade, sem taxas ocultas e com suporte especializado.',
-        canonical: 'https://zemda.com.br/planos',
-        robots: 'index, follow'
-      });
-      trackPageView('/planos', 'Zemda • Planos e Preços');
-      return;
-    }
-
-    if (currentUser) {
+    clearPublicSeo();
       const viewTitles: Record<string, string> = {
         dashboard: 'Painel Operacional',
         calendar: 'Agenda de Atendimentos',
@@ -357,57 +337,10 @@ const AppContent: React.FC = () => {
         billing: 'Assinatura e Planos',
         onboarding: 'Configuração Inicial'
       };
-      const title = viewTitles[currentView] ? `Zemda • ${viewTitles[currentView]}` : `Zemda • ${currentView}`;
-      updateDocumentSeo({
-        title,
-        robots: 'noindex, nofollow'
-      });
-      trackPageView(`/${currentView}`, title);
-    } else {
-      if (activeSeoSlug && SEO_PAGES[activeSeoSlug]) {
-        const page = SEO_PAGES[activeSeoSlug];
-        updateDocumentSeo({
-          title: page.title,
-          description: page.metaDescription,
-          canonical: `https://zemda.com.br${page.path}`,
-          robots: 'index, follow'
-        });
-        trackPageView(`/${activeSeoSlug}`, `Zemda • ${page.title}`);
-      } else if (activeProfSlug) {
-        updateDocumentSeo({
-          title: 'Zemda • Agendamento Online',
-          robots: 'noindex, nofollow'
-        });
-        trackPageView('/agendar', 'Zemda • Agendamento Online');
-      } else if (activeInvite) {
-        updateDocumentSeo({
-          title: 'Zemda • Convite',
-          robots: 'noindex, nofollow'
-        });
-        trackPageView('/convite', 'Zemda • Convite');
-      } else if (publicView === 'login') {
-        updateDocumentSeo({
-          title: 'Zemda • Acesso Seguro',
-          robots: 'noindex, nofollow'
-        });
-        trackPageView('/login', 'Zemda • Login e Acesso');
-      } else if (!isValidApplicationRoute(window.location.pathname)) {
-        updateDocumentSeo({
-          title: 'Página não encontrada (404) | Zemda',
-          robots: 'noindex, nofollow'
-        });
-        trackPageView(window.location.pathname, 'Zemda • Página não encontrada (404)');
-      } else {
-        updateDocumentSeo({
-          title: 'Zemda • Sistema de Gestão para Clínicas, Consultórios e Saúde',
-          description: 'Software completo para clínicas, consultórios médicos e terapêuticos. Agenda online inteligente, prontuário eletrônico seguro, gestão financeira, controle de caixa, emissão de recibos e aplicativo integrado para médicos, psicólogos, fonoaudiólogos e fisioterapeutas.',
-          canonical: 'https://zemda.com.br/',
-          robots: 'index, follow'
-        });
-        trackPageView('/', 'Zemda • Sistema de Gestão em Saúde');
-      }
-    }
-  }, [currentUser, currentView, publicView, activeSeoSlug, activeProfSlug, activeInvite, activeLegalPage]);
+    const title = currentUser ? (viewTitles[currentView] ? `Zemda • ${viewTitles[currentView]}` : `Zemda • ${currentView}`) : !isValidApplicationRoute(path) ? 'Página não encontrada (404) | Zemda' : 'Zemda • Acesso Seguro';
+    updateDocumentSeo({title, description:'Acesso à plataforma Zemda.', robots:'noindex, nofollow'});
+    trackPageView(currentUser ? `/${currentView}` : '/login', title);
+  }, [loading, currentUser, currentView, publicView, activeSeoSlug, activeProfSlug, activeInvite, activeLegalPage, activeTrialToken, activeVerificationToken]);
 
   // Tratamento do botão Voltar nativo do Android
   useEffect(() => {
@@ -476,7 +409,13 @@ const AppContent: React.FC = () => {
       }
     };
 
+    const handleBrowserBack = () => {
+      // Public history must follow the URL selected by the browser, not push Home.
+      if (currentUser) handleBackButton();
+    };
+
     const handleSyncUrlState = () => {
+      if (!currentUser) setPublicView(window.location.pathname === '/login' || window.location.pathname === '/cadastro' ? 'login' : 'landing');
       const cleanPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
       if (cleanPath === 'termos-de-uso') {
         setActiveLegalPage('terms');
@@ -537,7 +476,7 @@ const AppContent: React.FC = () => {
     };
 
     window.addEventListener('android-back-button', handleBackButton);
-    window.addEventListener('popstate', handleBackButton);
+    window.addEventListener('popstate', handleBrowserBack);
     window.addEventListener('popstate', handleSyncUrlState);
     document.addEventListener('click', handleDocumentClick);
 
@@ -569,7 +508,7 @@ const AppContent: React.FC = () => {
 
     return () => {
       window.removeEventListener('android-back-button', handleBackButton);
-      window.removeEventListener('popstate', handleBackButton);
+      window.removeEventListener('popstate', handleBrowserBack);
       window.removeEventListener('popstate', handleSyncUrlState);
       document.removeEventListener('click', handleDocumentClick);
       if (cleanupCapacitorListener) {
@@ -724,6 +663,9 @@ const AppContent: React.FC = () => {
 
   const callback = window.location.pathname.match(/^\/assinatura\/(sucesso|cancelada|expirada)\/?$/)?.[1];
   if (callback || window.location.pathname === '/planos') {
+    if (!currentUser && window.location.pathname === '/planos') {
+      return <main><BillingView publicPage /></main>;
+    }
     return (
       <BillingView
         publicPage={window.location.pathname === '/planos' || !currentUser}
@@ -791,10 +733,14 @@ const AppContent: React.FC = () => {
           onNavigateHome={navigateToHome}
           onNavigatePage={navigateToSeoPage}
           onLogin={() => {
+            setActiveSeoSlug(null);
+            window.history.pushState(null, '', '/login');
             setAuthInitialAction('login');
             setPublicView('login');
           }}
           onRegisterClinic={() => {
+            setActiveSeoSlug(null);
+            window.history.pushState(null, '', '/login');
             setAuthInitialAction('create-clinic');
             setPublicView('login');
           }}
@@ -1101,22 +1047,23 @@ const AppContent: React.FC = () => {
   );
 };
 
+const PrivateOverlays: React.FC = () => {
+  const { currentUser } = useAuth();
+  if (!currentUser) return null;
+  return <Suspense fallback={null}><LegalReacceptanceModal /><OnboardingSpotlight /><OnboardingWelcomeModal /><OnboardingHelpModal /><WhatsNewModal /><KeyboardShortcutsModal /></Suspense>;
+};
+
 export const App: React.FC = () => {
   return (
     <AuthProvider>
       <ToastProvider>
         <OnboardingProvider>
-          <AppContent />
+          <Suspense fallback={<div role="status" className="min-h-screen flex items-center justify-center">Carregando Zemda...</div>}><AppContent /></Suspense>
+          <PrivateOverlays />
           <CookieBanner />
           <CookiePreferencesModal />
-          <LegalReacceptanceModal />
           <NetworkOfflineModal />
           <UpdateNotificationModal />
-          <OnboardingSpotlight />
-          <OnboardingWelcomeModal />
-          <OnboardingHelpModal />
-          <WhatsNewModal />
-          <KeyboardShortcutsModal />
         </OnboardingProvider>
       </ToastProvider>
     </AuthProvider>

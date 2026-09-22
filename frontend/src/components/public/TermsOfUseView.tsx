@@ -28,7 +28,6 @@ export const TermsOfUseView: React.FC<TermsOfUseViewProps> = ({
   onRegisterClinic
 }) => {
   useEffect(() => {
-    document.title = 'Termos de Uso • Zemda';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 

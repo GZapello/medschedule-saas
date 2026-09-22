@@ -176,10 +176,10 @@ export const CookiePreferencesModal: React.FC<CookiePreferencesModalProps> = ({
               </label>
             </div>
             <p className="text-slate-600 leading-relaxed">
-              Permitem analisar métricas anônimas de visitação, tempo de resposta e telas mais acessadas para aprimoramento da performance e estabilidade do sistema. Desativados por padrão até a sua autorização.
+              Permitem analisar métricas de visitação, tempo de resposta e telas mais acessadas para aprimoramento da performance e estabilidade do sistema. Desativados por padrão até a sua autorização.
             </p>
             <div className="p-3 bg-teal-50/70 border border-teal-100 rounded-xl text-[11px] text-teal-900 leading-relaxed font-medium">
-              🛡️ <strong>Garantia de Privacidade Médica e LGPD:</strong> Nunca transmitimos ao Analytics nome de pacientes, CPF, e-mail, telefone, diagnósticos, anotações de prontuário, medicamentos ou qualquer dado clínico sensível.
+              🛡️ <strong>Privacidade dos registros clínicos:</strong> Nunca transmitimos ao Analytics nome de pacientes, CPF, e-mail, telefone, diagnósticos, anotações de prontuário, medicamentos ou qualquer dado clínico sensível.
             </div>
           </div>
 

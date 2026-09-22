@@ -53,8 +53,9 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
         >
           <div className="relative flex items-center justify-center">
             <img
-              src="/brand/zemda-icon.png"
+              src="/brand/zemda-icon-96.webp"
               alt="Zemda"
+              width={36} height={36}
               className="w-9 h-9 object-contain rounded-xl drop-shadow-xs group-hover:scale-105 transition-transform"
             />
           </div>

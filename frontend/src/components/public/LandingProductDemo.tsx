@@ -94,7 +94,7 @@ export const LandingProductDemo: React.FC = () => {
   return (
     <div id="produto" className="zl-product">
       <div className="zl-product-bar">
-        <span><img src="/brand/zemda-icon.png" alt="" width="24" height="24" /> O ecossistema Zemda</span>
+        <span><img src="/brand/zemda-icon-96.webp" alt="" width="24" height="24" /> O ecossistema Zemda</span>
         <span className="zl-caption">Visão esquemática dos recursos</span>
       </div>
       <div className="zl-product-layout">

@@ -1,3 +1,4 @@
+import { LANDING_HERO, LANDING_HERO_TITLE_LINES } from '../../../../backend/src/seo/landingContent';
 import React, { useEffect } from 'react';
 import { Activity, Apple, ArrowDown, ArrowRight, Brain, CalendarDays, Check, CheckCheck, ChevronDown, CloudUpload, Crosshair, DollarSign, Dumbbell, FileText, Files, GraduationCap, Heart, Layers3, LockKeyhole, Mic, ShieldCheck, Smile, Sparkles, Users } from 'lucide-react';
 import { PublicHeader } from './PublicHeader';
@@ -55,9 +56,9 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
               <span className="zl-hero-note">Profissionais solo, consultórios, equipes e clínicas.</span>
             </div>
             <div className="zl-hero-grid">
-              <h1>Gestão e atendimento em saúde.<br /><span>Do profissional solo à clínica.</span></h1>
+              <h1>{LANDING_HERO_TITLE_LINES[0]}<br />{' '}<span>{LANDING_HERO_TITLE_LINES[1]}</span></h1>
               <div className="zl-hero-copy">
-                <p>O sistema completo para quem atende individualmente ou em equipe: agenda inteligente, prontuário eletrônico, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.</p>
+                <p>{LANDING_HERO.description}</p>
                 <div className="zl-actions">
                   <button className="zl-button" onClick={() => onRegisterClinic('SOLO', true)}>
                     Testar grátis por 7 dias <ArrowRight size={17} />

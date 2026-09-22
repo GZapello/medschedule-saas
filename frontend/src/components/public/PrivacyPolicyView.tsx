@@ -30,7 +30,6 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
   onRegisterClinic
 }) => {
   useEffect(() => {
-    document.title = 'Política de Privacidade e Proteção de Dados — LGPD • Zemda';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 

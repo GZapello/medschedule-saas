@@ -1,747 +1,982 @@
 import { LANDING_HERO } from './landingContent';
-// Fonte Única de Verdade para Rotas SEO, Metadados e Arquitetura Pública do Zemda
-
+import { BLOG_ARTICLES } from './blogContent';
 export const OFFICIAL_DOMAIN = 'https://zemda.com.br';
-
+export interface SeoSection { heading: string; paragraphs: string[]; links?: string[] }
 export interface SeoRoute {
-  path: string;
-  slug?: string;
-  title: string;
-  metaDescription: string;
-  keywords?: string;
-  canonical: string;
-  indexable: boolean;
-  inSitemap: boolean;
-  lastmod?: string;
-  badge?: string;
-  h1?: string;
-  h2?: string;
-  summary?: string;
-  features?: {
-    title: string;
-    description: string;
-    iconName?: string;
-  }[];
-  benefits?: string[];
-  faqs?: {
-    question: string;
-    answer: string;
-  }[];
-  ctaHeadline?: string;
-  ctaSubheadline?: string;
+ path: string; slug?: string; title: string; metaDescription: string; canonical: string;
+ indexable: boolean; inSitemap: boolean; lastmod?: string; keywords?: string;
+ badge?: string; h1?: string; h2?: string; summary?: string;
+ features?: {title: string; description: string; iconName?: string}[];
+ benefits?: string[]; faqs?: {question: string; answer: string}[];
+ sections?: SeoSection[]; relatedLinks?: string[];
+ ctaHeadline?: string; ctaSubheadline?: string;
+ article?: {author: string; published: string; modified: string};
 }
-
-// Compatibilidade de interface com componentes legados do frontend
-export interface SeoPageData {
-  slug: string;
-  path: string;
-  title: string;
-  metaDescription: string;
-  keywords: string;
-  badge: string;
-  h1: string;
-  h2: string;
-  summary: string;
-  features: {
-    title: string;
-    description: string;
-    iconName?: string;
-  }[];
-  benefits: string[];
-  faqs: {
-    question: string;
-    answer: string;
-  }[];
-  ctaHeadline: string;
-  ctaSubheadline: string;
+export interface SeoPageData extends SeoRoute {
+ slug: string; keywords: string; badge: string; h1: string; h2: string; summary: string;
+ features: NonNullable<SeoRoute['features']>; benefits: string[]; faqs: NonNullable<SeoRoute['faqs']>;
+ ctaHeadline: string; ctaSubheadline: string;
 }
-
-/**
- * Normaliza caminhos de URL:
- * - Remove query strings e hashes
- * - Remove trailing slash (exceto para a raiz '/')
- * - Converte para lowercase
- */
 export function normalizePath(rawPath: string): string {
-  if (!rawPath) return '/';
-  const clean = rawPath.split('?')[0].split('#')[0].trim();
-  if (clean === '' || clean === '/') return '/';
-  return clean.replace(/\/+$/, '').toLowerCase();
+ const clean = (rawPath || '/').split('?')[0].split('#')[0].trim();
+ return !clean || clean === '/' ? '/' : clean.replace(/\/+$/, '').toLowerCase();
 }
-
-/**
- * Constrói a URL canônica oficial estrita
- */
-export function buildCanonical(rawPath: string): string {
-  const norm = normalizePath(rawPath);
-  if (norm === '/') {
-    return `${OFFICIAL_DOMAIN}/`;
-  }
-  return `${OFFICIAL_DOMAIN}${norm}`;
-}
-
-export const SEO_ROUTES: SeoRoute[] = [
-  // 1. Home Principal
+export function buildCanonical(path: string): string { return OFFICIAL_DOMAIN + normalizePath(path); }
+type RouteInput = Omit<SeoRoute, 'canonical' | 'indexable' | 'inSitemap'>;
+const PROFESSIONAL_PAGES: RouteInput[] = [
   {
-    path: '/',
-    title: 'Zemda • Ecossistema de Saúde e Gestão Multiprofissional',
-    metaDescription: LANDING_HERO.description,
-    keywords: 'sistema para clinicas, software para clinica, prontuario eletronico, agenda medica, gestao para psicologos, fonoaudiologia, fisioterapia, recibos medicos, clinica medica, zemda',
-    canonical: `${OFFICIAL_DOMAIN}/`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Ecossistema de Saúde & Gestão',
-    h1: LANDING_HERO.title,
-    h2: 'Gestão unificada, ferramentas para cada profissão',
-    summary: LANDING_HERO.description
+    "slug": "sistema-para-clinicas",
+    "path": "/sistema-para-clinicas",
+    "title": "Sistema para Clínicas e Consultórios | Zemda",
+    "metaDescription": "Organize uma clínica multiprofissional com agenda, prontuário, financeiro e equipe no Zemda. Acesso por usuário e ferramentas específicas por profissão.",
+    "badge": "Gestão de clínicas",
+    "h1": "Integre recepção, atendimento e gestão da clínica",
+    "h2": "Coordenação entre recepção e profissionais",
+    "summary": "Uma clínica multiprofissional precisa coordenar horários, profissionais e registros sem confundir responsabilidades. O Zemda reúne a operação em uma base compartilhada, com ferramentas clínicas conforme a profissão e permissões do usuário.",
+    "features": [
+      {
+        "title": "Coordenação entre recepção e profissionais",
+        "description": "Mudanças de horário, faltas e atendimentos concluídos precisam ser compreendidos por quem acompanha a agenda. A equipe pode consultar os estados dos agendamentos e organizar serviços e profissionais em um mesmo ambiente."
+      },
+      {
+        "title": "Histórico clínico com autoria",
+        "description": "O prontuário organiza registros e documentos vinculados ao paciente e ao atendimento. A consulta ao histórico deve respeitar o perfil de acesso; compartilhar a gestão não significa liberar todos os registros a toda a equipe."
+      },
+      {
+        "title": "Gestão de receitas e despesas",
+        "description": "Acompanhe entradas, despesas, caixa e repasses. Compare registros financeiros com os atendimentos concluídos para localizar pendências antes do fechamento do período."
+      }
+    ],
+    "sections": [
+      {
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
+      },
+      {
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
+      }
+    ],
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira",
+      "/sistema-para-medicos",
+      "/sistema-para-psicologos",
+      "/sistema-para-fonoaudiologos",
+      "/sistema-para-fisioterapeutas",
+      "/sistema-para-nutricionistas",
+      "/sistema-para-psicopedagogos",
+      "/sistema-para-dentistas",
+      "/sistema-para-terapeutas-ocupacionais",
+      "/sistema-para-personal-trainers"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 2. Planos e Preços
   {
-    path: '/planos',
-    title: 'Planos e Preços Transparentes | Zemda',
-    metaDescription: 'Conheça os planos do Zemda para consultórios, profissionais autônomos e clínicas multiprofissionais. Sem fidelidade, sem taxas ocultas e com suporte especializado.',
-    keywords: 'planos zemda, precos software clinica, assinatura sistema medico, planos prontuario eletronico',
-    canonical: `${OFFICIAL_DOMAIN}/planos`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Planos e Preços',
-    h1: 'Planos Transparentes para o seu Consultório ou Clínica',
-    h2: 'Escolha o plano ideal para a sua prática em saúde sem surpresas ou taxas ocultas',
-    summary: 'Todos os planos incluem suporte técnico humanizado, prontuário seguro em nuvem, agenda online 24h e emissão de recibos oficiais.'
+    "slug": "sistema-para-medicos",
+    "path": "/sistema-para-medicos",
+    "title": "Sistema para Médicos e Consultórios | Zemda",
+    "metaDescription": "Organize o consultório médico com agenda, prontuário eletrônico, documentos e histórico de atendimentos. Conheça os recursos de gestão do Zemda.",
+    "badge": "Médicos",
+    "h1": "Prontuário e organização para a rotina médica",
+    "h2": "Consulta e continuidade do cuidado",
+    "summary": "Consultar o histórico, registrar a avaliação e emitir documentos são etapas conectadas da consulta médica. O Zemda organiza essas informações junto à agenda e ao cadastro do paciente, mantendo a decisão clínica sob responsabilidade do profissional.",
+    "features": [
+      {
+        "title": "Consulta e continuidade do cuidado",
+        "description": "Reúna a anamnese, os registros da consulta e os anexos no histórico do paciente. Diferencie o que foi relatado, observado e planejado para que a próxima consulta possa retomar o contexto."
+      },
+      {
+        "title": "Documentos vinculados ao atendimento",
+        "description": "Utilize os modelos disponíveis para receituários, atestados e pedidos de exames. Revise identificação, conteúdo e autoria antes de emitir o documento; um modelo não substitui a avaliação profissional."
+      },
+      {
+        "title": "Agenda do consultório",
+        "description": "Organize os horários por profissional e serviço, acompanhe cancelamentos e registre o atendimento. A gestão financeira complementa o acompanhamento administrativo das consultas."
+      }
+    ],
+    "sections": [
+      {
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
+      },
+      {
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
+      }
+    ],
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 3. Sistema para Clínicas
   {
-    slug: 'sistema-para-clinicas',
-    path: '/sistema-para-clinicas',
-    title: 'Sistema para Clínicas e Consultórios Médicos e Terapêuticos | Zemda',
-    metaDescription: 'Software completo para gestão de clínicas médicas, multiprofissionais e consultórios. Prontuário eletrônico seguro, agenda online 24h, gestão financeira e recibos oficiais.',
-    keywords: 'sistema para clinicas, software para clinica medica, gestao de clinica, prontuario eletronico para clinicas, agenda clinica',
-    canonical: `${OFFICIAL_DOMAIN}/sistema-para-clinicas`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Gestão Completa de Clínicas',
-    h1: 'Sistema Integrado de Gestão para Clínicas e Consultórios',
-    h2: 'Centralize Recepção, Corpo Clínico, Prontuários e Faturamento em um só Lugar',
-    summary: 'O Zemda foi projetado para elevar o padrão operacional da sua clínica. Conecte recepcionistas, gestores e especialistas em saúde através de uma interface intuitiva, segura e em conformidade rigorosa com a LGPD e conselhos de classe.',
-    features: [
+    "slug": "sistema-para-psicologos",
+    "path": "/sistema-para-psicologos",
+    "title": "Sistema para Psicólogos | ZemdaPsico",
+    "metaDescription": "Conheça o ZemdaPsico: sessões, evolução, triagens, metas e documentos psicológicos integrados à agenda e ao histórico de atendimento do Zemda.",
+    "badge": "ZemdaPsico",
+    "h1": "Organização das sessões com o ZemdaPsico",
+    "h2": "Sessões e evolução longitudinal",
+    "summary": "A continuidade do acompanhamento psicológico exige registros úteis, objetivos e organizados. O ZemdaPsico reúne sessões, evolução, metas e documentos em um ambiente conectado ao prontuário e à agenda.",
+    "features": [
       {
-        title: 'Prontuário Eletrônico Unificado e Multidisciplinar',
-        description: 'Mantenha todo o histórico clínico dos pacientes organizado por data e especialidade. Anexe laudos, imagens, prescrições e exames com segurança absoluta em nuvem.'
+        "title": "Sessões e evolução longitudinal",
+        "description": "Registre o acompanhamento e consulte o histórico entre sessões. O módulo dispõe de salvamento automático e recuperação de rascunhos nos fluxos disponíveis; confira o indicador de salvamento e finalize o registro ao concluir."
       },
       {
-        title: 'Agenda Online Inteligente com Confirmação Automática',
-        description: 'Permita que seus pacientes agendem consultas 24 horas por dia com link próprio da clínica. Reduza faltas em até 45% com lembretes automáticos.'
+        "title": "Triagens e avaliação estruturada",
+        "description": "Há áreas para estado mental, avaliação de risco, triagens e escalas. Os registros apoiam a organização da avaliação, sem substituir interpretação profissional ou autorizar o uso de instrumentos restritos."
       },
       {
-        title: 'Gestão Financeira, Controle de Caixa e Emissão de Recibos',
-        description: 'Fechamento de caixa por turno de atendimento, controle de repasses médicos, conciliação de pagamentos via PIX e cartão, e emissão de recibos oficiais em folha A4.'
-      },
-      {
-        title: 'Painel Multiprofissional e Acessos Customizados',
-        description: 'Defina permissões refinadas para recepcionistas, secretárias, administradores e profissionais de saúde, resguardando o sigilo de cada paciente.'
+        "title": "Metas e documentos psicológicos",
+        "description": "Organize metas do acompanhamento e documentos conforme os recursos do módulo. Revise o conteúdo e limite os dados compartilhados à finalidade de cada documento."
       }
     ],
-    benefits: [
-      'Redução comprovada do tempo de espera na recepção',
-      'Eliminação de erros de prontuário em papel e perdas de ficha',
-      'Total conformidade com resoluções CFM, CFP, Crefito e LGPD',
-      'Acesso sincronizado no navegador web e aplicativo Desktop Windows'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'O Zemda suporta clínicas com múltiplas especialidades?',
-        answer: 'Sim. O Zemda permite cadastrar médicos, psicólogos, fisioterapeutas, fonoaudiólogos e nutricionistas, cada um com seus parâmetros e horários dedicados.'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'Meus dados e fichas de pacientes estão protegidos?',
-        answer: 'Absolutamente. Todas as comunicações utilizam criptografia SSL/TLS ponta a ponta e backups diários automatizados em infraestrutura de nuvem segura.'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Transforme a gestão da sua clínica hoje mesmo',
-    ctaSubheadline: 'Conheça a plataforma Zemda e descubra como unificar recepção, corpo clínico e financeiro com máxima eficiência.'
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 4. Sistema para Médicos
   {
-    slug: 'sistema-para-medicos',
-    path: '/sistema-para-medicos',
-    title: 'Sistema para Médicos e Consultórios Médicos | Zemda',
-    metaDescription: 'Software médico intuitivo e seguro com prontuário eletrônico, prescrição digital, CID-10, atestados, pedidos de exames e agenda inteligente.',
-    keywords: 'sistema para medicos, software medico, prontuario eletronico medico, receita medica, atestado medico, gestao consultorio medico',
-    canonical: `${OFFICIAL_DOMAIN}/sistema-para-medicos`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Padrão CFM & Excelência Médica',
-    h1: 'Sistema para Médicos e Consultórios Médicos Particulares',
-    h2: 'Eficiência Clínica, Prescrições Ágeis e Conformidade com o CFM',
-    summary: 'Pensado para médicos que valorizam o tempo com o paciente. Emita receitas, atestados e pedidos de exame com formatação A4 impecável, pesquise códigos CID-10 rapidamente e mantenha a agenda do consultório sempre produtiva.',
-    features: [
+    "slug": "sistema-para-fonoaudiologos",
+    "path": "/sistema-para-fonoaudiologos",
+    "title": "Sistema para Fonoaudiólogos | ZemdaFono",
+    "metaDescription": "ZemdaFono reúne fonologia, linguagem, voz, audiologia, disfagia, CAA e evolução clínica em um prontuário conectado à agenda e à gestão do consultório.",
+    "badge": "ZemdaFono",
+    "h1": "Avaliação e evolução com o ZemdaFono",
+    "h2": "Fonologia, linguagem e voz",
+    "summary": "A prática fonoaudiológica envolve diferentes áreas de avaliação e acompanhamento. O ZemdaFono organiza registros especializados e metas terapêuticas junto ao histórico do paciente, permitindo retomar o contexto entre atendimentos.",
+    "features": [
       {
-        title: 'Prontuário Eletrônico com CID-10 e Histórico Completo',
-        description: 'Busca integrada de CID-10, evolução SOAP, registro de antecedentes mórbidos, cirurgias prévias e medicamentos em uso.'
+        "title": "Fonologia, linguagem e voz",
+        "description": "Utilize o painel fonêmico e os registros de linguagem, voz e gravações disponíveis no módulo. Relacione as observações ao atendimento correspondente para facilitar a comparação ao longo do acompanhamento."
       },
       {
-        title: 'Emissão de Receituários, Atestados e Pedidos de Exame',
-        description: 'Geração imediata de atestados com número de dias e indicação facultativa de CID, além de receituários claros para farmácias.'
+        "title": "Motricidade, disfagia e audiologia",
+        "description": "O módulo dispõe de registros de motricidade orofacial, disfagia e IDDSI, além de audiologia e audiograma. Os recursos documentam a avaliação conduzida pelo profissional e não determinam diagnóstico ou conduta automaticamente."
       },
       {
-        title: 'Redução de Faltas com Confirmações Automáticas de Consulta',
-        description: 'Disparo de lembretes automáticos para os pacientes confirmarem a presença, liberando encaixes para a recepção em caso de desistência.'
-      },
-      {
-        title: 'Segurança Máxima de Dados com Criptografia e Backup',
-        description: 'Infraestrutura blindada em nuvem para garantir a confidencialidade e a integridade de todas as informações de saúde (LGPD).'
+        "title": "CAA, metas e plano terapêutico",
+        "description": "Organize comunicação aumentativa e alternativa, objetivos e evolução clínica. Ao registrar a sessão, explicite a atividade realizada e a resposta observada; confira o salvamento antes de finalizar."
       }
     ],
-    benefits: [
-      'Menos tempo digitando e mais tempo olhando para o paciente',
-      'Documentos médicos gerados em folha A4 com logotipo da clínica',
-      'Acesso seguro de qualquer lugar (consultório, hospital ou notebook)',
-      'Organização impecável da recepção com controle de sala de espera'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'Os atestados e receitas gerados pelo Zemda são aceitos legalmente?',
-        answer: 'Sim, os documentos contêm dados completos do médico (nome, CRM, especialidade, endereço do consultório e data) prontos para assinatura e carimbo ou certificado digital.'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'Posso usar minha conta médica em múltiplos computadores e navegadores?',
-        answer: 'Sim, o Zemda possui aplicativo desktop dedicado para Windows e versão web moderna que se adapta com perfeição a computadores e notebooks.'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Mais modernidade e precisão para seu consultório médico',
-    ctaSubheadline: 'Conheça a experiência clínica do Zemda em conformidade com as normas do CFM, sem perda de tempo e com total segurança.'
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 5. Sistema para Psicólogos
   {
-    slug: 'sistema-para-psicologos',
-    path: '/sistema-para-psicologos',
-    title: 'Sistema para Psicólogos e Clínicas de Psicologia | Zemda',
-    metaDescription: 'Software de gestão clínica para psicólogos e terapeutas. Prontuário psicológico sigiloso, evolução de sessões, controle de pacotes e recibos para IRPF.',
-    keywords: 'sistema para psicologos, software para psicologia, prontuario psicologico, gestao consultorio psicologia, anamnese psicologica',
-    canonical: `${OFFICIAL_DOMAIN}/sistema-para-psicologos`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Especializado para Psicologia',
-    h1: 'Software de Gestão e Prontuário para Psicólogos',
-    h2: 'Privacidade Absoluta, Sigilo Profissional e Gestão Eficiente para sua Prática Clínica',
-    summary: 'Desenvolvido sob medida para a rotina do psicólogo clínico e equipes de psicoterapia. Organize anotações de sessões, anamnese inicial, pacotes de consultas e emita recibos válidos para dedução no imposto de renda dos pacientes.',
-    features: [
+    "slug": "sistema-para-fisioterapeutas",
+    "path": "/sistema-para-fisioterapeutas",
+    "title": "Sistema para Fisioterapeutas | ZemdaFisio",
+    "metaDescription": "Organize avaliações funcionais, ADM, escalas, plano terapêutico e evolução com o ZemdaFisio. Use o ZemdaBody para complementar o registro corporal.",
+    "badge": "ZemdaFisio",
+    "h1": "Da avaliação funcional à evolução com o ZemdaFisio",
+    "h2": "Avaliação funcional e ADM",
+    "summary": "O acompanhamento fisioterapêutico compara achados funcionais e respostas ao tratamento ao longo das sessões. O ZemdaFisio reúne avaliação, plano terapêutico e evolução, com apoio do mapa corporal para localizar observações.",
+    "features": [
       {
-        title: 'Evolução de Sessões e Anamnese Estruturada (CRP)',
-        description: 'Registre a evolução psicológica de cada atendimento com privacidade estrita. Suas anotações clínicas ficam protegidas contra qualquer acesso não autorizado.'
+        "title": "Avaliação funcional e ADM",
+        "description": "Registre força, amplitude de movimento e goniometria nos campos disponíveis. Para comparar avaliações, mantenha o mesmo contexto de medição e descreva fatores que possam influenciar o resultado."
       },
       {
-        title: 'Gestão de Pacotes de Sessões e Mensalidades',
-        description: 'Controle quantas sessões foram realizadas, quantas restam no pacote contratado e a situação financeira de cada paciente com clareza.'
+        "title": "Escalas e plano terapêutico",
+        "description": "Organize os instrumentos utilizados e as metas do acompanhamento. A evolução deve relacionar a intervenção, a resposta observada e as decisões do profissional, em vez de repetir somente o plano inicial."
       },
       {
-        title: 'Lembretes Automáticos para Reduzir Faltas de Pacientes',
-        description: 'Notificações antecipadas que garantem que o paciente compareça pontualmente ou avise com antecedência caso precise remarcar o atendimento.'
-      },
-      {
-        title: 'Comprovantes e Recibos Dedutíveis no Imposto de Renda',
-        description: 'Gere recibos com valor numérico e por extenso, dados do CRP, CPF do tomador e do profissional em um clique no padrão oficial da Receita Federal.'
+        "title": "Mapa corporal com ZemdaBody",
+        "description": "Complemente o texto com marcações por região e vistas anatômicas. O mapa facilita a localização visual do registro; não substitui o exame funcional nem a interpretação clínica."
       }
     ],
-    benefits: [
-      'Sigilo estrito garantido por criptografia de ponta a ponta',
-      'Controle visual imediato de sessões pagas e pendentes',
-      'Agenda intuitiva com bloqueio de intervalos para estudo de casos',
-      'Total mobilidade e agilidade para consultar fichas no computador ou notebook'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'Outros usuários da clínica podem ver as anotações do prontuário psicológico?',
-        answer: 'Não. O prontuário clínico é restrito ao profissional responsável pelo paciente e administradores autorizados, preservando as normas do Conselho Federal de Psicologia (CFP).'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'É possível emitir recibo para o paciente declarar no IRPF?',
-        answer: 'Sim, os recibos emitidos pelo Zemda contêm CPF do emitente e tomador, registro profissional e valor por extenso, atendendo a todos os requisitos do Carnê-Leão e Receita Federal.'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Mais tempo para focar no acolhimento dos seus pacientes',
-    ctaSubheadline: 'Descubra como o prontuário psicológico sigiloso e a gestão de sessões do Zemda simplificam o dia a dia do seu consultório.'
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira",
+      "/mapa-corporal-clinico"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 6. Sistema para Fonoaudiólogos
   {
-    slug: 'sistema-para-fonoaudiologos',
-    path: '/sistema-para-fonoaudiologos',
-    title: 'Sistema para Fonoaudiólogos e Clínicas de Fonoaudiologia | Zemda',
-    metaDescription: 'Plataforma especializada para fonoaudiologia. Registro de avaliações em linguagem, voz, audição, motricidade orofacial e evolução terapêutica contínua.',
-    keywords: 'sistema-para-fonoaudiologos, software fonoaudiologia, prontuario fonoaudiologico, clinica fonoaudiologia, exercicios fonoaudiologia',
-    canonical: `${OFFICIAL_DOMAIN}/sistema-para-fonoaudiologos`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Especializado para Fonoaudiologia',
-    h1: 'Sistema Especializado para Clínicas e Consultórios de Fonoaudiologia',
-    h2: 'Acompanhamento Terapêutico Preciso em Voz, Linguagem, Audiologia e Motricidade',
-    summary: 'Projetado para fonoaudiólogos que necessitam registrar minuciosamente planos terapêuticos e evolução fonoterápica. Permite acompanhar resultados de testes auditivos, histórico de fala, mastigação e desenvolvimento infantil.',
-    features: [
+    "slug": "sistema-para-nutricionistas",
+    "path": "/sistema-para-nutricionistas",
+    "title": "Sistema para Nutricionistas | ZemdaNutri",
+    "metaDescription": "Anamnese, antropometria, bioimpedância, recordatório alimentar e plano alimentar no ZemdaNutri, com evolução longitudinal e agenda do consultório.",
+    "badge": "ZemdaNutri",
+    "h1": "Avaliação nutricional e acompanhamento com o ZemdaNutri",
+    "h2": "Anamnese e consumo alimentar",
+    "summary": "O atendimento nutricional combina história alimentar, medidas e acompanhamento das orientações. O ZemdaNutri organiza esses registros em uma sequência de consultas, permitindo consultar avaliações anteriores e o plano alimentar.",
+    "features": [
       {
-        title: 'Prontuário com Protocolos Fonoterápicos',
-        description: 'Espaço dedicado para registrar avaliações de fala, audiometria, deglutição e evolução de exercícios por sessão realizada.'
+        "title": "Anamnese e consumo alimentar",
+        "description": "Registre a história alimentar e o recordatório de 24 horas. Diferencie o relato do paciente das observações da consulta para documentar o contexto em que o plano foi elaborado."
       },
       {
-        title: 'Anexo Rápido de Áudios, Vídeos e Relatórios',
-        description: 'Guarde arquivos de gravação de voz e exames complementares direto no perfil seguro do paciente em nuvem.'
+        "title": "Antropometria e bioimpedância",
+        "description": "Organize as medidas e os resultados registrados no módulo. A comparação ao longo do tempo depende de métodos e condições de coleta compatíveis, definidos pelo nutricionista."
       },
       {
-        title: 'Agenda de Sessões Recorrentes Sem Choque de Horários',
-        description: 'Configure sessões semanais ou quinzenais fixas com facilidade, recebendo avisos de conflitos de sala ou terapeuta.'
-      },
-      {
-        title: 'Controle de Planos e Pacotes Terapêuticos',
-        description: 'Painel visual para acompanhar a quantidade de atendimentos realizados e previstos em cada plano de tratamento.'
+        "title": "Plano alimentar e evolução",
+        "description": "Mantenha o plano alimentar junto ao histórico de acompanhamento. Registre mudanças, dificuldades relatadas e orientações discutidas em cada retorno, sem perder a referência da avaliação anterior."
       }
     ],
-    benefits: [
-      'Histórico completo do desenvolvimento de cada paciente',
-      'Atendimento dentro das diretrizes éticas do CFFa',
-      'Confirmação automática de presença via WhatsApp e e-mail',
-      'Praticidade na emissão de declarações e recibos timbrados'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'Posso anexar gravações de voz ou vídeos de evolução no prontuário?',
-        answer: 'Sim, o Zemda suporta anexos de arquivos de áudio, relatórios em PDF e laudos diretamente no prontuário com total criptografia.'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'Como funciona o agendamento de sessões com horários fixos semanais?',
-        answer: 'A agenda permite criar agendamentos recorrentes com facilidade, reservando automaticamente os dias e horários para o paciente.'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Eleve o padrão do seu consultório de Fonoaudiologia',
-    ctaSubheadline: 'Conheça as ferramentas especializadas do Zemda para acompanhamento terapêutico em voz, linguagem e motricidade.'
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 7. Sistema para Fisioterapeutas
   {
-    slug: 'sistema-para-fisioterapeutas',
-    path: '/sistema-para-fisioterapeutas',
-    title: 'Sistema para Fisioterapeutas e Clínicas de Fisioterapia | Zemda',
-    metaDescription: 'Software de gestão para clínicas de fisioterapia, pilates e reabilitação. Avaliação postural, escala de dor, evolução cinético-funcional e controle de sessões.',
-    keywords: 'sistema para fisioterapeutas, software fisioterapia, prontuario fisioterapia, clinica pilates, gestao fisioterapia',
-    canonical: `${OFFICIAL_DOMAIN}/sistema-para-fisioterapeutas`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Especializado para Fisioterapia & Reabilitação',
-    h1: 'Software de Gestão para Fisioterapia e Clínicas de Reabilitação',
-    h2: 'Evolução Cinético-Funcional, Controle de Salas e Acompanhamento de Pacientes',
-    summary: 'A ferramenta ideal para fisioterapeutas autônomos e clínicas de reabilitação motora, ortopédica, respiratória ou estúdios de pilates. Agilize o preenchimento de evoluções diárias e tenha controle transparente dos atendimentos.',
-    features: [
+    "slug": "sistema-para-psicopedagogos",
+    "path": "/sistema-para-psicopedagogos",
+    "title": "Sistema para Psicopedagogos | ZemdaPP",
+    "metaDescription": "Conheça o ZemdaPP para anamnese, avaliação psicopedagógica, análise da aprendizagem, plano de intervenção e histórico organizado de acompanhamento.",
+    "badge": "ZemdaPP",
+    "h1": "Avaliação e intervenção psicopedagógica com o ZemdaPP",
+    "h2": "Perfil e anamnese",
+    "summary": "A organização do acompanhamento psicopedagógico precisa conectar história, avaliação e intervenção. O ZemdaPP reúne perfil, anamnese e evolução para documentar hipóteses de trabalho e o percurso de aprendizagem.",
+    "features": [
       {
-        title: 'Ficha de Avaliação Fisioterapêutica e Escala de Dor',
-        description: 'Monitore a graduação de dor (EVA), amplitude de movimento e testes específicos ao longo de cada ciclo de atendimento.'
+        "title": "Perfil e anamnese",
+        "description": "Reúna as informações relevantes à demanda e ao contexto de aprendizagem. Registre a origem das informações para diferenciar relatos da família, da escola e observações do atendimento."
       },
       {
-        title: 'Gestão Inteligente de Boxes, Salas e Aparelhos',
-        description: 'Evite superlotação distribuindo pacientes entre salas de cinesioterapia, eletroterapia ou aparelhos de pilates.'
+        "title": "Avaliação e análise da aprendizagem",
+        "description": "Organize os registros da avaliação psicopedagógica e a análise da aprendizagem. A escolha e a interpretação de instrumentos dependem da formação e das atribuições do profissional."
       },
       {
-        title: 'Controle de Sessões Realizadas e Remarcações Rápidas',
-        description: 'Saiba instantaneamente o saldo de sessões do paciente e remaneje horários com um simples clique na agenda.'
-      },
-      {
-        title: 'Emissão de Recibos para Reembolso em Planos de Saúde',
-        description: 'Imprima comprovantes com descritivo das sessões para que seu paciente solicite reembolso junto ao convênio médico.'
+        "title": "Plano de intervenção psicopedagógica",
+        "description": "Use o PIP para documentar objetivos, atividades e evolução. Compare as observações das sessões e registre ajustes de planejamento, mantendo um histórico de acompanhamento."
       }
     ],
-    benefits: [
-      'Agilidade no registro da evolução fisioterapêutica diária',
-      'Redução de faltas em até 50% com lembretes automáticos',
-      'Conformidade com os padrões do Coffito e Crefito',
-      'Visão financeira consolidada dos procedimentos mais rentáveis'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'O sistema permite gerenciar múltiplos fisioterapeutas e salas na mesma clínica?',
-        answer: 'Sim, o sistema possui controle completo de múltiplos profissionais e salas/boxes, impedindo duplicidade de agendamentos.'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'Os recibos emitidos servem para o paciente pedir reembolso no convênio?',
-        answer: 'Sim, os recibos emitidos no Zemda contêm todas as informações fiscais e profissionais exigidas pelas operadoras de saúde.'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Profissionalize o atendimento da sua clínica de fisioterapia',
-    ctaSubheadline: 'Veja como organizar planos de reabilitação, sessões de fisioterapia e controle de evolução em uma única interface.'
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 8. Sistema para Nutricionistas
   {
-    slug: 'sistema-para-nutricionistas',
-    path: '/sistema-para-nutricionistas',
-    title: 'Sistema para Nutricionistas e Clínicas de Nutrição | Zemda',
-    metaDescription: 'Software para nutricionistas com prontuário alimentar, recordatório 24h, avaliação antropométrica, metas e agendamento de retornos simplificado.',
-    keywords: 'sistema para nutricionistas, software nutricao, prontuario nutricional, anamnese nutricional, clinica de nutricao',
-    canonical: `${OFFICIAL_DOMAIN}/sistema-para-nutricionistas`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Especializado para Nutrição',
-    h1: 'Sistema Integrado para Nutricionistas e Clínicas de Nutrição',
-    h2: 'Acompanhe Metas, Registre Anamneses e Fidelize seus Pacientes',
-    summary: 'Apoie seus pacientes na conquista de saúde e qualidade de vida com um software ágil. Centralize fichas de hábitos alimentares, evolução de objetivos, agendamento de consultas de retorno e controle financeiro.',
-    features: [
+    "slug": "sistema-para-dentistas",
+    "path": "/sistema-para-dentistas",
+    "title": "Sistema para Dentistas e Clínicas Odontológicas | Zemda",
+    "metaDescription": "Software odontológico com odontograma, periodontograma, plano de tratamento e prontuário. Organize a agenda e a gestão do consultório com ZemdaOdonto.",
+    "badge": "ZemdaOdonto",
+    "h1": "Prontuário odontológico e gestão com o ZemdaOdonto",
+    "h2": "Odontograma e periodontograma",
+    "summary": "O consultório odontológico precisa localizar achados por dente e região e acompanhar tratamentos em etapas. O ZemdaOdonto reúne registros especializados, plano de tratamento e histórico junto à agenda da clínica.",
+    "features": [
       {
-        title: 'Ficha Nutricional Completa e Histórico de Hábitos',
-        description: 'Registro de rotina alimentar, preferências, intolerâncias, alergias e metas traçadas para o paciente.'
+        "title": "Odontograma e periodontograma",
+        "description": "Registre observações dentárias e periodontais nas ferramentas do módulo. Vincule a informação à avaliação para acompanhar mudanças sem depender apenas de descrições dispersas no prontuário."
       },
       {
-        title: 'Controle de Retornos e Acompanhamento Periódico',
-        description: 'Organize as consultas de acompanhamento para que nenhum paciente abandone o plano nutricional por falta de contato.'
+        "title": "Endodontia, prótese e HOF",
+        "description": "O módulo possui áreas de registro para endodontia, prótese e harmonização orofacial. A documentação deve refletir o procedimento efetivamente realizado e a responsabilidade do profissional habilitado."
       },
       {
-        title: 'Agenda Online 24 Horas Integrada',
-        description: 'Seus pacientes agendam consultas particulares ou de retorno pelo seu link institucional personalizado a qualquer hora do dia.'
-      },
-      {
-        title: 'Emissão de Recibos com Dados Oficiais do CRN',
-        description: 'Recibos médicos com CNPJ/CPF, número do conselho regional e detalhamento da consulta para declaração ou reembolso.'
+        "title": "Plano de tratamento e retornos",
+        "description": "Organize as etapas do plano de tratamento e a sequência de consultas. Consulte o histórico antes do retorno e mantenha os registros clínicos distintos das pendências administrativas e financeiras."
       }
     ],
-    benefits: [
-      'Aumento da retenção e retorno de pacientes para acompanhamento',
-      'Prontuário com visualização cronológica de toda a evolução alimentar',
-      'Envio de lembretes que reduzem o esquecimento de consultas',
-      'Gestão financeira com controle de pagamentos via PIX e cartão'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'Posso usar o Zemda para atendimentos online e presenciais?',
-        answer: 'Sim, o Zemda funciona 100% em nuvem em qualquer navegador moderno, permitindo atender tanto presencialmente quanto via teleconsulta.'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'O paciente pode agendar sozinho pela internet?',
-        answer: 'Sim! Sua clínica recebe uma página de agendamento online exclusiva onde o paciente escolhe o dia e horário disponível.'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Dê um salto de organização no seu consultório de Nutrição',
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 8.1 Sistema para Psicopedagogos (ZemdaPP - CBO 2394-25)
   {
-    slug: 'sistema-para-psicopedagogos',
-    path: '/sistema-para-psicopedagogos',
-    title: 'ZemdaPP • Sistema para Psicopedagogos e Clínicas de Psicopedagogia',
-    metaDescription: 'Software completo para psicopedagogos clínicos e institucionais (CBO 2394-25). Avaliação psicopedagógica, plano de intervenção (PIP), parceria escola-família e evoluções em conformidade com as diretrizes da ABPp.',
-    keywords: 'sistema para psicopedagogos, software psicopedagogia, prontuario psicopedagogico, plano de intervencao psicopedagogica, avaliacao psicopedagogica, ABPp, zemda, zemdapp',
-    canonical: `${OFFICIAL_DOMAIN}/sistema-para-psicopedagogos`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'ZemdaPP — Psicopedagogia',
-    h1: 'O Software Definitivo para Psicopedagogia Clínica e Institucional',
-    h2: 'Avaliações, plano de intervenção (PIP), escuta familiar e parceria com a escola em uma só plataforma',
-    summary: 'Apoio especializado para o psicopedagogo acompanhar o desenvolvimento cognitivo e as aprendizagens com segurança, sigilo profissional e clareza metodológica (CBO 2394-25).',
-    features: [
+    "slug": "sistema-para-terapeutas-ocupacionais",
+    "path": "/sistema-para-terapeutas-ocupacionais",
+    "title": "Sistema para Terapeutas Ocupacionais | ZemdaTO",
+    "metaDescription": "Software para terapia ocupacional com perfil ocupacional, AVDs, análise de tarefa e plano terapêutico. Organize prontuário, evolução e agenda com ZemdaTO.",
+    "badge": "ZemdaTO",
+    "h1": "Perfil ocupacional e acompanhamento com o ZemdaTO",
+    "h2": "Perfil ocupacional e AVDs",
+    "summary": "A terapia ocupacional acompanha a participação nas atividades e sua relação com o contexto de vida. O ZemdaTO organiza o perfil ocupacional, avaliações e planos terapêuticos em um histórico de atendimentos.",
+    "features": [
       {
-        title: 'Avaliação Psicopedagógica Estruturada (Modo Clínico e Institucional)',
-        description: 'Instrumentos para leitura, escrita, matemática, funções executivas e análise do clima pedagógico escolar.'
+        "title": "Perfil ocupacional e AVDs",
+        "description": "Documente atividades de vida diária, demandas e prioridades do acompanhamento. Registre o contexto em que a atividade ocorre para que a evolução não seja reduzida a uma medida isolada."
       },
       {
-        title: 'Plano de Intervenção Psicopedagógica (PIP) com Metas Claras',
-        description: 'Construa estratégias de mediação pedagógica com objetivos SMART e acompanhamento percentual de evolução.'
+        "title": "Perfil sensorial e análise de tarefa",
+        "description": "Organize observações sensoriais e etapas da tarefa nas ferramentas disponíveis. Diferencie barreiras, recursos e respostas observadas para apoiar o planejamento profissional."
       },
       {
-        title: 'Parceria com a Escola e Escuta da Família',
-        description: 'Registre reuniões com a coordenação pedagógica, visitas escolares e devolutivas familiares com total rastreabilidade.'
-      },
-      {
-        title: 'Sigilo Absoluto e Bloqueio Ético de Instrumentos',
-        description: 'Isolamento de prontuário com proteção LGPD e bloqueio automático de testes privativos da Psicologia (SATEPSI/CFP).'
+        "title": "Tecnologia assistiva e plano terapêutico",
+        "description": "Mantenha os registros de tecnologia assistiva junto às metas e intervenções. Acompanhe a experiência de uso relatada e os ajustes realizados ao longo das sessões."
       }
     ],
-    benefits: [
-      'Registro seguro das sessões com assinatura eletrônica e selamento oficial',
-      'Emissão de relatórios psicopedagógicos formatados para escolas e médicos',
-      'Facilidade no acompanhamento longitudinal do aprendente',
-      'Atendimento em conformidade com as boas práticas da ABPp e CBO 2394-25'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'O registro na ABPp é obrigatório para utilizar o ZemdaPP?',
-        answer: 'Não. O registro na Associação Brasileira de Psicopedagogia (ABPp) é opcional. O profissional pode registrar seu número de associado, selecionar outro vínculo ou declarar não informado.'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'A Psicopedagogia já é uma profissão regulamentada por lei federal?',
-        answer: 'A ocupação é formalmente reconhecida pelo Ministério do Trabalho (CBO 2394-25). O projeto de lei de regulamentação profissional (PL 1675/2023) foi aprovado pelo Congresso Nacional e aguarda os trâmites legais de sanção.'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
       },
       {
-        question: 'Posso emitir relatórios psicopedagógicos para encaminhamento escolar ou neurológico?',
-        answer: 'Sim! O ZemdaPP permite emitir relatórios detalhados, pareceres técnicos e declarações de acompanhamento prontos para impressão ou compartilhamento seguro com assinatura eletrônica ou digital.'
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Organize sua prática psicopedagógica com o ZemdaPP',
-    ctaSubheadline: 'Experimente a plataforma pensada especificamente para as necessidades do psicopedagogo clínico e institucional.'
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 9. Agenda Online
   {
-    slug: 'agenda-online',
-    path: '/agenda-online',
-    title: 'Agenda Online para Clínicas e Profissionais de Saúde | Zemda',
-    metaDescription: 'Agenda online inteligente para área da saúde com link de agendamento 24h, bloqueio de horários, confirmação automática e redução de no-show.',
-    keywords: 'agenda online clinica, marcar consulta online, agenda medica online, agendamento para pacientes, software agenda consultorio',
-    canonical: `${OFFICIAL_DOMAIN}/agenda-online`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Produtividade & Agilidade',
-    h1: 'Agenda Online Inteligente para Consultórios e Clínicas de Saúde',
-    h2: 'Elimine Conflitos de Horários e Permita que seus Pacientes Agendem 24 Horas por Dia',
-    summary: 'A agenda do Zemda foi projetada para simplificar a vida da sua recepção e oferecer autonomia aos pacientes. Visualize compromissos por dia, semana ou profissional, bloqueie horários e evite cancelamentos de última hora.',
-    features: [
+    "slug": "sistema-para-personal-trainers",
+    "path": "/sistema-para-personal-trainers",
+    "title": "Sistema para Personal Trainer | ZemdaPersonal",
+    "metaDescription": "Gestão de alunos com avaliação física, antropometria, composição corporal, TAV, treinos e histórico comparativo. Conheça o módulo ZemdaPersonal.",
+    "badge": "ZemdaPersonal",
+    "h1": "Avaliação física e gestão de alunos com o ZemdaPersonal",
+    "h2": "Antropometria, composição corporal e TAV",
+    "summary": "Acompanhar alunos exige relacionar avaliação, prescrição de treino e evolução. O ZemdaPersonal organiza medidas, fichas e registros comparativos para que o profissional consulte o histórico ao revisar o planejamento.",
+    "features": [
       {
-        title: 'Link Personalizado de Agendamento Online para a Clínica',
-        description: 'Disponibilize seu link no Instagram, WhatsApp e site. Os pacientes selecionam o profissional, o serviço e o horário disponível sem intermediários.'
+        "title": "Antropometria, composição corporal e TAV",
+        "description": "Registre perímetros, composição corporal e TAV nos campos disponíveis. Preserve unidades e método de coleta; uma comparação só é útil quando o contexto das avaliações também é considerado."
       },
       {
-        title: 'Lembretes Automáticos via E-mail e Notificações',
-        description: 'Alertas pontuais avisam o paciente no dia anterior à consulta, reduzindo drasticamente o índice de faltas e horários ociosos.'
+        "title": "Avaliação neuromotora e cardiorrespiratória",
+        "description": "Organize os registros de avaliação física disponíveis e as observações relevantes à prescrição. O sistema documenta os dados informados e não substitui a avaliação nem a escolha profissional dos protocolos."
       },
       {
-        title: 'Visualização por Dia, Semana, Mês ou por Profissional',
-        description: 'Alterne rapidamente a visualização da equipe inteira ou foque na sua própria escala de atendimentos com filtros claros.'
-      },
-      {
-        title: 'Sincronização em Tempo Real entre Dispositivos',
-        description: 'Qualquer agendamento realizado no balcão reflete instantaneamente no painel do profissional e na tela da recepção.'
+        "title": "Treinos e histórico comparativo",
+        "description": "Crie fichas de treino e consulte a evolução e fotos comparativas. Revise o planejamento com base nos registros do aluno e gere os relatórios disponíveis para acompanhamento."
       }
     ],
-    benefits: [
-      'Até 45% menos faltas com confirmações automatizadas',
-      'Fim das ligações telefônicas demoradas para marcar consulta',
-      'Controle de encaixes e lista de espera para preencher vagas',
-      'Configuração individual de duração de consulta por procedimento'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'O paciente pode agendar fora do horário comercial?',
-        answer: 'Sim! Com o agendamento online público do Zemda, os pacientes marcam horários mesmo durante a noite ou aos finais de semana.'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'Como a secretária gerencia os encaixes do dia?',
-        answer: 'A agenda possui criação instantânea de consultas com preenchimento automático do paciente e alerta visual de status (confirmado, em espera, atendido).'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Tenha a agenda do seu consultório sempre cheia e organizada',
-    ctaSubheadline: 'Conheça o sistema de agendamento online 24h e lembretes automáticos do Zemda que eliminam faltas e otimizam a recepção.'
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira",
+      "/mapa-corporal-clinico"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
-
-  // 10. Prontuário Eletrônico
   {
-    slug: 'prontuario',
-    path: '/prontuario',
-    title: 'Prontuário Eletrônico Seguro e Personalizável | Zemda',
-    metaDescription: 'Prontuário eletrônico completo para a saúde. Registro rápido de consultas, anamneses, histórico cronológico, anexos de exames e impressão em folha A4.',
-    keywords: 'prontuario eletronico, prontuario em nuvem, PEP medicina, prontuario psicologico, registro clinico seguro, ficha de paciente',
-    canonical: `${OFFICIAL_DOMAIN}/prontuario`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Segurança & Sigilo Absoluto',
-    h1: 'Prontuário Eletrônico em Nuvem com Máxima Segurança e Rapidez',
-    h2: 'O Histórico Completo do seu Paciente ao seu Alcance em Poucos Cliques',
-    summary: 'Acesse todo o histórico do paciente em segundos, com linha do tempo intuitiva, busca ágil e ferramentas que aceleram o registro clínico sem comprometer o cuidado humano.',
-    features: [
+    "slug": "mapa-corporal-clinico",
+    "path": "/mapa-corporal-clinico",
+    "title": "Mapa Corporal Clínico | ZemdaBody",
+    "metaDescription": "Mapa corporal clínico com vistas anatômicas, marcações por região e desenhos. Conheça o ZemdaBody para complementar avaliações e evolução em saúde.",
+    "badge": "ZemdaBody · módulo transversal",
+    "h1": "Mapa corporal clínico com o ZemdaBody",
+    "h2": "Localização visual de observações",
+    "summary": "O ZemdaBody é um módulo transversal para registro visual do corpo. Profissionais de diferentes áreas podem complementar o prontuário com localização de observações, marcações e desenhos, conforme os recursos e permissões disponíveis.",
+    "features": [
       {
-        title: 'Linha do Tempo Cronológica com Toda a Trajetória do Paciente',
-        description: 'Visualize consultas anteriores, prescrições, evoluções de outras especialidades e notas clínicas em uma linha do tempo clara.'
+        "title": "Localização visual de observações",
+        "description": "Use as vistas anatômicas para indicar regiões e registrar visualmente a localização de dor relatada ou outros achados. Explique no texto o significado das marcações e sua relação com a avaliação."
       },
       {
-        title: 'Modelos Prontos de Evolução e Campos Customizáveis',
-        description: 'Adapte o prontuário para a sua especialidade com modelos estruturados que poupam digitação repetitiva no dia a dia.'
+        "title": "Marcações e desenhos por região",
+        "description": "Combine marcações e desenhos com os registros do atendimento. A representação visual ajuda a recuperar o contexto espacial, mas não corresponde a exame de imagem nem fornece diagnóstico automático."
       },
       {
-        title: 'Armazenamento Seguro de Laudos e Documentos Externos',
-        description: 'Faça upload de PDFs de exames laboratoriais, fotos de acompanhamento clínico e laudos de imagem diretamente na ficha do paciente.'
-      },
-      {
-        title: 'Impressão Formatada em Folha A4 com Logotipo Oficial',
-        description: 'Exporte evoluções, relatórios e documentos clínicos em PDF ou imprima em folha A4 sem cortes nem desconfigurações.'
+        "title": "Acompanhamento entre atendimentos",
+        "description": "Consulte os registros para acompanhar a evolução documentada. Em fisioterapia, o mapa pode complementar a avaliação funcional; em outras áreas, sua aplicação depende da finalidade definida pelo profissional."
       }
     ],
-    benefits: [
-      'Segurança total com backups diários e criptografia ponta a ponta',
-      'Agilidade no atendimento com carregamento instantâneo das fichas',
-      'Total conformidade com os requisitos da LGPD para dados de saúde',
-      'Fim definitivo do arquivo físico de papel e pastas empilhadas'
-    ],
-    faqs: [
+    "sections": [
       {
-        question: 'O prontuário pode ser acessado fora da clínica?',
-        answer: 'Sim, você pode acessar com suas credenciais seguras de qualquer computador ou notebook com internet.'
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
       },
       {
-        question: 'Como funciona a exclusão ou alteração de registros?',
-        answer: 'Para garantir a rastreabilidade exigida pelos conselhos profissionais, todas as inserções e alterações possuem registro de data, hora e usuário autor.'
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
       }
     ],
-    ctaHeadline: 'Eleve o padrão dos seus registros clínicos com o Zemda',
-    ctaSubheadline: 'Explore um prontuário eletrônico completo, ágil e em total conformidade com a LGPD e conselhos profissionais.'
-  },
-
-  // 11. Gestão Financeira
-  {
-    slug: 'gestao-financeira',
-    path: '/gestao-financeira',
-    title: 'Gestão Financeira e Controle de Caixa para Clínicas | Zemda',
-    metaDescription: 'Controle financeiro para consultórios e clínicas: fluxo de caixa diário, controle de recebimentos em PIX e cartões, fechamento de caixa e emissão de recibos.',
-    keywords: 'gestao financeira clinica, fluxo de caixa consultorio, controle de caixa saude, recibo de pagamento medico, financas para clinicas',
-    canonical: `${OFFICIAL_DOMAIN}/gestao-financeira`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Controle Financeiro Rigoroso',
-    h1: 'Gestão Financeira e Controle de Fluxo de Caixa para Saúde',
-    h2: 'Tenha Previsibilidade de Receita, Controle de Inadimplência e Fechamento de Caixa sem Erros',
-    summary: 'Assuma o controle total das entradas e saídas da sua clínica. O Zemda oferece fechamento de caixa por operador e turno, separação de formas de pagamento (PIX, cartão e dinheiro) e relatórios claros para sua contabilidade.',
-    features: [
+    "benefits": [],
+    "faqs": [
       {
-        title: 'Abertura, Movimentação e Fechamento de Caixa por Turno',
-        description: 'Controle fundo de troco inicial, entradas do dia e faça a conferência de valores gaveta a gaveta ao final de cada expediente.'
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
       },
       {
-        title: 'Separação Clara por Forma de Pagamento (PIX, Cartão, Espécie)',
-        description: 'Monitore exatamente quanto entrou em transferências instantâneas, quanto está a compensar no cartão e o dinheiro físico em caixa.'
-      },
-      {
-        title: 'Emissão Sequencial de Recibos Oficiais em Folha A4',
-        description: 'Gere comprovantes fiscais com numeração sequencial atômica, valor numérico e por extenso, e espaço formal para assinatura do profissional.'
-      },
-      {
-        title: 'Relatórios Financeiros e Exportação para Contabilidade',
-        description: 'Exporte relatórios consolidados de faturamento por período, por especialidade ou por profissional para facilitar o fechamento contábil.'
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
       }
     ],
-    benefits: [
-      'Eliminação de furos e divergências de caixa na recepção',
-      'Visão consolidada do faturamento diário, semanal e mensal',
-      'Redução de inadimplência com status claro de pagamentos pendentes',
-      'Comprovantes emitidos em segundos direto na finalização do atendimento'
+    "relatedLinks": [
+      "/sistema-para-fisioterapeutas",
+      "/prontuario",
+      "/sistema-para-terapeutas-ocupacionais"
     ],
-    faqs: [
-      {
-        question: 'Posso fechar o caixa mais de uma vez ao dia se houver troca de recepcionista?',
-        answer: 'Sim, o módulo de caixa suporta múltiplos turnos e operadores diários, registrando o responsável por cada abertura e fechamento.'
-      },
-      {
-        question: 'O sistema calcula o valor por extenso nos recibos automaticamente?',
-        answer: 'Sim! Ao emitir o recibo, o Zemda escreve o valor por extenso em reais e centavos para plena conformidade contábil.'
-      }
-    ],
-    ctaHeadline: 'Tenha total clareza dos números da sua clínica',
-    ctaSubheadline: 'Conheça o módulo financeiro do Zemda com fechamento de caixa por turno, controle de repasses e emissão de recibos oficiais A4.'
-  },
-
-  // 12. Blog
-  {
-    slug: 'blog',
-    path: '/blog',
-    title: 'Blog Zemda | Dicas de Gestão, Tecnologia e Produtividade em Saúde',
-    metaDescription: 'Artigos, tutoriais e melhores práticas sobre gestão em saúde, redução de faltas na agenda, emissão de recibos e tecnologia para clínicas e consultórios.',
-    keywords: 'blog gestao saude, dicas para clinicas, como administrar consultorio, reducao faltas pacientes, prontuario eletronico dicas',
-    canonical: `${OFFICIAL_DOMAIN}/blog`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Conteúdos Estratégicos',
-    h1: 'Blog & Conteúdos Estratégicos sobre Gestão na Saúde',
-    h2: 'Tendências, Inovação e Melhores Práticas para Clínicas e Profissionais Autônomos',
-    summary: 'Aprenda como transformar o seu consultório em uma clínica altamente rentável, organizada e admirada pelos pacientes. Confira artigos práticos escritos por especialistas em gestão em saúde.',
-    features: [
-      {
-        title: 'Como Reduzir o Absenteísmo e Faltas de Pacientes na Agenda',
-        description: 'Descubra estratégias práticas com lembretes automáticos e políticas de cancelamento que reduzem o no-show em até 45% nos consultórios.'
-      },
-      {
-        title: 'O Guia Completo da Emissão de Recibos para a Receita Federal',
-        description: 'Tudo o que médicos, psicólogos e terapeutas precisam saber sobre campos obrigatórios, valor por extenso e conformidade com o Carnê-Leão.'
-      },
-      {
-        title: 'Prontuário Eletrônico vs. Papel: Produtividade, Segurança e LGPD',
-        description: 'Por que o prontuário em nuvem garante maior proteção jurídica, sigilo profissional e rapidez na consulta diária de históricos de pacientes.'
-      },
-      {
-        title: 'Dicas Práticas para Aumentar a Captação de Pacientes Particulares',
-        description: 'Como utilizar o agendamento online 24h e um atendimento acolhedor na recepção para fidelizar mais clientes para a sua clínica.'
-      }
-    ],
-    benefits: [
-      'Artigos com orientações práticas para a rotina clínica',
-      'Dicas jurídicas e contábeis simplificadas para profissionais de saúde',
-      'Metodologias comprovadas de aumento de receita e corte de desperdícios',
-      'Atualizações frequentes sobre inovações tecnológicas na medicina e terapia'
-    ],
-    faqs: [
-      {
-        question: 'Com que frequência novos artigos são publicados?',
-        answer: 'Publicamos novos artigos e orientações sobre gestão e tecnologia em saúde semanalmente.'
-      },
-      {
-        question: 'Posso sugerir um tema para ser abordado no blog do Zemda?',
-        answer: 'Com certeza! Envie sua dúvida ou sugestão para nossa equipe de especialistas através dos nossos canais de suporte.'
-      }
-    ],
-    ctaHeadline: 'Aplique as melhores práticas na sua clínica com o Zemda',
-    ctaSubheadline: 'Acompanhe nossos conteúdos estratégicos e conheça as melhores inovações para a gestão do seu consultório.'
-  },
-
-  // 13. Termos de Uso
-  {
-    path: '/termos-de-uso',
-    title: 'Termos de Uso | Zemda',
-    metaDescription: 'Termos e condições gerais de uso da plataforma Zemda de gestão para saúde.',
-    keywords: 'termos de uso zemda, termos de servico software saude, contrato de uso clinica',
-    canonical: `${OFFICIAL_DOMAIN}/termos-de-uso`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'Jurídico & Conformidade',
-    h1: 'Termos de Uso',
-    h2: 'Condições gerais de prestação de serviços e utilização da plataforma Zemda',
-    summary: 'Conheça as regras, direitos e responsabilidades aplicáveis ao uso da plataforma Zemda para profissionais e clínicas.'
-  },
-
-  // 14. Política de Privacidade
-  {
-    path: '/privacidade',
-    title: 'Política de Privacidade e Proteção de Dados (LGPD) | Zemda',
-    metaDescription: 'Conheça nossa política de privacidade, tratamento e proteção de dados em conformidade rigorosa com a LGPD.',
-    keywords: 'politica de privacidade zemda, lgpd saude, protecao de dados medicos, seguranca clinica',
-    canonical: `${OFFICIAL_DOMAIN}/privacidade`,
-    indexable: true,
-    inSitemap: true,
-    badge: 'LGPD & Privacidade',
-    h1: 'Política de Privacidade e Proteção de Dados',
-    h2: 'Compromisso com a segurança, sigilo clínico e conformidade com a LGPD',
-    summary: 'Entenda como tratamos e protegemos seus dados e os dados de saúde dos seus pacientes com os mais elevados padrões de segurança da informação.'
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   }
 ];
-
-// Mapa de páginas de nicho para acesso imediato via slug (compatibilidade total com SEO_PAGES)
-export const PUBLIC_NICHE_PAGES: Record<string, SeoPageData> = SEO_ROUTES.reduce((acc, route) => {
-  if (route.slug) {
-    acc[route.slug] = {
-      slug: route.slug,
-      path: route.path,
-      title: route.title,
-      metaDescription: route.metaDescription,
-      keywords: route.keywords || '',
-      badge: route.badge || '',
-      h1: route.h1 || '',
-      h2: route.h2 || '',
-      summary: route.summary || '',
-      features: route.features || [],
-      benefits: route.benefits || [],
-      faqs: route.faqs || [],
-      ctaHeadline: route.ctaHeadline || 'Conheça a plataforma Zemda',
-      ctaSubheadline: route.ctaSubheadline || 'Eleve o padrão do seu atendimento com máxima segurança e agilidade.'
-    };
+const BASE_PAGES: RouteInput[] = [
+  {
+    "path": "/",
+    "title": "Zemda | Gestão para Clínicas e Profissionais da Saúde",
+    "metaDescription": "Gestão de clínicas e profissionais da saúde com agenda, prontuário eletrônico, financeiro e módulos especializados em uma única plataforma.",
+    "h1": LANDING_HERO.title,
+    "summary": LANDING_HERO.description
+  },
+  {
+    "path": "/planos",
+    "title": "Planos para Profissionais e Clínicas | Zemda",
+    "metaDescription": "Conheça os planos Zemda para profissionais, equipes e clínicas. Compare o número de acessos e escolha a opção adequada à organização dos seus atendimentos.",
+    "h1": "Assinatura e Plano",
+    "summary": "O número de acessos define o plano. A profissão e as permissões definem as ferramentas disponíveis. Consulte os valores e condições de contratação.",
+    "sections": [
+      {
+        "heading": "Escolha conforme o tamanho da equipe",
+        "paragraphs": [
+          "Compare os acessos necessários para profissionais e equipe administrativa. Os planos públicos da landing ajudam a dimensionar a contratação, enquanto a página de assinatura apresenta as condições disponíveis."
+        ],
+        "links": [
+          "/sistema-para-clinicas"
+        ]
+      }
+    ]
+  },
+  {
+    "path": "/termos-de-uso",
+    "title": "Termos de Uso | Zemda",
+    "metaDescription": "Consulte os termos de uso do Zemda, responsabilidades de usuários, condições da plataforma e orientações para utilização dos recursos de gestão em saúde.",
+    "h1": "Termos de Uso da Plataforma Zemda",
+    "summary": "Consulte as condições de utilização da plataforma e as responsabilidades relacionadas ao acesso e aos registros."
+  },
+  {
+    "path": "/privacidade",
+    "title": "Política de Privacidade e Proteção de Dados | Zemda",
+    "metaDescription": "Conheça o tratamento de dados no Zemda, controles de acesso, preferências de cookies e canais para exercer direitos relacionados às suas informações.",
+    "h1": "Política de Privacidade e Proteção de Dados — LGPD",
+    "summary": "Informações sobre tratamento de dados, privacidade e escolhas de cookies no Zemda."
+  },
+  {
+    "path": "/agenda-online",
+    "slug": "agenda-online",
+    "title": "Agenda Online para Clínicas e Consultórios | Zemda",
+    "metaDescription": "Organize horários, profissionais, serviços e status de consultas com a agenda online do Zemda. Conheça os recursos de agendamento e comunicação.",
+    "badge": "Agenda online",
+    "h1": "Organize a agenda e acompanhe os agendamentos",
+    "summary": "Organize horários, profissionais, serviços e status de consultas com a agenda online do Zemda. Conheça os recursos de agendamento e comunicação.",
+    "features": [
+      {
+        "title": "Horários e serviços",
+        "description": "A agenda conecta profissionais, serviços e horários para apoiar a recepção. Confira disponibilidade e duração antes de confirmar um atendimento e mantenha visíveis os estados de cada agendamento."
+      },
+      {
+        "title": "Confirmações e lembretes",
+        "description": "O acompanhamento de confirmações, faltas e cancelamentos ajuda a identificar horários que precisam de atenção. Lembretes pelo WhatsApp dependem da configuração disponível e não garantem a presença do paciente."
+      },
+      {
+        "title": "Agendamento público",
+        "description": "Os fluxos públicos de agendamento permitem consultar disponibilidade e solicitar horários conforme configuração. Essas páginas operacionais não são páginas de conteúdo SEO nem devem expor informações clínicas."
+      }
+    ],
+    "relatedLinks": [
+      "/sistema-para-clinicas",
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Organize a rotina com o Zemda"
+  },
+  {
+    "path": "/prontuario",
+    "slug": "prontuario",
+    "title": "Prontuário Eletrônico para Profissionais da Saúde | Zemda",
+    "metaDescription": "Organize registros, documentos, anexos e evolução clínica no prontuário eletrônico do Zemda, com ferramentas por profissão e acesso conforme permissões.",
+    "badge": "Prontuário eletrônico",
+    "h1": "Prontuário eletrônico e histórico de atendimento",
+    "summary": "Organize registros, documentos, anexos e evolução clínica no prontuário eletrônico do Zemda, com ferramentas por profissão e acesso conforme permissões.",
+    "features": [
+      {
+        "title": "Registros com contexto",
+        "description": "Reúna os registros por atendimento e consulte o histórico do paciente. Diferencie informações relatadas, observações e condutas para tornar a evolução compreensível na próxima consulta."
+      },
+      {
+        "title": "Documentos e anexos",
+        "description": "Documentos profissionais, pedidos e anexos complementam o registro. Revise conteúdo, identificação e autoria antes de emitir ou compartilhar; o formato do documento não representa validação fiscal ou regulatória automática."
+      },
+      {
+        "title": "Acesso e autoria",
+        "description": "O Zemda utiliza perfis, permissões e registros de autoria nos fluxos disponíveis. Defina acessos de acordo com as responsabilidades da equipe e mantenha a revisão profissional dos registros."
+      }
+    ],
+    "relatedLinks": [
+      "/sistema-para-clinicas",
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Organize a rotina com o Zemda"
+  },
+  {
+    "path": "/gestao-financeira",
+    "slug": "gestao-financeira",
+    "title": "Gestão Financeira para Clínicas e Consultórios | Zemda",
+    "metaDescription": "Acompanhe receitas, despesas, caixa e repasses da clínica no Zemda. Organize os registros financeiros junto à rotina administrativa dos atendimentos.",
+    "badge": "Gestão financeira",
+    "h1": "Organize o financeiro da clínica",
+    "summary": "Acompanhe receitas, despesas, caixa e repasses da clínica no Zemda. Organize os registros financeiros junto à rotina administrativa dos atendimentos.",
+    "features": [
+      {
+        "title": "Receitas e despesas",
+        "description": "Registre entradas e despesas por período e acompanhe pendências. Separe a data do atendimento da data de recebimento para interpretar o movimento de caixa sem confundir produção com pagamento."
+      },
+      {
+        "title": "Caixa e repasses",
+        "description": "Consulte movimentações e repasses nos recursos disponíveis. Confira os registros antes do fechamento e documente ajustes para facilitar a revisão pela equipe responsável."
+      },
+      {
+        "title": "Recibos e relatórios",
+        "description": "Emita os recibos disponíveis e consulte relatórios para apoiar a organização administrativa. A emissão no sistema não substitui a verificação das obrigações fiscais aplicáveis à atividade."
+      }
+    ],
+    "relatedLinks": [
+      "/sistema-para-clinicas",
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira"
+    ],
+    "ctaHeadline": "Organize a rotina com o Zemda"
+  },
+  {
+    "path": "/blog",
+    "slug": "blog",
+    "title": "Blog Zemda | Organização e Gestão em Saúde",
+    "metaDescription": "Guias práticos do Zemda sobre organização da agenda, prontuários e gestão de clínicas. Leia artigos para avaliar processos e melhorar a rotina da equipe.",
+    "badge": "Blog Zemda",
+    "h1": "Blog Zemda: organização e gestão em saúde",
+    "summary": "Guias da equipe Zemda para revisar processos de agenda, documentação e organização administrativa. Os conteúdos explicam critérios de trabalho sem prometer resultados automáticos."
   }
-  return acc;
-}, {} as Record<string, SeoPageData>);
-
-// Rotas internas legítimas da aplicação (deep links para autenticação e painéis protegidos)
-export const VALID_INTERNAL_EXACT_PATHS = new Set<string>([
+];
+export const SEO_ROUTES: SeoRoute[] = [...BASE_PAGES, ...PROFESSIONAL_PAGES, ...BLOG_ARTICLES].map(route => ({
+ ...route, canonical: buildCanonical(route.path), indexable: true, inSitemap: true,
+}));
+for (const route of SEO_ROUTES) {
+ if (route.path.startsWith('/sistema-') || route.path === '/prontuario') {
+  route.relatedLinks = [...(route.relatedLinks || []), '/blog/prontuario-eletronico-vs-papel'];
+ } else if (route.path === '/agenda-online') {
+  route.relatedLinks = [...(route.relatedLinks || []), '/blog/como-reduzir-faltas-de-pacientes'];
+ } else if (route.path === '/gestao-financeira') {
+  route.relatedLinks = [...(route.relatedLinks || []), '/blog/gestao-de-clinica-multiprofissional'];
+ }
+}
+export const PUBLIC_NICHE_PAGES: Record<string, SeoPageData> = Object.fromEntries(
+ SEO_ROUTES.filter(route => route.slug).map(route => [route.slug!, {
+  keywords: '', badge: route.title, h1: route.title, h2: '', summary: route.metaDescription,
+  features: [], benefits: [], faqs: [], ctaHeadline: 'Conheça o Zemda', ctaSubheadline: 'Consulte os planos para a sua equipe.',
+  ...route, slug: route.slug!,
+ }])
+);
+const VALID_INTERNAL_EXACT_PATHS = new Set<string>([
   '/login',
   '/dashboard',
   '/calendar',
@@ -869,26 +1104,13 @@ export function generateSitemapXml(): string {
 export function generateRobotsTxt(): string {
   return `User-agent: *
 Allow: /
-Allow: /planos
-Allow: /sistema-para-clinicas
-Allow: /sistema-para-medicos
-Allow: /sistema-para-psicologos
-Allow: /sistema-para-fonoaudiologos
-Allow: /sistema-para-fisioterapeutas
-Allow: /sistema-para-nutricionistas
-Allow: /sistema-para-psicopedagogos
-Allow: /agenda-online
-Allow: /prontuario
-Allow: /gestao-financeira
-Allow: /blog
-Allow: /termos-de-uso
-Allow: /privacidade
-Allow: /verificar-documento
-
-# APIs
 Disallow: /api/
 Disallow: /v1/
 
 Sitemap: ${OFFICIAL_DOMAIN}/sitemap.xml
-`.trim();
+`;
+}
+export function generateSitemapIndexXml(): string {
+ return `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>${OFFICIAL_DOMAIN}/sitemap.xml</loc></sitemap></sitemapindex>`;
 }
