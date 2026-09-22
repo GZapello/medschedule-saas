@@ -20,7 +20,7 @@ import {
   Sparkles,
   Briefcase
 } from 'lucide-react';
-import { REGISTRATION_PROFESSIONS } from '../../types/professions';
+import { REGISTRATION_PROFESSIONS, RegistrationProfessionOption } from '../../types/professions';
 
 interface CreateClinicModalProps {
   isOpen: boolean;
@@ -44,10 +44,33 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
   };
   useEffect(() => { if (isOpen) loadPlans(); }, [isOpen]);
 
+  const [professionOptions, setProfessionOptions] = useState<RegistrationProfessionOption[]>(() => REGISTRATION_PROFESSIONS || []);
+  const [loadingProfessions, setLoadingProfessions] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    setLoadingProfessions(true);
+    ApiClient.get<RegistrationProfessionOption[]>('/v1/taxonomy/professions')
+      .then(data => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setProfessionOptions(data);
+        }
+      })
+      .catch(() => {
+        // Fallback to static list already initialized in state
+      })
+      .finally(() => {
+        if (isMounted) setLoadingProfessions(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
+
   const [step, setStep] = useState<'form' | 'verify_email' | 'plans'>('form');
   const contentRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (contentRef.current) contentRef.current.scrollTop = 0; }, [step, isOpen]);
-  const [loading, setLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);

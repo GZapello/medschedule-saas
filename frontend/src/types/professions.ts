@@ -97,5 +97,5 @@ export function findProfessionById(id: string): ProfessionItem | undefined {
   return undefined;
 }
 
-export { REGISTRATION_PROFESSIONS } from '../../../backend/src/types/registration-professions';
+export { REGISTRATION_PROFESSIONS, REGISTRATION_PROFESSION_ALIASES } from '../../../backend/src/types/registration-professions';
 export type { RegistrationProfessionOption } from '../../../backend/src/types/registration-professions';

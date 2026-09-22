@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { resolveProfessionModule } from '../utils/profession-module';
 
 export class TaxonomyController {
   // Categorias (Tipos de Serviço Macro)
@@ -26,37 +27,28 @@ export class TaxonomyController {
     try {
       const { name, slug, icon, description, defaultTerminology, isClinical } = req.body;
       if (!name || !name.trim()) {
-        res.status(400).json({ error: 'Nome do tipo de serviço / categoria é obrigatório' });
+        res.status(400).json({ error: 'Nome da categoria é obrigatório' });
         return;
       }
 
       const id = 'cat-' + uuidv4().slice(0, 8);
-      const generatedSlug = slug || name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
+      const generatedSlug = slug || name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
 
-      const validTerms = ['patient', 'client', 'student', 'pet_owner'];
-      let term = (defaultTerminology || 'client').toLowerCase();
-      if (term === 'cliente') term = 'client';
-      if (term === 'paciente') term = 'patient';
-      if (term === 'aluno') term = 'student';
-      if (!validTerms.includes(term)) term = 'client';
-
-      const insertStmt = db.prepare(`
-        INSERT INTO categories (id, tenant_id, name, slug, icon, description, default_terminology, is_clinical, active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-      `);
-
-      insertStmt.run(
+      db.prepare(`
+        INSERT INTO categories (id, name, slug, icon, description, default_terminology, is_clinical, active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      `).run(
         id,
-        null,
         name.trim(),
         generatedSlug,
-        icon || 'Layers',
-        description ? description.trim() : null,
-        term,
-        isClinical ? 1 : 0
+        icon || 'Activity',
+        description || null,
+        defaultTerminology || 'paciente',
+        isClinical !== undefined ? (isClinical ? 1 : 0) : 1
       );
 
-      res.status(201).json({ id, name: name.trim(), slug: generatedSlug, message: 'Tipo de serviço criado com sucesso' });
+      const created = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
+      res.status(201).json(created);
     } catch (err: any) {
       console.error('[TaxonomyController.createCategory] Erro:', err);
       res.status(500).json({ error: 'Erro ao criar categoria' });
@@ -66,52 +58,46 @@ export class TaxonomyController {
   static updateCategory(req: Request, res: Response): void {
     try {
       const { id } = req.params;
-      const { name, description, defaultTerminology, isClinical } = req.body;
+      const { name, slug, icon, description, defaultTerminology, isClinical } = req.body;
 
-      if (!name || !name.trim()) {
-        res.status(400).json({ error: 'Nome do tipo de serviço / categoria é obrigatório' });
+      const category = db.prepare('SELECT * FROM categories WHERE id = ?').get(id) as any;
+      if (!category) {
+        res.status(404).json({ error: 'Categoria não encontrada' });
         return;
       }
-
-      const existing = db.prepare('SELECT id FROM categories WHERE id = ?').get(id);
-      if (!existing) {
-        res.status(404).json({ error: 'Tipo de serviço não encontrado' });
-        return;
-      }
-
-      const validTerms = ['patient', 'client', 'student', 'pet_owner'];
-      let term = (defaultTerminology || 'client').toLowerCase();
-      if (term === 'cliente') term = 'client';
-      if (term === 'paciente') term = 'patient';
-      if (term === 'aluno') term = 'student';
-      if (!validTerms.includes(term)) term = 'client';
 
       db.prepare(`
-        UPDATE categories SET
-          name = ?,
-          description = ?,
-          default_terminology = ?,
-          is_clinical = ?
+        UPDATE categories
+        SET name = COALESCE(?, name),
+            slug = COALESCE(?, slug),
+            icon = COALESCE(?, icon),
+            description = COALESCE(?, description),
+            default_terminology = COALESCE(?, default_terminology),
+            is_clinical = COALESCE(?, is_clinical),
+            updated_at = datetime('now')
         WHERE id = ?
       `).run(
-        name.trim(),
-        description ? description.trim() : null,
-        term,
-        isClinical ? 1 : 0,
+        name ? name.trim() : null,
+        slug || null,
+        icon || null,
+        description !== undefined ? description : null,
+        defaultTerminology || null,
+        isClinical !== undefined ? (isClinical ? 1 : 0) : null,
         id
       );
 
-      res.json({ message: 'Tipo de serviço atualizado com sucesso' });
+      const updated = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
+      res.json(updated);
     } catch (err: any) {
       console.error('[TaxonomyController.updateCategory] Erro:', err);
-      res.status(500).json({ error: 'Erro ao atualizar tipo de serviço' });
+      res.status(500).json({ error: 'Erro ao atualizar categoria' });
     }
   }
 
   static toggleCategoryStatus(req: Request, res: Response): void {
     try {
       const { id } = req.params;
-      const category = db.prepare('SELECT id, name, active FROM categories WHERE id = ?').get(id) as any;
+      const category = db.prepare('SELECT * FROM categories WHERE id = ?').get(id) as any;
 
       if (!category) {
         res.status(404).json({ error: 'Tipo de serviço não encontrado' });
@@ -138,7 +124,8 @@ export class TaxonomyController {
       const showAll = all === 'true';
 
       let query = `
-        SELECT p.id, p.category_id, c.name as category_name, p.name, p.slug, p.registration_board_label, p.registration_required, p.custom_fields_schema, p.active
+        SELECT p.id, p.category_id, c.name as category_name, c.is_clinical as category_is_clinical,
+               p.name, p.slug, p.registration_board_label, p.registration_required, p.custom_fields_schema, p.active
         FROM professions p
         LEFT JOIN categories c ON c.id = p.category_id
       `;
@@ -161,7 +148,32 @@ export class TaxonomyController {
       query += ' ORDER BY p.name ASC';
 
       const stmt = db.prepare(query);
-      const professions = stmt.all(...params);
+      const rows = stmt.all(...params);
+
+      const professions = rows.map((p: any) => {
+        const { module } = resolveProfessionModule({
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          registrationType: p.registration_board_label
+        });
+        const modules = [module || 'Recursos gerais do Zemda', 'ZemdaBody'];
+        const accessLabel = modules.join(' + ');
+        const displayOption = `${p.name} — ${accessLabel}`;
+        const isAdministrative = p.category_is_clinical === 0 || p.category_id === 'cat-admin';
+        return {
+          ...p,
+          label: p.name,
+          canonicalName: p.name,
+          boardLabel: p.registration_board_label,
+          module: module || undefined,
+          modules,
+          accessLabel,
+          displayOption,
+          administrative: isAdministrative
+        };
+      });
+
       res.json(professions);
     } catch (err: any) {
       console.error('[TaxonomyController.listProfessions] Erro:', err);
