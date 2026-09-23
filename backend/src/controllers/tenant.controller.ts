@@ -11,6 +11,7 @@ import { globalAudit, purgeClinic } from '../services/clinic-control.service';
 import { ensureDefaultClinicService } from '../services/default-service.service';
 import { EmailService } from '../services/email.service';
 import { TrialNotificationService } from '../services/trial-notification.service';
+import { CapabilityService } from '../services/capability.service';
 import { resolveProfessionModule } from '../utils/profession-module';
 import { REGISTRATION_PROFESSIONS } from '../types/professions';
 
@@ -392,6 +393,10 @@ export class TenantController {
         throw txErr;
       }
 
+      if (req.body.practiceAreaIds && Array.isArray(req.body.practiceAreaIds)) {
+        CapabilityService.setUserPracticeAreas(userId, tenantId, req.body.practiceAreaIds);
+      }
+
       if (startTrial) {
         void TrialNotificationService.notifyTrialStarted(tenantId, cleanEmail, responsibleName, trialEndsAt);
       }
@@ -451,7 +456,8 @@ export class TenantController {
         zemdaFonoEnabled: modFlags.zemda_fono_enabled === 1,
         zemdaPsicoEnabled: modFlags.zemda_psico_enabled === 1,
         zemdaPPEnabled: modFlags.zemda_pp_enabled === 1,
-        zemdaPersonalEnabled: modFlags.zemda_personal_enabled === 1
+        zemdaPersonalEnabled: modFlags.zemda_personal_enabled === 1,
+        zemdaMedEnabled: modFlags.zemda_med_enabled === 1
       };
 
       res.status(201).json({

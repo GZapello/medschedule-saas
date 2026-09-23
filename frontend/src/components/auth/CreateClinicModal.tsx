@@ -34,6 +34,7 @@ import {
   Check
 } from 'lucide-react';
 import { REGISTRATION_PROFESSIONS, RegistrationProfessionOption } from '../../types/professions';
+import { PracticeArea } from '../../types/capabilities';
 
 interface CreateClinicModalProps {
   isOpen: boolean;
@@ -101,6 +102,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   const [professionOptions, setProfessionOptions] = useState<RegistrationProfessionOption[]>(() => REGISTRATION_PROFESSIONS || []);
   const [loadingProfessions, setLoadingProfessions] = useState(false);
 
+  // Áreas de Atuação e Abordagens Clínicas
+  const [practiceAreas, setPracticeAreas] = useState<PracticeArea[]>([]);
+  const [selectedPracticeAreaIds, setSelectedPracticeAreaIds] = useState<string[]>([]);
+  const [loadingPracticeAreas, setLoadingPracticeAreas] = useState(false);
+
   // Carregar planos
   const loadPlans = () => {
     setPlanError('');
@@ -136,6 +142,40 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       isMounted = false;
     };
   }, [isOpen]);
+
+  // Carregar áreas de atuação para a profissão selecionada
+  useEffect(() => {
+    if (!formData.profession) {
+      setPracticeAreas([]);
+      setSelectedPracticeAreaIds([]);
+      return;
+    }
+    let isMounted = true;
+    setLoadingPracticeAreas(true);
+    ApiClient.get<PracticeArea[]>(`/v1/capabilities/practice-areas?professionId=${encodeURIComponent(formData.profession)}`)
+      .then(data => {
+        if (isMounted && Array.isArray(data)) {
+          setPracticeAreas(data);
+          // Pré-seleciona a área especializada padrão se for especialista médico
+          if (formData.profession === 'prof-pediatra') setSelectedPracticeAreaIds(['pa-med-pediatria']);
+          else if (formData.profession === 'prof-cardiologista') setSelectedPracticeAreaIds(['pa-med-cardio']);
+          else if (formData.profession === 'prof-dermatologista') setSelectedPracticeAreaIds(['pa-med-dermato']);
+          else if (formData.profession === 'prof-psiquiatra') setSelectedPracticeAreaIds(['pa-med-psiquiatria']);
+          else if (formData.profession === 'prof-medico') setSelectedPracticeAreaIds(['pa-med-clinica']);
+          else setSelectedPracticeAreaIds([]);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setPracticeAreas([]);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingPracticeAreas(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [formData.profession]);
 
   // Scroll to top ao trocar de etapa
   useEffect(() => {
@@ -532,6 +572,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
           ? formData.customProfession.trim()
           : (selectedOption?.canonicalName || selectedOption?.label || (selectedOption as any)?.name || formData.profession);
 
+      const selectedAreaNames = practiceAreas
+        .filter(pa => selectedPracticeAreaIds.includes(pa.id))
+        .map(pa => pa.name);
+
       const data = await ApiClient.post<any>('/v1/public/tenants/register', {
         responsibleName: formData.responsibleName.trim(),
         email: formData.email.trim().toLowerCase(),
@@ -541,6 +585,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         professionId: selectedOption?.id || undefined,
         professionName: professionNameToSend,
         registrationType: selectedOption?.boardLabel || undefined,
+        practiceAreaIds: selectedPracticeAreaIds,
+        practiceAreas: selectedAreaNames.length > 0 ? selectedAreaNames.join(', ') : undefined,
         clinicName: fallbackClinicName,
         tradeName: fallbackClinicName,
         termsAccepted: formData.termsAccepted,
@@ -925,6 +971,89 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                         onChange={e => setFormData({ ...formData, customProfession: e.target.value })}
                         className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
                       />
+                    </div>
+                  )}
+
+                  {/* Seleção Interativa de Áreas de Atuação e Abordagens (Multiselect Cards) */}
+                  {formData.profession && (
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-extrabold text-slate-800">
+                          Áreas de Atuação & Abordagens Clínicas
+                        </label>
+                        <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/60">
+                          {selectedPracticeAreaIds.length === 0
+                            ? 'Opcional • Selecione'
+                            : `${selectedPracticeAreaIds.length} selecionada${selectedPracticeAreaIds.length > 1 ? 's' : ''}`}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mb-2.5">
+                        Escolha suas áreas para pré-configurar recursos clínicos, escalas e prescrições ideais.
+                      </p>
+
+                      {loadingPracticeAreas ? (
+                        <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                          <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
+                          <span>Carregando áreas de atuação recomendadas...</span>
+                        </div>
+                      ) : practiceAreas.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                          {practiceAreas.map(area => {
+                            const isSelected = selectedPracticeAreaIds.includes(area.id);
+                            return (
+                              <button
+                                type="button"
+                                key={area.id}
+                                onClick={() => {
+                                  setSelectedPracticeAreaIds(prev =>
+                                    isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
+                                  );
+                                }}
+                                className={`p-2.5 rounded-xl border text-left transition-all flex items-start gap-2.5 cursor-pointer select-none ${
+                                  isSelected
+                                    ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
+                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
+                                }`}
+                              >
+                                <div
+                                  className={`w-4 h-4 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                    isSelected
+                                      ? 'bg-teal-600 border-teal-600 text-white'
+                                      : 'border-slate-300 bg-white'
+                                  }`}
+                                >
+                                  {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-teal-950' : 'text-slate-800'}`}>
+                                      {area.name}
+                                    </span>
+                                    <span
+                                      className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase shrink-0 ${
+                                        area.type === 'approach'
+                                          ? 'bg-purple-100 text-purple-700'
+                                          : 'bg-emerald-100 text-emerald-800'
+                                      }`}
+                                    >
+                                      {area.type === 'approach' ? 'Abordagem' : 'Especialidade'}
+                                    </span>
+                                  </div>
+                                  {area.description && (
+                                    <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">
+                                      {area.description}
+                                    </p>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic py-2">
+                          Nenhuma área específica configurada para esta especialidade. Módulos padrão serão ativados.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

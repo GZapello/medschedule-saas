@@ -11,6 +11,7 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { EmailService } from '../services/email.service';
+import { CapabilityService } from '../services/capability.service';
 
 export class AuthController {
   static async login(req: Request, res: Response): Promise<void> {
@@ -242,6 +243,16 @@ export class AuthController {
         user.role === 'clinic_admin' || user.role === 'professional' || cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
       );
 
+      const computedCaps = (user.tenant_id && user.role !== 'superadmin')
+        ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
+        : null;
+
+      const zemdaMedEnabled = isEligibleUser && (
+        modFlags.zemda_med_enabled === 1 ||
+        computedCaps?.commercialModule === 'ZemdaMed' ||
+        (computedCaps?.activeCapabilities && computedCaps.activeCapabilities.includes('medical_consultations'))
+      );
+
       const needsLegalAcceptance = user.role !== 'superadmin' && (
         user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
         user.privacy_version_accepted !== CURRENT_PRIVACY_VERSION
@@ -282,7 +293,12 @@ export class AuthController {
           zemdaPPEnabled,
           zemdaPsicoEnabled,
           zemdaPersonalEnabled,
-          zemdaBodyEnabled
+          zemdaMedEnabled: !!zemdaMedEnabled,
+          zemdaBodyEnabled,
+          commercialModule: computedCaps?.commercialModule || null,
+          capabilities: computedCaps?.activeCapabilities || [],
+          practiceAreaIds: computedCaps?.practiceAreaIds || [],
+          selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []
         },
         tenant: tenantData
       });
@@ -428,6 +444,16 @@ export class AuthController {
         user.role === 'clinic_admin' || user.role === 'professional' || cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
       );
 
+      const computedCaps = (user.tenant_id && user.role !== 'superadmin')
+        ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
+        : null;
+
+      const zemdaMedEnabled = isEligibleUser && (
+        modFlags.zemda_med_enabled === 1 ||
+        computedCaps?.commercialModule === 'ZemdaMed' ||
+        (computedCaps?.activeCapabilities && computedCaps.activeCapabilities.includes('medical_consultations'))
+      );
+
       const needsLegalAcceptance = user.role !== 'superadmin' && (
         user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
         user.privacy_version_accepted !== CURRENT_PRIVACY_VERSION
@@ -467,7 +493,12 @@ export class AuthController {
           zemdaPPEnabled,
           zemdaPsicoEnabled,
           zemdaPersonalEnabled,
-          zemdaBodyEnabled
+          zemdaMedEnabled: !!zemdaMedEnabled,
+          zemdaBodyEnabled,
+          commercialModule: computedCaps?.commercialModule || null,
+          capabilities: computedCaps?.activeCapabilities || [],
+          practiceAreaIds: computedCaps?.practiceAreaIds || [],
+          selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []
         },
         tenant: tenantData
       });

@@ -15,7 +15,8 @@ export type ZemdaModule =
   | 'ZemdaPP'
   | 'ZemdaFisio'
   | 'ZemdaOdonto'
-  | 'ZemdaPersonal';
+  | 'ZemdaPersonal'
+  | 'ZemdaMed';
 
 export interface ModuleFlags {
   zemda_fono_enabled: number;
@@ -26,6 +27,7 @@ export interface ModuleFlags {
   zemda_fisio_enabled: number;
   zemda_odonto_enabled: number;
   zemda_personal_enabled: number;
+  zemda_med_enabled?: number;
 }
 
 export interface ResolveProfessionInput {
@@ -154,6 +156,36 @@ export function resolveProfessionModule(input: ResolveProfessionInput): { module
   ) {
     matchedModule = 'ZemdaPersonal';
   }
+  // 9. Medicina Geral e Especialidades Médicas
+  else if (
+    pId === 'prof-medico' ||
+    pId === 'prof-medicina' ||
+    pId === 'prof-cardiologista' ||
+    pId === 'prof-dermatologista' ||
+    pId === 'prof-pediatra' ||
+    pId === 'prof-psiquiatra' ||
+    pId === 'prof-neurologista' ||
+    pId === 'prof-geriatra' ||
+    pId === 'prof-ortopedista' ||
+    pId === 'prof-endocrinologista' ||
+    pId === 'prof-reumatologista' ||
+    pSlug === 'medico' ||
+    pSlug === 'medicina' ||
+    pSlug === 'cardiologista' ||
+    pSlug === 'dermatologista' ||
+    pSlug === 'pediatra' ||
+    pSlug === 'psiquiatra' ||
+    pSlug === 'neurologista' ||
+    pSlug === 'geriatra' ||
+    pSlug === 'ortopedista' ||
+    pSlug === 'endocrinologista' ||
+    pSlug === 'reumatologista' ||
+    combined.includes('médic') ||
+    combined.includes('medic') ||
+    regType === 'CRM'
+  ) {
+    matchedModule = 'ZemdaMed';
+  }
 
   // Gera mapa atômico com exclusividade mútua
   const flags: ModuleFlags = {
@@ -164,7 +196,8 @@ export function resolveProfessionModule(input: ResolveProfessionInput): { module
     zemda_pp_enabled: matchedModule === 'ZemdaPP' ? 1 : 0,
     zemda_fisio_enabled: matchedModule === 'ZemdaFisio' ? 1 : 0,
     zemda_odonto_enabled: matchedModule === 'ZemdaOdonto' ? 1 : 0,
-    zemda_personal_enabled: matchedModule === 'ZemdaPersonal' ? 1 : 0
+    zemda_personal_enabled: matchedModule === 'ZemdaPersonal' ? 1 : 0,
+    zemda_med_enabled: matchedModule === 'ZemdaMed' ? 1 : 0
   };
 
   return { module: matchedModule, flags };
@@ -188,7 +221,8 @@ export function cleanPracticeAreasForNewProfession(newProfessionId: string, curr
     ZemdaPP: ['psicopedag', 'aprendizagem', 'dificuldades escolares'],
     ZemdaFisio: ['fisio', 'reabilitação', 'ortopedia', 'traumatologia', 'pilates'],
     ZemdaOdonto: ['odonto', 'dentis', 'clareamento', 'ortodontia', 'endodontia', 'implante'],
-    ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'treinamento', 'condicionamento físico']
+    ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'treinamento', 'condicionamento físico'],
+    ZemdaMed: ['médic', 'medic', 'clínica médica', 'prescrição', 'soap', 'cid', 'neurologia', 'psiquiatria', 'pediatria', 'cardiologia', 'dermatologia']
   };
 
   const filtered = rawAreas.filter(area => {

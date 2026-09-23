@@ -51,6 +51,9 @@ import { ExternalTestsController } from '../controllers/external-tests.controlle
 import { EmailVerificationController } from '../controllers/email-verification.controller';
 import { WhatsAppCloudController } from '../controllers/whatsapp-cloud.controller';
 import { ClinicalDraftController } from '../controllers/clinical-draft.controller';
+import { CapabilityController } from '../controllers/capability.controller';
+import { MedicalController } from '../controllers/medical.controller';
+import { SandboxController } from '../controllers/sandbox.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -934,5 +937,32 @@ api.get('/v1/whatsapp-cloud/config', requireRole('superadmin'), WhatsAppCloudCon
 api.get('/v1/whatsapp-cloud/status', requireRole('superadmin'), WhatsAppCloudController.getStatus);
 api.post('/v1/whatsapp-cloud/exchange-code', requireRole('superadmin'), WhatsAppCloudController.exchangeCode);
 api.post('/v1/whatsapp-cloud/disconnect', requireRole('superadmin'), WhatsAppCloudController.disconnect);
+
+// ==========================================
+// CAPABILITIES & RECURSOS PROFISSIONAIS ("Meus Recursos")
+// ==========================================
+api.get('/v1/capabilities/catalog', CapabilityController.getCatalog);
+api.get('/v1/capabilities/practice-areas', CapabilityController.getPracticeAreas);
+api.get('/v1/capabilities/my-resources', requireTenant, CapabilityController.getMyResources);
+api.get('/v1/my-resources', requireTenant, CapabilityController.getMyResources);
+api.put('/v1/capabilities/my-resources', requireTenant, CapabilityController.updateMyOptionalResources);
+api.put('/v1/my-resources', requireTenant, CapabilityController.updateMyOptionalResources);
+api.put('/v1/capabilities/my-practice-areas', requireTenant, CapabilityController.updateMyPracticeAreas);
+api.put('/v1/my-resources/practice-areas', requireTenant, CapabilityController.updateMyPracticeAreas);
+
+// ==========================================
+// ZEMDAMED — MÓDULO MÉDICO INTEGRADO
+// ==========================================
+api.get('/v1/medical/consultations/patient/:patientId', requireTenant, MedicalController.listConsultationsByPatient);
+api.get('/v1/medical/consultations/:id', requireTenant, MedicalController.getConsultationById);
+api.post('/v1/medical/consultations', requireTenant, MedicalController.createConsultation);
+api.post('/v1/medical/consultations/:id/finish', requireTenant, MedicalController.finishConsultation);
+api.post('/v1/medical/finish-consultation', requireTenant, MedicalController.finishConsultation);
+
+// ==========================================
+// LABORATÓRIO ZEMDA (SUPERADMIN SANDBOX)
+// ==========================================
+api.post('/v1/sandbox/create-session', requireRole('superadmin'), SandboxController.createSession);
+api.post('/v1/sandbox/reset', SandboxController.resetSandbox);
 
 export default api;

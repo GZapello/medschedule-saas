@@ -6,6 +6,7 @@ import { BillingView, BillingBanner, useBillingSummary } from './components/bill
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { ApiClient } from './api/client';
 const Navbar = lazy(() => import('./components/common/Navbar').then(module => ({ default: module.Navbar })));
 const Sidebar = lazy(() => import('./components/common/Sidebar').then(module => ({ default: module.Sidebar })));
 const AuthPage = lazy(() => import('./components/auth/AuthPage').then(module => ({ default: module.AuthPage })));
@@ -44,6 +45,9 @@ const PendingExamsView = lazy(() => import('./components/exams/PendingExamsView'
 const InventoryView = lazy(() => import('./components/inventory/InventoryView').then(module => ({ default: module.InventoryView })));
 const BudgetsView = lazy(() => import('./components/budgets/BudgetsView').then(module => ({ default: module.BudgetsView })));
 const ProfessionalPayrollView = lazy(() => import('./components/payroll/ProfessionalPayrollView').then(module => ({ default: module.ProfessionalPayrollView })));
+const ZemdaMedWorkspace = lazy(() => import('./components/medical/ZemdaMedWorkspace').then(module => ({ default: module.ZemdaMedWorkspace })));
+const MyResourcesView = lazy(() => import('./components/profile/MyResourcesView').then(module => ({ default: module.MyResourcesView })));
+const SuperAdminLaboratoryView = lazy(() => import('./components/superadmin/SuperAdminLaboratoryView').then(module => ({ default: module.SuperAdminLaboratoryView })));
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
 import { PublicHeader } from './components/public/PublicHeader';
@@ -131,7 +135,12 @@ const AppContent: React.FC = () => {
     isZemdaPsico,
     isPsychopedagogue,
     isZemdaPP,
-    isZemdaPersonal
+    isZemdaPersonal,
+    isDoctor,
+    isZemdaMed,
+    hasCapability,
+    isSandboxSession,
+    exitSandboxSession
   } = useAuth();
 
   const { summary: billingSummary } = useBillingSummary();
@@ -794,6 +803,50 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#fafbfc] flex flex-col">
       <BillingBanner summary={billingSummary} />
+      {/* Floating Sandbox Simulation Banner */}
+      {isSandboxSession && (
+        <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-purple-950 text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2 shadow-md border-b border-purple-500/30 sticky top-0 z-50">
+          <div className="flex items-center gap-2 font-bold">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>🧪 AMBIENTE DE TESTE — Simulação Ativa:</span>
+            <span className="bg-purple-800/80 px-2 py-0.5 rounded-md border border-purple-400/40 text-purple-200">
+              {currentUser?.name || currentUser?.professionName || 'Profissional'}
+            </span>
+            <span className="hidden sm:inline text-purple-300 font-normal">
+              (Isolado: WhatsApp, Resend e Asaas bloqueados)
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={async () => {
+                try {
+                  await ApiClient.post('/v1/sandbox/reset', { tenantId: currentUser?.tenantId });
+                  window.location.reload();
+                } catch (e: any) {
+                  alert(e.message || 'Erro ao resetar sandbox');
+                }
+              }}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+              title="Limpa e reseta dados de teste simulados neste ambiente"
+            >
+              Resetar Dados
+            </button>
+            <button
+              onClick={() => setCurrentView('superadmin')}
+              className="px-2.5 py-1 bg-purple-700 hover:bg-purple-600 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+            >
+              Laboratório
+            </button>
+            <button
+              onClick={exitSandboxSession}
+              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+            >
+              Encerrar Simulação
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <Navbar
         onToggleSidebar={() => setSidebarOpen(prev => !prev)}
@@ -832,6 +885,22 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'clinical' && <ClinicalRecordsView />}
+
+          {currentView === 'zemda-med' && (
+            (isDoctor || isZemdaMed || hasCapability('MEDICAL_BASE') || hasCapability('medical_consultations') || isSuperAdmin) ? (
+              <ZemdaMedWorkspace />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaMed</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Este módulo clínico é de uso exclusivo para médicos e especialistas com área de atuação em <strong>Medicina Geral e Especialidades</strong>.
+                </p>
+              </div>
+            )
+          )}
 
           {currentView === 'zemda-body' && <ZemdaBodyRecordsView />}
 
@@ -1000,6 +1069,12 @@ const AppContent: React.FC = () => {
           {currentView === 'audit' && <AuditView />}
 
           {currentView === 'settings' && <SettingsView />}
+
+          {currentView === 'my-resources' && <MyResourcesView />}
+
+          {(currentView === 'sandbox' || currentView === 'laboratory') && isSuperAdmin && (
+            <SuperAdminLaboratoryView />
+          )}
 
           {currentView === 'superadmin' && isSuperAdmin && <SuperAdminView />}
         </main>

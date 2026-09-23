@@ -515,6 +515,11 @@ export class WhatsAppCloudService {
     messageText: string;
   }): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
+      if (params.recipientPhone.includes('99999-0000') || params.recipientPhone.includes('98888-1111') || params.recipientPhone.includes('97777-2222') || params.recipientPhone.includes('sandbox')) {
+        console.log('[SANDBOX MOCK] Disparo real de WhatsApp suprimido no modo teste/sandbox.');
+        return { success: true, messageId: 'sbx-msg-mock' };
+      }
+
       const rawKey = (process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || '').trim();
       if (!rawKey) {
         return { success: false, error: 'Chave de criptografia WHATSAPP_TOKEN_ENCRYPTION_KEY não configurada no ambiente.' };

@@ -211,6 +211,12 @@ export class EmailService {
       };
     }
 
+    // 1.1 Proteção estrita de Sandbox / Modo Teste
+    if (email.endsWith('@zemda.test') || email.includes('sandbox')) {
+      console.log('[SANDBOX MOCK] Envio real de e-mail suprimido no modo teste/sandbox.');
+      return { success: true };
+    }
+
     // 2. Validação obrigatória de RESEND_API_KEY
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey || !apiKey.trim()) {

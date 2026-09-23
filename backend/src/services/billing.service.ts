@@ -72,6 +72,9 @@ function checkPlanSize(clinic: string, plan: any) {
   if (count>plan.max_users) throw new BillingError('PLAN_USER_LIMIT_REACHED',`Você possui ${count} usuários ativos. O plano escolhido permite até ${plan.max_users}. Desative ${count-plan.max_users} usuários antes de continuar.`);
 }
 async function customer(t: any): Promise<string> {
+  if (t?.id && String(t.id).startsWith('sbx-tenant-')) {
+    throw new BillingError('SANDBOX_PAYMENT_BLOCKED', '[SANDBOX] Operações financeiras com gateway real estão bloqueadas no modo teste.');
+  }
   const environment=AsaasService.getEnvironment();
   let local=db.prepare('SELECT * FROM billing_customers WHERE clinic_id=? AND environment=?').get(t.id,environment);
   if (local?.asaas_customer_id) return local.asaas_customer_id;

@@ -24,17 +24,19 @@ import {
   ToggleRight,
   Sparkles,
   Gift,
-  MessageSquare
+  MessageSquare,
+  FlaskConical
 } from 'lucide-react';
 import { FreeTrialsAdminView } from './FreeTrialsAdminView';
 import { WhatsAppEmbeddedSignup } from '../settings/WhatsAppEmbeddedSignup';
+import { SuperAdminLaboratoryView } from './SuperAdminLaboratoryView';
 
 export const SuperAdminView: React.FC = () => {
   const { switchTenant, currentUser: user } = useAuth();
   const { showToast } = useToast();
 
   // Navegação Principal do SuperAdmin
-  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp'>('tenants');
+  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory'>('tenants');
 
   // Clínicas
   const [metrics, setMetrics] = useState<any>(null);
@@ -440,6 +442,18 @@ export const SuperAdminView: React.FC = () => {
             <MessageSquare className="w-3.5 h-3.5" />
             WhatsApp Central
           </button>
+
+          <button
+            onClick={() => setMainSection('laboratory')}
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              mainSection === 'laboratory'
+                ? 'bg-purple-600 text-white font-black shadow-md'
+                : 'text-purple-300 hover:text-white'
+            }`}
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            Laboratório Sandbox
+          </button>
         </div>
       </div>
 
@@ -450,6 +464,7 @@ export const SuperAdminView: React.FC = () => {
       {mainSection === 'integrations' && <GlobalBillingView integration />}
       {mainSection === 'free_trials' && <FreeTrialsAdminView />}
       {mainSection === 'whatsapp' && <WhatsAppEmbeddedSignup />}
+      {mainSection === 'laboratory' && <SuperAdminLaboratoryView />}
       {mainSection === 'tenants' && (
         <div className="space-y-6">
           {/* Alertas do Sistema */}

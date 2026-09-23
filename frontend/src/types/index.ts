@@ -34,9 +34,16 @@ export interface User {
   zemdaPPEnabled?: boolean;
   zemdaPsicoEnabled?: boolean;
   zemdaPersonalEnabled?: boolean;
+  zemdaMedEnabled?: boolean;
   zemdaBodyEnabled?: boolean;
+  commercialModule?: string;
+  capabilities?: string[];
+  practiceAreaIds?: string[];
+  selectedOptionalCapabilities?: string[];
   permissions?: string[];
 }
+
+export * from './capabilities';
 
 export interface Tenant {
   id: string;

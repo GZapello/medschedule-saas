@@ -7,6 +7,7 @@ import { migrateConsultations } from './consultation-migration';
 import { migrateLongitudinalClinical } from './longitudinal-clinical.migration';
 import { seedExerciseLibrary } from './exercise-library.seed';
 import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
+import { migrateModularArchitecture } from './modular-architecture.migration';
 
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
 const dbDir = path.dirname(dbPath);
@@ -3446,4 +3447,10 @@ function repairLegacyPhotoUrls(rawDb: any): void {
     );
     CREATE INDEX IF NOT EXISTS idx_fono_auditory_patient ON fono_auditory_screenings(tenant_id, patient_id, screening_date);
   `);
+
+  try {
+    migrateModularArchitecture(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateModularArchitecture:', err);
+  }
 }

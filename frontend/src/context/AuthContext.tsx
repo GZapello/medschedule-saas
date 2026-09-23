@@ -34,7 +34,17 @@ interface AuthContextType {
   isZemdaPP: boolean;
   isPersonalTrainer: boolean;
   isZemdaPersonal: boolean;
+  isDoctor: boolean;
+  isZemdaMed: boolean;
   isZemdaBody: boolean;
+  commercialModule: string | null;
+  capabilities: string[];
+  practiceAreaIds: string[];
+  selectedOptionalCapabilities: string[];
+  hasCapability: (capabilityId: string) => boolean;
+  isSandboxSession: boolean;
+  startSandboxSession: (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => void;
+  exitSandboxSession: () => void;
   userPermissions: string[];
   clientTermLabel: string;
 }
@@ -114,9 +124,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = () => {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('active_tenant_id');
+    localStorage.removeItem('sandbox_backup_token');
+    localStorage.removeItem('sandbox_backup_tenant');
     setToken(null);
     setCurrentUser(null);
     setCurrentTenant(null);
+  };
+
+  const startSandboxSession = (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => {
+    const originalToken = localStorage.getItem('auth_token');
+    const originalTenant = localStorage.getItem('active_tenant_id');
+    if (originalToken && !localStorage.getItem('sandbox_backup_token')) {
+      localStorage.setItem('sandbox_backup_token', originalToken);
+      if (originalTenant) localStorage.setItem('sandbox_backup_tenant', originalTenant);
+    }
+
+    loginWithToken(sessionData.token, sessionData.user, sessionData.tenant);
+  };
+
+  const exitSandboxSession = () => {
+    const backupToken = localStorage.getItem('sandbox_backup_token');
+    const backupTenant = localStorage.getItem('sandbox_backup_tenant');
+
+    localStorage.removeItem('sandbox_backup_token');
+    localStorage.removeItem('sandbox_backup_tenant');
+
+    if (backupToken) {
+      localStorage.setItem('auth_token', backupToken);
+      if (backupTenant) {
+        localStorage.setItem('active_tenant_id', backupTenant);
+      } else {
+        localStorage.removeItem('active_tenant_id');
+      }
+      setToken(backupToken);
+      void reloadSession();
+    } else {
+      logout();
+    }
   };
 
   const switchTenant = async (tenantId: string) => {
@@ -182,6 +226,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     | 'ZemdaFisio'
     | 'ZemdaOdonto'
     | 'ZemdaPersonal'
+    | 'ZemdaMed'
     | null = null;
 
   if (
@@ -274,6 +319,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     regType === 'CREF'
   ) {
     activeModule = 'ZemdaPersonal';
+  } else if (
+    profId === 'prof-medico' ||
+    profId === 'prof-medicina' ||
+    profId === 'prof-cardiologista' ||
+    profId === 'prof-dermatologista' ||
+    profId === 'prof-pediatra' ||
+    profId === 'prof-psiquiatra' ||
+    profId === 'prof-neurologista' ||
+    profId === 'prof-geriatra' ||
+    profId === 'prof-ortopedista' ||
+    profId === 'prof-endocrinologista' ||
+    profId === 'prof-reumatologista' ||
+    profSlug === 'medico' ||
+    profSlug === 'medicina' ||
+    profSlug === 'cardiologista' ||
+    profSlug === 'dermatologista' ||
+    profSlug === 'pediatra' ||
+    profSlug === 'psiquiatra' ||
+    profSlug === 'neurologista' ||
+    profSlug === 'geriatra' ||
+    profSlug === 'ortopedista' ||
+    profSlug === 'endocrinologista' ||
+    profSlug === 'reumatologista' ||
+    combinedProf.includes('médic') ||
+    combinedProf.includes('medic') ||
+    regType === 'CRM'
+  ) {
+    activeModule = 'ZemdaMed';
   }
 
   const userPermissions = (currentUser as any)?.permissions || [];
@@ -307,6 +380,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
   const isZemdaPersonal = isPersonalTrainer;
 
+  // ZemdaMed: Nova vertical médica integral com 10 especialidades
+  const isDoctor = isEligibleStaff && (
+    activeModule === 'ZemdaMed' ||
+    currentUser?.commercialModule === 'ZemdaMed' ||
+    Boolean(currentUser?.zemdaMedEnabled) ||
+    Boolean(currentUser?.capabilities?.includes('medical_consultations'))
+  );
+  const isZemdaMed = isDoctor;
+
   // ZemdaBody: Módulo complementar universal para TODOS os profissionais clínicos e gestores
   const isZemdaBody = isEligibleStaff && (
     isClinicAdmin ||
@@ -315,6 +397,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     Boolean((currentUser as any)?.zemdaBodyEnabled) ||
     Boolean((currentUser as any)?.zemda_body_enabled)
   );
+
+  const capabilities = currentUser?.capabilities || [];
+  const practiceAreaIds = currentUser?.practiceAreaIds || [];
+  const selectedOptionalCapabilities = currentUser?.selectedOptionalCapabilities || [];
+  const commercialModule = currentUser?.commercialModule || activeModule || null;
+
+  const isSandboxSession = Boolean(
+    currentUser?.tenantId?.startsWith('sbx-tenant-') ||
+    currentTenant?.id?.startsWith('sbx-tenant-') ||
+    localStorage.getItem('sandbox_backup_token')
+  );
+
+  const hasCapability = (capId: string): boolean => {
+    if (isSuperAdmin && !isSandboxSession) return true;
+    return capabilities.includes(capId);
+  };
 
   const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
 
@@ -352,7 +450,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaPP,
         isPersonalTrainer,
         isZemdaPersonal,
+        isDoctor,
+        isZemdaMed,
         isZemdaBody,
+        commercialModule,
+        capabilities,
+        practiceAreaIds,
+        selectedOptionalCapabilities,
+        hasCapability,
+        isSandboxSession,
+        startSandboxSession,
+        exitSandboxSession,
         userPermissions,
         clientTermLabel
       }}

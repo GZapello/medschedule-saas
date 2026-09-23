@@ -33,7 +33,9 @@ import {
   Mic,
   Brain,
   Dumbbell,
-  GraduationCap
+  GraduationCap,
+  Stethoscope,
+  Sliders
 } from 'lucide-react';
 import { openZemdaAI } from '../../utils/aiHelper';
 
@@ -81,7 +83,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isZemdaPsico,
     isPsychopedagogue,
     isZemdaPP,
+    isPersonalTrainer,
     isZemdaPersonal,
+    isDoctor,
+    isZemdaMed,
+    hasCapability,
     isZemdaBody,
     clientTermLabel
   } = useAuth();
@@ -99,6 +105,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'Prontuário & Evolução',
           icon: FileText,
           visible: isClinicAdmin || isProfessional
+        },
+        {
+          id: 'zemda-med',
+          label: 'ZemdaMed (Medicina)',
+          icon: Stethoscope,
+          visible: isDoctor || isZemdaMed || hasCapability('MEDICAL_BASE') || hasCapability('medical_consultations')
         },
         {
           id: 'zemda-body',
@@ -194,6 +206,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: true },
         { id: 'import', label: 'Importar Dados', icon: UploadCloud, visible: isClinicAdmin },
         { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isSuperAdmin },
+        { id: 'my-resources', label: 'Meus Recursos', icon: Sliders, visible: isProfessional || isClinicAdmin },
         { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },
         { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: isSuperAdmin },
       ]
