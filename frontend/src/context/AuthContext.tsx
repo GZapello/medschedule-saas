@@ -316,6 +316,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     combinedProf.includes('personal') ||
     combinedProf.includes('educação física') ||
     combinedProf.includes('educacao fisica') ||
+    combinedProf.includes('educador físico') ||
+    combinedProf.includes('educador fisico') ||
+    combinedProf.includes('treinamento físico') ||
+    combinedProf.includes('musculação') ||
+    combinedProf.includes('musculacao') ||
     regType === 'CREF'
   ) {
     activeModule = 'ZemdaPersonal';
@@ -373,10 +378,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isPsychopedagogue = isEligibleStaff && (activeModule === 'ZemdaPP' || (activeModule === null && Boolean(currentUser?.zemdaPPEnabled)));
   const isZemdaPP = isPsychopedagogue;
 
-  const isPersonalTrainer = isEligibleStaff && activeModule === 'ZemdaPersonal' && (
-    currentUser?.role === 'clinic_admin' ||
-    userPermissions.includes('access_zemda_personal') ||
-    Boolean((currentUser as any)?.zemdaPersonalEnabled)
+  const isPersonalTrainer = isEligibleStaff && (
+    activeModule === 'ZemdaPersonal' ||
+    currentUser?.commercialModule === 'ZemdaPersonal' ||
+    Boolean((currentUser as any)?.zemdaPersonalEnabled) ||
+    Boolean((currentUser as any)?.zemda_personal_enabled) ||
+    Boolean(currentUser?.capabilities?.includes('TRAINING_PRESCRIBE'))
   );
   const isZemdaPersonal = isPersonalTrainer;
 
@@ -385,7 +392,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     activeModule === 'ZemdaMed' ||
     currentUser?.commercialModule === 'ZemdaMed' ||
     Boolean(currentUser?.zemdaMedEnabled) ||
-    Boolean(currentUser?.capabilities?.includes('medical_consultations'))
+    Boolean(currentUser?.capabilities?.includes('medical_consultations')) ||
+    Boolean(currentUser?.capabilities?.includes('MEDICAL_BASE'))
   );
   const isZemdaMed = isDoctor;
 

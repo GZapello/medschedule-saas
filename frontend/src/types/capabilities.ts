@@ -26,6 +26,7 @@ export interface PracticeArea {
   type: 'practice_area' | 'approach';
   description?: string;
   active?: boolean;
+  isInferredForAlias?: boolean;
 }
 
 export interface ComputedUserCapabilities {

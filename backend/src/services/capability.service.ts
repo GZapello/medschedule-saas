@@ -1,5 +1,5 @@
 import { db } from '../config/database';
-import { resolveProfessionModule, ZemdaModule } from '../utils/profession-module';
+import { resolveProfessionModule, resolveCanonicalProfession, ZemdaModule } from '../utils/profession-module';
 import { ComputedUserCapabilities } from '../types/capabilities';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 
@@ -9,31 +9,16 @@ export class CapabilityService {
    */
   public static normalizeProfessionId(profId?: string | null): string {
     if (!profId) return 'prof-outro-saude';
-    const clean = profId.trim().toLowerCase();
-    return REGISTRATION_PROFESSION_ALIASES[clean] || clean;
+    const resolution = resolveCanonicalProfession({ id: profId });
+    return resolution.canonicalId;
   }
 
   /**
-   * Determina o módulo comercial de exibição (ZemdaMed, ZemdaFisio, etc.)
+   * Determina o módulo comercial de exibição (ZemdaMed, ZemdaFisio, ZemdaPersonal, etc.)
    */
   public static resolveCommercialModule(profId: string, profName?: string): string {
-    const canonical = this.normalizeProfessionId(profId);
-
-    // Verificação prioritária de Medicina para ativar a nova vertical ZemdaMed
-    if (
-      canonical === 'prof-medico' ||
-      canonical === 'prof-medicina' ||
-      canonical === 'prof-cardiologista' ||
-      canonical === 'prof-dermatologista' ||
-      canonical === 'prof-pediatra' ||
-      canonical === 'prof-psiquiatra' ||
-      (profName && /médic|medic|crm|cardiolog|dermatolog|pediatr|psiquiatr/i.test(profName))
-    ) {
-      return 'ZemdaMed';
-    }
-
-    const { module } = resolveProfessionModule({ id: canonical, name: profName });
-    return module || 'ZemdaGestao';
+    const resolution = resolveCanonicalProfession({ id: profId, name: profName });
+    return resolution.commercialModule || 'ZemdaGestao';
   }
 
   /**
@@ -47,13 +32,19 @@ export class CapabilityService {
    * Retorna as áreas de atuação disponíveis para uma dada profissão
    */
   public static getPracticeAreas(professionId: string): any[] {
-    const canonical = this.normalizeProfessionId(professionId);
-    return db.prepare(`
+    const resolution = resolveCanonicalProfession({ id: professionId });
+    const canonical = resolution.canonicalId;
+    const rows = db.prepare(`
       SELECT id, profession_id, name, slug, type, description
       FROM practice_areas
       WHERE (profession_id = ? OR profession_id = ?) AND active = 1
       ORDER BY name ASC
-    `).all(canonical, professionId);
+    `).all(canonical, professionId) as any[];
+
+    return rows.map(r => ({
+      ...r,
+      isInferredForAlias: resolution.inferredAreaId ? r.id === resolution.inferredAreaId : false
+    }));
   }
 
   /**
@@ -130,19 +121,16 @@ export class CapabilityService {
 
     const rawProfId = userRow?.p_prof_id || userRow?.u_prof_id || userRow?.profession_custom || 'prof-outro-saude';
     const profName = userRow?.prof_name || userRow?.u_prof_name || '';
-    const canonicalProfId = this.normalizeProfessionId(rawProfId);
-    const commercialModule = this.resolveCommercialModule(canonicalProfId, profName);
+    const resolution = resolveCanonicalProfession({ id: rawProfId, name: profName });
+    const canonicalProfId = resolution.canonicalId;
+    const commercialModule = resolution.commercialModule || 'ZemdaGestao';
 
     // 2. Busca áreas selecionadas pelo usuário
     let userAreaIds = this.getUserPracticeAreas(userId, tenantId);
 
-    // Se usuário não tiver áreas cadastradas mas for médico especialista, infere a área inicial correspondente
-    if (userAreaIds.length === 0) {
-      if (rawProfId === 'prof-pediatra') userAreaIds = ['pa-med-pediatria'];
-      else if (rawProfId === 'prof-cardiologista') userAreaIds = ['pa-med-cardio'];
-      else if (rawProfId === 'prof-dermatologista') userAreaIds = ['pa-med-dermato'];
-      else if (rawProfId === 'prof-psiquiatra') userAreaIds = ['pa-med-psiquiatria'];
-      else if (canonicalProfId === 'prof-medico') userAreaIds = ['pa-med-clinica'];
+    // Se usuário não tiver áreas cadastradas, infere a área inicial correspondente a partir da resolução canônica
+    if (userAreaIds.length === 0 && resolution.inferredAreaId) {
+      userAreaIds = [resolution.inferredAreaId];
     }
 
     // 3. Busca opcionais ativos pelo usuário

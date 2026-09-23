@@ -17,18 +17,48 @@ export interface RegistrationProfessionOption {
 // Existing database aliases are represented once in the public selector.
 // Old IDs remain valid; no stored profession or permission is rewritten.
 export const REGISTRATION_PROFESSION_ALIASES: Record<string, string> = {
+  // Odontologia
   "prof-cirurgiao-dentista": "prof-dentista",
   "prof-odontologia": "prof-dentista",
+  // Enfermagem
   "prof-enfermagem": "prof-enfermeiro",
+  // Fisioterapia
   "prof-fisioterapia": "prof-fisioterapeuta",
+  "prof-osteopata": "prof-fisioterapeuta",
+  "prof-quiropraxista": "prof-fisioterapeuta",
+  // Fonoaudiologia
   "prof-fonoaudiologia": "prof-fonoaudiologo",
+  // Medicina e Especialidades Médicas
   "prof-medicina": "prof-medico",
+  "prof-psiquiatra": "prof-medico",
+  "prof-cardiologista": "prof-medico",
+  "prof-pediatra": "prof-medico",
+  "prof-dermatologista": "prof-medico",
+  "prof-neurologista": "prof-medico",
+  "prof-geriatra": "prof-medico",
+  "prof-ortopedista": "prof-medico",
+  "prof-endocrinologista": "prof-medico",
+  "prof-reumatologista": "prof-medico",
+  // Veterinária
   "prof-medicina-veterinaria": "prof-veterinario",
+  // Nutrição
   "prof-nutricao": "prof-nutricionista",
+  // Psicologia
   "prof-psicologia": "prof-psicologo",
+  "prof-neuropsicologo": "prof-psicologo",
+  "prof-psicanalista": "prof-psicologo",
+  "prof-terapeuta-familiar": "prof-psicologo",
+  // Psicopedagogia
   "prof-psicopedagogia": "prof-psicopedagogo",
+  // Terapia Ocupacional
   "prof-terapia-ocupacional": "prof-terapeuta-ocupacional",
+  // Personal Trainer / Educação Física
   "prof-educacao-fisica": "prof-personal-trainer",
+  "prof-educador-fisico": "prof-personal-trainer",
+  "personal_trainer": "prof-personal-trainer",
+  "personal-trainer": "prof-personal-trainer",
+  "educacao-fisica": "prof-personal-trainer",
+  // Outros
   "other_health": "prof-outro-saude",
   "prof-gestor": "prof-administrador"
 };

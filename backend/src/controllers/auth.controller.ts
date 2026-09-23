@@ -236,9 +236,7 @@ export class AuthController {
       const zemdaFonoEnabled = isEligibleUser && modFlags.zemda_fono_enabled === 1;
       const zemdaPsicoEnabled = isEligibleUser && modFlags.zemda_psico_enabled === 1;
       const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
-      const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1 && (
-        isManagerUser || cuRow?.zemda_personal_enabled === 1 || userPermissions.includes('access_zemda_personal')
-      );
+      const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
       const zemdaBodyEnabled = user.role !== 'superadmin' && (
         user.role === 'clinic_admin' || user.role === 'professional' || cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
       );
@@ -437,9 +435,7 @@ export class AuthController {
       const zemdaFonoEnabled = isEligibleUser && modFlags.zemda_fono_enabled === 1;
       const zemdaPsicoEnabled = isEligibleUser && modFlags.zemda_psico_enabled === 1;
       const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
-      const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1 && (
-        isManagerUser || cuRow?.zemda_personal_enabled === 1 || userPermissions.includes('access_zemda_personal')
-      );
+      const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
       const zemdaBodyEnabled = user.role !== 'superadmin' && (
         user.role === 'clinic_admin' || user.role === 'professional' || cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
       );

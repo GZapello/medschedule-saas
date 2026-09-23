@@ -2,6 +2,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { generateToken } from '../utils/jwt';
 import { CapabilityService } from './capability.service';
+import { resolveCanonicalProfession } from '../utils/profession-module';
 
 export class SandboxService {
   /**
@@ -33,12 +34,17 @@ export class SandboxService {
     const sandboxUserId = 'sbx-user-' + uuidv4().slice(0, 8);
     const sandboxProfId = 'sbx-prof-' + uuidv4().slice(0, 8);
 
-    const canonicalProfId = CapabilityService.normalizeProfessionId(professionId);
+    const resolution = resolveCanonicalProfession({ id: professionId });
+    const canonicalProfId = resolution.canonicalId;
     const profRow = db.prepare('SELECT name, registration_board_label FROM professions WHERE id = ?').get(canonicalProfId) as any;
-    const profName = profRow?.name || 'Profissional de Saúde';
-    const regBoard = profRow?.registration_board_label || 'CRM/REG';
+    const profName = resolution.canonicalName || profRow?.name || 'Profissional de Saúde';
+    const regBoard = resolution.boardLabel || profRow?.registration_board_label || 'CRM/REG';
+    const commercialModule = resolution.commercialModule || 'ZemdaGestao';
 
-    const commercialModule = CapabilityService.resolveCommercialModule(canonicalProfId, profName);
+    let finalAreaIds = Array.isArray(practiceAreaIds) && practiceAreaIds.length > 0 ? [...practiceAreaIds] : [];
+    if (finalAreaIds.length === 0 && resolution.inferredAreaId) {
+      finalAreaIds = [resolution.inferredAreaId];
+    }
 
     // 2. Cria Tenant Sandbox Isolado
     db.prepare(`
@@ -70,25 +76,25 @@ export class SandboxService {
       `sandbox-${sessionId}@zemda.test`,
       canonicalProfId,
       profName,
-      practiceAreaIds.join(', ')
+      finalAreaIds.join(', ')
     );
 
     // 4. Cria Vínculo clinic_users Simulado
     db.prepare(`
       INSERT INTO clinic_users (
-        id, tenant_id, user_id, role, status, is_manager, created_at
+        id, tenant_id, user_id, role, status, is_manager, zemda_personal_enabled, created_at
       ) VALUES (
-        ?, ?, ?, 'professional', 'active', 0, datetime('now')
+        ?, ?, ?, 'professional', 'active', 0, ?, datetime('now')
       )
-    `).run('cu-' + sessionId, sandboxTenantId, sandboxUserId);
+    `).run('cu-' + sessionId, sandboxTenantId, sandboxUserId, commercialModule === 'ZemdaPersonal' ? 1 : 0);
 
     // 5. Cria Cadastro em professionals
     db.prepare(`
       INSERT INTO professionals (
         id, tenant_id, user_id, name, profession_id, registration_type,
-        registration_number, active, created_at, updated_at
+        registration_number, practice_areas, zemda_personal_enabled, active, created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, '123456-TESTE', 1, datetime('now'), datetime('now')
+        ?, ?, ?, ?, ?, ?, '123456-TESTE', ?, ?, 1, datetime('now'), datetime('now')
       )
     `).run(
       sandboxProfId,
@@ -96,11 +102,13 @@ export class SandboxService {
       sandboxUserId,
       `Dr(a). Teste Sandbox (${profName})`,
       canonicalProfId,
-      regBoard
+      regBoard,
+      finalAreaIds.join(', '),
+      commercialModule === 'ZemdaPersonal' ? 1 : 0
     );
 
     // 6. Registra Áreas de Atuação na Sessão
-    CapabilityService.setUserPracticeAreas(sandboxUserId, sandboxTenantId, practiceAreaIds);
+    CapabilityService.setUserPracticeAreas(sandboxUserId, sandboxTenantId, finalAreaIds);
 
     // 7. Popula Dados Automáticos de Teste no Sandbox
     this.seedSandboxData(sandboxTenantId, sandboxProfId, sandboxUserId, profName);
@@ -109,7 +117,7 @@ export class SandboxService {
     const capabilities = CapabilityService.calculateCapabilities({
       professionId: canonicalProfId,
       commercialModule,
-      practiceAreaIds,
+      practiceAreaIds: finalAreaIds,
       tenantId: sandboxTenantId,
       planCode: planCode || 'ALL'
     });
@@ -135,12 +143,17 @@ export class SandboxService {
       sessionId,
       adminUserId,
       canonicalProfId,
-      JSON.stringify(practiceAreaIds),
+      JSON.stringify(finalAreaIds),
       planCode,
       token,
       sandboxTenantId,
       expiresAt
     );
+
+    const permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'create_patient', 'edit_patient', 'access_zemda_body'];
+    if (commercialModule === 'ZemdaPersonal') {
+      permissions.push('access_zemda_personal');
+    }
 
     const userObj = {
       id: sandboxUserId,
@@ -154,8 +167,11 @@ export class SandboxService {
       professionName: profName,
       registrationType: regBoard,
       registrationNumber: '123456-TESTE',
-      practiceAreas: practiceAreaIds.join(', '),
-      permissions: ['view_schedule', 'create_appointment', 'edit_appointment', 'create_patient', 'edit_patient', 'access_zemda_body'],
+      practiceAreas: finalAreaIds.join(', '),
+      practiceAreaIds: finalAreaIds,
+      commercialModule,
+      capabilities: capabilities.activeCapabilities,
+      permissions,
       isSandbox: true,
       sandboxSessionId: sessionId,
       sandboxPlanCode: planCode

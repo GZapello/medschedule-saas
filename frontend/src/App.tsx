@@ -135,6 +135,7 @@ const AppContent: React.FC = () => {
     isZemdaPsico,
     isPsychopedagogue,
     isZemdaPP,
+    isPersonalTrainer,
     isZemdaPersonal,
     isDoctor,
     isZemdaMed,
@@ -905,7 +906,7 @@ const AppContent: React.FC = () => {
           {currentView === 'zemda-body' && <ZemdaBodyRecordsView />}
 
           {currentView === 'zemda-personal' && (
-            isZemdaPersonal ? (
+            (isPersonalTrainer || isZemdaPersonal || currentUser?.commercialModule === 'ZemdaPersonal' || hasCapability('TRAINING_PRESCRIBE') || hasCapability('PHYSICAL_ASSESSMENT') || isSuperAdmin) ? (
               <ZemdaPersonalView />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -914,7 +915,7 @@ const AppContent: React.FC = () => {
                 </div>
                 <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Exclusivo: ZemdaPersonal</h2>
                 <p className="text-sm text-slate-600 mb-4">
-                  O módulo ZemdaPersonal é de uso exclusivo para profissionais cuja profissão cadastrada seja <strong>Personal Trainer / Educação Física</strong> (CREF) e com permissão ativa concedida pelo gerenciador da clínica.
+                  O módulo ZemdaPersonal é de uso exclusivo para profissionais cuja profissão cadastrada seja <strong>Personal Trainer / Educação Física</strong> (CREF) ou com credencial correspondente.
                 </p>
                 <button
                   onClick={() => setCurrentView('dashboard')}
@@ -927,7 +928,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-fisio' && (
-            (isPhysiotherapist || isZemdaFisio) ? (
+            (isPhysiotherapist || isZemdaFisio || currentUser?.commercialModule === 'ZemdaFisio' || hasCapability('MOBILITY_ASSESSMENT') || isSuperAdmin) ? (
               <PhysiotherapyWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -943,7 +944,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-odonto' && (
-            (isDentist || isZemdaOdonto) ? (
+            (isDentist || isZemdaOdonto || currentUser?.commercialModule === 'ZemdaOdonto' || hasCapability('ODONTOGRAM') || isSuperAdmin) ? (
               <DentistryWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -959,7 +960,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-nutri' && (
-            (isNutritionist || isZemdaNutri) ? (
+            (isNutritionist || isZemdaNutri || currentUser?.commercialModule === 'ZemdaNutri' || hasCapability('DIET_PRESCRIBE') || isSuperAdmin) ? (
               <NutritionWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -975,7 +976,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-to' && (
-            (isOccupationalTherapist || isZemdaTO) ? (
+            (isOccupationalTherapist || isZemdaTO || currentUser?.commercialModule === 'ZemdaTO' || hasCapability('SENSORY_INTEGRATION') || isSuperAdmin) ? (
               <OccupationalTherapyWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -991,7 +992,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-fono' && (
-            (isSpeechTherapist || isZemdaFono) ? (
+            (isSpeechTherapist || isZemdaFono || currentUser?.commercialModule === 'ZemdaFono' || hasCapability('AUDIOMETRY') || isSuperAdmin) ? (
               <SpeechTherapyWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -1007,7 +1008,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-psico' && (
-            (isPsychologist || isZemdaPsico) ? (
+            (isPsychologist || isZemdaPsico || currentUser?.commercialModule === 'ZemdaPsico' || hasCapability('BEHAVIORAL_TRACKING') || isSuperAdmin) ? (
               <PsychologyWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
@@ -1023,7 +1024,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'zemda-pp' && (
-            (isPsychopedagogue || isZemdaPP) ? (
+            (isPsychopedagogue || isZemdaPP || currentUser?.commercialModule === 'ZemdaPP' || hasCapability('LEARNING_ASSESSMENT') || isSuperAdmin) ? (
               <PsychopedagogyWorkspace />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">

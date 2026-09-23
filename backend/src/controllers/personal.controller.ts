@@ -107,31 +107,27 @@ export function hasPersonalAccess(req: Request): boolean {
 
   const isPT = isUserPersonalTrainer(req.user.userId, req.tenantId);
 
-  // Outra profissão -> não exibir e não permitir acesso
-  if (!isPT) {
-    if (req.user.role === 'clinic_admin') {
-      const cu = db.prepare(`
-        SELECT cu.profession_custom, cu.practice_areas, t.manager_profession
-        FROM clinic_users cu
-        LEFT JOIN tenants t ON t.id = cu.tenant_id
-        WHERE cu.user_id = ? AND cu.tenant_id = ?
-      `).get(req.user.userId, req.tenantId) as any;
-      const text = [cu?.profession_custom, cu?.practice_areas, cu?.manager_profession].filter(Boolean).join(' ').toLowerCase();
-      const hasConflict = text.includes('médic') || text.includes('dentis') || text.includes('nutri') || text.includes('fisio') || text.includes('psicol');
-      if (!hasConflict) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Profissão = Personal Trainer:
-  // Se for clinic_admin -> liberado
-  if (req.user.role === 'clinic_admin') {
+  // 1. Se o profissional for de Educação Física / Personal Trainer -> ACESSO DIRETO E INTEGRAL
+  if (isPT) {
     return true;
   }
 
-  // Se for profissional -> exige permissão ativa concedida pelo gerenciador da clínica
+  // 2. Se for gestor/administrador da clínica
+  if (req.user.role === 'clinic_admin') {
+    const cu = db.prepare(`
+      SELECT cu.profession_custom, cu.practice_areas, t.manager_profession
+      FROM clinic_users cu
+      LEFT JOIN tenants t ON t.id = cu.tenant_id
+      WHERE cu.user_id = ? AND cu.tenant_id = ?
+    `).get(req.user.userId, req.tenantId) as any;
+    const text = [cu?.profession_custom, cu?.practice_areas, cu?.manager_profession].filter(Boolean).join(' ').toLowerCase();
+    const hasConflict = text.includes('médic') || text.includes('dentis') || text.includes('nutri') || text.includes('fisio') || text.includes('psicol');
+    if (!hasConflict) {
+      return true;
+    }
+  }
+
+  // 3. Se possuir permissão explícita ou flag legada concedida
   try {
     const cu = db.prepare('SELECT permissions_json, zemda_personal_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
     if (cu) {

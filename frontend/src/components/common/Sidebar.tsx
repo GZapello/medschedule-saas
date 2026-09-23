@@ -89,6 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isZemdaMed,
     hasCapability,
     isZemdaBody,
+    commercialModule,
     clientTermLabel
   } = useAuth();
 
@@ -110,61 +111,61 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-med',
           label: 'ZemdaMed (Medicina)',
           icon: Stethoscope,
-          visible: isDoctor || isZemdaMed || hasCapability('MEDICAL_BASE') || hasCapability('medical_consultations')
+          visible: isDoctor || isZemdaMed || commercialModule === 'ZemdaMed' || hasCapability('MEDICAL_BASE') || hasCapability('medical_consultations')
         },
         {
           id: 'zemda-body',
           label: 'ZemdaBody (Mapa Corporal)',
           icon: Activity,
-          visible: isClinicAdmin || isProfessional || isZemdaBody
+          visible: isClinicAdmin || isProfessional || isZemdaBody || hasCapability('BODY_MAP')
         },
         {
           id: 'zemda-fisio',
           label: 'ZemdaFisio (Fisioterapia)',
           icon: Activity,
-          visible: isPhysiotherapist || isZemdaFisio
+          visible: isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio' || hasCapability('MOBILITY_ASSESSMENT')
         },
         {
           id: 'zemda-odonto',
           label: 'ZemdaOdonto (Odontologia)',
           icon: Smile,
-          visible: isDentist || isZemdaOdonto
+          visible: isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto' || hasCapability('ODONTO_SPECIFIC')
         },
         {
           id: 'zemda-nutri',
           label: 'ZemdaNutri (Nutrição)',
           icon: Apple,
-          visible: isNutritionist || isZemdaNutri
+          visible: isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri' || hasCapability('NUTRITION_SPECIFIC')
         },
         {
           id: 'zemda-to',
           label: 'ZemdaTO (Terapia Ocupacional)',
           icon: Hand,
-          visible: isOccupationalTherapist || isZemdaTO
+          visible: isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO' || hasCapability('ADL_ASSESSMENT')
         },
         {
           id: 'zemda-fono',
           label: 'ZemdaFono (Fonoaudiologia)',
           icon: Mic,
-          visible: isSpeechTherapist || isZemdaFono
+          visible: isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono' || hasCapability('FONO_SPECIFIC')
         },
         {
           id: 'zemda-psico',
           label: 'ZemdaPsico (Psicologia)',
           icon: Brain,
-          visible: isPsychologist || isZemdaPsico
+          visible: isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico' || hasCapability('BEHAVIOR_ASSESSMENT')
         },
         {
           id: 'zemda-pp',
           label: 'ZemdaPP (Psicopedagogia)',
           icon: GraduationCap,
-          visible: isPsychopedagogue || isZemdaPP
+          visible: isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP' || hasCapability('LEARNING_ASSESSMENT')
         },
         {
           id: 'zemda-personal',
           label: 'ZemdaPersonal (Treinamento)',
           icon: Dumbbell,
-          visible: isZemdaPersonal
+          visible: isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal' || hasCapability('TRAINING_PRESCRIBE')
         },
         { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
       ]
@@ -320,6 +321,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       const Icon = item.icon;
                       const isActive = currentView === item.id;
                       const isUserModule = (
+                        (item.id === 'zemda-med' && isZemdaMed) ||
                         (item.id === 'zemda-fono' && isZemdaFono) ||
                         (item.id === 'zemda-psico' && isZemdaPsico) ||
                         (item.id === 'zemda-odonto' && isZemdaOdonto) ||

@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { resolveCanonicalProfession } from '../utils/profession-module';
 
 export function migrateModularArchitecture(rawDb: DatabaseSync): void {
   // Helper de colunas
@@ -145,6 +146,9 @@ export function migrateModularArchitecture(rawDb: DatabaseSync): void {
 
   // Seed da Matriz de Regras de Capabilities
   seedCapabilitiesMatrix(rawDb);
+
+  // Reconciliação retroativa e compatibilidade para contas existentes
+  reconcileLegacyProfessionsAndCapabilities(rawDb);
 }
 
 function seedCapabilities(rawDb: DatabaseSync): void {
@@ -521,5 +525,79 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
     insertPlanCap.run('plan-pro', capId);
     insertPlanCap.run('zemda-SOLO', capId);
     insertPlanCap.run('plan-basic', capId);
+  }
+}
+
+/**
+ * Reconciliação segura para contas e profissionais existentes no banco.
+ * Garante que aliases legados recebam a profissão canônica, módulo comercial e áreas de atuação.
+ */
+function reconcileLegacyProfessionsAndCapabilities(rawDb: DatabaseSync): void {
+  try {
+    const profs = rawDb.prepare(`
+      SELECT p.id as prof_id, p.user_id, p.tenant_id, p.profession_id, p.name as prof_name,
+             u.profession_name as user_prof_name, u.profession_id as user_prof_id
+      FROM professionals p
+      LEFT JOIN users u ON u.id = p.user_id
+    `).all() as any[];
+
+    for (const p of profs) {
+      const pId = p.profession_id || p.user_prof_id;
+      const pName = p.prof_name || p.user_prof_name || '';
+      const resolution = resolveCanonicalProfession({ id: pId, name: pName });
+
+      if (resolution.canonicalId && resolution.canonicalId !== p.profession_id) {
+        try {
+          rawDb.prepare('UPDATE professionals SET profession_id = ? WHERE id = ?').run(resolution.canonicalId, p.prof_id);
+        } catch (_) {}
+      }
+
+      if (p.user_id && resolution.canonicalId && resolution.canonicalId !== p.user_prof_id) {
+        try {
+          rawDb.prepare('UPDATE users SET profession_id = ? WHERE id = ?').run(resolution.canonicalId, p.user_id);
+        } catch (_) {}
+      }
+
+      // Se for Educação Física / Personal Trainer, ativa flag correspondente
+      if (resolution.commercialModule === 'ZemdaPersonal') {
+        try {
+          rawDb.prepare('UPDATE professionals SET zemda_personal_enabled = 1 WHERE id = ?').run(p.prof_id);
+          if (p.user_id) {
+            rawDb.prepare('UPDATE users SET zemda_personal_enabled = 1 WHERE id = ?').run(p.user_id);
+            if (p.tenant_id) {
+              rawDb.prepare('UPDATE clinic_users SET zemda_personal_enabled = 1 WHERE user_id = ? AND tenant_id = ?').run(p.user_id, p.tenant_id);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Se for Medicina / ZemdaMed, ativa flag correspondente
+      if (resolution.commercialModule === 'ZemdaMed') {
+        try {
+          rawDb.prepare('UPDATE professionals SET zemda_med_enabled = 1 WHERE id = ?').run(p.prof_id);
+          if (p.user_id) {
+            rawDb.prepare('UPDATE users SET zemda_med_enabled = 1 WHERE id = ?').run(p.user_id);
+            if (p.tenant_id) {
+              rawDb.prepare('UPDATE clinic_users SET zemda_med_enabled = 1 WHERE user_id = ? AND tenant_id = ?').run(p.user_id, p.tenant_id);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Se usuário não tiver áreas cadastradas mas houver área inferida, vincula na tabela
+      if (p.user_id && p.tenant_id && resolution.inferredAreaId) {
+        try {
+          const countRow = rawDb.prepare('SELECT count(*) as c FROM user_practice_areas WHERE user_id = ? AND tenant_id = ?').get(p.user_id, p.tenant_id) as any;
+          if (!countRow || countRow.c === 0) {
+            rawDb.prepare(`
+              INSERT OR IGNORE INTO user_practice_areas (user_id, practice_area_id, tenant_id)
+              VALUES (?, ?, ?)
+            `).run(p.user_id, resolution.inferredAreaId, p.tenant_id);
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (err) {
+    console.warn('[ModularMigration] Reconciliação legada executada com resiliência:', err);
   }
 }

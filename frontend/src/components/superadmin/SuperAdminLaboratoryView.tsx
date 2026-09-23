@@ -51,7 +51,8 @@ export const SuperAdminLaboratoryView: React.FC = () => {
         if (isCurrent && Array.isArray(res)) {
           setPracticeAreas(res);
           if (res.length > 0) {
-            setSelectedAreaIds([res[0].id]);
+            const inferred = res.find(a => a.isInferredForAlias);
+            setSelectedAreaIds([inferred ? inferred.id : res[0].id]);
           } else {
             setSelectedAreaIds([]);
           }

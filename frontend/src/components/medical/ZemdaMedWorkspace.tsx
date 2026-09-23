@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -117,13 +117,93 @@ export const MEDICAL_SPECIALTY_PRESETS: MedicalSpecialtyPreset[] = [
   }
 ];
 
+const AREA_TO_PRESET_MAP: Record<string, MedicalSpecialtyPresetKey> = {
+  'pa-med-clinica': 'clinica-medica',
+  'clinica-medica': 'clinica-medica',
+  'pa-med-neuro': 'neurologia',
+  'neurologia': 'neurologia',
+  'pa-med-psiquiatria': 'psiquiatria',
+  'psiquiatria': 'psiquiatria',
+  'pa-med-pediatria': 'pediatria',
+  'pediatria': 'pediatria',
+  'pa-med-geriatria': 'geriatria',
+  'geriatria': 'geriatria',
+  'pa-med-endocrino': 'endocrinologia',
+  'pa-med-endocrinologia': 'endocrinologia',
+  'endocrinologia': 'endocrinologia',
+  'pa-med-ortopedia': 'ortopedia',
+  'ortopedia': 'ortopedia',
+  'pa-med-cardio': 'cardiologia',
+  'pa-med-cardiologia': 'cardiologia',
+  'cardiologia': 'cardiologia',
+  'pa-med-dermato': 'dermatologia',
+  'pa-med-dermatologia': 'dermatologia',
+  'dermatologia': 'dermatologia',
+  'pa-med-reumato': 'reumatologia',
+  'pa-med-reumatologia': 'reumatologia',
+  'reumatologia': 'reumatologia',
+  'prof-psiquiatra': 'psiquiatria',
+  'prof-cardiologista': 'cardiologia',
+  'prof-pediatra': 'pediatria',
+  'prof-dermatologista': 'dermatologia',
+  'prof-neurologista': 'neurologia',
+  'prof-ortopedista': 'ortopedia',
+  'prof-endocrinologista': 'endocrinologia',
+  'prof-geriatra': 'geriatria',
+  'prof-reumatologista': 'reumatologia'
+};
+
+function resolveUserMedicalPresets(
+  practiceAreaIds: string[] | undefined,
+  currentUser: any
+): MedicalSpecialtyPreset[] {
+  const matchedPresetIds = new Set<MedicalSpecialtyPresetKey>();
+
+  if (Array.isArray(practiceAreaIds) && practiceAreaIds.length > 0) {
+    for (const areaId of practiceAreaIds) {
+      const mapped = AREA_TO_PRESET_MAP[areaId] || AREA_TO_PRESET_MAP[areaId.toLowerCase()];
+      if (mapped) matchedPresetIds.add(mapped);
+    }
+  }
+
+  if (Array.isArray(currentUser?.practiceAreas)) {
+    for (const pa of currentUser.practiceAreas) {
+      const id = typeof pa === 'string' ? pa : (pa?.id || pa?.slug);
+      if (id && AREA_TO_PRESET_MAP[id]) matchedPresetIds.add(AREA_TO_PRESET_MAP[id]);
+    }
+  }
+
+  const profStr = String(currentUser?.profession || '').toLowerCase();
+  const specStr = String(currentUser?.specialty || '').toLowerCase();
+  for (const [key, presetKey] of Object.entries(AREA_TO_PRESET_MAP)) {
+    const rawKey = key.replace('pa-med-', '').replace('prof-', '');
+    if ((rawKey.length > 3 && profStr.includes(rawKey)) || (rawKey.length > 3 && specStr.includes(rawKey))) {
+      matchedPresetIds.add(presetKey);
+    }
+  }
+
+  if (matchedPresetIds.size === 0) {
+    if (currentUser?.role === 'superadmin') {
+      return MEDICAL_SPECIALTY_PRESETS;
+    }
+    return [MEDICAL_SPECIALTY_PRESETS[0]];
+  }
+
+  const presets = MEDICAL_SPECIALTY_PRESETS.filter(p => matchedPresetIds.has(p.id));
+  return presets.length > 0 ? presets : [MEDICAL_SPECIALTY_PRESETS[0]];
+}
+
 export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   initialPatientId,
   initialAppointmentId,
   onFinishConsultation
 }) => {
-  const { currentUser, clientTermLabel } = useAuth();
+  const { currentUser, clientTermLabel, practiceAreaIds } = useAuth();
   const { showToast } = useToast();
+
+  const allowedPresets = useMemo(() => {
+    return resolveUserMedicalPresets(practiceAreaIds, currentUser);
+  }, [practiceAreaIds, currentUser]);
 
   // Pacientes e Seleção
   const [patients, setPatients] = useState<any[]>([]);
@@ -131,8 +211,18 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [searchPatient, setSearchPatient] = useState<string>('');
 
-  // Preset de Especialidade Ativo
-  const [activePreset, setActivePreset] = useState<MedicalSpecialtyPresetKey>('clinica-medica');
+  // Preset de Especialidade Ativo - abre direto na especialidade cadastrada do médico
+  const [activePreset, setActivePreset] = useState<MedicalSpecialtyPresetKey>(() => {
+    const initialAllowed = resolveUserMedicalPresets(practiceAreaIds, currentUser);
+    return initialAllowed[0]?.id || 'clinica-medica';
+  });
+
+  // Atualiza preset ativo caso allowedPresets mude
+  useEffect(() => {
+    if (allowedPresets.length > 0 && !allowedPresets.some(p => p.id === activePreset)) {
+      setActivePreset(allowedPresets[0].id);
+    }
+  }, [allowedPresets, activePreset]);
 
   // Estado da Consulta Atual
   const [chiefComplaint, setChiefComplaint] = useState('');
@@ -362,9 +452,26 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
               <Stethoscope className="w-3.5 h-3.5" />
               ZemdaMed • Medicina Especializada
             </span>
-            <span className="text-xs px-2.5 py-1 rounded-full bg-white/10 text-white font-medium">
-              10 Presets Médicos
-            </span>
+            {allowedPresets.length === 1 ? (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-teal-500/20 text-teal-300 font-bold border border-teal-500/30">
+                {allowedPresets[0].name}
+              </span>
+            ) : (
+              <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-full border border-white/20">
+                <span className="text-[11px] text-teal-300 font-bold">Especialidade:</span>
+                <select
+                  value={activePreset}
+                  onChange={e => setActivePreset(e.target.value as MedicalSpecialtyPresetKey)}
+                  className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+                >
+                  {allowedPresets.map(preset => (
+                    <option key={preset.id} value={preset.id} className="bg-slate-900 text-white">
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
             Consultório Médico & Especialidades
@@ -439,47 +546,38 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Seletor dos 10 Presets Médicos Especializados */}
-      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600">
-            2. Especialidade Médica (10 Presets Disponíveis)
-          </label>
-          <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
-            {MEDICAL_SPECIALTY_PRESETS.find(p => p.id === activePreset)?.name}
+      {/* Seletor Compacto Discreto para Médicos com Múltiplas Especialidades */}
+      {allowedPresets.length > 1 && (
+        <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
+              Especialidade de Atendimento:
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {allowedPresets.map(preset => {
+                const isSelected = activePreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setActivePreset(preset.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-teal-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {preset.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+            {allowedPresets.find(p => p.id === activePreset)?.focusAreas.join(' • ')}
           </span>
         </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-          {MEDICAL_SPECIALTY_PRESETS.map(preset => {
-            const isSelected = activePreset === preset.id;
-            return (
-              <button
-                type="button"
-                key={preset.id}
-                onClick={() => setActivePreset(preset.id)}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer select-none flex flex-col justify-between ${
-                  isSelected
-                    ? 'border-teal-600 bg-teal-50/90 shadow-sm ring-2 ring-teal-600'
-                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className={`text-xs font-black truncate ${isSelected ? 'text-teal-950' : 'text-slate-800'}`}>
-                      {preset.name}
-                    </span>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-teal-600 shrink-0 stroke-[3]" />}
-                  </div>
-                  <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed">
-                    {preset.description}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      )}
 
       {activeTab === 'consultation' ? (
         <div className="space-y-6">
