@@ -38,10 +38,19 @@ export class FreeTrialController {
         return;
       }
 
-      const { targetName, targetEmail, durationDays, notes } = req.body;
+      const { targetName, targetEmail, durationDays, notes, plan } = req.body;
 
       if (!targetName || typeof targetName !== 'string' || !targetName.trim()) {
         res.status(400).json({ error: 'O nome do cliente/clínica é obrigatório.' });
+        return;
+      }
+
+      // Validação obrigatória do plano comercial a ser testado
+      const normalizedPlan = typeof plan === 'string' ? plan.replace(/^zemda-/i, '').toUpperCase().trim() : '';
+      if (!['SOLO', 'TEAM', 'CLINIC'].includes(normalizedPlan)) {
+        res.status(400).json({
+          error: 'O plano do teste grátis é obrigatório. Selecione: Zemda Solo (SOLO), Zemda Equipe (TEAM) ou Zemda Clínica (CLINIC).'
+        });
         return;
       }
 
@@ -63,8 +72,8 @@ export class FreeTrialController {
       db.prepare(`
         INSERT INTO free_trials (
           id, token, target_name, target_email, duration_days, duration_label,
-          status, created_by, created_at, link_expires_at, notes, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+          plan, status, created_by, created_at, link_expires_at, notes, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
       `).run(
         trialId,
         token,
@@ -72,6 +81,7 @@ export class FreeTrialController {
         targetEmail && typeof targetEmail === 'string' && targetEmail.trim() ? targetEmail.trim().toLowerCase() : null,
         daysNum,
         durationLabel,
+        normalizedPlan,
         req.user?.userId,
         nowIso,
         linkExpiresAt,
@@ -83,6 +93,7 @@ export class FreeTrialController {
         targetName: targetName.trim(),
         durationDays: daysNum,
         durationLabel,
+        plan: normalizedPlan,
         linkExpiresAt
       });
 
@@ -95,6 +106,7 @@ export class FreeTrialController {
           targetEmail: targetEmail?.trim() || null,
           durationDays: daysNum,
           durationLabel,
+          plan: normalizedPlan,
           createdAt: nowIso,
           linkExpiresAt,
           status: 'pending'
@@ -325,6 +337,13 @@ export class FreeTrialController {
         return;
       }
 
+      const PLAN_NAMES: Record<string, string> = {
+        SOLO: 'Zemda Solo',
+        TEAM: 'Zemda Equipe',
+        CLINIC: 'Zemda Clínica'
+      };
+      const trialPlan = (trial.plan || 'SOLO').replace(/^zemda-/i, '').toUpperCase();
+
       res.status(200).json({
         valid: true,
         trial: {
@@ -333,6 +352,8 @@ export class FreeTrialController {
           targetEmail: trial.target_email,
           durationDays: trial.duration_days,
           durationLabel: trial.duration_label,
+          plan: trialPlan,
+          planLabel: PLAN_NAMES[trialPlan] || 'Zemda Solo',
           linkExpiresAt: trial.link_expires_at
         }
       });
@@ -463,16 +484,22 @@ export class FreeTrialController {
         const selectedProfessionName = profRow ? profRow.name : professionId.trim();
         const selectedProfessionSlug = profRow ? profRow.slug : (professionId.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-'));
 
-        // 4. Criar o Tenant (Clínica)
+        // 4. Resolver o plano exato definido pelo SuperAdmin no teste grátis (SOLO, TEAM ou CLINIC)
+        const trialPlanCode = (trial.plan || 'SOLO').replace(/^zemda-/i, '').toUpperCase().trim();
+        const planRow = (db.prepare("SELECT id, name, code FROM plans WHERE code = ? OR id = ? OR id = ?").get(trialPlanCode, `zemda-${trialPlanCode}`, `plan-${trialPlanCode.toLowerCase()}`) as any)
+          || (db.prepare("SELECT id, name, code FROM plans WHERE code = 'SOLO' OR id = 'zemda-SOLO'").get() as any)
+          || { id: 'zemda-SOLO', name: 'Zemda Solo', code: 'SOLO' };
+
+        // 4.1 Criar o Tenant (Clínica) com o plan_id exato
         db.prepare(`
           INSERT INTO tenants (
-            id, slug, name, trade_name, corporate_name, email, phone,
+            id, slug, name, trade_name, corporate_name, email, phone, plan_id,
             status, billing_required, onboarding_completed, onboarding_step,
             terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
             responsible_name, responsible_email, responsible_phone, responsible_role,
             manager_profession, manager_practice_areas,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, 1, 1, ?, 1, ?, ?, ?, ?, 'Gestor da Clínica', ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, 1, 1, ?, 1, ?, ?, ?, ?, 'Gestor da Clínica', ?, ?, ?, ?)
         `).run(
           tenantId,
           uniqueSlug,
@@ -481,6 +508,7 @@ export class FreeTrialController {
           clinicName.trim(),
           cleanEmail,
           managerPhone && typeof managerPhone === 'string' ? managerPhone.trim() : null,
+          planRow.id,
           nowIso,
           nowIso,
           managerName.trim(),
@@ -566,11 +594,7 @@ export class FreeTrialController {
           nowIso
         );
 
-        // 8. Obter plano para assinatura de teste (sempre Plano Solo)
-        const planRow = (db.prepare("SELECT id FROM plans WHERE code = 'SOLO' OR id = 'zemda-SOLO'").get() as any)
-          || { id: 'zemda-SOLO' };
-
-        // 9. Criar assinatura com status 'trial' no Plano Solo
+        // 8 e 9. Criar assinatura com status 'trial' no plano selecionado (${planRow.name || planRow.id})
         db.prepare(`
           INSERT INTO subscriptions (
             id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,

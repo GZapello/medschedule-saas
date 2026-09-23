@@ -323,6 +323,8 @@ api.put('/v1/taxonomy/categories/:id/toggle-status', requireRole('superadmin'), 
 api.post('/v1/taxonomy/professions', requireRole('superadmin'), TaxonomyController.createProfession);
 api.put('/v1/taxonomy/professions/:id', requireRole('superadmin'), TaxonomyController.updateProfession);
 api.put('/v1/taxonomy/professions/:id/toggle-status', requireRole('superadmin'), TaxonomyController.toggleProfessionStatus);
+api.get('/v1/taxonomy/professions/:id/impact', requireRole('superadmin'), TaxonomyController.getProfessionImpact);
+api.delete('/v1/taxonomy/professions/:id', requireRole('superadmin'), TaxonomyController.deleteProfession);
 api.post('/v1/taxonomy/specialties', requireRole('superadmin'), TaxonomyController.createSpecialty);
 
 // Profissionais

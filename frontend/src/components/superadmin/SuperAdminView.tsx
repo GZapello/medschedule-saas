@@ -25,7 +25,8 @@ import {
   Sparkles,
   Gift,
   MessageSquare,
-  FlaskConical
+  FlaskConical,
+  Trash2
 } from 'lucide-react';
 import { FreeTrialsAdminView } from './FreeTrialsAdminView';
 import { WhatsAppEmbeddedSignup } from '../settings/WhatsAppEmbeddedSignup';
@@ -79,6 +80,62 @@ export const SuperAdminView: React.FC = () => {
 
   // Profissões Globais
   const [professions, setProfessions] = useState<any[]>([]);
+  const [deletingProf, setDeletingProf] = useState<any>(null);
+  const [profImpact, setProfImpact] = useState<any>(null);
+  const [profImpactLoading, setProfImpactLoading] = useState(false);
+  const [deleteProfConfirmation, setDeleteProfConfirmation] = useState('');
+  const [deleteProfPassword, setDeleteProfPassword] = useState('');
+  const [deleteProfReason, setDeleteProfReason] = useState('');
+  const [deleteProfBusy, setDeleteProfBusy] = useState(false);
+  const [deleteProfError, setDeleteProfError] = useState('');
+
+  const openDeleteProfModal = async (prof: any) => {
+    setDeletingProf(prof);
+    setProfImpact(null);
+    setDeleteProfConfirmation('');
+    setDeleteProfPassword('');
+    setDeleteProfReason('');
+    setDeleteProfError('');
+    setProfImpactLoading(true);
+    try {
+      const impact = await ApiClient.get<any>(`/v1/taxonomy/professions/${prof.id}/impact`);
+      setProfImpact(impact);
+    } catch {
+      setProfImpact(null);
+    } finally {
+      setProfImpactLoading(false);
+    }
+  };
+
+  const closeDeleteProfModal = () => {
+    setDeletingProf(null);
+    setProfImpact(null);
+    setDeleteProfConfirmation('');
+    setDeleteProfPassword('');
+    setDeleteProfReason('');
+    setDeleteProfError('');
+  };
+
+  const submitDeleteProf = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deletingProf || deleteProfBusy) return;
+    setDeleteProfBusy(true);
+    setDeleteProfError('');
+    try {
+      await ApiClient.delete(`/v1/taxonomy/professions/${deletingProf.id}`, {
+        confirmation: deleteProfConfirmation,
+        password: deleteProfPassword,
+        reason: deleteProfReason
+      });
+      showToast(`Profissão "${deletingProf.name}" excluída definitivamente!`, 'success');
+      closeDeleteProfModal();
+      await loadAll();
+    } catch (err: any) {
+      setDeleteProfError(err.message || 'Erro ao excluir profissão');
+    } finally {
+      setDeleteProfBusy(false);
+    }
+  };
   const [searchProf, setSearchProf] = useState('');
   const [isProfModalOpen, setIsProfModalOpen] = useState(false);
   const [editingProf, setEditingProf] = useState<any>(null);
@@ -841,11 +898,19 @@ export const SuperAdminView: React.FC = () => {
                           onClick={() => handleToggleProfStatus(p)}
                           className={`px-2.5 py-1.5 font-bold text-[11px] rounded-lg flex items-center gap-1 cursor-pointer ${
                             p.active === 1
-                              ? 'bg-rose-50 hover:bg-rose-100 text-rose-700'
+                              ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                               : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
                           }`}
                         >
                           {p.active === 1 ? 'Desativar' : 'Ativar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDeleteProfModal(p)}
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-[11px] rounded-lg flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3 text-rose-600" />
+                          Excluir
                         </button>
                       </div>
                     </td>
@@ -1222,6 +1287,152 @@ export const SuperAdminView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal: Exclusão Definitiva de Profissão Global */}
+      {deletingProf && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Excluir Profissão Definitivamente
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Profissão: <strong className="text-rose-700">{deletingProf.name}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeDeleteProfModal}
+                disabled={deleteProfBusy}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Painel de Impacto */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+              <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                Análise de Impacto do Purge Estrutural:
+              </div>
+              {profImpactLoading ? (
+                <div className="py-3 text-center text-slate-400 flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                  <span>Calculando impacto no banco de dados...</span>
+                </div>
+              ) : profImpact ? (
+                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+                  <div className="p-2 bg-white rounded-xl border border-slate-200">
+                    <span className="text-slate-500">Usuários Vinculados:</span>
+                    <p className="text-sm font-black text-slate-800">{profImpact.affectedUsersCount} contas</p>
+                    <p className="text-[10px] text-teal-700 font-medium">Preservados (não serão apagados)</p>
+                  </div>
+                  <div className="p-2 bg-white rounded-xl border border-slate-200">
+                    <span className="text-slate-500">Áreas Exclusivas:</span>
+                    <p className="text-sm font-black text-slate-800">{profImpact.practiceAreasCount} áreas</p>
+                    <p className="text-[10px] text-rose-600 font-medium">Removidas junto</p>
+                  </div>
+                  <div className="p-2 bg-white rounded-xl border border-slate-200">
+                    <span className="text-slate-500">Aliases/Sinônimos:</span>
+                    <p className="text-sm font-black text-slate-800">{profImpact.aliasesCount} aliases</p>
+                    <p className="text-[10px] text-slate-500 truncate">{profImpact.aliases.join(', ') || 'Nenhum'}</p>
+                  </div>
+                  <div className="p-2 bg-white rounded-xl border border-slate-200">
+                    <span className="text-slate-500">Capabilities / Módulos:</span>
+                    <p className="text-sm font-black text-slate-800">{profImpact.capabilitiesCount} mapeadas</p>
+                    <p className="text-[10px] text-rose-600 font-medium">Mapeamentos removidos</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-slate-500 text-[11px]">Impacto estrutural padrão aplicado na exclusão.</p>
+              )}
+            </div>
+
+            {/* Aviso de Segurança de Contas */}
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-[11px] text-emerald-950 leading-relaxed">
+              <strong>Garantia de Integridade:</strong> Usuários, clínicas e prontuários vinculados a esta profissão <strong>NÃO serão apagados</strong>. O vínculo profissional será neutralizado para <em>"Profissão precisa ser atualizada"</em>. A profissão será registrada na lista de exclusão permanente para não retornar em restarts/seeds.
+            </div>
+
+            {deleteProfError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 font-medium">
+                {deleteProfError}
+              </div>
+            )}
+
+            <form onSubmit={submitDeleteProf} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Confirmação Explícita:
+                </label>
+                <p className="text-[11px] text-slate-500 mb-1.5">
+                  Digite exatamente <strong className="text-rose-600 font-black">EXCLUIR</strong> para confirmar:
+                </p>
+                <input
+                  type="text"
+                  required
+                  placeholder="EXCLUIR"
+                  value={deleteProfConfirmation}
+                  onChange={e => setDeleteProfConfirmation(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Motivo da Exclusão:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Profissão descontinuada / Reorganização da taxonomia"
+                  value={deleteProfReason}
+                  onChange={e => setDeleteProfReason(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Senha Atual do Administrador do Sistema: <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Sua senha de SuperAdmin..."
+                  value={deleteProfPassword}
+                  onChange={e => setDeleteProfPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={closeDeleteProfModal}
+                  disabled={deleteProfBusy}
+                  className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={deleteProfBusy || deleteProfConfirmation !== 'EXCLUIR' || !deleteProfPassword}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {deleteProfBusy ? 'Excluindo...' : 'EXCLUIR PROFISSÃO DEFINITIVAMENTE'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

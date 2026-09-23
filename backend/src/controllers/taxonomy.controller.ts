@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveCanonicalProfession } from '../utils/profession-module';
+import { comparePassword } from '../utils/password';
+import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 
 export class TaxonomyController {
   // Categorias (Tipos de Serviço Macro)
@@ -131,6 +133,11 @@ export class TaxonomyController {
       `;
       const conditions: string[] = [];
       const params: any[] = [];
+
+      // Sempre ocultar profissões que foram explicitamente excluídas pelo SuperAdmin
+      try {
+        conditions.push('p.id NOT IN (SELECT id FROM deleted_global_professions)');
+      } catch (_) {}
 
       if (!showAll) {
         conditions.push('p.active = 1');
@@ -355,4 +362,154 @@ export class TaxonomyController {
       res.status(500).json({ error: 'Erro ao criar especialidade' });
     }
   }
+
+  // Consulta de Impacto antes da Exclusão de Profissão Global (Exclusivo SuperAdmin)
+  static getProfessionImpact(req: Request, res: Response): void {
+    try {
+      const id = String(req.params.id);
+      const prof = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(id) as any;
+      if (!prof) {
+        res.status(404).json({ error: 'Profissão não encontrada' });
+        return;
+      }
+
+      // Aliases que apontam para esta profissão
+      const aliases = Object.entries(REGISTRATION_PROFESSION_ALIASES)
+        .filter(([_, target]) => target === id || target === prof.slug)
+        .map(([alias]) => alias);
+
+      // Áreas de atuação vinculadas
+      const practiceAreas = db.prepare('SELECT id, name, slug FROM practice_areas WHERE profession_id = ?').all(id) as any[];
+
+      // Usuários atualmente vinculados
+      const affectedUsersCount = (db.prepare('SELECT COUNT(*) as c FROM users WHERE profession_id = ?').get(id) as any)?.c || 0;
+      const affectedProfessionalsCount = (db.prepare('SELECT COUNT(*) as c FROM professionals WHERE profession_id = ?').get(id) as any)?.c || 0;
+
+      // Capabilities mapeadas
+      const capabilitiesCount = (db.prepare('SELECT COUNT(*) as c FROM profession_capabilities WHERE profession_id = ?').get(id) as any)?.c || 0;
+
+      // Especialidades vinculadas
+      const specialtiesCount = (db.prepare('SELECT COUNT(*) as c FROM specialties WHERE profession_id = ?').get(id) as any)?.c || 0;
+
+      res.json({
+        profession: prof,
+        aliases,
+        aliasesCount: aliases.length,
+        practiceAreas,
+        practiceAreasCount: practiceAreas.length,
+        affectedUsersCount,
+        affectedProfessionalsCount,
+        capabilitiesCount,
+        specialtiesCount
+      });
+    } catch (err: any) {
+      console.error('[TaxonomyController.getProfessionImpact] Erro:', err);
+      res.status(500).json({ error: 'Erro ao calcular impacto da profissão' });
+    }
+  }
+
+  // Exclusão Definitiva de Profissão Global (Exclusivo SuperAdmin com validação de senha)
+  static async deleteProfession(req: Request, res: Response): Promise<void> {
+    try {
+      const id = String(req.params.id);
+      const { password, confirmation, reason } = req.body;
+      const currentUserId = (req as any).user?.userId;
+
+      if (!currentUserId) {
+        res.status(401).json({ error: 'Usuário não autenticado.' });
+        return;
+      }
+
+      // Valida credenciais do SuperAdmin no banco de dados
+      const adminUser = db.prepare('SELECT id, email, password_hash, role FROM users WHERE id = ?').get(currentUserId) as any;
+      if (!adminUser || adminUser.role !== 'superadmin') {
+        res.status(403).json({ error: 'Acesso negado. Apenas o Administrador do Sistema pode executar esta operação.' });
+        return;
+      }
+
+      // Validação rigorosa da senha atual do administrador via bcrypt
+      const isPasswordValid = await comparePassword(typeof password === 'string' ? password : '', adminUser.password_hash || '');
+      if (!isPasswordValid) {
+        res.status(403).json({ error: 'Senha do Administrador inválida. Nenhuma alteração foi realizada.' });
+        return;
+      }
+
+      if (confirmation !== 'EXCLUIR') {
+        res.status(400).json({ error: 'Confirmação inválida. Digite exatamente a palavra EXCLUIR para confirmar.' });
+        return;
+      }
+
+      purgeGlobalProfession(id, adminUser.id, reason);
+
+      res.json({ message: 'Profissão global excluída definitivamente', deleted_profession_id: id });
+    } catch (err: any) {
+      console.error('[TaxonomyController.deleteProfession] Erro:', err);
+      res.status(500).json({ error: err?.message || 'Erro ao excluir profissão' });
+    }
+  }
+}
+
+/**
+ * Rotina Centralizada de Purge de Profissão Global
+ */
+export function purgeGlobalProfession(professionId: string, adminUserId: string, reason?: string): void {
+  const prof = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(professionId) as any;
+  if (!prof) throw new Error('Profissão não encontrada.');
+
+  db.transaction(() => {
+    // 1. Desvincular e neutralizar usuários e profissionais (NUNCA deletar contas de usuários!)
+    db.prepare(`
+      UPDATE users
+      SET profession_id = NULL,
+          profession_name = 'Profissão precisa ser atualizada'
+      WHERE profession_id = ?
+    `).run(professionId);
+
+    db.prepare(`
+      UPDATE professionals
+      SET profession_id = NULL
+      WHERE profession_id = ?
+    `).run(professionId);
+
+    db.prepare(`
+      UPDATE tenants
+      SET manager_profession = 'Profissão precisa ser atualizada'
+      WHERE manager_profession = ? OR manager_profession = ?
+    `).run(professionId, prof.name);
+
+    // 2. Remover capabilities e especialidades da profissão
+    db.prepare('DELETE FROM profession_capabilities WHERE profession_id = ?').run(professionId);
+    db.prepare('DELETE FROM specialties WHERE profession_id = ?').run(professionId);
+
+    // 3. Remover áreas de atuação exclusivas desta profissão
+    const areas = db.prepare('SELECT id FROM practice_areas WHERE profession_id = ?').all(professionId) as any[];
+    for (const area of areas) {
+      db.prepare('DELETE FROM practice_area_capabilities WHERE practice_area_id = ?').run(area.id);
+      db.prepare('DELETE FROM user_practice_areas WHERE practice_area_id = ?').run(area.id);
+    }
+    db.prepare('DELETE FROM practice_areas WHERE profession_id = ?').run(professionId);
+
+    // 4. Remover da tabela professions
+    db.prepare('DELETE FROM professions WHERE id = ?').run(professionId);
+
+    // 5. Inserir em deleted_global_professions para impedir que seeds ou restarts a recriem
+    db.prepare(`
+      INSERT OR REPLACE INTO deleted_global_professions (id, slug, name, deleted_at, deleted_by)
+      VALUES (?, ?, ?, datetime('now'), ?)
+    `).run(prof.id, prof.slug, prof.name, adminUserId);
+
+    // 6. Log de auditoria da remoção da profissão
+    try {
+      db.prepare(`
+        INSERT INTO audit_logs (id, user_id, action, entity, entity_id, old_values, new_values, created_at)
+        VALUES (?, ?, 'DELETE_GLOBAL_PROFESSION', 'professions', ?, ?, ?, datetime('now'))
+      `).run(
+        uuidv4(),
+        adminUserId,
+        prof.id,
+        JSON.stringify({ name: prof.name, slug: prof.slug, reason: reason || 'Exclusão administrativa definitiva' }),
+        null
+      );
+    } catch (_) {}
+  })();
 }

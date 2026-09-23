@@ -28,6 +28,7 @@ interface FreeTrialItem {
   target_email: string | null;
   duration_days: number;
   duration_label: string;
+  plan?: 'SOLO' | 'TEAM' | 'CLINIC';
   status: 'pending' | 'active' | 'used' | 'expired' | 'revoked';
   computed_status: 'pending' | 'active' | 'ended' | 'expired' | 'revoked';
   created_by: string;
@@ -116,6 +117,7 @@ export const FreeTrialsAdminView: React.FC = () => {
   const [formData, setFormData] = useState({
     targetName: '',
     targetEmail: '',
+    plan: 'SOLO' as 'SOLO' | 'TEAM' | 'CLINIC',
     durationDays: 30,
     notes: ''
   });
@@ -207,6 +209,7 @@ export const FreeTrialsAdminView: React.FC = () => {
         targetName: formData.targetName.trim(),
         targetEmail: formData.targetEmail.trim() || undefined,
         durationDays: formData.durationDays,
+        plan: formData.plan,
         notes: formData.notes.trim() || undefined
       });
 
@@ -215,6 +218,7 @@ export const FreeTrialsAdminView: React.FC = () => {
       setFormData({
         targetName: '',
         targetEmail: '',
+        plan: 'SOLO',
         durationDays: 30,
         notes: ''
       });
@@ -771,6 +775,7 @@ export const FreeTrialsAdminView: React.FC = () => {
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-3.5 px-4">Cliente / Clínica</th>
+                <th className="py-3.5 px-4 text-center">Plano</th>
                 <th className="py-3.5 px-4 text-center">Período do Teste</th>
                 <th className="py-3.5 px-4">Data de Geração</th>
                 <th className="py-3.5 px-4">Expiração do Link</th>
@@ -823,6 +828,19 @@ export const FreeTrialsAdminView: React.FC = () => {
                             </span>
                           </div>
                         )}
+                      </td>
+
+                      {/* 1.1 Plano Comercial */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10.5px] font-black border ${
+                          (trial.plan || 'SOLO') === 'CLINIC'
+                            ? 'bg-purple-50 text-purple-800 border-purple-200'
+                            : (trial.plan || 'SOLO') === 'TEAM'
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        }`}>
+                          {(trial.plan || 'SOLO') === 'CLINIC' ? 'Zemda Clínica' : (trial.plan || 'SOLO') === 'TEAM' ? 'Zemda Equipe' : 'Zemda Solo'}
+                        </span>
                       </td>
 
                       {/* 2. Período do teste */}
@@ -1018,6 +1036,56 @@ export const FreeTrialsAdminView: React.FC = () => {
                 <p className="text-[11px] text-slate-400 mt-1">
                   Se informado, será pré-preenchido no formulário de ativação do cliente.
                 </p>
+              </div>
+
+              {/* Plano Comercial do Teste (Obrigatório) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  Plano do Teste Grátis <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {[
+                    {
+                      id: 'SOLO',
+                      name: 'Zemda Solo',
+                      desc: '1 profissional • Autônomos',
+                      badge: 'Solo'
+                    },
+                    {
+                      id: 'TEAM',
+                      name: 'Zemda Equipe',
+                      desc: 'Até 5 profissionais • Equipes',
+                      badge: 'Equipe'
+                    },
+                    {
+                      id: 'CLINIC',
+                      name: 'Zemda Clínica',
+                      desc: 'Até 20 profissionais • Clínicas',
+                      badge: 'Clínica'
+                    }
+                  ].map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, plan: p.id as any }))}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                        formData.plan === p.id
+                          ? 'border-indigo-600 bg-indigo-50/90 text-indigo-950 font-black shadow-xs ring-2 ring-indigo-500/20'
+                          : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-xs font-black tracking-tight">{p.name}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${formData.plan === p.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                          {p.badge}
+                        </span>
+                      </div>
+                      <span className="text-[10.5px] text-slate-500 font-normal leading-snug">
+                        {p.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Período do teste */}

@@ -34,6 +34,8 @@ interface ValidTrialData {
   targetEmail: string | null;
   durationDays: number;
   durationLabel: string;
+  plan?: string;
+  planLabel?: string;
   linkExpiresAt: string;
 }
 
@@ -312,10 +314,10 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-black uppercase tracking-wider">
             <Gift className="w-4 h-4 text-teal-600" />
-            Convite Especial de Teste Grátis
+            {trialData?.planLabel ? `Plano ${trialData.planLabel} • Teste Grátis` : 'Convite Especial de Teste Grátis'}
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            Ative seu Teste de {trialData?.durationLabel}
+            Ative seu Teste de {trialData?.durationLabel} {trialData?.planLabel ? `(${trialData.planLabel})` : ''}
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
             Preencha os dados abaixo para configurar sua clínica e começar a utilizar todos os módulos do Zemda sem nenhum custo.

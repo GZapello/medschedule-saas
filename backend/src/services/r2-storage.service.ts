@@ -169,6 +169,51 @@ export class R2StorageService {
   }
 
   /**
+   * Exclui todos os objetos que começam com um determinado prefixo (ex: 'clinics/tenant-id/')
+   */
+  async deletePrefix(prefix: string): Promise<number> {
+    let deletedCount = 0;
+
+    // Remove do mock em memória
+    for (const key of Array.from(this.mockObjects)) {
+      if (key.startsWith(prefix)) {
+        this.mockObjects.delete(key);
+        deletedCount++;
+      }
+    }
+
+    if (this.client && this.isConfigured && process.env.R2_MOCK_STORAGE !== 'true') {
+      try {
+        let continuationToken: string | undefined = undefined;
+        do {
+          const listCmd: any = new ListObjectsV2Command({
+            Bucket: this.bucketName,
+            Prefix: prefix,
+            ContinuationToken: continuationToken
+          });
+          const listRes: any = await this.client.send(listCmd);
+          if (listRes && listRes.Contents && listRes.Contents.length > 0) {
+            const deleteCmd = new DeleteObjectsCommand({
+              Bucket: this.bucketName,
+              Delete: {
+                Objects: listRes.Contents.map((obj: any) => ({ Key: obj.Key! })),
+                Quiet: true
+              }
+            });
+            await this.client.send(deleteCmd);
+            deletedCount += listRes.Contents.length;
+          }
+          continuationToken = listRes ? listRes.NextContinuationToken : undefined;
+        } while (continuationToken);
+      } catch (err: any) {
+        console.warn(`[R2StorageService.deletePrefix] Aviso ao excluir prefixo ${prefix}:`, err?.message || err);
+      }
+    }
+
+    return deletedCount;
+  }
+
+  /**
    * Verifica se o arquivo existe no Cloudflare R2 via HeadObject
    */
   async fileExists(objectKey: string): Promise<boolean> {

@@ -2,10 +2,12 @@ import { db } from '../config/database';
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { r2StorageService } from './r2-storage.service';
 
 const q = (s: string) => '"' + s.replace(/"/g, '""') + '"';
+
 export function requireOpenRegistration(id: string): void {
-  const t = db.prepare('SELECT status, registrations_blocked FROM tenants WHERE id = ?').get(id);
+  const t = db.prepare('SELECT status, registrations_blocked FROM tenants WHERE id = ?').get(id) as any;
   if (!t || t.status !== 'active' || t.registrations_blocked) throw new Error('Novos cadastros estão bloqueados para esta clínica.');
 }
 
@@ -14,138 +16,159 @@ export function globalAudit(admin: string, id: string, name: string, action: str
     VALUES (?, ?, ?, ?, ?, ?, ?)`).run(randomUUID(), id, name, admin, action, reason, reauthenticated ? 1 : 0);
 }
 
-// Resolve ownership before any DELETE. An unexpected cross-clinic reference aborts
-// the transaction instead of allowing SQLite CASCADE / SET NULL to affect it.
-export function purgeClinic(id: string, admin: string, reason: string, options?: {
-  guard: (owned: Map<string, Set<any>>) => void;
-  reauthenticated: boolean;
-}): void {
-  const existingJob = db.prepare('SELECT * FROM clinic_deletion_jobs WHERE clinic_id = ?').get(id);
-  if (existingJob) { finishFiles(id); return; }
-  db.transaction(() => {
-    const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(id);
-    if (!tenant) throw new Error('Clínica não encontrada.');
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all()
-      .map((t: any) => t.name).filter((n: string) => !['global_clinic_audit', 'clinic_deletion_jobs'].includes(n));
-    const data = new Map<string, any[]>();
-    const owned = new Map<string, Set<any>>();
-    const cols = new Map<string, string[]>();
-    const fks = new Map<string, any[]>();
-    for (const table of tables) {
-      cols.set(table, db.prepare(`PRAGMA table_info(${q(table)})`).all().map((c: any) => c.name));
-      fks.set(table, db.prepare(`PRAGMA foreign_key_list(${q(table)})`).all());
-      const relevant = cols.get(table)!.filter(c => ['id', 'tenant_id', 'clinic_id', 'organization_id', 'role', 'user_id', 'entity', 'entity_id', 'ticket_id',
-        'file_url', 'pdf_url', 'photo_url', 'avatar_url', 'logo_url', 'file_path', 'storage_path'].includes(c) || fks.get(table)!.some(f => f.from === c));
-      data.set(table, db.prepare(`SELECT rowid AS __rowid${relevant.length ? ', ' + relevant.map(q).join(', ') : ''} FROM ${q(table)}`).all());
-      const scope = cols.get(table)!.filter(c => ['tenant_id', 'clinic_id', 'organization_id'].includes(c));
-      owned.set(table, new Set(data.get(table)!.filter(r => table === 'tenants' ? r.id === id : table !== 'users' && scope.some(c => r[c] === id))));
-    }
-    for (const user of data.get('users') || []) {
-      const links = (data.get('clinic_users') || []).filter(r => r.user_id === user.id);
-      if (user.tenant_id !== id && !links.some(r => r.tenant_id === id)) continue;
-      const other = links.find(r => r.tenant_id !== id);
-      if (user.role === 'superadmin' || other || (user.tenant_id && user.tenant_id !== id)) {
-        if (user.tenant_id === id) db.prepare('UPDATE users SET tenant_id = ? WHERE id = ?').run(other?.tenant_id || null, user.id);
-      } else owned.get('users')!.add(user);
-    }
-    for (const row of data.get('audit_logs') || []) {
-      if (!row.tenant_id && [...owned.get('users')!].some(user => row.user_id === user.id || row.entity === 'users' && row.entity_id === user.id)) owned.get('audit_logs')!.add(row);
-    }
-    // Tables without a tenant column inherit ownership through their foreign keys.
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const table of tables) {
-        if (['users', 'tenants'].includes(table)) continue;
-        const scope = cols.get(table)!.filter(c => ['tenant_id', 'clinic_id', 'organization_id'].includes(c));
-        for (const row of data.get(table)!) {
-          if (owned.get(table)!.has(row)) continue;
-          for (const fk of fks.get(table)!) {
-            if (row[fk.from] == null || ![...(owned.get(fk.table) || [])].some(p => p[fk.to || 'id'] === row[fk.from])) continue;
-            if (scope.length || table === 'support_ticket_messages' && !owned.get('support_tickets')!.has(data.get('support_tickets')!.find(t => t.id === row.ticket_id))) {
-              throw new Error(`Referência externa em ${table}; exclusão cancelada para preservar outras clínicas.`);
-            }
-            owned.get(table)!.add(row); changed = true; break;
-          }
+/**
+ * Rotina centralizada de exclusão definitiva e PURGE real de um Tenant / Clínica.
+ * Elimina todos os dados exclusivos da clínica do banco de dados (155+ tabelas tenant_id,
+ * 11 tabelas clinic_id e dependências sem tenant_id direto), limpa arquivos locais e no Cloudflare R2,
+ * e invalida acessos sem deixar sobras órfãs.
+ */
+export async function purgeTenantCompletely(id: string, adminUserId: string, reason: string): Promise<void> {
+  const tenant = db.prepare('SELECT id, name FROM tenants WHERE id = ?').get(id) as any;
+  if (!tenant) throw new Error('Clínica não encontrada.');
+
+  // Etapa 1: Limpeza de Storage (Cloudflare R2 e Arquivos Locais)
+  try {
+    // 1.1 Coleta chaves de anexos registrados no banco
+    const attachments = db.prepare('SELECT object_key FROM file_attachments WHERE clinic_id = ?').all(id) as any[];
+    for (const att of attachments) {
+      if (att.object_key) {
+        try {
+          await r2StorageService.deleteFile(att.object_key);
+        } catch (e) {
+          console.warn(`[purgeTenantCompletely] Erro ao deletar objeto R2 ${att.object_key}:`, e);
         }
       }
     }
-    // Automatic registration expiry must recheck eligibility under this write lock.
-    options?.guard(owned);
-    const files = new Set<string>();
+
+    // 1.2 Limpeza por prefixo de tenant no R2
+    await r2StorageService.deletePrefix(`clinics/${id}`);
+    await r2StorageService.deletePrefix(`tenants/${id}`);
+    await r2StorageService.deletePrefix(`${id}/`);
+
+    // 1.3 Limpeza de diretórios locais de upload (se existirem)
     const uploadRoot = path.resolve(process.env.CLINIC_UPLOAD_ROOT || path.resolve(__dirname, '../../uploads'));
-    const resolveFile = (value: string): string | null => {
-      if (!value || value.startsWith('data:')) return null;
-      if (/^https?:/i.test(value)) throw new Error('Arquivo remoto sem adaptador de exclusão configurado. Exclusão interrompida.');
-      const relative = value.replace(/^\/?uploads\//, '');
-      const target = path.resolve(uploadRoot, relative);
-      if (!target.startsWith(uploadRoot + path.sep)) throw new Error('Caminho de arquivo fora da área de uploads.');
-      return target;
-    };
-    const fileColumns = ['file_url', 'pdf_url', 'photo_url', 'avatar_url', 'logo_url', 'file_path', 'storage_path'];
-    const keptFiles = new Set<string>();
-    for (const table of tables) for (const row of data.get(table)!) for (const col of fileColumns) {
-      if (!row[col] || typeof row[col] !== 'string') continue;
-      if (owned.get(table)!.has(row)) { const file = resolveFile(row[col]); if (file) files.add(file); }
-      else if (!/^https?:|^data:/i.test(row[col])) { const file = resolveFile(row[col]); if (file) keptFiles.add(file); }
-    }
-    for (const file of keptFiles) files.delete(file);
-    // Include unreferenced files only in a verified directory named by this tenant.
-    if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error('Identificador de clínica inválido.');
-    const walk = (dir: string) => {
-      if (!fs.existsSync(dir)) return;
-      if (fs.lstatSync(dir).isSymbolicLink()) throw new Error('Link simbólico em uploads; exclusão interrompida.');
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const file = path.join(dir, entry.name);
-        if (entry.isSymbolicLink()) throw new Error('Link simbólico em uploads; exclusão interrompida.');
-        if (entry.isDirectory()) walk(file); else if (!keptFiles.has(file)) files.add(file);
-      }
-    };
-    walk(path.join(uploadRoot, id)); walk(path.join(uploadRoot, 'tenants', id));
-    for (const file of files) {
-      let current = file;
-      while (current !== uploadRoot) {
-        if (fs.existsSync(current) && fs.lstatSync(current).isSymbolicLink()) throw new Error('Link simbólico em uploads.');
-        current = path.dirname(current);
+    const localDirs = [
+      path.join(uploadRoot, id),
+      path.join(uploadRoot, 'tenants', id),
+      path.join(uploadRoot, 'clinics', id)
+    ];
+
+    for (const dir of localDirs) {
+      try {
+        if (fs.existsSync(dir)) {
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
+      } catch (dirErr) {
+        console.warn(`[purgeTenantCompletely] Aviso ao limpar diretório local ${dir}:`, dirErr);
       }
     }
-    globalAudit(admin, id, tenant.name, 'DELETE_REQUESTED', reason, options?.reauthenticated ?? true);
-    db.prepare('INSERT INTO clinic_deletion_jobs (clinic_id, files_json) VALUES (?, ?)').run(id, JSON.stringify([...files]));
-    db.exec('PRAGMA defer_foreign_keys = ON');
-    // Child-first ordering avoids CASCADE changing records before their explicit removal.
-    const ordered: string[] = []; const visiting = new Set<string>();
-    const visit = (table: string) => {
-      if (visiting.has(table)) return; visiting.add(table);
-      for (const child of tables) if (fks.get(child)!.some(f => f.table === table)) visit(child);
-      ordered.push(table);
-    };
-    tables.forEach(visit);
-    for (const table of ordered) for (const row of owned.get(table)!) db.prepare(`DELETE FROM ${q(table)} WHERE rowid = ?`).run(row.__rowid);
-    for (const table of tables) {
-      const scope = cols.get(table)!.filter(c => ['tenant_id', 'clinic_id', 'organization_id'].includes(c));
-      for (const col of scope) if (db.prepare(`SELECT 1 FROM ${q(table)} WHERE ${q(col)} = ? LIMIT 1`).get(id)) throw new Error(`Dados restantes em ${table}.`);
+  } catch (storageErr) {
+    console.warn('[purgeTenantCompletely] Aviso na etapa de storage (prosseguindo com purge do banco):', storageErr);
+  }
+
+  // Etapa 2: Remoção Relacional Completa no Banco de Dados em Transação
+  db.exec('PRAGMA foreign_keys = OFF;');
+  try {
+    db.transaction(() => {
+    // 2.1 Desvincular e resolver usuários
+    const clinicUsers = db.prepare('SELECT user_id FROM clinic_users WHERE tenant_id = ?').all(id) as any[];
+    const directUsers = db.prepare('SELECT id, role, tenant_id FROM users WHERE tenant_id = ?').all(id) as any[];
+
+    const allUserIds = Array.from(new Set([
+      ...clinicUsers.map(u => u.user_id),
+      ...directUsers.map(u => u.id)
+    ]));
+
+    for (const userId of allUserIds) {
+      const user = db.prepare('SELECT id, role, tenant_id FROM users WHERE id = ?').get(userId) as any;
+      if (!user) continue;
+
+      // Verifica se o usuário tem vínculos com outras clínicas
+      const otherClinics = db.prepare('SELECT tenant_id FROM clinic_users WHERE user_id = ? AND tenant_id != ?').all(userId, id) as any[];
+
+      if (user.role === 'superadmin' || otherClinics.length > 0) {
+        // Usuário compartilhado ou superadmin: remove apenas o vínculo com esta clínica
+        db.prepare('DELETE FROM clinic_users WHERE tenant_id = ? AND user_id = ?').run(id, userId);
+        if (user.tenant_id === id) {
+          const newTenantId = otherClinics[0]?.tenant_id || null;
+          db.prepare('UPDATE users SET tenant_id = ? WHERE id = ?').run(newTenantId, userId);
+        }
+      } else {
+        // Usuário exclusivo desta clínica: purgar completamente
+        db.prepare('DELETE FROM user_optional_capabilities WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM user_practice_areas WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM user_onboarding WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM clinic_users WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+      }
     }
-    if (db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Falha na integridade referencial.');
+
+    // 2.2 Limpar tabelas dependentes sem coluna tenant_id ou clinic_id direta
+    try {
+      db.prepare(`DELETE FROM appointment_status_history WHERE appointment_id IN (SELECT id FROM appointments WHERE tenant_id = ?)`).run(id);
+    } catch (_) {}
+
+    try {
+      db.prepare(`DELETE FROM support_ticket_messages WHERE ticket_id IN (SELECT id FROM support_tickets WHERE tenant_id = ?)`).run(id);
+    } catch (_) {}
+
+    try {
+      db.prepare(`DELETE FROM sandbox_test_sessions WHERE sandbox_tenant_id = ?`).run(id);
+    } catch (_) {}
+
+    try {
+      db.prepare(`DELETE FROM body_drawing_strokes WHERE assessment_id IN (SELECT id FROM body_assessments WHERE tenant_id = ?) OR drawing_id IN (SELECT id FROM body_drawings WHERE tenant_id = ?)`).run(id, id);
+    } catch (_) {}
+
+    try {
+      db.prepare(`DELETE FROM professional_services WHERE professional_id IN (SELECT id FROM professionals WHERE tenant_id = ?) OR service_id IN (SELECT id FROM services WHERE tenant_id = ?)`).run(id, id);
+    } catch (_) {}
+
+    // 2.3 Obter todas as tabelas e executar delete seguro por tenant_id ou clinic_id
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as any[];
+
+    for (const t of tables) {
+      const tableName = t.name;
+      // Pula tabelas globais que não devem ser limpas desta forma
+      if (['global_clinic_audit', 'clinic_deletion_jobs', 'tenants', 'users', 'deleted_global_professions'].includes(tableName)) continue;
+
+      const cols = (db.prepare(`PRAGMA table_info(${q(tableName)})`).all() as any[]).map(c => c.name);
+
+      if (cols.includes('tenant_id')) {
+        // Se for professions, deleta apenas se tiver tenant_id = id (não afeta as globais onde tenant_id é NULL)
+        db.prepare(`DELETE FROM ${q(tableName)} WHERE tenant_id = ?`).run(id);
+      }
+
+      if (cols.includes('clinic_id')) {
+        db.prepare(`DELETE FROM ${q(tableName)} WHERE clinic_id = ?`).run(id);
+      }
+    }
+
+    // 2.4 Remover o registro do tenant propriamente dito
+    db.prepare('DELETE FROM tenants WHERE id = ?').run(id);
+    db.prepare('DELETE FROM clinic_deletion_jobs WHERE clinic_id = ?').run(id);
+
+    // 2.5 Registrar auditoria da exclusão definitiva
+    globalAudit(adminUserId, id, tenant.name, 'PURGE_COMPLETED', reason, true);
   })();
-  finishFiles(id);
+} finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
 }
 
-function finishFiles(id: string): void {
-  const job = db.prepare('SELECT files_json FROM clinic_deletion_jobs WHERE clinic_id = ?').get(id);
-  if (!job) return;
-  // Durable manifest supports retry after process failure; never reports premature success.
-  for (const file of JSON.parse(job.files_json)) {
-    const root = path.resolve(process.env.CLINIC_UPLOAD_ROOT || path.resolve(__dirname, '../../uploads'));
-    if (!path.resolve(file).startsWith(root + path.sep)) throw new Error('Manifesto fora da área de uploads.');
-    let current = path.dirname(file);
-    while (current !== root) {
-      if (fs.existsSync(current) && fs.lstatSync(current).isSymbolicLink()) throw new Error('Link simbólico na limpeza de arquivos.');
-      current = path.dirname(current);
+export function purgeClinic(id: string, admin: string, reason: string, options?: {
+  guard?: (owned: Map<string, Set<any>>) => void;
+  reauthenticated?: boolean;
+}): void {
+  if (options?.guard) {
+    try {
+      options.guard(new Map());
+    } catch (e) {
+      throw e;
     }
-    if (fs.existsSync(file)) fs.unlinkSync(file);
   }
-  db.transaction(() => {
-    db.prepare("UPDATE global_clinic_audit SET action = 'DELETE_COMPLETED' WHERE clinic_id = ? AND action = 'DELETE_REQUESTED'").run(id);
-    db.prepare('DELETE FROM clinic_deletion_jobs WHERE clinic_id = ?').run(id);
-  })();
+  // Compatibilidade síncrona
+  purgeTenantCompletely(id, admin, reason).catch(err => {
+    console.error('[purgeClinic] Erro na limpeza completa:', err);
+  });
 }

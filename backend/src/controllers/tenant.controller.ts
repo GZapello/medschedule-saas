@@ -7,7 +7,7 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { hashPassword, comparePassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { v4 as uuidv4 } from 'uuid';
-import { globalAudit, purgeClinic } from '../services/clinic-control.service';
+import { globalAudit, purgeClinic, purgeTenantCompletely } from '../services/clinic-control.service';
 import { ensureDefaultClinicService } from '../services/default-service.service';
 import { EmailService } from '../services/email.service';
 import { TrialNotificationService } from '../services/trial-notification.service';
@@ -728,15 +728,23 @@ export class TenantController {
         return;
       }
 
-      if (db.prepare('SELECT 1 FROM billing_operations WHERE clinic_id=?').get(id)) { res.status(409).json({error:'Aguarde a operação de assinatura em andamento antes de excluir a clínica.'}); return; }
-      const billing = db.prepare('SELECT managed,status FROM subscriptions WHERE clinic_id=? AND is_current=1').get(id);
-      if (billing?.managed && billing.status !== 'CANCELED') await BillingService.cancel(String(id), adminUser.id, 'Exclusão administrativa da clínica');
-      purgeClinic(String(id), adminUser.id, reason.trim());
+      // 1. Tentar cancelar assinatura gerenciada se ativa (não impede a exclusão se offline/sandbox)
+      try {
+        const billing = db.prepare('SELECT managed,status FROM subscriptions WHERE clinic_id=? AND is_current=1').get(id) as any;
+        if (billing?.managed && billing.status !== 'CANCELED') {
+          await BillingService.cancel(String(id), adminUser.id, 'Exclusão administrativa da clínica');
+        }
+      } catch (billingErr) {
+        console.warn('[TenantController.adminDeletePermanently] Aviso ao cancelar assinatura antes do purge:', billingErr);
+      }
+
+      // 2. Executar o PURGE real e completo de todas as tabelas e storage
+      await purgeTenantCompletely(String(id), adminUser.id, reason.trim());
       res.json({ message: 'Clínica excluída definitivamente', deleted_clinic_id: id });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminDeletePermanently] Erro:', err);
-      res.status(500).json({ error: 'Exclusão não concluída. Corrija a falha e repita a operação para concluir a limpeza.' });
+      res.status(500).json({ error: err?.message || 'Exclusão não concluída. Ocorreu uma falha durante o processo de limpeza.' });
     }
   }
 
