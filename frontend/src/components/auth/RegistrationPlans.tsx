@@ -11,18 +11,19 @@ export interface RegistrationPlan {
   trial_days: number;
 }
 
-export function RegistrationPlans({ plans, selectedCode, busy, onChoose, onBack }: {
+export function RegistrationPlans({ plans, selectedCode, busy, onChoose, onBack, onSelectPlan }: {
   plans: RegistrationPlan[];
   selectedCode: string;
   busy: boolean;
   onChoose: (plan: RegistrationPlan) => void;
   onBack: () => void;
+  onSelectPlan?: (plan: RegistrationPlan) => void;
 }) {
   return <section className="space-y-5">
     <div><h3 className="text-xl font-extrabold text-slate-900">Escolha como começar no Zemda</h3>
       <p className="text-sm text-slate-600 mt-2">Você pode testar o Zemda ou escolher um plano para começar agora.</p></div>
     <div className="grid md:grid-cols-3 gap-4">
-      {plans.map(plan => <article key={plan.id} className={`rounded-2xl border p-4 flex flex-col gap-3 min-w-0 ${plan.trial_days ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white'}`}>
+      {plans.map(plan => <article key={plan.id} onClick={() => onSelectPlan?.(plan)} className={`rounded-2xl border p-4 flex flex-col gap-3 min-w-0 cursor-pointer transition-all ${plan.trial_days ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-white'}`}>
         {plan.trial_days > 0 && <span className="text-xs font-bold text-teal-800">{plan.trial_days} dias grátis</span>}
         <h4 className="font-extrabold text-slate-900">{plan.name}</h4>
         <p className="text-xl font-bold text-slate-900">{plan.monthly_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}<span className="text-xs font-normal">{plan.cycle === 'MONTHLY' ? '/mês' : ` / ${plan.cycle}`}</span></p>

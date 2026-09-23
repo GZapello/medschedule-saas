@@ -1,6 +1,15 @@
 import { RegistrationPlans, RegistrationPlan } from './RegistrationPlans';
 import { RegistrationProfessionSelect } from './RegistrationProfessionSelect';
-import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
+import {
+  trackCompletedRegistration,
+  trackSignupOpen,
+  trackSignupStarted,
+  trackSignupEmailValidation,
+  trackSignupEmailVerified,
+  trackSignupPlanSelected,
+  trackSignupSubmit,
+  trackSignupError
+} from '../../utils/registrationAnalytics';
 import React, { useState, useRef, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -77,6 +86,35 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const hasTrackedOpen = useRef(false);
+  const hasTrackedStarted = useRef(false);
+  const lastSelectedPlanCode = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (!hasTrackedOpen.current) {
+        hasTrackedOpen.current = true;
+        trackSignupOpen({
+          planCode: selectedPlanCode || initialPlan,
+          professionCode: formData.profession || undefined
+        });
+      }
+    } else {
+      hasTrackedOpen.current = false;
+      hasTrackedStarted.current = false;
+      lastSelectedPlanCode.current = null;
+    }
+  }, [isOpen, selectedPlanCode, initialPlan]);
+
+  const notifySignupStarted = () => {
+    if (!hasTrackedStarted.current && step === 'form') {
+      hasTrackedStarted.current = true;
+      trackSignupStarted({
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
+    }
+  };
 
   const [successData, setSuccessData] = useState<{ clinicId: string; slug: string; message: string } | null>(null);
   const [marketingAccepted, setMarketingAccepted] = useState(false);
@@ -179,45 +217,101 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    notifySignupStarted();
 
     if (!formData.responsibleName.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.password) {
+      trackSignupError({
+        step: 'form',
+        errorCode: 'REQUIRED_FIELDS_MISSING',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast('Preencha os campos obrigatórios marcados com *', 'error');
       return;
     }
 
     if (!formData.profession) {
+      trackSignupError({
+        step: 'form',
+        errorCode: 'PROFESSION_MISSING',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan
+      });
       showToast('Selecione sua profissão para continuar', 'error');
       return;
     }
 
     if (formData.profession === 'prof-outro-saude' && !formData.customProfession.trim()) {
+      trackSignupError({
+        step: 'form',
+        errorCode: 'CUSTOM_PROFESSION_MISSING',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: 'prof-outro-saude'
+      });
       showToast('Por favor, especifique sua profissão da saúde', 'error');
       return;
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[^s@]+@[^s@]+.[^s@]+$/;
     if (!emailRegex.test(formData.email.trim())) {
+      trackSignupError({
+        step: 'form',
+        errorCode: 'INVALID_EMAIL_FORMAT',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast('Informe um e-mail válido', 'error');
       return;
     }
 
     const cleanPhone = formData.phone.replace(/\D/g, '');
     if (cleanPhone.length < 10) {
+      trackSignupError({
+        step: 'form',
+        errorCode: 'INVALID_PHONE_FORMAT',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast('Informe um número de celular válido com DDD', 'error');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
+      trackSignupError({
+        step: 'form',
+        errorCode: 'PASSWORD_MISMATCH',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast('As senhas digitadas não coincidem', 'error');
       return;
     }
 
     if (formData.password.length < 6) {
+      trackSignupError({
+        step: 'form',
+        errorCode: 'PASSWORD_TOO_SHORT',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast('A senha deve ter no mínimo 6 caracteres', 'error');
       return;
     }
 
     if (!formData.termsAccepted || !formData.privacyAccepted) {
+      trackSignupError({
+        step: 'form',
+        errorCode: 'TERMS_NOT_ACCEPTED',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast('Você deve aceitar os Termos de Uso e a Política de Privacidade', 'error');
       return;
     }
@@ -237,10 +331,21 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
       setOtpDigits(['', '', '', '', '', '']);
       setCooldownSeconds(res.cooldownSeconds || 60);
       showToast('Código de 6 dígitos enviado para seu e-mail!', 'info');
+      trackSignupEmailValidation({
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       setTimeout(() => {
         otpInputRefs.current[0]?.focus();
       }, 150);
     } catch (err: any) {
+      trackSignupError({
+        step: 'form',
+        errorCode: err.code || 'REQUEST_CODE_FAILED',
+        errorType: err.code ? 'api_error' : 'network_error',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast(err.message || 'Erro ao enviar código de verificação', 'error');
     } finally {
       setLoading(false);
@@ -274,6 +379,13 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
   const handleVerifyAndRegister = async () => {
     const code = otpDigits.join('').trim();
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+      trackSignupError({
+        step: 'verify_email',
+        errorCode: 'INVALID_OTP_FORMAT',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast('Por favor, digite o código completo de 6 dígitos numéricos.', 'error');
       return;
     }
@@ -296,15 +408,43 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
       }
 
       setVerification({ email: formData.email.trim().toLowerCase(), token: verifyRes.emailVerificationToken });
+      trackSignupEmailVerified({
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       setStep('plans');
     } catch (err: any) {
+      trackSignupError({
+        step: 'verify_email',
+        errorCode: err.code || 'OTP_VERIFICATION_FAILED',
+        errorType: err.code ? 'api_error' : 'network_error',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: formData.profession || undefined
+      });
       showToast(err.message || 'Erro ao validar e-mail.', 'error');
     } finally { setIsVerifying(false); }
+  };
+
+  const handleSelectPlan = (plan: RegistrationPlan) => {
+    setSelectedPlanCode(plan.code);
+    if (lastSelectedPlanCode.current !== plan.code) {
+      lastSelectedPlanCode.current = plan.code;
+      trackSignupPlanSelected(plan.code, {
+        professionCode: formData.profession || undefined
+      });
+    }
   };
 
   const handleRegister = async (plan: RegistrationPlan) => {
     if (registrationBusy.current || accountCreated.current) return;
     if (!verification || verification.email !== formData.email.trim().toLowerCase()) { setStep('form'); return; }
+
+    handleSelectPlan(plan);
+    trackSignupSubmit({
+      planCode: plan.code,
+      professionCode: formData.profession || undefined
+    });
+
     registrationBusy.current = true;
     setLoading(true);
     setSelectedPlanCode(plan.code);
@@ -339,12 +479,24 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
         planCode: plan.code
       });
 
-      if (data.success === false) throw new Error(data.message || 'Não foi possível criar a conta.');
+      if (data.success === false) {
+        trackSignupError({
+          step: 'plans',
+          errorCode: data.code || 'REGISTRATION_REJECTED',
+          errorType: 'api_error',
+          planCode: plan.code,
+          professionCode: formData.profession || undefined
+        });
+        throw new Error(data.message || 'Não foi possível criar a conta.');
+      }
       if (data.token && data.user) {
         accountCreated.current = true;
         // The backend has committed account creation; never infer trial activation from the CTA.
         if (data.success !== false) {
-          trackCompletedRegistration(data.user.id, data.isTrial === true ? plan.trial_days : undefined);
+          trackCompletedRegistration(data.user.id, data.isTrial === true ? plan.trial_days : undefined, {
+            planCode: plan.code,
+            professionCode: formData.profession || undefined
+          });
         }
         // Autenticação automática imediata através do token de sessão
         loginWithToken(data.token, data.user, data.tenant);
@@ -365,10 +517,25 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
       }
 
       // Fallback
-      if (data.success === true || data.clinicId) { accountCreated.current = true; setSuccessData(data); }
-      else throw new Error('Resposta de cadastro inválida. Verifique seu acesso antes de tentar novamente.');
+      if (data.success === true || data.clinicId) {
+        accountCreated.current = true;
+        trackCompletedRegistration(data.clinicId, undefined, {
+          planCode: plan.code,
+          professionCode: formData.profession || undefined
+        });
+        setSuccessData(data);
+      } else {
+        throw new Error('Resposta de cadastro inválida. Verifique seu acesso antes de tentar novamente.');
+      }
       showToast('Cadastro realizado com sucesso! Faça login para continuar.', 'info');
     } catch (err: any) {
+      trackSignupError({
+        step: 'plans',
+        errorCode: err.code || 'REGISTRATION_FAILED',
+        errorType: err.code ? 'api_error' : 'server_error',
+        planCode: plan.code,
+        professionCode: formData.profession || undefined
+      });
       if (err.code === 'EMAIL_VERIFICATION_EXPIRED') { setVerification(null); setStep('form'); }
       showToast(err.message || 'Código incorreto ou erro ao validar e-mail.', 'error');
     } finally {
@@ -440,7 +607,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
             <>
               {planError && <p role="alert" className="text-sm text-red-700 mb-4">{planError} <button onClick={loadPlans} className="underline">Tentar novamente</button></p>}
               {!plans.length && !planError && <p role="status">Carregando planos...</p>}
-              <RegistrationPlans plans={plans} selectedCode={selectedPlanCode} busy={loading} onChoose={handleRegister} onBack={() => setStep('form')} />
+              <RegistrationPlans plans={plans} selectedCode={selectedPlanCode} busy={loading} onChoose={handleRegister} onBack={() => setStep('form')} onSelectPlan={handleSelectPlan} />
             </>
           ) : step === 'verify_email' ? (
             <div className="py-2 space-y-6">
@@ -574,7 +741,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({ isOpen, on
               </div>
             </div>
           ) : (
-            <form onSubmit={handleRequestOtp} className="space-y-4">
+            <form onSubmit={handleRequestOtp} onFocusCapture={notifySignupStarted} onChangeCapture={notifySignupStarted} className="space-y-4">
               <p className="text-xs text-slate-600">Preencha seus dados e confirme seu e-mail. Você escolherá o plano na última etapa.</p>
 
               {/* Formulário Simplificado */}

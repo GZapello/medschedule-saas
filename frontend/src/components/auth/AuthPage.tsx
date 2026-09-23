@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { trackLoginStarted } from '../../utils/registrationAnalytics';
 import { CreateClinicModal } from './CreateClinicModal';
 import { RegisterUserModal } from './RegisterUserModal';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
@@ -48,8 +49,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [loginError, setLoginError] = useState<{ message: string; code?: string } | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ email?: string; password?: string }>({});
 
+  const hasTrackedLoginStarted = useRef<boolean>(false);
+  const notifyLoginStarted = () => {
+    if (!hasTrackedLoginStarted.current) {
+      hasTrackedLoginStarted.current = true;
+      trackLoginStarted({ method: 'email' });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    notifyLoginStarted();
 
     const errors: { email?: string; password?: string } = {};
     if (!email.trim()) {
@@ -163,7 +173,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} onFocusCapture={notifyLoginStarted} onChangeCapture={notifyLoginStarted} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">E-mail de Acesso</label>
               <div className="relative">
