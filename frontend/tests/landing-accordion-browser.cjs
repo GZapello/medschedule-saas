@@ -20,12 +20,13 @@ const base=process.env.TEST_BASE_URL || 'http://127.0.0.1:5178';
   let navigations=0;page.on('framenavigated',()=>navigations++);
   for(const width of [320,768,1440]){
    await page.setViewportSize({width,height:1000});
-   for(const module of ['fono','psico','odonto','nutri','fisio','to','personal','pp','body']){
+   for(const module of ['med','body','fono','psico','odonto','nutri','fisio','to','personal','pp']){
     await select.selectOption(module);
     const triggers=page.locator('#product-view .zl-feature-trigger');
-    assert.equal(await triggers.count(),4);
+    const count = module === 'med' ? 6 : 4;
+    assert.equal(await triggers.count(),count);
     assert.equal(await page.locator('.zl-feature-trigger[aria-expanded=true]').count(),0);
-    for(let i=0;i<4;i++){
+    for(let i=0;i<count;i++){
      const trigger=triggers.nth(i);await trigger.click();
      assert.equal(await trigger.getAttribute('aria-expanded'),'true');
      const panel=page.locator(`[id="${await trigger.getAttribute('aria-controls')}"]`);
@@ -40,7 +41,7 @@ const base=process.env.TEST_BASE_URL || 'http://127.0.0.1:5178';
     await triggers.first().press('Space');
     assert.equal(await triggers.first().getAttribute('aria-expanded'),'true');
    }
-   console.log(`Accordion: 9 modules x 4 resources, exclusive expansion, keyboard and layout at ${width}px OK`);
+   console.log(`Accordion: 10 modules, exclusive expansion, keyboard and layout at ${width}px OK`);
   }
   await page.getByRole('tab',{name:'ZemdaPsico',exact:true}).click();
   assert.equal(await page.locator('.zl-feature-trigger[aria-expanded=true]').count(),0);

@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import {
   Activity, Apple, ArrowRight, Brain, CalendarDays, ChevronDown, CircleDot, Crosshair,
   DollarSign, Dumbbell, FileText, GraduationCap, Heart, LayoutDashboard,
-  Layers3, Mic, Network, Smile, Users, type LucideIcon
+  Layers3, Mic, Network, Smile, Stethoscope, Users, type LucideIcon
 } from 'lucide-react';
 import { LANDING_MODULE_PREVIEWS, type LandingModulePreview } from './landingModulePreviews';
 
 const moduleIcons: Record<string, LucideIcon> = {
-  fono: Mic, psico: Brain, odonto: Smile, nutri: Apple, fisio: Activity,
-  to: Heart, personal: Dumbbell, pp: GraduationCap, body: Crosshair
+  med: Stethoscope, body: Crosshair, fono: Mic, psico: Brain, odonto: Smile,
+  nutri: Apple, fisio: Activity, to: Heart, personal: Dumbbell, pp: GraduationCap
 };
 const views = [
   {
@@ -55,7 +55,7 @@ const ModuleFeatureList = ({ module }: { module: LandingModulePreview }) => {
             <button type="button" id={buttonId} className="zl-feature-trigger"
               aria-expanded={isExpanded} aria-controls={panelId}
               onClick={() => setExpandedIndex(isExpanded ? null : index)}>
-              <span aria-hidden="true">0{index + 1}</span>
+              <span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
               <strong>{feature}</strong>
               <ChevronDown size={18} aria-hidden="true" />
             </button>
@@ -72,7 +72,7 @@ const ModuleFeatureList = ({ module }: { module: LandingModulePreview }) => {
 /** Local-only product exploration: never loads patient data or clinical modules. */
 export const LandingProductDemo: React.FC = () => {
   const [activeViewId, setActiveViewId] = useState('specialty');
-  const [activeModuleId, setActiveModuleId] = useState('fono');
+  const [activeModuleId, setActiveModuleId] = useState('med');
   const view = views.find(item => item.id === activeViewId) ?? views[3];
   const module = LANDING_MODULE_PREVIEWS.find(item => item.id === activeModuleId) ?? LANDING_MODULE_PREVIEWS[0];
   const isSpecialty = view.id === 'specialty';
@@ -122,7 +122,9 @@ export const LandingProductDemo: React.FC = () => {
                     onChange={event => setActiveModuleId(event.target.value)}
                   >
                     {LANDING_MODULE_PREVIEWS.map(item => (
-                      <option key={item.id} value={item.id}>{item.name} — {item.area}</option>
+                      <option key={item.id} value={item.id}>
+                        {item.name} — {item.id === 'body' ? 'Mapa corporal e acompanhamento visual' : item.area}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -155,7 +157,9 @@ export const LandingProductDemo: React.FC = () => {
             aria-label="Recursos da área selecionada" aria-live="polite" aria-atomic="true">
             <div className="zl-product-copy">
               <span className="zl-icon"><Icon size={25} aria-hidden="true" /></span>
-              <span className="zl-eyebrow">{isSpecialty ? module.area : view.name}</span>
+              <span className="zl-eyebrow">
+                {isSpecialty ? (module.id === 'body' ? 'Módulo Transversal · Mapa corporal e acompanhamento visual' : module.area) : view.name}
+              </span>
               <h2>{isSpecialty ? module.name : view.heading}</h2>
               <p>{isSpecialty ? module.description : view.description}</p>
             </div>

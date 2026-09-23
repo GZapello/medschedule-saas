@@ -19,7 +19,7 @@ for(const plan of LANDING_PLANS) assert.ok(home.includes(plan.price));
 for(const [,href] of home.matchAll(/<a[^>]*href="([^"]+)"/g)) {
   if(href.startsWith('/')&&!href.startsWith('//')) assert.ok(isValidApplicationRoute(href.split('#')[0]||'/'),`Unregistered route: ${href}`);
 }
-assert.ok(!/Android|SaaS|100%|ZemdaMed/.test(home));
+assert.ok(!/Android|SaaS|100%/.test(home));
 const notFound=renderPreRenderedHtml(base,'/rota-inexistente-qa');
 assert.ok(notFound.includes('noindex, nofollow'));
 assert.ok(!notFound.includes('rel="canonical"'));

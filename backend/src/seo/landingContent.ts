@@ -2,10 +2,11 @@
 export const LANDING_HERO_TITLE_LINES = ['Gestão e atendimento em saúde.', 'Do profissional solo à clínica.'];
 export const LANDING_HERO = {
   title: LANDING_HERO_TITLE_LINES.join(' '),
-  description: 'O sistema completo para quem atende individualmente ou em equipe: agenda inteligente, prontuário eletrônico, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.'
+  description: 'O sistema completo para médicos, profissionais de saúde e clínicas multiprofissionais: agenda inteligente, prontuário eletrônico estruturado, emissão de documentos, controle financeiro, gestão de equipe e módulos clínicos especializados em uma única plataforma.'
 };
 
 export const LANDING_MODULES = [
+  { id: 'med', name: 'ZemdaMed', profession: 'Medicina', slug: 'sistema-para-medicos', features: ['Prontuário médico e anamnese', 'Sinais vitais e acompanhamento clínico', 'Exames, medicamentos e prescrições', 'Especialidades e acompanhamento longitudinal'] },
   { id: 'fono', name: 'ZemdaFono', profession: 'Fonoaudiologia', slug: 'sistema-para-fonoaudiologos', features: ['Fonologia e painel fonêmico', 'Linguagem, voz e gravações', 'Audiologia, disfagia e IDDSI', 'CAA, metas e histórico clínico'] },
   { id: 'psico', name: 'ZemdaPsico', profession: 'Psicologia', slug: 'sistema-para-psicologos', features: ['Sessões, evolução e autosave', 'Estado mental e avaliação de risco', 'Triagens, escalas e metas', 'Documentos psicológicos e histórico'] },
   { id: 'odonto', name: 'ZemdaOdonto', profession: 'Odontologia', slug: 'sistema-para-dentistas', features: ['Odontograma e periodontograma', 'Endodontia e prótese', 'Harmonização orofacial (HOF)', 'Planos de tratamento e prontuário'] },
@@ -29,11 +30,11 @@ export const LANDING_STEPS = [
 export const LANDING_LAYERS = [
   { title: 'Gestão', description: 'Uma base para organizar a clínica.', items: ['Agenda', 'Pacientes', 'Equipe', 'Serviços', 'Financeiro', 'Estoque', 'Comissões', 'Relatórios'] },
   { title: 'Atendimento', description: 'Contexto para acompanhar cada paciente.', items: ['Prontuário', 'Evolução', 'Documentos', 'Anexos', 'Exames', 'Autosave nos módulos compatíveis', 'Histórico'] },
-  { title: 'Especialidade', description: 'Ferramentas que acompanham sua prática.', items: LANDING_MODULES.map(module => module.name) }
+  { title: 'Especialidade', description: 'Ferramentas que acompanham sua prática.', items: ['ZemdaMed', 'ZemdaBody', 'ZemdaFono', 'ZemdaPsico', 'ZemdaOdonto', 'ZemdaNutri', 'ZemdaFisio', 'ZemdaTO', 'ZemdaPersonal', 'ZemdaPP'] }
 ];
 export const LANDING_FAQS = [
   { question: 'O que muda de um plano para outro?', answer: 'O número de acessos: Solo tem 1, Equipe até 5 e Clínica até 20. Cada acesso corresponde a um usuário, incluindo profissionais e colaboradores. A profissão e as permissões definem as ferramentas clínicas disponíveis.' },
-  { question: 'Posso reunir profissões diferentes na mesma clínica?', answer: 'Sim. A gestão permanece unificada, e cada profissional acessa o ambiente da sua área conforme sua profissão e permissões. São oito módulos profissionais, além do ZemdaBody como recurso transversal de mapa corporal.' },
+  { question: 'Posso reunir profissões diferentes na mesma clínica?', answer: 'Sim. A gestão permanece unificada, e cada profissional acessa o ambiente da sua área conforme sua profissão e permissões. São nove módulos profissionais, além do ZemdaBody como recurso transversal de mapa corporal.' },
   { question: 'Como a equipe entra na clínica?', answer: 'Cada usuário se cadastra, informa sua profissão e solicita vínculo com a clínica. O responsável aprova a solicitação, respeitando o limite de acessos do plano.' },
   { question: 'O atendimento é salvo automaticamente?', answer: 'Psicologia e Fonoaudiologia contam com autosave e recuperação de rascunhos. A recuperação depende de existir um rascunho salvo no navegador ou no servidor. Confira o indicador de salvamento e finalize o atendimento ao concluir. Esses recursos são projetados para reduzir o risco de perda de dados.' },
   { question: 'Como funcionam os lembretes pelo WhatsApp?', answer: 'A plataforma permite lembrete manual pelo WhatsApp. Lembretes automáticos dependem da configuração e da disponibilidade da integração na clínica. Não há promessa de confirmação automática de consultas.' },

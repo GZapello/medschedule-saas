@@ -1,6 +1,6 @@
 import { LANDING_HERO, LANDING_HERO_TITLE_LINES } from '../../../../backend/src/seo/landingContent';
 import React, { useEffect } from 'react';
-import { Activity, Apple, ArrowDown, ArrowRight, Brain, CalendarDays, Check, CheckCheck, ChevronDown, CloudUpload, Crosshair, DollarSign, Dumbbell, FileText, Files, GraduationCap, Heart, Layers3, LockKeyhole, Mic, ShieldCheck, Smile, Sparkles, Users } from 'lucide-react';
+import { Activity, Apple, ArrowDown, ArrowRight, Brain, CalendarDays, Check, CheckCheck, ChevronDown, CloudUpload, Crosshair, DollarSign, Dumbbell, FileText, Files, GraduationCap, Heart, Layers3, LockKeyhole, Mic, ShieldCheck, Smile, Sparkles, Stethoscope, Users, type LucideIcon } from 'lucide-react';
 import { PublicHeader } from './PublicHeader';
 import { PublicFooter } from './PublicFooter';
 import { RevealSection, RevealItem } from './RevealOnScroll';
@@ -15,7 +15,17 @@ interface ZemdaLandingPageProps {
   onOpenPublicBooking?: () => void;
   onNavigateSeoPage?: (slug: string) => void;
 }
-const moduleIcons = [Mic, Brain, Smile, Apple, Activity, Heart, Dumbbell, GraduationCap];
+const moduleIcons: Record<string, LucideIcon> = {
+  med: Stethoscope,
+  fono: Mic,
+  psico: Brain,
+  odonto: Smile,
+  nutri: Apple,
+  fisio: Activity,
+  to: Heart,
+  personal: Dumbbell,
+  pp: GraduationCap
+};
 const Bullets = ({ items }: { items: string[] }) => <ul className="zl-bullets">{items.map(item => <li key={item}><Check aria-hidden="true" size={16} /><span>{item}</span></li>)}</ul>;
 const Heading = ({ label, title, children }: { label: string; title: string; children?: React.ReactNode }) => <div className="zl-heading"><span className="zl-eyebrow">{label}</span><h2>{title}</h2>{children && <p>{children}</p>}</div>;
 
@@ -53,7 +63,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
                 <span className="zl-pill"><span />Ecossistema de Saúde &amp; Gestão</span>
                 <span className="zl-hero-badge"><Sparkles size={13} /> 7 dias grátis</span>
               </div>
-              <span className="zl-hero-note">Profissionais solo, consultórios, equipes e clínicas.</span>
+              <span className="zl-hero-note">Médicos, consultórios individuais, equipes e clínicas multiprofissionais.</span>
             </div>
             <div className="zl-hero-grid">
               <h1>{LANDING_HERO_TITLE_LINES[0]}<br />{' '}<span>{LANDING_HERO_TITLE_LINES[1]}</span></h1>
@@ -69,7 +79,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
                   <p className="zl-hero-trial-highlight">Crie sua conta em 2 minutos e teste os principais recursos do Zemda por 7 dias grátis.</p>
                   <p className="zl-hero-trial-sub">Sem compromisso.</p>
                 </div>
-                <p className="zl-small">Feito para consultórios individuais, equipes em crescimento e clínicas multiprofissionais.</p>
+                <p className="zl-small">Feito para consultórios médicos, profissionais de saúde, equipes e clínicas multiprofissionais.</p>
               </div>
             </div>
           </RevealItem>
@@ -88,8 +98,8 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
 
       <RevealSection id="profissoes" className="zl-section zl-tinted"><div className="zl-container">
         <RevealItem distancePx={16} durationMs={550}><Heading label="Ecossistema profissional" title="Ferramentas específicas para sua profissão.">Avalie, registre e acompanhe cada atendimento com os recursos da sua área.</Heading></RevealItem>
-        <RevealItem distancePx={18} delayMs={100} durationMs={600}><article id="zemdabody" className="zl-body"><span className="zl-body-symbol"><Crosshair size={48} strokeWidth={1.3} /></span><div><span className="zl-eyebrow">Módulo transversal</span><h3>ZemdaBody</h3><p>Um mapa corporal para registrar marcações, explorar vistas anatômicas e acompanhar a evolução em diferentes áreas. Uma ferramenta de apoio integrada à prática profissional.</p></div><div className="zl-body-tags"><span>Mapa corporal</span><span>Vistas anatômicas</span><span>Marcações e evolução</span></div></article></RevealItem>
-        <div className="zl-modules">{LANDING_MODULES.map((module, index) => { const Icon = moduleIcons[index]; return <RevealItem key={module.id} distancePx={18} delayMs={(index % 4) * 60} durationMs={600} className="zl-full-height"><article id={`modulo-${module.id}`} className={`zl-module zl-module-${module.id}`}><span className="zl-module-icon"><Icon size={23} /></span><p className="zl-profession">{module.profession}</p><h3>{module.name}</h3><Bullets items={module.features} /><a href={moduleHref(module)} onClick={event => navigateModule(event, module)} className="zl-module-link" aria-label={`Conhecer módulo ${module.name}`}>Conhecer módulo <ArrowRight size={16} /></a></article></RevealItem>; })}</div>
+        <RevealItem distancePx={18} delayMs={100} durationMs={600}><article id="zemdabody" className="zl-body"><span className="zl-body-symbol"><Crosshair size={48} strokeWidth={1.3} /></span><div><span className="zl-eyebrow">Módulo transversal</span><h3>ZemdaBody</h3><p>Registre regiões corporais, marque achados clínicos e acompanhe visualmente a evolução do paciente ao longo dos atendimentos. Um recurso compartilhado entre a medicina e as especialidades multiprofissionais.</p></div><div className="zl-body-tags"><span>Mapa corporal e acompanhamento visual</span><span>Vistas anatômicas</span><span>Marcações e evolução</span></div></article></RevealItem>
+        <div className="zl-modules">{LANDING_MODULES.map((module, index) => { const Icon = moduleIcons[module.id] || Stethoscope; return <RevealItem key={module.id} distancePx={18} delayMs={(index % 4) * 60} durationMs={600} className="zl-full-height"><article id={`modulo-${module.id}`} className={`zl-module zl-module-${module.id}`}><span className="zl-module-icon"><Icon size={23} /></span><p className="zl-profession">{module.profession}</p><h3>{module.name}</h3><Bullets items={module.features} /><a href={moduleHref(module)} onClick={event => navigateModule(event, module)} className="zl-module-link" aria-label={`Conhecer módulo ${module.name}`}>Conhecer módulo <ArrowRight size={16} /></a></article></RevealItem>; })}</div>
       </div></RevealSection>
 
       <RevealSection id="funcionalidades" className="zl-section"><div className="zl-container">

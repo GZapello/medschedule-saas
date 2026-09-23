@@ -3,13 +3,51 @@ export interface LandingModulePreview {
   name: string;
   area: string;
   description: string;
-  features: readonly [string, string, string, string];
-  featureDescriptions: readonly [string, string, string, string];
+  features: readonly string[];
+  featureDescriptions: readonly string[];
   focus: string;
 }
 
 /** Public highlights verified against the clinical workspaces, not a feature roadmap. */
 export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
+  {
+    id: 'med', name: 'ZemdaMed', area: 'Medicina',
+    description: 'Prontuário médico, acompanhamento clínico, exames, prescrições e recursos adaptados às diferentes áreas médicas.',
+    features: [
+      'Prontuário médico e anamnese',
+      'Sinais vitais e acompanhamento clínico',
+      'Exames, medicamentos e prescrições',
+      'Especialidades e acompanhamento longitudinal',
+      'Documentos médicos e encaminhamentos',
+      'Integração com ZemdaBody'
+    ],
+    featureDescriptions: [
+      'Estruture a anamnese, hipóteses diagnósticas e histórico clínico completo do paciente com rapidez e segurança.',
+      'Acompanhe pressão arterial, frequência cardíaca, peso, saturação e histórico longitudinal dos sinais vitais.',
+      'Organize prescrições medicamentosas, pedidos de exames laboratoriais e controle de laudos no prontuário.',
+      'Recursos adaptados para Neurologia, Psiquiatria, Pediatria, Clínica Geral e diversas especialidades médicas.',
+      'Emita atestados, receituários, relatórios e guias de encaminhamento com rastreabilidade e registro de autoria.',
+      'Mapeie achados clínicos, dores, dermatologia e procedimentos diretamente no mapa corporal interativo.'
+    ],
+    focus: 'Prontuário médico longitudinal, prescrições, documentos e integração com mapa corporal no mesmo ambiente.'
+  },
+  {
+    id: 'body', name: 'ZemdaBody', area: 'Módulo transversal',
+    description: 'Registre regiões corporais, marque achados clínicos e acompanhe visualmente a evolução do paciente ao longo dos atendimentos.',
+    features: [
+      'Mapa corporal interativo',
+      'Vistas frontais, posteriores e laterais',
+      'Marcações por região e desenhos',
+      'Registros vinculados ao atendimento'
+    ],
+    featureDescriptions: [
+      'Explore regiões do corpo para organizar o registro visual da avaliação e exames.',
+      'Consulte as vistas frontal, posterior e laterais do modelo anatômico interativo.',
+      'Selecione regiões corporais e registre marcações, achados e notas clínicas.',
+      'Mantenha a avaliação corporal relacionada ao paciente e ao atendimento correspondente.'
+    ],
+    focus: 'Recurso transversal de mapa corporal compartilhado entre medicina e especialidades multiprofissionais.'
+  },
   {
     id: 'fono', name: 'ZemdaFono', area: 'Fonoaudiologia',
     description: 'Avaliação, evolução e acompanhamento fonoaudiológico.',
@@ -105,17 +143,5 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
       "Defina e registre objetivos e ações no Plano de Intervenção Psicopedagógica."
     ],
     focus: 'Registre a evolução, emita documentos e acompanhe o histórico das sessões.'
-  },
-  {
-    id: 'body', name: 'ZemdaBody', area: 'Módulo transversal',
-    description: 'Registro visual do corpo para apoiar diferentes áreas de atendimento.',
-    features: ['Mapa corporal interativo', 'Vistas frontais, posteriores e laterais', 'Marcações por região e desenhos', 'Registros vinculados ao atendimento'],
-    featureDescriptions: [
-      "Explore regiões do corpo para organizar o registro visual da avaliação.",
-      "Consulte as vistas frontal, posterior e laterais do modelo anatômico.",
-      "Selecione regiões e use desenhos para registrar observações no mapa corporal.",
-      "Mantenha a avaliação corporal relacionada ao paciente e ao atendimento correspondente."
-    ],
-    focus: 'Um recurso compartilhado entre especialidades, com acesso conforme as permissões do profissional.'
   }
 ];
