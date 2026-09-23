@@ -51,6 +51,8 @@ export interface ComputedUserCapabilities {
   professionId: string;
   commercialModule: string;
   practiceAreaIds: string[];
+  medicalSpecialtyIds?: string[];
+  medicalPracticeAreaIds?: string[];
   activeCapabilities: string[];
   defaultCapabilities: string[];
   availableOptionalCapabilities: string[];

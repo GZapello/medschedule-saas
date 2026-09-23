@@ -2,6 +2,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { generateToken } from '../utils/jwt';
 import { CapabilityService } from './capability.service';
+import { MedicalTreeService } from './medical-tree.service';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 
 export class SandboxService {
@@ -166,6 +167,32 @@ export class SandboxService {
     // 6. Registra Áreas de Atuação na Sessão
     CapabilityService.setUserPracticeAreas(sandboxUserId, sandboxTenantId, finalAreaIds);
 
+    let medSpecIds: string[] | undefined = undefined;
+    let medPaIds: string[] | undefined = undefined;
+
+    if (canonicalProfId === 'prof-medico' || commercialModule === 'ZemdaMed') {
+      try {
+        let specs: string[] = [];
+        if (resolution.medicalSpecialtyId) {
+          specs.push(resolution.medicalSpecialtyId);
+        }
+        const fromFinal = finalAreaIds.filter(a => a.startsWith('med-spec-'));
+        for (const s of fromFinal) {
+          if (!specs.includes(s)) specs.push(s);
+        }
+        if (specs.length === 0) {
+          specs = ['med-spec-clinica'];
+        }
+
+        const pas = finalAreaIds.filter(a => a.startsWith('med-pa-'));
+        MedicalTreeService.setUserMedicalHierarchy(sandboxUserId, sandboxTenantId, specs, pas);
+        medSpecIds = specs;
+        medPaIds = pas;
+      } catch (sbxMedErr) {
+        console.warn('[SandboxService] Erro ao gravar hierarquia médica no sandbox:', sbxMedErr);
+      }
+    }
+
     // 7. Popula Dados Automáticos de Teste no Sandbox
     this.seedSandboxData(sandboxTenantId, sandboxProfId, sandboxUserId, profName);
 
@@ -174,6 +201,8 @@ export class SandboxService {
       professionId: canonicalProfId,
       commercialModule,
       practiceAreaIds: finalAreaIds,
+      medicalSpecialtyIds: medSpecIds,
+      medicalPracticeAreaIds: medPaIds,
       tenantId: sandboxTenantId,
       planCode: planCode || 'ALL'
     });

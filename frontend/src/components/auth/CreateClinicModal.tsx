@@ -31,10 +31,13 @@ import {
   Briefcase,
   Eye,
   EyeOff,
-  Check
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Stethoscope
 } from 'lucide-react';
 import { RegistrationProfessionOption } from '../../types/professions';
-import { PracticeArea } from '../../types/capabilities';
+import { PracticeArea, MedicalSpecialtyItem } from '../../types/capabilities';
 
 interface CreateClinicModalProps {
   isOpen: boolean;
@@ -107,6 +110,13 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   const [selectedPracticeAreaIds, setSelectedPracticeAreaIds] = useState<string[]>([]);
   const [loadingPracticeAreas, setLoadingPracticeAreas] = useState(false);
   const lastLoadedProfessionRef = useRef<string>('');
+
+  // Árvore Clínica Médica (ZemdaMed)
+  const [medicalTree, setMedicalTree] = useState<MedicalSpecialtyItem[]>([]);
+  const [selectedMedicalSpecialtyIds, setSelectedMedicalSpecialtyIds] = useState<string[]>(['med-spec-clinica']);
+  const [selectedMedicalPracticeAreaIds, setSelectedMedicalPracticeAreaIds] = useState<string[]>([]);
+  const [expandedSpecialtyIds, setExpandedSpecialtyIds] = useState<string[]>(['med-spec-clinica']);
+  const [loadingMedicalTree, setLoadingMedicalTree] = useState(false);
 
   // Carregar planos
   const loadPlans = () => {
@@ -210,6 +220,36 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       isMounted = false;
     };
   }, [formData.profession, professionOptions]);
+
+  // Carregar Árvore Clínica Médica completa para Médico(a) genérico
+  useEffect(() => {
+    if (formData.profession !== 'prof-medico') return;
+    if (medicalTree.length > 0) return;
+
+    let isMounted = true;
+    setLoadingMedicalTree(true);
+
+    ApiClient.get<any>('/v1/taxonomy/medical-tree')
+      .then(res => {
+        if (!isMounted) return;
+        const list: MedicalSpecialtyItem[] = Array.isArray(res) ? res : (res?.specialties || []);
+        setMedicalTree(list);
+        if (selectedMedicalSpecialtyIds.length === 0 && list.length > 0) {
+          setSelectedMedicalSpecialtyIds(['med-spec-clinica']);
+          setExpandedSpecialtyIds(['med-spec-clinica']);
+        }
+      })
+      .catch(err => {
+        console.warn('Erro ao carregar árvore médica:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingMedicalTree(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [formData.profession, medicalTree.length, selectedMedicalSpecialtyIds.length]);
 
   // Scroll to top ao trocar de etapa
   useEffect(() => {
@@ -356,6 +396,18 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         professionCode: 'prof-outro-saude'
       });
       showToast('Por favor, especifique sua profissão da saúde.', 'error');
+      return;
+    }
+
+    if (formData.profession === 'prof-medico' && selectedMedicalSpecialtyIds.length === 0) {
+      trackSignupError({
+        step: 'profession',
+        errorCode: 'MEDICAL_SPECIALTY_MISSING',
+        errorType: 'validation',
+        planCode: selectedPlanCode || initialPlan,
+        professionCode: 'prof-medico'
+      });
+      showToast('Por favor, selecione ao menos uma especialidade médica.', 'error');
       return;
     }
 
@@ -605,9 +657,40 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
           ? formData.customProfession.trim()
           : (selectedOption?.canonicalName || selectedOption?.label || (selectedOption as any)?.name || formData.profession);
 
-      const selectedAreaNames = practiceAreas
-        .filter(pa => selectedPracticeAreaIds.includes(pa.id))
-        .map(pa => pa.name);
+      const isSpecificMedical = practiceAreas.length > 0 && !!practiceAreas[0].medicalSpecialtyId;
+      const isGenericDoc = formData.profession === 'prof-medico';
+
+      let medSpecialtyIdsToSend: string[] | undefined = undefined;
+      let medPracticeAreaIdsToSend: string[] | undefined = undefined;
+      let allPracticeAreaIdsToSend = selectedPracticeAreaIds;
+      let selectedAreaNames: string[] = [];
+
+      if (isSpecificMedical) {
+        const specId = practiceAreas[0].medicalSpecialtyId!;
+        medSpecialtyIdsToSend = [specId];
+        medPracticeAreaIdsToSend = selectedPracticeAreaIds;
+        allPracticeAreaIdsToSend = selectedPracticeAreaIds;
+        const subNames = practiceAreas
+          .filter(pa => selectedPracticeAreaIds.includes(pa.id))
+          .map(pa => pa.name);
+        selectedAreaNames = [practiceAreas[0].medicalSpecialtyName || 'Especialidade Médica', ...subNames];
+      } else if (isGenericDoc) {
+        medSpecialtyIdsToSend = selectedMedicalSpecialtyIds;
+        medPracticeAreaIdsToSend = selectedMedicalPracticeAreaIds;
+        allPracticeAreaIdsToSend = [...selectedMedicalSpecialtyIds, ...selectedMedicalPracticeAreaIds];
+        const specNames = medicalTree
+          .filter(s => selectedMedicalSpecialtyIds.includes(s.id))
+          .map(s => s.name);
+        const subNames = medicalTree
+          .flatMap(s => s.practiceAreas || [])
+          .filter(pa => selectedMedicalPracticeAreaIds.includes(pa.id))
+          .map(pa => pa.name);
+        selectedAreaNames = [...specNames, ...subNames];
+      } else {
+        selectedAreaNames = practiceAreas
+          .filter(pa => selectedPracticeAreaIds.includes(pa.id))
+          .map(pa => pa.name);
+      }
 
       const data = await ApiClient.post<any>('/v1/public/tenants/register', {
         responsibleName: formData.responsibleName.trim(),
@@ -618,7 +701,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         professionId: selectedOption?.id || undefined,
         professionName: professionNameToSend,
         registrationType: selectedOption?.boardLabel || undefined,
-        practiceAreaIds: selectedPracticeAreaIds,
+        practiceAreaIds: allPracticeAreaIdsToSend,
+        medicalSpecialtyIds: medSpecialtyIdsToSend,
+        medicalPracticeAreaIds: medPracticeAreaIdsToSend,
         practiceAreas: selectedAreaNames.length > 0 ? selectedAreaNames.join(', ') : undefined,
         clinicName: fallbackClinicName,
         tradeName: fallbackClinicName,
@@ -1010,10 +1095,247 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                   )}
 
                   {/* Seleção Interativa de Áreas de Atuação e Abordagens */}
-                  {formData.profession && (loadingPracticeAreas || practiceAreas.length > 0) && (
+                  {formData.profession && (
                     <div className="mt-5 pt-5 border-t border-slate-200 animate-in fade-in duration-200">
-                      {practiceAreas.length === 1 && practiceAreas[0].isInferredForAlias ? (
-                        /* CASO 2 e 3: Título que já é uma especialidade ou abordagem específica */
+                      {/* CASO A: MÉDICO GENÉRICO (prof-medico) - Árvore Clínica Médica Dinâmica */}
+                      {formData.profession === 'prof-medico' ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                              <Stethoscope className="w-4 h-4 text-teal-600" />
+                              <span>Especialidades Médicas & Subáreas (ZemdaMed)</span>
+                            </label>
+                            <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
+                              {selectedMedicalSpecialtyIds.length} especialidade(s)
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mb-3">
+                            Selecione uma ou mais especialidades em que você atua. Expanda para detalhar suas áreas de atuação / subáreas clínicas.
+                          </p>
+
+                          {loadingMedicalTree ? (
+                            <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2.5 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                              <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
+                              <span className="font-medium">Carregando catálogo de especialidades médicas...</span>
+                            </div>
+                          ) : (
+                            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                              {medicalTree.map(spec => {
+                                const isSpecSelected = selectedMedicalSpecialtyIds.includes(spec.id);
+                                const isExpanded = expandedSpecialtyIds.includes(spec.id);
+                                const specSubareas = spec.practiceAreas || [];
+                                const selectedSubareaCount = specSubareas.filter(pa => selectedMedicalPracticeAreaIds.includes(pa.id)).length;
+
+                                return (
+                                  <div
+                                    key={spec.id}
+                                    className={`rounded-2xl border transition-all overflow-hidden ${
+                                      isSpecSelected
+                                        ? 'border-teal-500 bg-teal-50/50 shadow-xs'
+                                        : 'border-slate-200 bg-white hover:border-slate-300'
+                                    }`}
+                                  >
+                                    {/* Specialty Header Row */}
+                                    <div className="p-3 sm:p-3.5 flex items-center justify-between gap-3">
+                                      <div
+                                        onClick={() => {
+                                          if (isSpecSelected) {
+                                            setSelectedMedicalSpecialtyIds(prev => prev.filter(id => id !== spec.id));
+                                            // Deselect child subareas
+                                            const childIds = new Set(specSubareas.map(pa => pa.id));
+                                            setSelectedMedicalPracticeAreaIds(prev => prev.filter(id => !childIds.has(id)));
+                                          } else {
+                                            setSelectedMedicalSpecialtyIds(prev => [...prev, spec.id]);
+                                            if (!isExpanded) {
+                                              setExpandedSpecialtyIds(prev => [...prev, spec.id]);
+                                            }
+                                          }
+                                        }}
+                                        className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none"
+                                      >
+                                        <div
+                                          className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                            isSpecSelected
+                                              ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                                              : 'border-slate-300 bg-white'
+                                          }`}
+                                        >
+                                          {isSpecSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-2">
+                                            <span className={`text-xs sm:text-sm font-black ${isSpecSelected ? 'text-teal-950' : 'text-slate-800'}`}>
+                                              {spec.name}
+                                            </span>
+                                            {selectedSubareaCount > 0 && (
+                                              <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-teal-600 text-white">
+                                                {selectedSubareaCount} subárea(s)
+                                              </span>
+                                            )}
+                                          </div>
+                                          {spec.description && (
+                                            <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                                              {spec.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {specSubareas.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpandedSpecialtyIds(prev =>
+                                              isExpanded ? prev.filter(id => id !== spec.id) : [...prev, spec.id]
+                                            );
+                                          }}
+                                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors shrink-0 cursor-pointer"
+                                          title={isExpanded ? 'Recolher subáreas' : 'Expandir subáreas'}
+                                        >
+                                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Child Practice Areas (Subareas) */}
+                                    {isExpanded && specSubareas.length > 0 && (
+                                      <div className="px-3 pb-3 pt-1 border-t border-teal-100/70 bg-white/70">
+                                        <p className="text-[11px] font-extrabold text-slate-600 mb-2">
+                                          Subáreas & Focos Clínicos de {spec.name}:
+                                        </p>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                          {specSubareas.map(sub => {
+                                            const isSubSelected = selectedMedicalPracticeAreaIds.includes(sub.id);
+                                            return (
+                                              <div
+                                                key={sub.id}
+                                                onClick={() => {
+                                                  if (isSubSelected) {
+                                                    setSelectedMedicalPracticeAreaIds(prev => prev.filter(id => id !== sub.id));
+                                                  } else {
+                                                    setSelectedMedicalPracticeAreaIds(prev => [...prev, sub.id]);
+                                                    // Ensure parent specialty is selected
+                                                    if (!isSpecSelected) {
+                                                      setSelectedMedicalSpecialtyIds(prev => [...prev, spec.id]);
+                                                    }
+                                                  }
+                                                }}
+                                                className={`p-2 rounded-xl border text-left cursor-pointer transition-all flex items-center gap-2 select-none ${
+                                                  isSubSelected
+                                                    ? 'border-teal-500 bg-teal-50 text-teal-950 font-bold'
+                                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs'
+                                                }`}
+                                              >
+                                                <div
+                                                  className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                                    isSubSelected ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300'
+                                                  }`}
+                                                >
+                                                  {isSubSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                                </div>
+                                                <span className="text-[11px] truncate">{sub.name}</span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ) : practiceAreas.length > 0 && practiceAreas[0].medicalSpecialtyId ? (
+                        /* CASO B: ALIAS MÉDICO ESPECÍFICO (Neurologista, Cardiologista, Psiquiatra, etc.) */
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                              Especialidade Médica Vinculada
+                            </label>
+                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                              Definida Automaticamente
+                            </span>
+                          </div>
+
+                          <div className="p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/90 text-teal-950 flex items-start gap-3 shadow-2xs mb-4">
+                            <div className="w-7 h-7 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                              <Check className="w-4 h-4 stroke-[3]" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-black text-teal-950">
+                                  {practiceAreas[0].medicalSpecialtyName || 'Especialidade Médica'}
+                                </span>
+                                <span className="text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200/60">
+                                  ZemdaMed
+                                </span>
+                              </div>
+                              <p className="text-xs text-teal-800 mt-1">
+                                Prescrições, anamnese estruturada e recursos clínicos pré-configurados para <strong>{practiceAreas[0].medicalSpecialtyName}</strong>.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Subáreas / Áreas de Atuação daquela Especialidade Médica */}
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                              Áreas de Atuação / Subáreas de {practiceAreas[0].medicalSpecialtyName} (Opcional)
+                            </label>
+                            <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
+                              {selectedPracticeAreaIds.length === 0
+                                ? 'Nenhuma subárea • Geral'
+                                : `${selectedPracticeAreaIds.length} selecionada(s)`}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mb-3">
+                            Selecione as subáreas em que você atua para enriquecer escalas e modelos especializados.
+                          </p>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
+                            {practiceAreas.map(area => {
+                              const isSelected = selectedPracticeAreaIds.includes(area.id);
+                              return (
+                                <button
+                                  type="button"
+                                  key={area.id}
+                                  onClick={() => {
+                                    setSelectedPracticeAreaIds(prev =>
+                                      isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
+                                    );
+                                  }}
+                                  className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer select-none ${
+                                    isSelected
+                                      ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
+                                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+                                  }`}
+                                >
+                                  <div
+                                    className={`w-4.5 h-4.5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                      isSelected
+                                        ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                                        : 'border-slate-300 bg-white'
+                                    }`}
+                                  >
+                                    {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <span className={`text-xs font-bold block truncate ${isSelected ? 'text-teal-950 font-black' : 'text-slate-800'}`}>
+                                      {area.name}
+                                    </span>
+                                    {area.description && (
+                                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                                        {area.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : practiceAreas.length === 1 && practiceAreas[0].isInferredForAlias ? (
+                        /* CASO C: ALIAS DE OUTRAS PROFISSÕES (Neuropsicólogo, Psicanalista, etc.) */
                         <div>
                           {(() => {
                             const isApproach = String(practiceAreas[0].type || '').toUpperCase().includes('APPROACH');
@@ -1044,7 +1366,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                                       Recursos e diretrizes clínicas pré-configurados para <strong>{practiceAreas[0].name}</strong>.
                                     </p>
                                     <p className="text-[11px] text-slate-500 mt-2 border-t border-teal-200/60 pt-1.5">
-                                      💡 Caso atue em <strong>múltiplas especialidades</strong>, selecione a profissão genérica correspondente (ex: Medicina, Odontologia ou Fisioterapia) para selecionar mais de uma.
+                                      💡 Caso atue em <strong>múltiplas especialidades</strong>, selecione a profissão genérica correspondente (ex: Odontologia ou Fisioterapia) para selecionar mais de uma.
                                     </p>
                                   </div>
                                 </div>
@@ -1053,7 +1375,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                           })()}
                         </div>
                       ) : (
-                        /* CASO 1 e 4: Profissão canônica genérica com áreas irmãs/pares */
+                        /* CASO D: PROFISSÕES CANÔNICAS GENÉRICAS (Fisioterapia, Odonto, Nutrição, etc.) */
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <label className="block text-xs sm:text-sm font-extrabold text-slate-800">

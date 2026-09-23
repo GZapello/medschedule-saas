@@ -106,6 +106,8 @@ api.get('/v1/taxonomy/categories', TaxonomyController.listCategories);
 api.get('/v1/taxonomy/professions', TaxonomyController.listProfessions);
 api.get('/v1/taxonomy/specialties', TaxonomyController.listSpecialties);
 api.get('/v1/taxonomy/practice-areas', CapabilityController.getPracticeAreas);
+api.get('/v1/taxonomy/medical-tree', CapabilityController.getMedicalTree);
+api.get('/v1/capabilities/medical-tree', CapabilityController.getMedicalTree);
 
 // Página Pública da Clínica & Agendamento Online (/c/:slug)
 api.get('/v1/public/tenants/:slug', TenantController.getPublicProfile);
@@ -952,6 +954,7 @@ api.put('/v1/capabilities/my-resources', requireTenant, CapabilityController.upd
 api.put('/v1/my-resources', requireTenant, CapabilityController.updateMyOptionalResources);
 api.put('/v1/capabilities/my-practice-areas', requireTenant, CapabilityController.updateMyPracticeAreas);
 api.put('/v1/my-resources/practice-areas', requireTenant, CapabilityController.updateMyPracticeAreas);
+api.put('/v1/capabilities/my-medical-hierarchy', requireTenant, CapabilityController.updateMyMedicalHierarchy);
 
 // ==========================================
 // ZEMDAMED — MÓDULO MÉDICO INTEGRADO

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -6,31 +6,27 @@ import {
   Stethoscope,
   Activity,
   Heart,
-  Thermometer,
-  Scale,
   Brain,
   Search,
-  User,
   CheckCircle2,
-  Calendar,
-  Clock,
-  Save,
   FileText,
-  AlertTriangle,
   History,
   Sparkles,
   Baby,
   Smile,
   Shield,
   X,
-  ChevronRight,
-  ArrowRight,
   Flame,
-  Check
+  Scale,
+  Eye,
+  Headphones,
+  ShieldCheck,
+  HeartHandshake
 } from 'lucide-react';
 import {
-  MedicalSpecialtyPresetKey,
   MedicalSpecialtyPreset,
+  MedicalSpecialtyItem,
+  MedicalTreeResponse,
   MedicalVitalSigns,
   MedicalPhysicalExam,
   MedicalNeurologicalExam,
@@ -44,27 +40,27 @@ interface ZemdaMedWorkspaceProps {
   onFinishConsultation?: () => void;
 }
 
-export const MEDICAL_SPECIALTY_PRESETS: MedicalSpecialtyPreset[] = [
+export const DEFAULT_MEDICAL_SPECIALTIES: MedicalSpecialtyPreset[] = [
   {
     id: 'clinica-medica',
     name: 'Clínica Médica',
     description: 'Atendimento geral do adulto, anamnese completa, rastreamento e conduta clínica.',
     iconName: 'Stethoscope',
-    focusAreas: ['Geral', 'Cardiometabólico', 'Prevenção']
+    focusAreas: ['Doenças Crônicas', 'Medicina Preventiva', 'Risco Cirúrgico', 'Investigação Diagnóstica']
   },
   {
     id: 'neurologia',
     name: 'Neurologia',
     description: 'Exame neurológico detalhado, pares cranianos, reflexos, marcha e mapa de sintomas.',
     iconName: 'Brain',
-    focusAreas: ['Pares Cranianos', 'Força Motora', 'Reflexos', 'Mapa Corporal']
+    focusAreas: ['Exame Neurológico', 'AVC & Cognição', 'Cefaleias & Movimento', 'Neuromuscular']
   },
   {
     id: 'psiquiatria',
     name: 'Psiquiatria',
     description: 'Avaliação do estado mental, humor, afeto, sono, apetite e psicofármacos.',
     iconName: 'Smile',
-    focusAreas: ['Humor', 'Afeto', 'Ideação', 'Sono & Apetite']
+    focusAreas: ['Humor & Afeto', 'Ansiedade & Pânico', 'Sono & Apetite', 'Psicofármacos']
   },
   {
     id: 'pediatria',
@@ -78,28 +74,28 @@ export const MEDICAL_SPECIALTY_PRESETS: MedicalSpecialtyPreset[] = [
     name: 'Geriatria',
     description: 'Avaliação geriátrica ampla, polifarmácia, risco de quedas e autonomia funcional.',
     iconName: 'Shield',
-    focusAreas: ['AGA', 'Polifarmácia', 'Risco de Quedas', 'AVD/AIVD']
+    focusAreas: ['AGA', 'Polifarmácia & Desprescrição', 'Risco de Quedas', 'AVD/AIVD']
   },
   {
     id: 'endocrinologia',
-    name: 'Endocrinologia',
+    name: 'Endocrinologia e Metabologia',
     description: 'Controle glicêmico, metabolismo lipídico, tireoide, obesidade e metas laboratoriais.',
     iconName: 'Scale',
-    focusAreas: ['Glicemia', 'Tireoide', 'Metabolismo', 'IMC']
+    focusAreas: ['Diabetes Mellitus', 'Tireoide', 'Metabolismo & Obesidade', 'Osteometabolismo']
   },
   {
     id: 'ortopedia',
-    name: 'Ortopedia',
+    name: 'Ortopedia e Traumatologia',
     description: 'Exame músculo-esquelético, amplitude articular, testes ortopédicos e dor osteoarticular.',
     iconName: 'Activity',
-    focusAreas: ['Articulações', 'Amplitude de Movimento', 'Testes Especiais']
+    focusAreas: ['Aparelho Locomotor', 'Coluna Vertebral', 'Membros Superiores & Inferiores', 'Trauma']
   },
   {
     id: 'cardiologia',
     name: 'Cardiologia',
     description: 'Ausculta cardíaca, ritmo, controle pressórico e estratificação de risco cardiovascular.',
     iconName: 'Heart',
-    focusAreas: ['Risco Cardiovascular', 'Ausculta', 'Hipertensão', 'Ritmo']
+    focusAreas: ['Risco Cardiovascular', 'Hipertensão Arterial', 'Ausculta & Ritmo', 'Insuficiência Cardíaca']
   },
   {
     id: 'dermatologia',
@@ -113,85 +109,44 @@ export const MEDICAL_SPECIALTY_PRESETS: MedicalSpecialtyPreset[] = [
     name: 'Reumatologia',
     description: 'Contagem de articulações inflamadas/dolorosas, rigidez matinal e manifestações sistêmicas.',
     iconName: 'Activity',
-    focusAreas: ['Articulações Dolorosas', 'Rigidez Matinal', 'Autoimunidade']
+    focusAreas: ['Artropatias Inflamatórias', 'Autoimunidade Sistêmica', 'Fibromialgia', 'Osteoporose']
+  },
+  {
+    id: 'ginecologia',
+    name: 'Ginecologia e Obstetrícia',
+    description: 'Saúde integral da mulher, pré-natal, rastreamento preventivo, climatério e planejamento reprodutivo.',
+    iconName: 'HeartHandshake',
+    focusAreas: ['Saúde da Mulher', 'Pré-Natal', 'Climatério & Menopausa', 'Rastreamento Preventivo']
+  },
+  {
+    id: 'gastroenterologia',
+    name: 'Gastroenterologia',
+    description: 'Doenças do trato gastrointestinal alto e baixo, hepatologia clínica e distúrbios funcionais.',
+    iconName: 'Stethoscope',
+    focusAreas: ['DRGE & Gastrites', 'Doenças Intestinais', 'Hepatologia Clínica', 'Distúrbios Funcionais']
+  },
+  {
+    id: 'oftalmologia',
+    name: 'Oftalmologia',
+    description: 'Refração, acuidade visual, rastreamento de glaucoma e avaliação de superfície ocular e retina.',
+    iconName: 'Eye',
+    focusAreas: ['Refração & Acuidade', 'Glaucoma & Tonometria', 'Superfície Ocular', 'Retina']
+  },
+  {
+    id: 'otorrinolaringologia',
+    name: 'Otorrinolaringologia',
+    description: 'Afecções de ouvido, nariz e garganta, avaliação de vertigem e distúrbios de voz e sono.',
+    iconName: 'Headphones',
+    focusAreas: ['Rinologia', 'Otologia & Vertigem', 'Laringe & Voz', 'Distúrbios do Sono']
+  },
+  {
+    id: 'urologia',
+    name: 'Urologia',
+    description: 'Saúde urológica e andrológica, afecções da próstata, litíase urinária e incontinência.',
+    iconName: 'ShieldCheck',
+    focusAreas: ['Próstata & Rastreamento', 'Litíase Urinária', 'Saúde do Homem', 'Incontinência Urinária']
   }
 ];
-
-const AREA_TO_PRESET_MAP: Record<string, MedicalSpecialtyPresetKey> = {
-  'pa-med-clinica': 'clinica-medica',
-  'clinica-medica': 'clinica-medica',
-  'pa-med-neuro': 'neurologia',
-  'neurologia': 'neurologia',
-  'pa-med-psiquiatria': 'psiquiatria',
-  'psiquiatria': 'psiquiatria',
-  'pa-med-pediatria': 'pediatria',
-  'pediatria': 'pediatria',
-  'pa-med-geriatria': 'geriatria',
-  'geriatria': 'geriatria',
-  'pa-med-endocrino': 'endocrinologia',
-  'pa-med-endocrinologia': 'endocrinologia',
-  'endocrinologia': 'endocrinologia',
-  'pa-med-ortopedia': 'ortopedia',
-  'ortopedia': 'ortopedia',
-  'pa-med-cardio': 'cardiologia',
-  'pa-med-cardiologia': 'cardiologia',
-  'cardiologia': 'cardiologia',
-  'pa-med-dermato': 'dermatologia',
-  'pa-med-dermatologia': 'dermatologia',
-  'dermatologia': 'dermatologia',
-  'pa-med-reumato': 'reumatologia',
-  'pa-med-reumatologia': 'reumatologia',
-  'reumatologia': 'reumatologia',
-  'prof-psiquiatra': 'psiquiatria',
-  'prof-cardiologista': 'cardiologia',
-  'prof-pediatra': 'pediatria',
-  'prof-dermatologista': 'dermatologia',
-  'prof-neurologista': 'neurologia',
-  'prof-ortopedista': 'ortopedia',
-  'prof-endocrinologista': 'endocrinologia',
-  'prof-geriatra': 'geriatria',
-  'prof-reumatologista': 'reumatologia'
-};
-
-function resolveUserMedicalPresets(
-  practiceAreaIds: string[] | undefined,
-  currentUser: any
-): MedicalSpecialtyPreset[] {
-  const matchedPresetIds = new Set<MedicalSpecialtyPresetKey>();
-
-  if (Array.isArray(practiceAreaIds) && practiceAreaIds.length > 0) {
-    for (const areaId of practiceAreaIds) {
-      const mapped = AREA_TO_PRESET_MAP[areaId] || AREA_TO_PRESET_MAP[areaId.toLowerCase()];
-      if (mapped) matchedPresetIds.add(mapped);
-    }
-  }
-
-  if (Array.isArray(currentUser?.practiceAreas)) {
-    for (const pa of currentUser.practiceAreas) {
-      const id = typeof pa === 'string' ? pa : (pa?.id || pa?.slug);
-      if (id && AREA_TO_PRESET_MAP[id]) matchedPresetIds.add(AREA_TO_PRESET_MAP[id]);
-    }
-  }
-
-  const profStr = String(currentUser?.profession || '').toLowerCase();
-  const specStr = String(currentUser?.specialty || '').toLowerCase();
-  for (const [key, presetKey] of Object.entries(AREA_TO_PRESET_MAP)) {
-    const rawKey = key.replace('pa-med-', '').replace('prof-', '');
-    if ((rawKey.length > 3 && profStr.includes(rawKey)) || (rawKey.length > 3 && specStr.includes(rawKey))) {
-      matchedPresetIds.add(presetKey);
-    }
-  }
-
-  if (matchedPresetIds.size === 0) {
-    if (currentUser?.role === 'superadmin') {
-      return MEDICAL_SPECIALTY_PRESETS;
-    }
-    return [MEDICAL_SPECIALTY_PRESETS[0]];
-  }
-
-  const presets = MEDICAL_SPECIALTY_PRESETS.filter(p => matchedPresetIds.has(p.id));
-  return presets.length > 0 ? presets : [MEDICAL_SPECIALTY_PRESETS[0]];
-}
 
 export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   initialPatientId,
@@ -201,9 +156,86 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   const { currentUser, clientTermLabel, practiceAreaIds } = useAuth();
   const { showToast } = useToast();
 
-  const allowedPresets = useMemo(() => {
-    return resolveUserMedicalPresets(practiceAreaIds, currentUser);
-  }, [practiceAreaIds, currentUser]);
+  // Árvore Médica Centralizada e Especialidades do Usuário
+  const [medicalTree, setMedicalTree] = useState<MedicalSpecialtyItem[]>([]);
+  const [userSpecialtyIds, setUserSpecialtyIds] = useState<string[]>([]);
+
+  // Carrega a árvore médica e especialidades do médico
+  useEffect(() => {
+    let isMounted = true;
+
+    Promise.all([
+      ApiClient.get<MedicalTreeResponse>('/v1/taxonomy/medical-tree').catch(() => null),
+      ApiClient.get<any>('/v1/capabilities/my-resources').catch(() => null)
+    ]).then(([treeRes, resData]) => {
+      if (!isMounted) return;
+
+      if (treeRes && Array.isArray(treeRes.specialties)) {
+        setMedicalTree(treeRes.specialties);
+      }
+
+      if (resData?.medicalSpecialtyIds && Array.isArray(resData.medicalSpecialtyIds)) {
+        setUserSpecialtyIds(resData.medicalSpecialtyIds);
+      } else if (resData?.medicalHierarchy?.specialtyIds) {
+        setUserSpecialtyIds(resData.medicalHierarchy.specialtyIds);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Presets disponíveis para o médico logado
+  const allowedPresets = useMemo<MedicalSpecialtyPreset[]>(() => {
+    const catalogSource: MedicalSpecialtyPreset[] = (medicalTree.length > 0 ? medicalTree : DEFAULT_MEDICAL_SPECIALTIES).map(s => ({
+      id: s.slug || s.id,
+      name: s.name,
+      slug: s.slug || s.id,
+      description: s.description || '',
+      iconName: s.iconName || 'Stethoscope',
+      focusAreas: s.focusAreas || [],
+      practiceAreas: s.practiceAreas || []
+    }));
+
+    // SuperAdmin tem acesso a todas as 15 especialidades no consultório para testes
+    if (currentUser?.role === 'superadmin') {
+      return catalogSource;
+    }
+
+    // Se o médico possui especialidades médicas vinculadas (ex: Neurologia + Psiquiatria)
+    if (userSpecialtyIds.length > 0) {
+      const filtered = catalogSource.filter(p =>
+        userSpecialtyIds.includes(p.id) ||
+        userSpecialtyIds.some(id => id.includes(p.id) || p.id.includes(id.replace('med-spec-', '')))
+      );
+      if (filtered.length > 0) return filtered;
+    }
+
+    // Fallback com áreas legadas em practiceAreaIds
+    if (Array.isArray(practiceAreaIds) && practiceAreaIds.length > 0) {
+      const filtered = catalogSource.filter(p =>
+        practiceAreaIds.some(paId => {
+          const cleanPa = paId.replace('pa-med-', '').replace('med-spec-', '').replace('med-pa-', '');
+          return p.id.includes(cleanPa) || cleanPa.includes(p.id);
+        })
+      );
+      if (filtered.length > 0) return filtered;
+    }
+
+    // Fallback por nome/título da profissão
+    const profStr = String(currentUser?.professionName || currentUser?.canonicalProfessionName || currentUser?.professionId || '').toLowerCase();
+    const specStr = String(currentUser?.specialtyName || '').toLowerCase();
+    const matched = catalogSource.filter(p => {
+      const pName = p.name.toLowerCase();
+      const pId = p.id.toLowerCase();
+      return profStr.includes(pId) || specStr.includes(pId) || profStr.includes(pName) || specStr.includes(pName);
+    });
+
+    if (matched.length > 0) return matched;
+
+    return [catalogSource[0]];
+  }, [medicalTree, userSpecialtyIds, practiceAreaIds, currentUser]);
 
   // Pacientes e Seleção
   const [patients, setPatients] = useState<any[]>([]);
@@ -211,13 +243,12 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [searchPatient, setSearchPatient] = useState<string>('');
 
-  // Preset de Especialidade Ativo - abre direto na especialidade cadastrada do médico
-  const [activePreset, setActivePreset] = useState<MedicalSpecialtyPresetKey>(() => {
-    const initialAllowed = resolveUserMedicalPresets(practiceAreaIds, currentUser);
-    return initialAllowed[0]?.id || 'clinica-medica';
+  // Preset de Especialidade Ativo
+  const [activePreset, setActivePreset] = useState<string>(() => {
+    return allowedPresets[0]?.id || 'clinica-medica';
   });
 
-  // Atualiza preset ativo caso allowedPresets mude
+  // Atualiza preset ativo quando allowedPresets for carregado
   useEffect(() => {
     if (allowedPresets.length > 0 && !allowedPresets.some(p => p.id === activePreset)) {
       setActivePreset(allowedPresets[0].id);
@@ -244,7 +275,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     bmi: undefined
   });
 
-  // Exame Físico Geral
+  // Exame Físico Geral (Clínica Médica e Base)
   const [physicalExam, setPhysicalExam] = useState<MedicalPhysicalExam>({
     generalStatus: 'Bom estado geral, corado, hidratado, acianótico, anictérico.',
     headAndNeck: '',
@@ -256,7 +287,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     additionalNotes: ''
   });
 
-  // Exame Neurológico & Marcadores de Dor
+  // Exame Neurológico (Neurologia)
   const [neurologicalExam, setNeurologicalExam] = useState<MedicalNeurologicalExam>({
     mentalStatus: 'Vigil, orientado no tempo e espaço, discurso coerente.',
     cranialNerves: 'Pares cranianos (I a XII) sem déficits aparentes.',
@@ -268,7 +299,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     painMapMarkers: []
   });
 
-  // Especialidades Específicas
+  // Avaliação Psiquiátrica (Psiquiatria)
   const [psychiatricNotes, setPsychiatricNotes] = useState({
     mood: 'Eutímico',
     affect: 'Adequado e modulado',
@@ -277,18 +308,87 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     sleepApetite: 'Sono preservado (7h/noite), apetite estável'
   });
 
+  // Avaliação Pediátrica (Pediatria)
   const [pediatricNotes, setPediatricNotes] = useState({
     growthPercentileWeight: 'P50',
     growthPercentileHeight: 'P50',
     vaccinationStatus: 'Vacinação em dia conforme PNI',
-    dnpmMilestones: 'Marcos de desenvolvimento adequados para a faixa etária'
+    dnpmMilestones: 'Marcos de desenvolvimento neuropsicomotor adequados para a idade',
+    feedingType: 'Aleitamento materno / Alimentação da família'
   });
 
+  // Avaliação Geriátrica Ampla (Geriatria)
   const [geriatricNotes, setGeriatricNotes] = useState({
-    fallRisk: 'Baixo risco',
-    polypharmacy: 'Uso de até 3 medicações de uso contínuo',
+    fallRisk: 'Baixo risco de quedas (Timed Up and Go < 10s)',
+    polypharmacy: 'Uso de até 3 medicações de uso contínuo (sem polifarmácia excessiva)',
     katsIndexAVD: 'Independente para AVDs básicas (6/6)',
-    lawtonIndexAIVD: 'Independente para instrumentais (8/8)'
+    lawtonIndexAIVD: 'Independente para AIVDs instrumentais (8/8)',
+    cognitiveScreening: 'Mini-Mental: sem indícios de declínio cognitivo significativo'
+  });
+
+  // Avaliações Específicas das Demais Especialidades
+  const [cardioNotes, setCardioNotes] = useState({
+    rhythm: 'Ritmo sinusal regular',
+    murmurs: 'Sem sopros patológicos',
+    cvRisk: 'Risco cardiovascular intermediário',
+    edema: 'Sem edema de membros inferiores'
+  });
+
+  const [dermatoNotes, setDermatoNotes] = useState({
+    phototype: 'Fototipo III (Fitzpatrick)',
+    lesionExam: 'Ectoscopia dermatológica sem lesões suspeitas de malignidade',
+    abcdeCriteria: 'Ausência de assimetria, bordas regulares, cor uniforme, diâmetro < 6mm'
+  });
+
+  const [orthoNotes, setOrthoNotes] = useState({
+    mobilityROM: 'Amplitude de movimento preservada nos segmentos avaliados',
+    jointStability: 'Articulações estáveis, sem gaveta ou frouxidão ligamentar',
+    palpationPain: 'Sem pontos gatilho dolorosos ou crepitações articulares'
+  });
+
+  const [rheumaNotes, setRheumaNotes] = useState({
+    tenderJointCount: '0 articulações dolorosas',
+    swollenJointCount: '0 articulações edemaciadas',
+    morningStiffnessMinutes: 'Sem rigidez matinal significativa (< 15 min)'
+  });
+
+  const [gynecoNotes, setGynecoNotes] = useState({
+    lmpDate: '',
+    breastExam: 'Mamas simétricas, sem nódulos palpáveis ou secreção papilar',
+    cervixExam: 'Colo uterino de aspecto eutrófico, sem lesões aparentes',
+    preventiveStatus: 'Preventivo Papanicolau em dia'
+  });
+
+  const [endocrinoNotes, setEndocrinoNotes] = useState({
+    fastingGlucose: '',
+    hba1c: '',
+    thyroidPalpation: 'Tireoide normopalpável, indolor, sem nódulos',
+    waistCircumference: ''
+  });
+
+  const [gastroNotes, setGastroNotes] = useState({
+    bristolScale: 'Tipo 4 (forma de salsicha, lisa e suave)',
+    abdominalExam: 'Abdome indolor, sem visceromegalias palpáveis',
+    gerdSymptoms: 'Sem queixas de pirose ou regurgitação'
+  });
+
+  const [ophtalmoNotes, setOphtalmoNotes] = useState({
+    visualAcuityOD: '20/20',
+    visualAcuityOE: '20/20',
+    intraocularPressure: '14 mmHg bilateral',
+    fundusExam: 'Fundo de olho com papila nítida, rácio E/P normal, vasos preservados'
+  });
+
+  const [otorrinoNotes, setOtorrinoNotes] = useState({
+    otoscopy: 'Membrana timpânica íntegra, translúcida bilateralmente',
+    rhinoscopy: 'Mucosa nasal corada, cornetos normotróficos, sem secreção',
+    oropharynx: 'Orofaringe sem hiperemia, amígdalas grau I, palato íntegro'
+  });
+
+  const [uroNotes, setUroNotes] = useState({
+    ipssScore: 'Sintomas obstrutivos ausentes ou leves',
+    urinaryFlow: 'Micção sem esforço, jato urinário satisfatório',
+    prostateExam: 'Próstata normotrófica, fibroelástica, indolor'
   });
 
   // SOAP
@@ -314,7 +414,6 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
   // Controle de Submissão
   const [isFinishing, setIsFinishing] = useState(false);
-  const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   // Carrega Pacientes
   useEffect(() => {
@@ -395,22 +494,62 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     try {
       setIsFinishing(true);
 
-      const evolutionText = `[ZemdaMed — Consulta de ${MEDICAL_SPECIALTY_PRESETS.find(p => p.id === activePreset)?.name}]\n\n` +
+      const activePresetObj = allowedPresets.find(p => p.id === activePreset);
+      const specName = activePresetObj?.name || 'Consulta Médica';
+
+      let evolutionText = `[ZemdaMed — Consulta de ${specName}]\n\n` +
         `• Queixa Principal: ${chiefComplaint || 'Consulta de rotina'}\n` +
         (hpi ? `• HDA: ${hpi}\n` : '') +
-        (vitalSigns.bloodPressureSystolic ? `• Sinais Vitais: PA ${vitalSigns.bloodPressureSystolic}/${vitalSigns.bloodPressureDiastolic || ''} mmHg, FC ${vitalSigns.heartRate || '-'} bpm, SpO2 ${vitalSigns.oxygenSaturation || '-'}%, Temp ${vitalSigns.temperature || '-'}°C, IMC ${vitalSigns.bmi || '-'}\n` : '') +
-        (cidCode ? `• CID-10: ${cidCode} - ${cidDescription || ''}\n` : '') +
+        (pastMedicalHistory ? `• Antecedentes (HPP): ${pastMedicalHistory}\n` : '') +
+        (familyHistory ? `• Histórico Familiar: ${familyHistory}\n` : '') +
+        (vitalSigns.bloodPressureSystolic ? `• Sinais Vitais: PA ${vitalSigns.bloodPressureSystolic}/${vitalSigns.bloodPressureDiastolic || ''} mmHg, FC ${vitalSigns.heartRate || '-'} bpm, SpO2 ${vitalSigns.oxygenSaturation || '-'}%, Temp ${vitalSigns.temperature || '-'}°C, IMC ${vitalSigns.bmi || '-'}\n` : '');
+
+      // Anexa achados do exame físico especializado
+      if (activePreset === 'neurologia') {
+        evolutionText += `\n[EXAME NEUROLÓGICO]:\n• Mental: ${neurologicalExam.mentalStatus}\n• Pares Cranianos: ${neurologicalExam.cranialNerves}\n• Motor: ${neurologicalExam.motorSystem}\n• Reflexos: ${neurologicalExam.reflexes}\n• Marcha: ${neurologicalExam.coordinationAndGait}\n`;
+      } else if (activePreset === 'psiquiatria') {
+        evolutionText += `\n[EXAME DO ESTADO MENTAL]:\n• Humor: ${psychiatricNotes.mood} | Afeto: ${psychiatricNotes.affect}\n• Pensamento: ${psychiatricNotes.thoughtProcess}\n• Sensopercepção: ${psychiatricNotes.perception}\n• Sono/Apetite: ${psychiatricNotes.sleepApetite}\n`;
+      } else if (activePreset === 'pediatria') {
+        evolutionText += `\n[PUERICULTURA & CRESCIMENTO]:\n• Percentil Peso/Estatura: ${pediatricNotes.growthPercentileWeight} / ${pediatricNotes.growthPercentileHeight}\n• Vacinação: ${pediatricNotes.vaccinationStatus}\n• DNPM: ${pediatricNotes.dnpmMilestones}\n`;
+      } else if (activePreset === 'geriatria') {
+        evolutionText += `\n[AVALIAÇÃO GERIÁTRICA AMPLA (AGA)]:\n• Quedas: ${geriatricNotes.fallRisk}\n• Polifarmácia: ${geriatricNotes.polypharmacy}\n• AVD (Katz): ${geriatricNotes.katsIndexAVD} | AIVD (Lawton): ${geriatricNotes.lawtonIndexAIVD}\n`;
+      } else if (activePreset === 'cardiologia') {
+        evolutionText += `\n[AVALIAÇÃO CARDIOVASCULAR]:\n• Ausculta: ${cardioNotes.murmurs} | Ritmo: ${cardioNotes.rhythm}\n• Estratificação de Risco: ${cardioNotes.cvRisk}\n`;
+      } else if (activePreset === 'dermatologia') {
+        evolutionText += `\n[EXAME DERMATOLÓGICO]:\n• Lesões: ${dermatoNotes.lesionExam}\n• Fototipo: ${dermatoNotes.phototype} | ABCDE: ${dermatoNotes.abcdeCriteria}\n`;
+      } else if (activePreset === 'ortopedia') {
+        evolutionText += `\n[EXAME ORTOPÉDICO]:\n• Amplitude/Mobilidade: ${orthoNotes.mobilityROM}\n• Estabilidade: ${orthoNotes.jointStability}\n• Palpação: ${orthoNotes.palpationPain}\n`;
+      } else if (activePreset === 'reumatologia') {
+        evolutionText += `\n[AVALIAÇÃO REUMATOLÓGICA]:\n• Articulações Dolorosas: ${rheumaNotes.tenderJointCount} | Edemaciadas: ${rheumaNotes.swollenJointCount}\n• Rigidez Matinal: ${rheumaNotes.morningStiffnessMinutes}\n`;
+      } else if (activePreset === 'ginecologia' || activePreset === 'ginecologia-obstetricia') {
+        evolutionText += `\n[EXAME GINECOLÓGICO / OBSTÉTRICO]:\n• DUM: ${gynecoNotes.lmpDate || 'Não informada'}\n• Mamas: ${gynecoNotes.breastExam}\n• Rastreamento: ${gynecoNotes.preventiveStatus}\n`;
+      } else if (activePreset === 'endocrinologia') {
+        evolutionText += `\n[METABOLISMO & TIREOIDE]:\n• Glicemia: ${endocrinoNotes.fastingGlucose || '-'} | HbA1c: ${endocrinoNotes.hba1c || '-'}\n• Tireoide: ${endocrinoNotes.thyroidPalpation}\n`;
+      } else if (activePreset === 'gastroenterologia') {
+        evolutionText += `\n[EXAME GASTROENTEROLÓGICO]:\n• Escala de Bristol: ${gastroNotes.bristolScale}\n• Abdome: ${gastroNotes.abdominalExam}\n`;
+      } else if (activePreset === 'oftalmologia') {
+        evolutionText += `\n[EXAME OFTALMOLÓGICO]:\n• Acuidade OD/OE: ${ophtalmoNotes.visualAcuityOD} / ${ophtalmoNotes.visualAcuityOE}\n• Pressão Intraocular: ${ophtalmoNotes.intraocularPressure}\n`;
+      } else if (activePreset === 'otorrinolaringologia') {
+        evolutionText += `\n[EXAME OTORRINOLARINGOLÓGICO]:\n• Otoscopia: ${otorrinoNotes.otoscopy}\n• Rinoscopia/Orofaringe: ${otorrinoNotes.rhinoscopy}\n`;
+      } else if (activePreset === 'urologia') {
+        evolutionText += `\n[EXAME UROLÓGICO]:\n• Próstata: ${uroNotes.prostateExam}\n• Sintomas IPSS: ${uroNotes.ipssScore}\n`;
+      }
+
+      evolutionText += (cidCode ? `\n• CID-10: ${cidCode} - ${cidDescription || ''}\n` : '') +
         (diagnosticHypotheses.length > 0 ? `• Hipóteses: ${diagnosticHypotheses.join(', ')}\n` : '') +
-        `\n[CONDUTA MÉDICA / PLANO]:\n${clinicalConduct || soapNotes.plan}\n` +
+        `\n[CONDUTA MÉDICA / PRESCRIÇÃO]:\n${clinicalConduct || soapNotes.plan}\n` +
         (returnInDays ? `\n• Retorno previsto em: ${returnInDays} dias` : '');
 
       await ApiClient.post('/v1/medical/finish-consultation', {
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId || null,
-        title: `Consulta Médica — ${MEDICAL_SPECIALTY_PRESETS.find(p => p.id === activePreset)?.name}`,
+        title: `Consulta Médica — ${specName}`,
         specialtyPreset: activePreset,
         chiefComplaint,
         hpi,
+        pastMedicalHistory,
+        familyHistory,
+        habitsLifestyle,
         vitalSigns,
         physicalExam,
         neurologicalExam,
@@ -430,8 +569,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         onFinishConsultation();
       }
     } catch (err: any) {
-      console.error('Erro ao finalizar consulta:', err);
-      showToast(err.message || 'Erro ao finalizar consulta médica', 'error');
+      console.error('Erro ao finalizar consulta médica:', err);
+      showToast(err.message || 'Erro ao registrar atendimento médico.', 'error');
     } finally {
       setIsFinishing(false);
     }
@@ -447,22 +586,24 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       {/* Top Header ZemdaMed */}
       <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
               <Stethoscope className="w-3.5 h-3.5" />
-              ZemdaMed • Medicina Especializada
+              ZemdaMed • Medicina
             </span>
+
+            {/* Seletor Compacto e Discreto no Topo */}
             {allowedPresets.length === 1 ? (
               <span className="text-xs px-2.5 py-1 rounded-full bg-teal-500/20 text-teal-300 font-bold border border-teal-500/30">
                 {allowedPresets[0].name}
               </span>
             ) : (
-              <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1 rounded-full border border-white/20">
-                <span className="text-[11px] text-teal-300 font-bold">Especialidade:</span>
+              <div className="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full border border-white/20 backdrop-blur-xs">
+                <span className="text-xs text-teal-300 font-bold">Especialidade atual:</span>
                 <select
                   value={activePreset}
-                  onChange={e => setActivePreset(e.target.value as MedicalSpecialtyPresetKey)}
-                  className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+                  onChange={e => setActivePreset(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer pr-1"
                 >
                   {allowedPresets.map(preset => (
                     <option key={preset.id} value={preset.id} className="bg-slate-900 text-white">
@@ -473,11 +614,12 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
               </div>
             )}
           </div>
+
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
             Consultório Médico & Especialidades
           </h1>
           <p className="text-slate-300 text-sm mt-1 max-w-2xl font-medium">
-            Prontuário médico com anamnese estruturada, sinais vitais, exame neurológico com mapa de sintomas, notas SOAP e integração ao CID-10.
+            Prontuário médico com anamnese estruturada, sinais vitais, exame físico adaptativo à especialidade, notas SOAP e integração ao CID-10.
           </p>
         </div>
 
@@ -496,7 +638,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
           <div className="flex bg-white/10 p-1 rounded-2xl border border-white/10">
             <button
               onClick={() => setActiveTab('consultation')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'consultation' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -504,7 +646,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -548,7 +690,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
       {/* Seletor Compacto Discreto para Médicos com Múltiplas Especialidades */}
       {allowedPresets.length > 1 && (
-        <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-4">
+        <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
               Especialidade de Atendimento:
@@ -780,55 +922,57 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             </div>
           </div>
 
-          {/* Exame Físico por Sistemas & Específico do Preset */}
+          {/* Exame Físico Especializado Adaptativo à Especialidade */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
             <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
               <Stethoscope className="w-4 h-4 text-teal-600" />
-              Exame Físico Especializado ({MEDICAL_SPECIALTY_PRESETS.find(p => p.id === activePreset)?.name})
+              Exame Especializado ({allowedPresets.find(p => p.id === activePreset)?.name || 'Consulta Médica'})
             </h2>
 
-            {activePreset === 'neurologia' ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Estado Mental & Funções Corticais</label>
-                    <textarea
-                      rows={2}
-                      value={neurologicalExam.mentalStatus}
-                      onChange={e => setNeurologicalExam({ ...neurologicalExam, mentalStatus: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Pares Cranianos (I a XII)</label>
-                    <textarea
-                      rows={2}
-                      value={neurologicalExam.cranialNerves}
-                      onChange={e => setNeurologicalExam({ ...neurologicalExam, cranialNerves: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Sistema Motor & Força (0 a V)</label>
-                    <textarea
-                      rows={2}
-                      value={neurologicalExam.motorSystem}
-                      onChange={e => setNeurologicalExam({ ...neurologicalExam, motorSystem: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Coordenação, Marcha & Sinais Meníngeos</label>
-                    <textarea
-                      rows={2}
-                      value={neurologicalExam.coordinationAndGait}
-                      onChange={e => setNeurologicalExam({ ...neurologicalExam, coordinationAndGait: e.target.value })}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                    />
-                  </div>
+            {/* NEUROLOGIA */}
+            {activePreset === 'neurologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Estado Mental & Funções Corticais</label>
+                  <textarea
+                    rows={2}
+                    value={neurologicalExam.mentalStatus}
+                    onChange={e => setNeurologicalExam({ ...neurologicalExam, mentalStatus: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Pares Cranianos (I a XII)</label>
+                  <textarea
+                    rows={2}
+                    value={neurologicalExam.cranialNerves}
+                    onChange={e => setNeurologicalExam({ ...neurologicalExam, cranialNerves: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Sistema Motor & Força (0 a V)</label>
+                  <textarea
+                    rows={2}
+                    value={neurologicalExam.motorSystem}
+                    onChange={e => setNeurologicalExam({ ...neurologicalExam, motorSystem: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Coordenação, Marcha & Sinais Meníngeos</label>
+                  <textarea
+                    rows={2}
+                    value={neurologicalExam.coordinationAndGait}
+                    onChange={e => setNeurologicalExam({ ...neurologicalExam, coordinationAndGait: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
                 </div>
               </div>
-            ) : activePreset === 'psiquiatria' ? (
+            )}
+
+            {/* PSIQUIATRIA */}
+            {activePreset === 'psiquiatria' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Humor & Afeto</label>
@@ -867,8 +1011,429 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                   />
                 </div>
               </div>
-            ) : (
+            )}
+
+            {/* PEDIATRIA */}
+            {activePreset === 'pediatria' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Curvas e Percentis de Crescimento</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Peso P50, Estatura P50, PC P50"
+                    value={`${pediatricNotes.growthPercentileWeight} / ${pediatricNotes.growthPercentileHeight}`}
+                    onChange={e => setPediatricNotes({ ...pediatricNotes, growthPercentileWeight: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Situação Vacinal (PNI)</label>
+                  <input
+                    type="text"
+                    value={pediatricNotes.vaccinationStatus}
+                    onChange={e => setPediatricNotes({ ...pediatricNotes, vaccinationStatus: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Marcos do Desenvolvimento (DNPM)</label>
+                  <textarea
+                    rows={2}
+                    value={pediatricNotes.dnpmMilestones}
+                    onChange={e => setPediatricNotes({ ...pediatricNotes, dnpmMilestones: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* GERIATRIA */}
+            {activePreset === 'geriatria' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Rastreamento de Quedas & Fragilidade</label>
+                  <input
+                    type="text"
+                    value={geriatricNotes.fallRisk}
+                    onChange={e => setGeriatricNotes({ ...geriatricNotes, fallRisk: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Polifarmácia & Desprescrição</label>
+                  <input
+                    type="text"
+                    value={geriatricNotes.polypharmacy}
+                    onChange={e => setGeriatricNotes({ ...geriatricNotes, polypharmacy: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Autonomia AVD (Índice de Katz)</label>
+                  <input
+                    type="text"
+                    value={geriatricNotes.katsIndexAVD}
+                    onChange={e => setGeriatricNotes({ ...geriatricNotes, katsIndexAVD: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Autonomia AIVD (Escala de Lawton)</label>
+                  <input
+                    type="text"
+                    value={geriatricNotes.lawtonIndexAIVD}
+                    onChange={e => setGeriatricNotes({ ...geriatricNotes, lawtonIndexAIVD: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* CARDIOLOGIA */}
+            {activePreset === 'cardiologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Ausculta Cardíaca & Sopros</label>
+                  <input
+                    type="text"
+                    value={cardioNotes.murmurs}
+                    onChange={e => setCardioNotes({ ...cardioNotes, murmurs: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Ritmo & Frequência</label>
+                  <input
+                    type="text"
+                    value={cardioNotes.rhythm}
+                    onChange={e => setCardioNotes({ ...cardioNotes, rhythm: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Estratificação de Risco Cardiovascular</label>
+                  <input
+                    type="text"
+                    value={cardioNotes.cvRisk}
+                    onChange={e => setCardioNotes({ ...cardioNotes, cvRisk: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Edema de MMII & Sinais Congestivos</label>
+                  <input
+                    type="text"
+                    value={cardioNotes.edema}
+                    onChange={e => setCardioNotes({ ...cardioNotes, edema: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* DERMATOLOGIA */}
+            {activePreset === 'dermatologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Fototipo de Fitzpatrick</label>
+                  <input
+                    type="text"
+                    value={dermatoNotes.phototype}
+                    onChange={e => setDermatoNotes({ ...dermatoNotes, phototype: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Critérios ABCDE de Lesões Pigmentadas</label>
+                  <input
+                    type="text"
+                    value={dermatoNotes.abcdeCriteria}
+                    onChange={e => setDermatoNotes({ ...dermatoNotes, abcdeCriteria: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Ectoscopia & Dermatoscopia de Lesões</label>
+                  <textarea
+                    rows={2}
+                    value={dermatoNotes.lesionExam}
+                    onChange={e => setDermatoNotes({ ...dermatoNotes, lesionExam: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ORTOPEDIA */}
+            {activePreset === 'ortopedia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Amplitude Articular (ADM) & Mobilidade</label>
+                  <input
+                    type="text"
+                    value={orthoNotes.mobilityROM}
+                    onChange={e => setOrthoNotes({ ...orthoNotes, mobilityROM: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Estabilidade Articular & Testes Especiais</label>
+                  <input
+                    type="text"
+                    value={orthoNotes.jointStability}
+                    onChange={e => setOrthoNotes({ ...orthoNotes, jointStability: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Pontos Dolorosos & Crepitações Ósseas</label>
+                  <input
+                    type="text"
+                    value={orthoNotes.palpationPain}
+                    onChange={e => setOrthoNotes({ ...orthoNotes, palpationPain: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* REUMATOLOGIA */}
+            {activePreset === 'reumatologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Contagem Articular Dolorosa</label>
+                  <input
+                    type="text"
+                    value={rheumaNotes.tenderJointCount}
+                    onChange={e => setRheumaNotes({ ...rheumaNotes, tenderJointCount: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Contagem Articular Edemaciada (Sinovite)</label>
+                  <input
+                    type="text"
+                    value={rheumaNotes.swollenJointCount}
+                    onChange={e => setRheumaNotes({ ...rheumaNotes, swollenJointCount: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Rigidez Matinal (Duração em minutos)</label>
+                  <input
+                    type="text"
+                    value={rheumaNotes.morningStiffnessMinutes}
+                    onChange={e => setRheumaNotes({ ...rheumaNotes, morningStiffnessMinutes: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* GINECOLOGIA E OBSTETRÍCIA */}
+            {(activePreset === 'ginecologia' || activePreset === 'ginecologia-obstetricia') && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Data da Última Menstruação (DUM)</label>
+                  <input
+                    type="date"
+                    value={gynecoNotes.lmpDate}
+                    onChange={e => setGynecoNotes({ ...gynecoNotes, lmpDate: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Exame Preventivo (Papanicolau)</label>
+                  <input
+                    type="text"
+                    value={gynecoNotes.preventiveStatus}
+                    onChange={e => setGynecoNotes({ ...gynecoNotes, preventiveStatus: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Exame das Mamas</label>
+                  <input
+                    type="text"
+                    value={gynecoNotes.breastExam}
+                    onChange={e => setGynecoNotes({ ...gynecoNotes, breastExam: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Exame Especular / Colo Uterino</label>
+                  <input
+                    type="text"
+                    value={gynecoNotes.cervixExam}
+                    onChange={e => setGynecoNotes({ ...gynecoNotes, cervixExam: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ENDOCRINOLOGIA */}
+            {activePreset === 'endocrinologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Glicemia de Jejum / HGT</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 95 mg/dL"
+                    value={endocrinoNotes.fastingGlucose}
+                    onChange={e => setEndocrinoNotes({ ...endocrinoNotes, fastingGlucose: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Hemoglobina Glicada (HbA1c)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 5.6%"
+                    value={endocrinoNotes.hba1c}
+                    onChange={e => setEndocrinoNotes({ ...endocrinoNotes, hba1c: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Palpação da Tireoide</label>
+                  <input
+                    type="text"
+                    value={endocrinoNotes.thyroidPalpation}
+                    onChange={e => setEndocrinoNotes({ ...endocrinoNotes, thyroidPalpation: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* GASTROENTEROLOGIA */}
+            {activePreset === 'gastroenterologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Escala de Bristol (Fezes)</label>
+                  <input
+                    type="text"
+                    value={gastroNotes.bristolScale}
+                    onChange={e => setGastroNotes({ ...gastroNotes, bristolScale: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Sintomas Dispépticos / DRGE</label>
+                  <input
+                    type="text"
+                    value={gastroNotes.gerdSymptoms}
+                    onChange={e => setGastroNotes({ ...gastroNotes, gerdSymptoms: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Palpação Abdominal & Visceromegalias</label>
+                  <input
+                    type="text"
+                    value={gastroNotes.abdominalExam}
+                    onChange={e => setGastroNotes({ ...gastroNotes, abdominalExam: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* OFTALMOLOGIA */}
+            {activePreset === 'oftalmologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Acuidade Visual (OD / OE)</label>
+                  <input
+                    type="text"
+                    placeholder="OD: 20/20 | OE: 20/20"
+                    value={`${ophtalmoNotes.visualAcuityOD} / ${ophtalmoNotes.visualAcuityOE}`}
+                    onChange={e => setOphtalmoNotes({ ...ophtalmoNotes, visualAcuityOD: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Pressão Intraocular (Tonometria)</label>
+                  <input
+                    type="text"
+                    value={ophtalmoNotes.intraocularPressure}
+                    onChange={e => setOphtalmoNotes({ ...ophtalmoNotes, intraocularPressure: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Fundo de Olho & Biomicroscopia</label>
+                  <input
+                    type="text"
+                    value={ophtalmoNotes.fundusExam}
+                    onChange={e => setOphtalmoNotes({ ...ophtalmoNotes, fundusExam: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* OTORRINOLARINGOLOGIA */}
+            {activePreset === 'otorrinolaringologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Otoscopia Bilateral</label>
+                  <input
+                    type="text"
+                    value={otorrinoNotes.otoscopy}
+                    onChange={e => setOtorrinoNotes({ ...otorrinoNotes, otoscopy: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Rinoscopia & Seios Nasais</label>
+                  <input
+                    type="text"
+                    value={otorrinoNotes.rhinoscopy}
+                    onChange={e => setOtorrinoNotes({ ...otorrinoNotes, rhinoscopy: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Orofaringe & Laringe</label>
+                  <input
+                    type="text"
+                    value={otorrinoNotes.oropharynx}
+                    onChange={e => setOtorrinoNotes({ ...otorrinoNotes, oropharynx: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* UROLOGIA */}
+            {activePreset === 'urologia' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Exame / Toque Prostático</label>
+                  <input
+                    type="text"
+                    value={uroNotes.prostateExam}
+                    onChange={e => setUroNotes({ ...uroNotes, prostateExam: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Escore de Sintomas Prostáticos (IPSS)</label>
+                  <input
+                    type="text"
+                    value={uroNotes.ipssScore}
+                    onChange={e => setUroNotes({ ...uroNotes, ipssScore: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* EXAME FÍSICO GERAL DE BASE (SEMPRE DISPONÍVEL COMO BASE OU CLÍNICA MÉDICA) */}
+            {(activePreset === 'clinica-medica' || !['neurologia', 'psiquiatria'].includes(activePreset)) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Aparelho Cardiovascular</label>
                   <textarea
@@ -897,7 +1462,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Extremidades & Pele</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Extremidades & Pulsos</label>
                   <textarea
                     rows={2}
                     value={physicalExam.extremities}
@@ -924,7 +1489,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                   placeholder="Ex: I10, E11, G43, F32..."
                   value={cidCode}
                   onChange={e => setCidCode(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-mono"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none font-mono font-bold"
                 />
               </div>
 
@@ -955,7 +1520,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                 <button
                   type="button"
                   onClick={handleAddHypothesis}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
                 >
                   Adicionar
                 </button>

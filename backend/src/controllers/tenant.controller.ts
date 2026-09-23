@@ -12,6 +12,7 @@ import { ensureDefaultClinicService } from '../services/default-service.service'
 import { EmailService } from '../services/email.service';
 import { TrialNotificationService } from '../services/trial-notification.service';
 import { CapabilityService } from '../services/capability.service';
+import { MedicalTreeService } from '../services/medical-tree.service';
 import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
 import { REGISTRATION_PROFESSIONS } from '../types/professions';
 
@@ -424,6 +425,39 @@ export class TenantController {
       }
       if (areasToSet.length > 0) {
         CapabilityService.setUserPracticeAreas(userId, tenantId, areasToSet);
+      }
+
+      // Persistência da Árvore Clínica de Medicina (ZemdaMed)
+      if (professionResolution.canonicalId === 'prof-medico' || professionResolution.commercialModule === 'ZemdaMed') {
+        try {
+          let medSpecs: string[] = [];
+          if (req.body.medicalSpecialtyIds && Array.isArray(req.body.medicalSpecialtyIds)) {
+            medSpecs = req.body.medicalSpecialtyIds.filter(Boolean);
+          }
+          if (professionResolution.isSpecificAlias && professionResolution.medicalSpecialtyId) {
+            if (!medSpecs.includes(professionResolution.medicalSpecialtyId)) {
+              medSpecs.push(professionResolution.medicalSpecialtyId);
+            }
+          }
+          // Se nenhuma especialidade médica foi explicitada, verifica se veio nas áreas ou usa padrão
+          if (medSpecs.length === 0) {
+            const specFromAreas = areasToSet.find(a => a.startsWith('med-spec-'));
+            medSpecs = [specFromAreas || 'med-spec-clinica'];
+          }
+
+          let medPas: string[] = [];
+          if (req.body.medicalPracticeAreaIds && Array.isArray(req.body.medicalPracticeAreaIds)) {
+            medPas = req.body.medicalPracticeAreaIds.filter(Boolean);
+          }
+          const pasFromAreas = areasToSet.filter(a => a.startsWith('med-pa-'));
+          for (const pa of pasFromAreas) {
+            if (!medPas.includes(pa)) medPas.push(pa);
+          }
+
+          MedicalTreeService.setUserMedicalHierarchy(userId, tenantId, medSpecs, medPas);
+        } catch (medErr) {
+          console.warn('[TenantController.registerPublic] Aviso ao gravar hierarquia médica:', medErr);
+        }
       }
 
       if (startTrial) {

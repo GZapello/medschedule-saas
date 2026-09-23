@@ -58,6 +58,8 @@ export interface CanonicalProfessionResolution {
   automaticPracticeAreaId?: string;
   automaticPracticeAreaName?: string;
   boardLabel?: string;
+  medicalSpecialtyId?: string;
+  medicalSpecialtyName?: string;
 }
 
 /**
@@ -456,44 +458,76 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pId === 'prof-ortopedista' || pSlug === 'ortopedista' || combined.includes('ortoped') ||
     pId === 'prof-reumatologista' || pSlug === 'reumatologista' || combined.includes('reumatolog') ||
     pId === 'prof-ginecologista' || pSlug === 'ginecologista' || combined.includes('ginecolog') || combined.includes('obstetr') ||
+    pId === 'prof-gastroenterologista' || pSlug === 'gastroenterologista' || combined.includes('gastroenterolog') ||
+    pId === 'prof-oftalmologista' || pSlug === 'oftalmologista' || combined.includes('oftalmolog') ||
+    pId === 'prof-otorrinolaringologista' || pSlug === 'otorrinolaringologista' || combined.includes('otorrino') ||
+    pId === 'prof-urologista' || pSlug === 'urologista' || combined.includes('urolog') ||
     pId === 'prof-clinico-geral' || pSlug === 'clinico-geral' || combined.includes('clinico geral') || combined.includes('clínico geral')
   ) {
+    let specId = 'med-spec-clinica';
+    let specName = 'Clínica Médica';
     let areaId = 'pa-med-clinica';
-    let areaName = 'Clínica Médica';
 
     if (pId === 'prof-cardiologista' || combined.includes('cardiolog')) {
+      specId = 'med-spec-cardio';
+      specName = 'Cardiologia';
       areaId = 'pa-med-cardio';
-      areaName = 'Cardiologia';
     } else if (pId === 'prof-dermatologista' || combined.includes('dermatolog')) {
+      specId = 'med-spec-dermato';
+      specName = 'Dermatologia';
       areaId = 'pa-med-dermato';
-      areaName = 'Dermatologia';
     } else if (pId === 'prof-psiquiatra' || combined.includes('psiquiatr')) {
+      specId = 'med-spec-psiquiatria';
+      specName = 'Psiquiatria';
       areaId = 'pa-med-psiquiatria';
-      areaName = 'Psiquiatria';
     } else if (pId === 'prof-neurologista' || combined.includes('neurolog')) {
+      specId = 'med-spec-neuro';
+      specName = 'Neurologia';
       areaId = 'pa-med-neuro';
-      areaName = 'Neurologia';
     } else if (pId === 'prof-pediatra' || combined.includes('pediatr')) {
+      specId = 'med-spec-pediatria';
+      specName = 'Pediatria';
       areaId = 'pa-med-pediatria';
-      areaName = 'Pediatria';
     } else if (pId === 'prof-geriatra' || combined.includes('geriatr')) {
+      specId = 'med-spec-geriatria';
+      specName = 'Geriatria';
       areaId = 'pa-med-geriatria';
-      areaName = 'Geriatria';
     } else if (pId === 'prof-endocrinologista' || combined.includes('endocrin')) {
+      specId = 'med-spec-endocrino';
+      specName = 'Endocrinologia e Metabologia';
       areaId = 'pa-med-endocrino';
-      areaName = 'Endocrinologia';
     } else if (pId === 'prof-ortopedista' || combined.includes('ortoped')) {
+      specId = 'med-spec-ortopedia';
+      specName = 'Ortopedia e Traumatologia';
       areaId = 'pa-med-ortopedia';
-      areaName = 'Ortopedia e Traumatologia';
     } else if (pId === 'prof-reumatologista' || combined.includes('reumatolog')) {
+      specId = 'med-spec-reumato';
+      specName = 'Reumatologia';
       areaId = 'pa-med-reumato';
-      areaName = 'Reumatologia';
     } else if (pId === 'prof-ginecologista' || combined.includes('ginecolog') || combined.includes('obstetr')) {
+      specId = 'med-spec-gineco';
+      specName = 'Ginecologia e Obstetrícia';
       areaId = 'pa-med-gineco';
-      areaName = 'Ginecologia e Obstetrícia';
+    } else if (pId === 'prof-gastroenterologista' || combined.includes('gastroenterolog')) {
+      specId = 'med-spec-gastro';
+      specName = 'Gastroenterologia';
+      areaId = 'pa-med-gastro';
+    } else if (pId === 'prof-oftalmologista' || combined.includes('oftalmolog')) {
+      specId = 'med-spec-oftalmo';
+      specName = 'Oftalmologia';
+      areaId = 'pa-med-oftalmo';
+    } else if (pId === 'prof-otorrinolaringologista' || combined.includes('otorrino')) {
+      specId = 'med-spec-otorrino';
+      specName = 'Otorrinolaringologia';
+      areaId = 'pa-med-otorrino';
+    } else if (pId === 'prof-urologista' || combined.includes('urolog')) {
+      specId = 'med-spec-urologia';
+      specName = 'Urologia';
+      areaId = 'pa-med-urologia';
     } else if (pId === 'prof-clinico-geral' || combined.includes('clinico geral') || combined.includes('clínico geral')) {
+      specId = 'med-spec-clinica';
+      specName = 'Clínica Médica';
       areaId = 'pa-med-clinica';
-      areaName = 'Clínica Médica';
     }
 
     return {
@@ -503,10 +537,12 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       boardLabel: 'CRM',
       taxonomyCategory: 'SPECIALTY_ALIAS',
       isSpecificAlias: true,
+      medicalSpecialtyId: specId,
+      medicalSpecialtyName: specName,
       inferredAreaId: areaId,
-      inferredAreaName: areaName,
+      inferredAreaName: specName,
       automaticPracticeAreaId: areaId,
-      automaticPracticeAreaName: areaName,
+      automaticPracticeAreaName: specName,
       flags: makeFlags('ZemdaMed')
     };
   }

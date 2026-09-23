@@ -14,9 +14,11 @@ import {
   Check,
   Plus,
   HelpCircle,
-  Stethoscope
+  Stethoscope,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
-import { PracticeArea, Capability, ComputedUserCapabilities } from '../../types/capabilities';
+import { PracticeArea, Capability, ComputedUserCapabilities, MedicalTreeResponse, MedicalSpecialtyItem } from '../../types/capabilities';
 
 export const MyResourcesView: React.FC = () => {
   const { currentUser, reloadSession } = useAuth();
@@ -35,10 +37,15 @@ export const MyResourcesView: React.FC = () => {
     hiddenCapabilities: string[];
     availableAreas: PracticeArea[];
     catalog: Capability[];
+    medicalTree?: MedicalTreeResponse | null;
+    medicalHierarchy?: { specialtyIds?: string[]; practiceAreaIds?: string[]; specialties?: string[]; practiceAreas?: string[] } | null;
   } | null>(null);
 
   const [selectedOptionals, setSelectedOptionals] = useState<string[]>([]);
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [selectedMedicalSpecialties, setSelectedMedicalSpecialties] = useState<string[]>([]);
+  const [selectedMedicalPracticeAreas, setSelectedMedicalPracticeAreas] = useState<string[]>([]);
+  const [expandedMedicalSpecialties, setExpandedMedicalSpecialties] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'resources' | 'areas'>('resources');
 
   const loadData = async () => {
@@ -48,6 +55,13 @@ export const MyResourcesView: React.FC = () => {
       setData(res);
       setSelectedOptionals(res.selectedOptionalCapabilities || []);
       setSelectedAreas(res.practiceAreaIds || []);
+      if (res.medicalHierarchy) {
+        const specs = res.medicalHierarchy.specialtyIds || res.medicalHierarchy.specialties || [];
+        const pas = res.medicalHierarchy.practiceAreaIds || res.medicalHierarchy.practiceAreas || [];
+        setSelectedMedicalSpecialties(specs);
+        setSelectedMedicalPracticeAreas(pas);
+        setExpandedMedicalSpecialties(specs.length > 0 ? specs : ['med-spec-clinica']);
+      }
     } catch (err: any) {
       console.error('Erro ao carregar recursos:', err);
       showToast(err.message || 'Erro ao carregar seus recursos profissionais', 'error');
@@ -108,6 +122,28 @@ export const MyResourcesView: React.FC = () => {
     }
   };
 
+  const handleSaveMedicalHierarchy = async () => {
+    try {
+      if (selectedMedicalSpecialties.length === 0) {
+        showToast('Selecione pelo menos uma especialidade médica.', 'error');
+        return;
+      }
+      setSaving(true);
+      await ApiClient.put('/v1/capabilities/my-medical-hierarchy', {
+        specialtyIds: selectedMedicalSpecialties,
+        practiceAreaIds: selectedMedicalPracticeAreas
+      });
+      await reloadSession();
+      showToast('Especialidades e áreas médicas atualizadas com sucesso!', 'success');
+      await loadData();
+    } catch (err: any) {
+      console.error('Erro ao salvar hierarquia médica:', err);
+      showToast(err.message || 'Erro ao atualizar especialidades e áreas médicas', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-slate-500">
@@ -159,6 +195,8 @@ export const MyResourcesView: React.FC = () => {
     groupedOptionals[cat].push(cap);
   }
 
+  const isMedicalUser = data.commercialModule === 'ZemdaMed' || data.professionId === 'prof-medico';
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header com identidade da profissão e módulo */}
@@ -202,7 +240,9 @@ export const MyResourcesView: React.FC = () => {
                   : 'text-slate-200 hover:text-white'
               }`}
             >
-              Áreas de Atuação ({selectedAreas.length})
+              {isMedicalUser
+                ? `Especialidades & Subáreas (${selectedMedicalSpecialties.length})`
+                : `Áreas de Atuação (${selectedAreas.length})`}
             </button>
           </div>
         </div>
@@ -321,21 +361,32 @@ export const MyResourcesView: React.FC = () => {
           </div>
         </div>
       ) : (
-        /* Aba Áreas de Atuação e Abordagens */
+        /* Aba Áreas de Atuação e Abordagens / Especialidades Médicas */
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                <Layers className="w-5 h-5 text-teal-600" />
-                Minhas Áreas de Atuação & Abordagens Clínicas
+                {isMedicalUser ? (
+                  <>
+                    <Stethoscope className="w-5 h-5 text-teal-600" />
+                    <span>Minhas Especialidades Médicas & Subáreas (ZemdaMed)</span>
+                  </>
+                ) : (
+                  <>
+                    <Layers className="w-5 h-5 text-teal-600" />
+                    <span>Minhas Áreas de Atuação & Abordagens Clínicas</span>
+                  </>
+                )}
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Ao selecionar suas áreas, o sistema recalcula automaticamente os recursos compatíveis.
+                {isMedicalUser
+                  ? 'Selecione suas especialidades médicas e subáreas clínicas. O sistema recalcula automaticamente as anamneses, escalas e presets no ZemdaMed.'
+                  : 'Ao selecionar suas áreas, o sistema recalcula automaticamente os recursos compatíveis.'}
               </p>
             </div>
 
             <button
-              onClick={handleSaveAreas}
+              onClick={isMedicalUser ? handleSaveMedicalHierarchy : handleSaveAreas}
               disabled={saving}
               className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-md shadow-teal-700/20 transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 disabled:opacity-50"
             >
@@ -347,71 +398,213 @@ export const MyResourcesView: React.FC = () => {
               ) : (
                 <>
                   <Check className="w-4 h-4 stroke-[3]" />
-                  <span>Salvar Áreas de Atuação</span>
+                  <span>{isMedicalUser ? 'Salvar Especialidades Médicas' : 'Salvar Áreas de Atuação'}</span>
                 </>
               )}
             </button>
           </div>
 
-          {data.availableAreas.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-              <Info className="w-6 h-6 mx-auto mb-2 text-slate-300" />
-              <p className="text-xs">Não há áreas especializadas específicas cadastradas para sua profissão.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {data.availableAreas.map(area => {
-                const isSelected = selectedAreas.includes(area.id);
-                return (
-                  <div
-                    key={area.id}
-                    onClick={() => handleToggleArea(area.id)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                      isSelected
-                        ? 'border-teal-500 bg-teal-50/70 shadow-xs ring-1 ring-teal-500'
-                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <span className={`text-xs font-black ${isSelected ? 'text-teal-950' : 'text-slate-800'}`}>
-                          {area.name}
-                        </span>
-                        <span
-                          className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase shrink-0 ${
-                            area.type === 'approach'
-                              ? 'bg-purple-100 text-purple-700'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}
-                        >
-                          {area.type === 'approach' ? 'Abordagem' : 'Especialidade'}
-                        </span>
-                      </div>
-                      {area.description && (
-                        <p className="text-[11px] text-slate-600 mt-2 font-medium leading-relaxed">
-                          {area.description}
-                        </p>
-                      )}
-                    </div>
+          {isMedicalUser ? (
+            /* VISÃO MÉDICA HIERÁRQUICA DO ZEMDAMED */
+            <div className="space-y-3">
+              {(!data.medicalTree?.specialties || data.medicalTree.specialties.length === 0) ? (
+                <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <Info className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                  <p className="text-xs">Catálogo médico não disponível no momento.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {data.medicalTree.specialties.map(spec => {
+                    const isSpecSelected = selectedMedicalSpecialties.includes(spec.id);
+                    const isExpanded = expandedMedicalSpecialties.includes(spec.id);
+                    const specSubareas = spec.practiceAreas || [];
+                    const selectedSubCount = specSubareas.filter(pa => selectedMedicalPracticeAreas.includes(pa.id)).length;
 
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                      <span className="text-[11px] text-slate-400">
-                        {isSelected ? 'Ativo no perfil' : 'Clique para ativar'}
-                      </span>
+                    return (
                       <div
-                        className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
-                          isSelected
-                            ? 'bg-teal-600 border-teal-600 text-white'
-                            : 'border-slate-300 bg-white'
+                        key={spec.id}
+                        className={`rounded-2xl border transition-all overflow-hidden ${
+                          isSpecSelected
+                            ? 'border-teal-500 bg-teal-50/40 shadow-xs'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
                         }`}
                       >
-                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        {/* Header da Especialidade */}
+                        <div className="p-4 sm:p-5 flex items-center justify-between gap-3">
+                          <div
+                            onClick={() => {
+                              if (isSpecSelected) {
+                                setSelectedMedicalSpecialties(prev => prev.filter(id => id !== spec.id));
+                                const childIds = new Set(specSubareas.map(pa => pa.id));
+                                setSelectedMedicalPracticeAreas(prev => prev.filter(id => !childIds.has(id)));
+                              } else {
+                                setSelectedMedicalSpecialties(prev => [...prev, spec.id]);
+                                if (!isExpanded) {
+                                  setExpandedMedicalSpecialties(prev => [...prev, spec.id]);
+                                }
+                              }
+                            }}
+                            className="flex items-center gap-3.5 min-w-0 flex-1 cursor-pointer select-none"
+                          >
+                            <div
+                              className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                isSpecSelected
+                                  ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                                  : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {isSpecSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-sm sm:text-base font-black ${isSpecSelected ? 'text-teal-950' : 'text-slate-800'}`}>
+                                  {spec.name}
+                                </span>
+                                {selectedSubCount > 0 && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-600 text-white">
+                                    {selectedSubCount} subárea(s)
+                                  </span>
+                                )}
+                              </div>
+                              {spec.description && (
+                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                                  {spec.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {specSubareas.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExpandedMedicalSpecialties(prev =>
+                                  isExpanded ? prev.filter(id => id !== spec.id) : [...prev, spec.id]
+                                );
+                              }}
+                              className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors shrink-0 cursor-pointer"
+                              title={isExpanded ? 'Recolher subáreas' : 'Expandir subáreas'}
+                            >
+                              {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Subáreas da Especialidade */}
+                        {isExpanded && specSubareas.length > 0 && (
+                          <div className="px-4 pb-4 pt-2 border-t border-teal-100/70 bg-white/70">
+                            <p className="text-xs font-extrabold text-slate-600 mb-2.5">
+                              Áreas de Atuação / Subáreas de {spec.name}:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {specSubareas.map(sub => {
+                                const isSubSelected = selectedMedicalPracticeAreas.includes(sub.id);
+                                return (
+                                  <div
+                                    key={sub.id}
+                                    onClick={() => {
+                                      if (isSubSelected) {
+                                        setSelectedMedicalPracticeAreas(prev => prev.filter(id => id !== sub.id));
+                                      } else {
+                                        setSelectedMedicalPracticeAreas(prev => [...prev, sub.id]);
+                                        if (!isSpecSelected) {
+                                          setSelectedMedicalSpecialties(prev => [...prev, spec.id]);
+                                        }
+                                      }
+                                    }}
+                                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-2.5 select-none ${
+                                      isSubSelected
+                                        ? 'border-teal-500 bg-teal-50/90 text-teal-950 font-bold shadow-2xs'
+                                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs'
+                                    }`}
+                                  >
+                                    <div
+                                      className={`w-4 h-4 mt-0.5 rounded flex items-center justify-center shrink-0 border ${
+                                        isSubSelected ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300'
+                                      }`}
+                                    >
+                                      {isSubSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <span className="text-xs block leading-tight">{sub.name}</span>
+                                      {sub.description && (
+                                        <span className="text-[10px] text-slate-400 block truncate mt-0.5">{sub.description}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* VISÃO PADRÃO PARA DEMAIS PROFISSÕES */
+            data.availableAreas.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <Info className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+                <p className="text-xs">Não há áreas especializadas específicas cadastradas para sua profissão.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {data.availableAreas.map(area => {
+                  const isSelected = selectedAreas.includes(area.id);
+                  return (
+                    <div
+                      key={area.id}
+                      onClick={() => handleToggleArea(area.id)}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
+                        isSelected
+                          ? 'border-teal-500 bg-teal-50/70 shadow-xs ring-1 ring-teal-500'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <span className={`text-xs font-black ${isSelected ? 'text-teal-950' : 'text-slate-800'}`}>
+                            {area.name}
+                          </span>
+                          <span
+                            className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase shrink-0 ${
+                              area.type === 'approach'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {area.type === 'approach' ? 'Abordagem' : 'Especialidade'}
+                          </span>
+                        </div>
+                        {area.description && (
+                          <p className="text-[11px] text-slate-600 mt-2 font-medium leading-relaxed">
+                            {area.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span className="text-[11px] text-slate-400">
+                          {isSelected ? 'Ativo no perfil' : 'Clique para ativar'}
+                        </span>
+                        <div
+                          className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                            isSelected
+                              ? 'bg-teal-600 border-teal-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       )}

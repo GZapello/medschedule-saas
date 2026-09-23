@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { CapabilityService } from '../services/capability.service';
+import { MedicalTreeService } from '../services/medical-tree.service';
 import { logAudit } from '../middlewares/audit.middleware';
 
 export class CapabilityController {
@@ -49,10 +50,19 @@ export class CapabilityController {
       const availableAreas = CapabilityService.getPracticeAreas(computed.professionId);
       const catalog = CapabilityService.getCatalog();
 
+      let medicalTree = null;
+      let medicalHierarchy = null;
+      if (computed.commercialModule === 'ZemdaMed' || computed.professionId === 'prof-medico') {
+        medicalTree = MedicalTreeService.getMedicalTree();
+        medicalHierarchy = MedicalTreeService.getUserMedicalHierarchy(req.user.userId, req.tenantId);
+      }
+
       res.json({
         ...computed,
         availableAreas,
-        catalog
+        catalog,
+        medicalTree,
+        medicalHierarchy
       });
     } catch (err: any) {
       console.error('[CapabilityController.getMyResources] Erro:', err);
@@ -132,6 +142,55 @@ export class CapabilityController {
     } catch (err: any) {
       console.error('[CapabilityController.updateMyPracticeAreas] Erro:', err);
       res.status(500).json({ error: 'Erro ao salvar áreas de atuação' });
+    }
+  }
+
+  /**
+   * Retorna a árvore hierárquica clínica completa de medicina (GET /v1/taxonomy/medical-tree)
+   */
+  public static getMedicalTree(req: Request, res: Response): void {
+    try {
+      const tree = MedicalTreeService.getMedicalTree();
+      res.json(tree);
+    } catch (err: any) {
+      console.error('[CapabilityController.getMedicalTree] Erro:', err);
+      res.status(500).json({ error: 'Erro ao carregar árvore clínica médica' });
+    }
+  }
+
+  /**
+   * Atualiza as especialidades e áreas médicas do profissional (PUT /v1/capabilities/my-medical-hierarchy)
+   */
+  public static updateMyMedicalHierarchy(req: Request, res: Response): void {
+    try {
+      if (!req.user || !req.tenantId) {
+        res.status(401).json({ error: 'Não autenticado' });
+        return;
+      }
+
+      const { specialtyIds, practiceAreaIds } = req.body;
+      if (!Array.isArray(specialtyIds) || specialtyIds.length === 0) {
+        res.status(400).json({ error: 'Pelo menos uma especialidade médica deve ser selecionada.' });
+        return;
+      }
+
+      MedicalTreeService.setUserMedicalHierarchy(
+        req.user.userId,
+        req.tenantId,
+        specialtyIds,
+        Array.isArray(practiceAreaIds) ? practiceAreaIds : []
+      );
+
+      const updated = CapabilityService.computeUserCapabilities(req.user.userId, req.tenantId);
+      logAudit(req, 'UPDATE_MY_MEDICAL_HIERARCHY', 'users', req.user.userId, { specialtyIds, practiceAreaIds });
+
+      res.json({
+        message: 'Especialidades e áreas médicas atualizadas com sucesso',
+        ...updated
+      });
+    } catch (err: any) {
+      console.error('[CapabilityController.updateMyMedicalHierarchy] Erro:', err);
+      res.status(400).json({ error: err.message || 'Erro ao salvar hierarquia médica' });
     }
   }
 }

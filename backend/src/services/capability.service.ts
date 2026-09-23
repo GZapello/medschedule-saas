@@ -2,6 +2,7 @@ import { db } from '../config/database';
 import { resolveProfessionModule, resolveCanonicalProfession, ZemdaModule } from '../utils/profession-module';
 import { ComputedUserCapabilities } from '../types/capabilities';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
+import { MedicalTreeService } from './medical-tree.service';
 
 export class CapabilityService {
   /**
@@ -37,7 +38,55 @@ export class CapabilityService {
 
     const resolution = resolveCanonicalProfession({ id: cleanId, name: cleanId, slug: cleanId });
 
-    // CASO 2 & 3: Título que já é uma especialidade ou abordagem específica
+    // CASO MEDICINA: ESPECIALIDADE MÉDICA ESPECÍFICA (ex: Neurologista, Cardiologista, Psiquiatra)
+    // Retorna as áreas de atuação / subáreas filhas daquela especialidade médica específica!
+    if (resolution.canonicalId === 'prof-medico' && resolution.isSpecificAlias && resolution.medicalSpecialtyId) {
+      const medAreas = db.prepare(`
+        SELECT id, name, slug, description, sort_order
+        FROM medical_practice_areas
+        WHERE medical_specialty_id = ? AND active = 1
+        ORDER BY sort_order ASC, name ASC
+      `).all(resolution.medicalSpecialtyId) as any[];
+
+      if (medAreas.length > 0) {
+        return medAreas.map(r => ({
+          id: r.id,
+          profession_id: 'prof-medico',
+          name: r.name,
+          slug: r.slug,
+          type: 'AREA',
+          description: r.description,
+          medicalSpecialtyId: resolution.medicalSpecialtyId,
+          medicalSpecialtyName: resolution.medicalSpecialtyName,
+          isInferredForAlias: false,
+          isSpecificLocked: false
+        }));
+      }
+    }
+
+    // CASO MEDICINA GENÉRICA (Médico / Medicina):
+    // Retorna as especialidades médicas como opções selecionáveis
+    if (resolution.canonicalId === 'prof-medico' && !resolution.isSpecificAlias) {
+      const specs = db.prepare(`
+        SELECT id, name, slug, description, sort_order
+        FROM medical_specialties
+        WHERE active = 1
+        ORDER BY sort_order ASC, name ASC
+      `).all() as any[];
+
+      return specs.map(s => ({
+        id: s.id,
+        profession_id: 'prof-medico',
+        name: s.name,
+        slug: s.slug,
+        type: 'SPECIALTY',
+        description: s.description,
+        isInferredForAlias: false,
+        isSpecificLocked: false
+      }));
+    }
+
+    // CASO OUTRAS PROFISSÕES: Título que já é uma especialidade ou abordagem específica (ex: Neuropsicólogo, Psicanalista)
     // Retorna ESTRITAMENTE a própria especialidade/área vinculada, eliminando falsas hierarquias
     if (resolution.isSpecificAlias && (resolution.automaticPracticeAreaId || resolution.inferredAreaId)) {
       const targetAreaId = resolution.automaticPracticeAreaId || resolution.inferredAreaId;
@@ -62,7 +111,7 @@ export class CapabilityService {
       return [];
     }
 
-    // CASO 1 & 4: Profissão canônica genérica (Médico, Fisioterapeuta, Psicólogo, etc.)
+    // CASO GERAL: Profissão canônica genérica (Fisioterapeuta, Psicólogo, Nutricionista, etc.)
     // Retorna todas as especialidades/áreas no mesmo nível hierárquico como pares
     const canonical = resolution.canonicalId;
     const rows = db.prepare(`
@@ -81,10 +130,7 @@ export class CapabilityService {
 
   /**
    * Valida se uma lista de practiceAreaIds é compatível com a profissão.
-   * Regras:
-   * a) Existem no catálogo (practice_areas) e estão ativas (active = 1);
-   * b) Pertencem à profissão canônica do usuário (profession_id == canonicalProfessionId);
-   * c) Se a profissão for um alias específico (ex: Cardiologista), não permitir que adicione áreas de outras especialidades.
+   * Suporta o catálogo transversal (practice_areas) e a árvore clínica de Medicina (medical_practice_areas / medical_specialties).
    */
   public static validatePracticeAreasForProfession(
     rawProfIdOrName?: string | null,
@@ -97,7 +143,57 @@ export class CapabilityService {
     const resolution = resolveCanonicalProfession({ id: rawProfIdOrName || '', name: rawProfIdOrName || '' });
     const canonicalProfId = resolution.canonicalId;
 
-    // Se a profissão for um alias específico (ex: Cardiologista, Neurologista, etc.)
+    // 1. Validação Especial para Medicina e Especialidades Médicas
+    if (canonicalProfId === 'prof-medico') {
+      // Se for alias médico específico (ex: Neurologista), aceita somente áreas dessa especialidade médica
+      if (resolution.isSpecificAlias && resolution.medicalSpecialtyId) {
+        const validAreas = db.prepare(`
+          SELECT id FROM medical_practice_areas
+          WHERE medical_specialty_id = ? AND active = 1
+        `).all(resolution.medicalSpecialtyId).map((r: any) => r.id);
+
+        const validSet = new Set(validAreas);
+        if (resolution.automaticPracticeAreaId) validSet.add(resolution.automaticPracticeAreaId);
+        if (resolution.inferredAreaId) validSet.add(resolution.inferredAreaId);
+
+        for (const areaId of practiceAreaIds) {
+          if (!validSet.has(areaId)) {
+            return {
+              valid: false,
+              error: `Área de atuação '${areaId}' não pertence à especialidade ${resolution.medicalSpecialtyName || 'médica vinculada'}`
+            };
+          }
+        }
+        return { valid: true };
+      }
+
+      // Se for médico genérico, aceita IDs de medical_practice_areas, medical_specialties ou practice_areas legadas
+      const placeholders = practiceAreaIds.map(() => '?').join(',');
+      const foundMedAreas = db.prepare(`
+        SELECT id FROM medical_practice_areas WHERE id IN (${placeholders}) AND active = 1
+      `).all(...practiceAreaIds).map((r: any) => r.id);
+
+      const foundSpecs = db.prepare(`
+        SELECT id FROM medical_specialties WHERE id IN (${placeholders}) AND active = 1
+      `).all(...practiceAreaIds).map((r: any) => r.id);
+
+      const foundLegacy = db.prepare(`
+        SELECT id FROM practice_areas WHERE id IN (${placeholders}) AND profession_id = 'prof-medico' AND active = 1
+      `).all(...practiceAreaIds).map((r: any) => r.id);
+
+      const validSet = new Set([...foundMedAreas, ...foundSpecs, ...foundLegacy]);
+      for (const areaId of practiceAreaIds) {
+        if (!validSet.has(areaId)) {
+          return {
+            valid: false,
+            error: `Área de atuação médica '${areaId}' não é válida no catálogo.`
+          };
+        }
+      }
+      return { valid: true };
+    }
+
+    // 2. Validação para outras profissões clínicas (Fisio, Psico, Fono, TO, Nutri, Personal, Odonto)
     const specificTargetAreaId = resolution.automaticPracticeAreaId || resolution.inferredAreaId;
     if (resolution.isSpecificAlias && specificTargetAreaId) {
       for (const areaId of practiceAreaIds) {
@@ -201,7 +297,8 @@ export class CapabilityService {
     // 1. Busca dados do usuário e profissional
     const userRow = db.prepare(`
       SELECT u.id, u.role, u.profession_id as u_prof_id, u.profession_name as u_prof_name,
-             cu.profession_custom, p.profession_id as p_prof_id, prof.name as prof_name
+             cu.profession_custom, p.profession_id as p_prof_id, prof.name as prof_name,
+             u.zemda_med_enabled as u_med, p.zemda_med_enabled as p_med
       FROM users u
       LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
       LEFT JOIN professionals p ON p.user_id = u.id AND p.tenant_id = ?
@@ -218,6 +315,24 @@ export class CapabilityService {
     // 2. Busca áreas selecionadas pelo usuário
     let userAreaIds = this.getUserPracticeAreas(userId, tenantId);
 
+    // Se for médico, busca a hierarquia clínica médica (Especialidades e Áreas)
+    let medSpecIds: string[] | undefined = undefined;
+    let medPaIds: string[] | undefined = undefined;
+
+    if (canonicalProfId === 'prof-medico' || userRow?.u_med === 1 || userRow?.p_med === 1) {
+      const medHierarchy = MedicalTreeService.getUserMedicalHierarchy(userId, tenantId);
+      medSpecIds = medHierarchy.specialtyIds;
+      medPaIds = medHierarchy.practiceAreaIds;
+
+      if (medSpecIds.length === 0) {
+        if (resolution.medicalSpecialtyId) {
+          medSpecIds = [resolution.medicalSpecialtyId];
+        } else {
+          medSpecIds = ['med-spec-clinica'];
+        }
+      }
+    }
+
     // Se usuário não tiver áreas cadastradas, infere a área inicial correspondente a partir da resolução canônica
     const autoAreaId = resolution.automaticPracticeAreaId || resolution.inferredAreaId;
     if (userAreaIds.length === 0 && autoAreaId) {
@@ -232,6 +347,8 @@ export class CapabilityService {
       professionId: canonicalProfId,
       commercialModule,
       practiceAreaIds: userAreaIds,
+      medicalSpecialtyIds: medSpecIds,
+      medicalPracticeAreaIds: medPaIds,
       selectedOptionalCapabilities: userSelectedOptionals,
       tenantId
     });
@@ -244,11 +361,20 @@ export class CapabilityService {
     professionId: string;
     commercialModule: string;
     practiceAreaIds: string[];
+    medicalSpecialtyIds?: string[];
+    medicalPracticeAreaIds?: string[];
     selectedOptionalCapabilities?: string[];
     tenantId?: string;
     planCode?: string; // Para sandbox: 'SOLO' | 'TEAM' | 'CLINIC' | 'ALL'
   }): ComputedUserCapabilities {
-    const { professionId, commercialModule, practiceAreaIds, selectedOptionalCapabilities = [] } = params;
+    const {
+      professionId,
+      commercialModule,
+      practiceAreaIds,
+      medicalSpecialtyIds = [],
+      medicalPracticeAreaIds = [],
+      selectedOptionalCapabilities = []
+    } = params;
 
     // Regras da Profissão
     const profRules = db.prepare(`
@@ -266,7 +392,7 @@ export class CapabilityService {
       else if (r.rule === 'HIDDEN') hiddenCapsSet.add(r.capability_id);
     }
 
-    // Regras das Áreas de Atuação Selecionadas
+    // Regras das Áreas de Atuação Selecionadas (Catálogo Geral)
     if (practiceAreaIds && practiceAreaIds.length > 0) {
       const placeholders = practiceAreaIds.map(() => '?').join(',');
       const areaRules = db.prepare(`
@@ -275,6 +401,36 @@ export class CapabilityService {
       `).all(...practiceAreaIds) as { capability_id: string; rule: string }[];
 
       for (const r of areaRules) {
+        if (r.rule === 'DEFAULT') defaultCapsSet.add(r.capability_id);
+        else if (r.rule === 'OPTIONAL') optionalCapsSet.add(r.capability_id);
+        else if (r.rule === 'HIDDEN') hiddenCapsSet.add(r.capability_id);
+      }
+    }
+
+    // Regras das Especialidades Médicas Selecionadas (Árvore Médica)
+    if (medicalSpecialtyIds && medicalSpecialtyIds.length > 0) {
+      const specPlaceholders = medicalSpecialtyIds.map(() => '?').join(',');
+      const specRules = db.prepare(`
+        SELECT capability_id, rule FROM medical_specialty_capabilities
+        WHERE medical_specialty_id IN (${specPlaceholders})
+      `).all(...medicalSpecialtyIds) as { capability_id: string; rule: string }[];
+
+      for (const r of specRules) {
+        if (r.rule === 'DEFAULT') defaultCapsSet.add(r.capability_id);
+        else if (r.rule === 'OPTIONAL') optionalCapsSet.add(r.capability_id);
+        else if (r.rule === 'HIDDEN') hiddenCapsSet.add(r.capability_id);
+      }
+    }
+
+    // Regras das Áreas de Atuação Médicas Selecionadas (Árvore Médica)
+    if (medicalPracticeAreaIds && medicalPracticeAreaIds.length > 0) {
+      const paPlaceholders = medicalPracticeAreaIds.map(() => '?').join(',');
+      const paRules = db.prepare(`
+        SELECT capability_id, rule FROM medical_practice_area_capabilities
+        WHERE medical_practice_area_id IN (${paPlaceholders})
+      `).all(...medicalPracticeAreaIds) as { capability_id: string; rule: string }[];
+
+      for (const r of paRules) {
         if (r.rule === 'DEFAULT') defaultCapsSet.add(r.capability_id);
         else if (r.rule === 'OPTIONAL') optionalCapsSet.add(r.capability_id);
         else if (r.rule === 'HIDDEN') hiddenCapsSet.add(r.capability_id);
@@ -320,6 +476,8 @@ export class CapabilityService {
       professionId,
       commercialModule,
       practiceAreaIds,
+      medicalSpecialtyIds,
+      medicalPracticeAreaIds,
       activeCapabilities: Array.from(activeCapsSet),
       defaultCapabilities: Array.from(defaultCapsSet),
       availableOptionalCapabilities: Array.from(optionalCapsSet),

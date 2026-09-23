@@ -8,6 +8,7 @@ import { migrateLongitudinalClinical } from './longitudinal-clinical.migration';
 import { seedExerciseLibrary } from './exercise-library.seed';
 import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
 import { migrateModularArchitecture } from './modular-architecture.migration';
+import { migrateMedicalTree } from './medical-tree.migration';
 
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
 const dbDir = path.dirname(dbPath);
@@ -3477,5 +3478,11 @@ function repairLegacyPhotoUrls(rawDb: any): void {
     migrateModularArchitecture(rawDb);
   } catch (err) {
     console.error('[Database] Erro ao executar migrateModularArchitecture:', err);
+  }
+
+  try {
+    migrateMedicalTree(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateMedicalTree:', err);
   }
 }

@@ -15,11 +15,13 @@ import {
   Eye,
   Info,
   ChevronRight,
+  ChevronDown,
   RefreshCw,
   LogOut,
-  X
+  X,
+  Stethoscope
 } from 'lucide-react';
-import { PracticeArea, Capability, ComputedUserCapabilities, SandboxSession } from '../../types/capabilities';
+import { PracticeArea, Capability, ComputedUserCapabilities, SandboxSession, MedicalSpecialtyItem } from '../../types/capabilities';
 import { REGISTRATION_PROFESSIONS } from '../../types/professions';
 
 export const SuperAdminLaboratoryView: React.FC = () => {
@@ -29,7 +31,9 @@ export const SuperAdminLaboratoryView: React.FC = () => {
   const [professions, setProfessions] = useState<any[]>(REGISTRATION_PROFESSIONS);
   const [selectedProfId, setSelectedProfId] = useState<string>('prof-medico');
   const [practiceAreas, setPracticeAreas] = useState<PracticeArea[]>([]);
-  const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>(['pa-med-clinica']);
+  const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>(['med-spec-clinica']);
+  const [medicalTree, setMedicalTree] = useState<MedicalSpecialtyItem[]>([]);
+  const [expandedSpecs, setExpandedSpecs] = useState<string[]>(['med-spec-clinica']);
   const [selectedPlanCode, setSelectedPlanCode] = useState<string>('ALL');
 
   const [loadingAreas, setLoadingAreas] = useState(false);
@@ -83,6 +87,21 @@ export const SuperAdminLaboratoryView: React.FC = () => {
 
     return () => { isCurrent = false; };
   }, [selectedProfId]);
+
+  // Carrega árvore médica completa se for Medicina genérica
+  useEffect(() => {
+    if (selectedProfId !== 'prof-medico') return;
+    if (medicalTree.length > 0) return;
+
+    ApiClient.get<any>('/v1/taxonomy/medical-tree')
+      .then(res => {
+        const list = Array.isArray(res) ? res : (res?.specialties || []);
+        setMedicalTree(list);
+      })
+      .catch(err => {
+        console.warn('Erro ao carregar árvore médica no laboratório:', err);
+      });
+  }, [selectedProfId, medicalTree.length]);
 
   const handleToggleArea = (areaId: string) => {
     setSelectedAreaIds(prev =>
@@ -247,18 +266,133 @@ export const SuperAdminLaboratoryView: React.FC = () => {
           })}
         </div>
 
-        {/* Áreas de Atuação */}
+        {/* Áreas de Atuação & Especialidades */}
         <div className="pt-4 border-t border-slate-100 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-600">
-              2. Áreas de Atuação & Abordagens Clínicas
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+              {selectedProfId === 'prof-medico' && <Stethoscope className="w-3.5 h-3.5 text-purple-600" />}
+              <span>{selectedProfId === 'prof-medico' ? '2. Especialidades Médicas & Subáreas (ZemdaMed)' : '2. Áreas de Atuação & Abordagens Clínicas'}</span>
             </h3>
             <span className="text-[11px] font-medium text-slate-500">
               {selectedAreaIds.length} selecionada(s)
             </span>
           </div>
 
-          {loadingAreas ? (
+          {selectedProfId === 'prof-medico' && medicalTree.length > 0 ? (
+            /* Visualização da Árvore Médica no Laboratório */
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {medicalTree.map(spec => {
+                const isSpecSelected = selectedAreaIds.includes(spec.id);
+                const isExpanded = expandedSpecs.includes(spec.id);
+                const specSubareas = spec.practiceAreas || [];
+                const activeSubs = specSubareas.filter(pa => selectedAreaIds.includes(pa.id)).length;
+
+                return (
+                  <div
+                    key={spec.id}
+                    className={`rounded-2xl border transition-all overflow-hidden ${
+                      isSpecSelected
+                        ? 'border-purple-500 bg-purple-50/40 shadow-xs'
+                        : 'border-slate-200 bg-white hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="p-3 flex items-center justify-between gap-3">
+                      <div
+                        onClick={() => {
+                          if (isSpecSelected) {
+                            setSelectedAreaIds(prev => prev.filter(id => id !== spec.id));
+                            const childIds = new Set(specSubareas.map(pa => pa.id));
+                            setSelectedAreaIds(prev => prev.filter(id => !childIds.has(id)));
+                          } else {
+                            setSelectedAreaIds(prev => [...prev, spec.id]);
+                            if (!isExpanded) {
+                              setExpandedSpecs(prev => [...prev, spec.id]);
+                            }
+                          }
+                        }}
+                        className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none"
+                      >
+                        <div
+                          className={`w-4.5 h-4.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                            isSpecSelected
+                              ? 'bg-purple-600 border-purple-600 text-white shadow-xs'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {isSpecSelected && <span className="text-[10px] font-bold">✓</span>}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-black ${isSpecSelected ? 'text-purple-950' : 'text-slate-800'}`}>
+                              {spec.name}
+                            </span>
+                            {activeSubs > 0 && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-purple-600 text-white">
+                                {activeSubs} subárea(s)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {specSubareas.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedSpecs(prev =>
+                              isExpanded ? prev.filter(id => id !== spec.id) : [...prev, spec.id]
+                            );
+                          }}
+                          className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors shrink-0 cursor-pointer"
+                        >
+                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+
+                    {isExpanded && specSubareas.length > 0 && (
+                      <div className="px-3 pb-3 pt-1 border-t border-purple-100/70 bg-white/70">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                          {specSubareas.map(sub => {
+                            const isSubSelected = selectedAreaIds.includes(sub.id);
+                            return (
+                              <div
+                                key={sub.id}
+                                onClick={() => {
+                                  if (isSubSelected) {
+                                    setSelectedAreaIds(prev => prev.filter(id => id !== sub.id));
+                                  } else {
+                                    setSelectedAreaIds(prev => [...prev, sub.id]);
+                                    if (!isSpecSelected) {
+                                      setSelectedAreaIds(prev => [...prev, spec.id]);
+                                    }
+                                  }
+                                }}
+                                className={`p-2 rounded-xl border text-left cursor-pointer transition-all flex items-center gap-2 select-none ${
+                                  isSubSelected
+                                    ? 'border-purple-500 bg-purple-50/90 text-purple-950 font-bold shadow-2xs'
+                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs'
+                                }`}
+                              >
+                                <div
+                                  className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border ${
+                                    isSubSelected ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300'
+                                  }`}
+                                >
+                                  {isSubSelected && <span className="text-[9px] font-bold">✓</span>}
+                                </div>
+                                <span className="text-[11px] truncate">{sub.name}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : loadingAreas ? (
             <div className="p-6 text-center text-xs text-slate-400">Carregando áreas...</div>
           ) : practiceAreas.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">

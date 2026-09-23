@@ -28,18 +28,48 @@ export interface PracticeArea {
   active?: boolean;
   isInferredForAlias?: boolean;
   isSpecificLocked?: boolean;
+  medicalSpecialtyId?: string;
+  medicalSpecialtyName?: string;
 }
 
 export interface ComputedUserCapabilities {
   professionId: string;
   commercialModule: string;
   practiceAreaIds: string[];
+  medicalSpecialtyIds?: string[];
+  medicalPracticeAreaIds?: string[];
   activeCapabilities: string[];
   defaultCapabilities: string[];
   availableOptionalCapabilities: string[];
   selectedOptionalCapabilities: string[];
   hiddenCapabilities: string[];
   planRestrictedCapabilities?: { capabilityId: string; requiredPlan: string }[];
+}
+
+export interface MedicalPracticeAreaItem {
+  id: string;
+  medicalSpecialtyId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  sortOrder: number;
+}
+
+export interface MedicalSpecialtyItem {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  iconName: string;
+  focusAreas: string[];
+  sortOrder: number;
+  practiceAreas: MedicalPracticeAreaItem[];
+  defaultCapabilities: string[];
+  optionalCapabilities: string[];
+}
+
+export interface MedicalTreeResponse {
+  specialties: MedicalSpecialtyItem[];
 }
 
 export type MedicalSpecialtyPresetKey =
@@ -52,14 +82,23 @@ export type MedicalSpecialtyPresetKey =
   | 'ortopedia'
   | 'cardiologia'
   | 'dermatologia'
-  | 'reumatologia';
+  | 'reumatologia'
+  | 'ginecologia-obstetricia'
+  | 'ginecologia'
+  | 'gastroenterologia'
+  | 'oftalmologia'
+  | 'otorrinolaringologia'
+  | 'urologia'
+  | string;
 
 export interface MedicalSpecialtyPreset {
-  id: MedicalSpecialtyPresetKey;
+  id: string;
   name: string;
+  slug?: string;
   description: string;
   iconName: string;
   focusAreas: string[];
+  practiceAreas?: MedicalPracticeAreaItem[];
 }
 
 export interface MedicalVitalSigns {
