@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
-import { resolveProfessionModule } from '../utils/profession-module';
+import { resolveCanonicalProfession } from '../utils/profession-module';
 
 export class TaxonomyController {
   // Categorias (Tipos de Serviço Macro)
@@ -151,22 +151,24 @@ export class TaxonomyController {
       const rows = stmt.all(...params);
 
       const professions = rows.map((p: any) => {
-        const { module } = resolveProfessionModule({
+        const resolution = resolveCanonicalProfession({
           id: p.id,
           name: p.name,
           slug: p.slug,
           registrationType: p.registration_board_label
         });
-        const modules = [module || 'Recursos gerais do Zemda', 'ZemdaBody'];
+        const primaryModule = resolution.commercialModule;
+        const modules = primaryModule ? [primaryModule, 'ZemdaBody'] : ['Recursos gerais do Zemda', 'ZemdaBody'];
         const accessLabel = modules.join(' + ');
         const displayOption = `${p.name} — ${accessLabel}`;
         const isAdministrative = p.category_is_clinical === 0 || p.category_id === 'cat-admin';
         return {
           ...p,
           label: p.name,
-          canonicalName: p.name,
-          boardLabel: p.registration_board_label,
-          module: module || undefined,
+          canonicalId: resolution.canonicalId,
+          canonicalName: resolution.canonicalName,
+          boardLabel: p.registration_board_label || resolution.boardLabel,
+          module: primaryModule || undefined,
           modules,
           accessLabel,
           displayOption,

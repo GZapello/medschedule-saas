@@ -150,7 +150,11 @@ export function RegistrationPlans({
         <button
           type="button"
           disabled={busy}
-          onClick={onBack}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onBack();
+          }}
           className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-teal-700 hover:text-teal-900 disabled:opacity-50 cursor-pointer self-start sm:self-auto py-1.5"
         >
           <ArrowLeft className="w-4 h-4" />

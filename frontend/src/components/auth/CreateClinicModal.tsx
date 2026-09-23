@@ -33,7 +33,7 @@ import {
   EyeOff,
   Check
 } from 'lucide-react';
-import { REGISTRATION_PROFESSIONS, RegistrationProfessionOption } from '../../types/professions';
+import { RegistrationProfessionOption } from '../../types/professions';
 import { PracticeArea } from '../../types/capabilities';
 
 interface CreateClinicModalProps {
@@ -98,14 +98,15 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [successData, setSuccessData] = useState<{ clinicId: string; slug: string; message: string } | null>(null);
 
-  // Catálogo de Profissões Dinâmico
-  const [professionOptions, setProfessionOptions] = useState<RegistrationProfessionOption[]>(() => REGISTRATION_PROFESSIONS || []);
+  // Catálogo de Profissões Dinâmico (Fonte da verdade: SuperAdmin /v1/taxonomy/professions)
+  const [professionOptions, setProfessionOptions] = useState<RegistrationProfessionOption[]>([]);
   const [loadingProfessions, setLoadingProfessions] = useState(false);
 
   // Áreas de Atuação e Abordagens Clínicas
   const [practiceAreas, setPracticeAreas] = useState<PracticeArea[]>([]);
   const [selectedPracticeAreaIds, setSelectedPracticeAreaIds] = useState<string[]>([]);
   const [loadingPracticeAreas, setLoadingPracticeAreas] = useState(false);
+  const lastLoadedProfessionRef = useRef<string>('');
 
   // Carregar planos
   const loadPlans = () => {
@@ -121,19 +122,19 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     }
   }, [isOpen]);
 
-  // Carregar profissões dinâmicas
+  // Carregar profissões ativas dinâmicas (administradas pelo SuperAdmin)
   useEffect(() => {
     if (!isOpen) return;
     let isMounted = true;
     setLoadingProfessions(true);
     ApiClient.get<RegistrationProfessionOption[]>('/v1/taxonomy/professions')
       .then(data => {
-        if (isMounted && Array.isArray(data) && data.length > 0) {
+        if (isMounted && Array.isArray(data)) {
           setProfessionOptions(data);
         }
       })
       .catch(() => {
-        // Fallback permanece com REGISTRATION_PROFESSIONS
+        if (isMounted) setProfessionOptions([]);
       })
       .finally(() => {
         if (isMounted) setLoadingProfessions(false);
@@ -148,21 +149,37 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     if (!formData.profession) {
       setPracticeAreas([]);
       setSelectedPracticeAreaIds([]);
+      lastLoadedProfessionRef.current = '';
       return;
     }
+
+    // Se já carregou para esta profissão exata, não limpa nem refaz para não resetar seleções ao navegar com Voltar
+    if (lastLoadedProfessionRef.current === formData.profession && practiceAreas.length > 0) {
+      return;
+    }
+
     let isMounted = true;
     setLoadingPracticeAreas(true);
+    lastLoadedProfessionRef.current = formData.profession;
+
     ApiClient.get<PracticeArea[]>(`/v1/capabilities/practice-areas?professionId=${encodeURIComponent(formData.profession)}`)
       .then(data => {
         if (isMounted && Array.isArray(data)) {
           setPracticeAreas(data);
-          // Pré-seleciona a área especializada padrão se for especialista médico
-          if (formData.profession === 'prof-pediatra') setSelectedPracticeAreaIds(['pa-med-pediatria']);
-          else if (formData.profession === 'prof-cardiologista') setSelectedPracticeAreaIds(['pa-med-cardio']);
-          else if (formData.profession === 'prof-dermatologista') setSelectedPracticeAreaIds(['pa-med-dermato']);
-          else if (formData.profession === 'prof-psiquiatra') setSelectedPracticeAreaIds(['pa-med-psiquiatria']);
-          else if (formData.profession === 'prof-medico') setSelectedPracticeAreaIds(['pa-med-clinica']);
-          else setSelectedPracticeAreaIds([]);
+
+          // Pré-seleciona a área especializada se for alias específico (ex: psiquiatria, pediatria, etc.)
+          const inferred = data.find(a => (a as any).isInferredForAlias);
+          if (inferred) {
+            setSelectedPracticeAreaIds([inferred.id]);
+          } else if (data.length > 0 && selectedPracticeAreaIds.length === 0) {
+            const defaultMed = data.find(a => a.id === 'pa-med-clinica');
+            if (defaultMed && (formData.profession === 'prof-medico' || formData.profession === 'prof-medicina')) {
+              setSelectedPracticeAreaIds(['pa-med-clinica']);
+            }
+          } else {
+            // Preserva seleções existentes do usuário se forem válidas para a profissão atual
+            setSelectedPracticeAreaIds(prev => prev.filter(id => data.some(a => a.id === id)));
+          }
         }
       })
       .catch(() => {
@@ -565,8 +582,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         ? `Consultório ${formData.responsibleName.trim()}`
         : 'Meu Consultório';
 
-      const currentProfessionOptions = professionOptions.length > 0 ? professionOptions : REGISTRATION_PROFESSIONS;
-      const selectedOption = currentProfessionOptions.find(p => p.id === formData.profession);
+      const selectedOption = professionOptions.find(p => p.id === formData.profession);
       const professionNameToSend =
         formData.profession === 'prof-outro-saude' && formData.customProfession.trim()
           ? formData.customProfession.trim()
@@ -935,9 +951,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
                   {/* Bloco informativo dinâmico dos módulos */}
                   {(() => {
-                    const currentList = professionOptions.length > 0 ? professionOptions : REGISTRATION_PROFESSIONS;
-                    const selected = currentList.find(p => p.id === formData.profession);
+                    const selected = professionOptions.find(p => p.id === formData.profession);
                     if (!selected) return null;
+                    const mods = selected.modules && selected.modules.length > 0
+                      ? selected.modules
+                      : (selected.module ? [selected.module, 'ZemdaBody'] : ['Recursos gerais do Zemda', 'ZemdaBody']);
                     return (
                       <div className="mt-3 p-3.5 rounded-2xl bg-teal-50/90 border border-teal-200/90 text-xs text-teal-950 animate-in fade-in duration-200 shadow-xs">
                         <div className="flex items-center gap-2 font-extrabold text-teal-900 mb-1.5">
@@ -945,7 +963,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                           <span>Módulos inclusos para sua área:</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                          {selected.modules.map((m, idx) => (
+                          {mods.map((m, idx) => (
                             <React.Fragment key={m}>
                               {idx > 0 && <span className="text-teal-400 font-bold">•</span>}
                               <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white border border-teal-200 text-teal-950 font-bold shadow-2xs">
@@ -1063,7 +1081,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
               <div className="flex items-center gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setStep('initial_data')}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setStep('initial_data');
+                  }}
                   className="min-h-[48px] px-4 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs sm:text-sm rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <ArrowLeft className="w-4 h-4" />
@@ -1214,7 +1236,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
               <div className="flex items-center gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => setStep('profession')}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setStep('profession');
+                  }}
                   className="min-h-[48px] px-4 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs sm:text-sm rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <ArrowLeft className="w-4 h-4" />
@@ -1328,7 +1354,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setStep('security')}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setStep('security');
+                  }}
                   className="min-h-[48px] px-4 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs sm:text-sm rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <ArrowLeft className="w-4 h-4" />
