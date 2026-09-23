@@ -181,7 +181,7 @@ export function trackCompletedRegistration(
 
 /** 9. signup_error: Disparar quando ocorrer erro durante o cadastro (sem dados pessoais). */
 export function trackSignupError(params: {
-  step: 'form' | 'verify_email' | 'plans';
+  step: 'form' | 'initial_data' | 'profession' | 'security' | 'verify_email' | 'plans' | string;
   errorCode?: string;
   errorType?: 'validation' | 'api_error' | 'server_error' | 'network_error' | 'unknown';
   planCode?: string;
