@@ -32,7 +32,8 @@ export class CapabilityService {
    * Retorna as áreas de atuação disponíveis para uma dada profissão
    */
   public static getPracticeAreas(professionId: string): any[] {
-    const resolution = resolveCanonicalProfession({ id: professionId });
+    const cleanId = (professionId || '').trim();
+    const resolution = resolveCanonicalProfession({ id: cleanId, name: cleanId, slug: cleanId });
     const canonical = resolution.canonicalId;
     const rows = db.prepare(`
       SELECT id, profession_id, name, slug, type, description

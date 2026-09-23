@@ -201,6 +201,25 @@ export function initializeDatabase(): void {
     } catch (e) {
       console.warn('[Migration] Erro ao criar tabela email_verifications:', e);
     }
+
+    // Tabela de controle de profissões globais excluídas (impede reaparecimento por seed/restart)
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS deleted_global_professions (
+          id TEXT PRIMARY KEY,
+          slug TEXT,
+          name TEXT,
+          deleted_at TEXT NOT NULL DEFAULT (datetime('now')),
+          deleted_by TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_deleted_global_professions_slug ON deleted_global_professions(slug);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar tabela deleted_global_professions:', e);
+    }
+
+    // Coluna de plano no teste grátis (SOLO, TEAM, CLINIC)
+    addColIfMissing('free_trials', 'plan', "TEXT NOT NULL DEFAULT 'SOLO'");
     addColIfMissing('email_verifications', 'ip_address', 'TEXT');
 
     // Tabela da Infraestrutura Central do WhatsApp Business Cloud API (SaaS SuperAdmin)
@@ -957,12 +976,17 @@ export function initializeDatabase(): void {
       { id: 'prof-outro', cat_id: 'cat-outros', name: 'Outro', slug: 'outro', reg_label: null, reg_req: 0 }
     ];
 
+    const deletedGlobalProfessions = new Set(
+      rawDb.prepare('SELECT id FROM deleted_global_professions').all().map((r: any) => r.id)
+    );
+
     const insertProfStmt = rawDb.prepare(`
       INSERT OR IGNORE INTO professions (id, category_id, name, slug, registration_board_label, registration_required)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     for (const p of allDetailedProfessions) {
+      if (deletedGlobalProfessions.has(p.id)) continue;
       insertProfStmt.run(p.id, p.cat_id, p.name, p.slug, p.reg_label, p.reg_req);
     }
 
@@ -1063,6 +1087,7 @@ export function initializeDatabase(): void {
     `);
 
     for (const s of allDetailedSpecialties) {
+      if (deletedGlobalProfessions.has(s.prof_id)) continue;
       insertSpecStmt.run(s.id, s.prof_id, s.name, s.slug, s.color);
     }
 

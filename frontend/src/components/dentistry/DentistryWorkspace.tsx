@@ -145,16 +145,19 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   // Planos de Tratamento e Orçamento
   const [treatmentPlans, setTreatmentPlans] = useState<any[]>([]);
   const [planForm, setPlanForm] = useState({
-    title: 'Plano de Tratamento Reabilitador',
-    items: [
-      { tooth: '16', face: 'Oclusal', procedure: 'Restauração Resina Composta Fotopolimerizável', value: 250 },
-      { tooth: '21', face: 'Vestibular', procedure: 'Faceta em Resina Direta', value: 450 }
-    ],
-    totalValue: 700,
-    discountValue: 50,
-    finalValue: 650,
-    paymentTerms: 'Entrada de 50% + 2x no cartão de crédito',
-    notes: 'Garantia de 12 meses nos procedimentos restauradores.'
+    title: '',
+    items: [] as Array<{ tooth: string; face: string; procedure: string; value: number }>,
+    totalValue: 0,
+    discountValue: 0,
+    finalValue: 0,
+    paymentTerms: '',
+    notes: ''
+  });
+  const [newPlanItem, setNewPlanItem] = useState({
+    tooth: '',
+    face: '',
+    procedure: '',
+    value: ''
   });
 
   // Prótese / Laboratório
@@ -440,9 +443,62 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     }
   };
 
+  // Adicionar Item/Procedimento ao Orçamento em Elaboração
+  const handleAddPlanItem = () => {
+    const procedure = newPlanItem.procedure.trim();
+    if (!procedure) {
+      setErrorMsg('Informe o nome ou descrição do procedimento para adicionar.');
+      setTimeout(() => setErrorMsg(null), 3000);
+      return;
+    }
+
+    const rawVal = parseFloat(newPlanItem.value.toString().replace(',', '.'));
+    const val = isNaN(rawVal) || rawVal < 0 ? 0 : rawVal;
+
+    const itemToAdd = {
+      tooth: newPlanItem.tooth.trim() || 'Geral',
+      face: newPlanItem.face.trim() || 'Geral',
+      procedure,
+      value: val
+    };
+
+    const updatedItems = [...planForm.items, itemToAdd];
+    const newTotal = updatedItems.reduce((acc, curr) => acc + curr.value, 0);
+    const newFinal = Math.max(0, newTotal - planForm.discountValue);
+
+    setPlanForm({
+      ...planForm,
+      items: updatedItems,
+      totalValue: newTotal,
+      finalValue: newFinal
+    });
+
+    setNewPlanItem({
+      tooth: '',
+      face: '',
+      procedure: '',
+      value: ''
+    });
+  };
+
   // Salvar Novo Plano de Tratamento e Orçamento
   const handleSavePlan = async () => {
-    if (!selectedPatientId) return;
+    if (!selectedPatientId) {
+      setErrorMsg('Selecione um paciente para registrar o orçamento.');
+      setTimeout(() => setErrorMsg(null), 3000);
+      return;
+    }
+    if (!planForm.title.trim()) {
+      setErrorMsg('Informe o título do plano de tratamento/orçamento.');
+      setTimeout(() => setErrorMsg(null), 3000);
+      return;
+    }
+    if (planForm.items.length === 0) {
+      setErrorMsg('Adicione pelo menos um procedimento ao orçamento.');
+      setTimeout(() => setErrorMsg(null), 3000);
+      return;
+    }
+
     setSaving(true);
     try {
       await ApiClient.post('/v1/dentistry/treatment-plans', {
@@ -452,6 +508,16 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       setSuccessMsg('Plano de tratamento e orçamento gerados com sucesso!');
       const res = await ApiClient.get<any[]>(`/v1/dentistry/treatment-plans/${selectedPatientId}`);
       setTreatmentPlans(res || []);
+      setPlanForm({
+        title: '',
+        items: [],
+        totalValue: 0,
+        discountValue: 0,
+        finalValue: 0,
+        paymentTerms: '',
+        notes: ''
+      });
+      setNewPlanItem({ tooth: '', face: '', procedure: '', value: '' });
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao salvar orçamento');
@@ -938,13 +1004,14 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Título do Plano
+                      Título do Plano / Orçamento *
                     </label>
                     <input
                       type="text"
+                      placeholder="Ex: Plano Restaurador e Reabilitador"
                       value={planForm.title}
                       onChange={e => setPlanForm({ ...planForm, title: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 focus:bg-white outline-none"
                     />
                   </div>
 
@@ -954,52 +1021,177 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                     </label>
                     <input
                       type="text"
+                      placeholder="Ex: Entrada de 50% + 2x no cartão de crédito"
                       value={planForm.paymentTerms}
                       onChange={e => setPlanForm({ ...planForm, paymentTerms: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 focus:bg-white outline-none"
                     />
+                  </div>
+                </div>
+
+                {/* Formulário de Adicionar Procedimento */}
+                <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <Plus className="w-4 h-4 text-cyan-600" />
+                      Adicionar Procedimento ao Orçamento:
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      Elemento, face e valor do procedimento
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Dente / Elemento
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 11, 16, Geral"
+                        value={newPlanItem.tooth}
+                        onChange={e => setNewPlanItem({ ...newPlanItem, tooth: e.target.value })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Face
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: O, V, M, MOD"
+                        value={newPlanItem.face}
+                        onChange={e => setNewPlanItem({ ...newPlanItem, face: e.target.value })}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-4">
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Procedimento *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Restauração Resina, Profilaxia..."
+                        value={newPlanItem.procedure}
+                        onChange={e => setNewPlanItem({ ...newPlanItem, procedure: e.target.value })}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddPlanItem();
+                          }
+                        }}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                        Valor (R$) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0,00"
+                        value={newPlanItem.value}
+                        onChange={e => setNewPlanItem({ ...newPlanItem, value: e.target.value })}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddPlanItem();
+                          }
+                        }}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-cyan-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <button
+                        type="button"
+                        onClick={handleAddPlanItem}
+                        className="w-full py-2.5 px-3 bg-cyan-600 hover:bg-cyan-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Adicionar</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* Itens do Plano */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Procedimentos Inclusos no Plano:
-                  </label>
-                  <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden">
-                    {planForm.items.map((it, idx) => (
-                      <div key={idx} className="p-3 flex items-center justify-between text-xs bg-slate-50/50">
-                        <div className="font-bold text-slate-800">
-                          Dente {it.tooth} ({it.face}): {it.procedure}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-extrabold text-cyan-800">
-                            R$ {it.value.toFixed(2)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = planForm.items.filter((_, i) => i !== idx);
-                              const total = updated.reduce((acc, curr) => acc + curr.value, 0);
-                              setPlanForm({
-                                ...planForm,
-                                items: updated,
-                                totalValue: total,
-                                finalValue: total - planForm.discountValue
-                              });
-                            }}
-                            className="text-rose-500 hover:text-rose-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Procedimentos Inclusos no Plano ({planForm.items.length}):
+                    </label>
+                    {planForm.items.length > 0 && (
+                      <span className="text-[11px] text-slate-500">
+                        {planForm.items.length} item(ns) inserido(s)
+                      </span>
+                    )}
                   </div>
+
+                  {planForm.items.length === 0 ? (
+                    <div className="p-6 bg-slate-50/70 border border-dashed border-slate-200 rounded-2xl text-center text-xs text-slate-400 italic">
+                      Nenhum procedimento adicionado ao orçamento ainda. Preencha os campos acima e clique no botão &ldquo;Adicionar&rdquo;.
+                    </div>
+                  ) : (
+                    <div className="border border-slate-200 rounded-2xl divide-y divide-slate-100 overflow-hidden bg-white shadow-xs">
+                      {planForm.items.map((it, idx) => (
+                        <div key={idx} className="p-3.5 flex items-center justify-between text-xs hover:bg-slate-50/60 transition-colors">
+                          <div className="font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+                            <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-800 border border-cyan-200/80 font-bold text-[11px]">
+                              Dente {it.tooth || 'Geral'} {it.face && it.face !== 'Geral' ? `(${it.face})` : ''}
+                            </span>
+                            <span>{it.procedure}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-extrabold text-cyan-900 text-sm">
+                              R$ {Number(it.value || 0).toFixed(2)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = planForm.items.filter((_, i) => i !== idx);
+                                const total = updated.reduce((acc, curr) => acc + curr.value, 0);
+                                setPlanForm({
+                                  ...planForm,
+                                  items: updated,
+                                  totalValue: total,
+                                  finalValue: Math.max(0, total - planForm.discountValue)
+                                });
+                              }}
+                              className="text-rose-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Remover procedimento"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Observações / Notas do Orçamento */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Observações e Termos do Orçamento
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Orçamento válido por 30 dias. Valores sujeitos a alteração após o prazo."
+                    value={planForm.notes}
+                    onChange={e => setPlanForm({ ...planForm, notes: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 focus:bg-white outline-none"
+                  />
                 </div>
 
                 {/* Valores */}
-                <div className="grid grid-cols-3 gap-4 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">Total Bruto (R$)</label>
                     <input
@@ -1007,9 +1199,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                       value={planForm.totalValue}
                       onChange={e => {
                         const tot = Number(e.target.value);
-                        setPlanForm({ ...planForm, totalValue: tot, finalValue: tot - planForm.discountValue });
+                        setPlanForm({ ...planForm, totalValue: tot, finalValue: Math.max(0, tot - planForm.discountValue) });
                       }}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
                     />
                   </div>
                   <div>
@@ -1019,14 +1211,14 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                       value={planForm.discountValue}
                       onChange={e => {
                         const desc = Number(e.target.value);
-                        setPlanForm({ ...planForm, discountValue: desc, finalValue: planForm.totalValue - desc });
+                        setPlanForm({ ...planForm, discountValue: desc, finalValue: Math.max(0, planForm.totalValue - desc) });
                       }}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold"
                     />
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">Valor Final Líquido</label>
-                    <div className="p-2 bg-cyan-50 border border-cyan-200 rounded-xl text-xs font-black text-cyan-900">
+                    <div className="p-2.5 bg-cyan-50 border border-cyan-200 rounded-xl text-xs font-black text-cyan-900">
                       R$ {planForm.finalValue.toFixed(2)}
                     </div>
                   </div>
@@ -1037,7 +1229,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                     type="button"
                     disabled={saving}
                     onClick={handleSavePlan}
-                    className="px-4 py-2 bg-cyan-600 text-white rounded-2xl text-xs font-bold hover:bg-cyan-700 shadow-sm flex items-center gap-2"
+                    className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white rounded-2xl text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
                     Gerar Orçamento / Salvar

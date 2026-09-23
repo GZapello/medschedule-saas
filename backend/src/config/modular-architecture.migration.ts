@@ -355,7 +355,15 @@ function seedPracticeAreas(rawDb: DatabaseSync): void {
     VALUES (?, ?, ?, ?, ?, 1)
   `);
 
+  let deletedProfIds = new Set<string>();
+  try {
+    deletedProfIds = new Set(
+      rawDb.prepare('SELECT id FROM deleted_global_professions').all().map((r: any) => r.id)
+    );
+  } catch (_) {}
+
   for (const a of areas) {
+    if (deletedProfIds.has(a.professionId)) continue;
     stmt.run(a.id, a.professionId, a.name, a.slug, a.type);
   }
 }

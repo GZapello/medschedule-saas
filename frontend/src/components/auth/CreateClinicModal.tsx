@@ -160,39 +160,60 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     let isMounted = true;
     setLoadingPracticeAreas(true);
-    lastLoadedProfessionRef.current = formData.profession;
 
-    ApiClient.get<PracticeArea[]>(`/v1/capabilities/practice-areas?professionId=${encodeURIComponent(formData.profession)}`)
-      .then(data => {
-        if (isMounted && Array.isArray(data)) {
-          setPracticeAreas(data);
+    const loadAreas = async () => {
+      try {
+        const selectedProf = professionOptions.find(p => p.id === formData.profession);
+        const queryParam = selectedProf?.canonicalId || formData.profession;
 
-          // Pré-seleciona a área especializada se for alias específico (ex: psiquiatria, pediatria, etc.)
-          const inferred = data.find(a => (a as any).isInferredForAlias);
-          if (inferred) {
-            setSelectedPracticeAreaIds([inferred.id]);
-          } else if (data.length > 0 && selectedPracticeAreaIds.length === 0) {
-            const defaultMed = data.find(a => a.id === 'pa-med-clinica');
-            if (defaultMed && (formData.profession === 'prof-medico' || formData.profession === 'prof-medicina')) {
-              setSelectedPracticeAreaIds(['pa-med-clinica']);
-            }
-          } else {
-            // Preserva seleções existentes do usuário se forem válidas para a profissão atual
-            setSelectedPracticeAreaIds(prev => prev.filter(id => data.some(a => a.id === id)));
-          }
+        let resData: any = null;
+        try {
+          resData = await ApiClient.get<any>(`/v1/capabilities/practice-areas?professionId=${encodeURIComponent(queryParam)}`);
+        } catch {
+          // Fallback para rota de taxonomia pública
+          resData = await ApiClient.get<any>(`/v1/taxonomy/practice-areas?professionId=${encodeURIComponent(queryParam)}`);
         }
-      })
-      .catch(() => {
-        if (isMounted) setPracticeAreas([]);
-      })
-      .finally(() => {
-        if (isMounted) setLoadingPracticeAreas(false);
-      });
+
+        const items: PracticeArea[] = Array.isArray(resData)
+          ? resData
+          : (resData?.data || resData?.items || []);
+
+        if (!isMounted) return;
+
+        lastLoadedProfessionRef.current = formData.profession;
+        setPracticeAreas(items);
+
+        // Pré-seleciona a área especializada se for alias específico (ex: psiquiatria, pediatria, etc.)
+        const inferred = items.find(a => (a as any).isInferredForAlias);
+        if (inferred) {
+          setSelectedPracticeAreaIds([inferred.id]);
+        } else if (items.length > 0 && selectedPracticeAreaIds.length === 0) {
+          const defaultMed = items.find(a => a.id === 'pa-med-clinica');
+          if (defaultMed && (formData.profession === 'prof-medico' || formData.profession === 'prof-medicina')) {
+            setSelectedPracticeAreaIds(['pa-med-clinica']);
+          }
+        } else {
+          // Preserva seleções existentes do usuário se forem válidas para a profissão atual
+          setSelectedPracticeAreaIds(prev => prev.filter(id => items.some(a => a.id === id)));
+        }
+      } catch (err) {
+        if (isMounted) {
+          lastLoadedProfessionRef.current = '';
+          setPracticeAreas([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingPracticeAreas(false);
+        }
+      }
+    };
+
+    loadAreas();
 
     return () => {
       isMounted = false;
     };
-  }, [formData.profession]);
+  }, [formData.profession, professionOptions]);
 
   // Scroll to top ao trocar de etapa
   useEffect(() => {
@@ -711,7 +732,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto">
       <div
         className={`bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[92dvh] sm:rounded-3xl flex flex-col ${
-          step === 'plans' ? 'sm:max-w-4xl' : 'sm:max-w-xl'
+          step === 'plans' ? 'sm:max-w-4xl' : step === 'profession' ? 'sm:max-w-2xl' : 'sm:max-w-xl'
         } overflow-hidden shadow-2xl border border-slate-100 transition-all duration-300`}
       >
         {/* Top Header com Marca e Fechar */}
@@ -994,30 +1015,31 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
                   {/* Seleção Interativa de Áreas de Atuação e Abordagens (Multiselect Cards) */}
                   {formData.profession && (
-                    <div className="mt-4 pt-4 border-t border-slate-200">
+                    <div className="mt-5 pt-5 border-t border-slate-200">
                       <div className="flex items-center justify-between mb-2">
-                        <label className="block text-xs font-extrabold text-slate-800">
+                        <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
                           Áreas de Atuação & Abordagens Clínicas
                         </label>
-                        <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/60">
+                        <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
                           {selectedPracticeAreaIds.length === 0
                             ? 'Opcional • Selecione'
                             : `${selectedPracticeAreaIds.length} selecionada${selectedPracticeAreaIds.length > 1 ? 's' : ''}`}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-500 mb-2.5">
+                      <p className="text-xs text-slate-500 mb-3">
                         Escolha suas áreas para pré-configurar recursos clínicos, escalas e prescrições ideais.
                       </p>
 
                       {loadingPracticeAreas ? (
-                        <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2.5 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                           <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
-                          <span>Carregando áreas de atuação recomendadas...</span>
+                          <span className="font-medium">Carregando áreas de atuação recomendadas...</span>
                         </div>
                       ) : practiceAreas.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 sm:max-h-72 overflow-y-auto pr-1">
                           {practiceAreas.map(area => {
                             const isSelected = selectedPracticeAreaIds.includes(area.id);
+                            const isApproach = (area.type || '').toUpperCase().includes('APPROACH');
                             return (
                               <button
                                 type="button"
@@ -1027,38 +1049,38 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                                     isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
                                   );
                                 }}
-                                className={`p-2.5 rounded-xl border text-left transition-all flex items-start gap-2.5 cursor-pointer select-none ${
+                                className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer select-none ${
                                   isSelected
                                     ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
-                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70'
+                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
                                 }`}
                               >
                                 <div
-                                  className={`w-4 h-4 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                  className={`w-4.5 h-4.5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
                                     isSelected
-                                      ? 'bg-teal-600 border-teal-600 text-white'
+                                      ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
                                       : 'border-slate-300 bg-white'
                                   }`}
                                 >
-                                  {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                  {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                  <div className="flex items-center justify-between gap-1">
-                                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-teal-950' : 'text-slate-800'}`}>
+                                  <div className="flex items-center justify-between gap-1.5">
+                                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-teal-950 font-black' : 'text-slate-800'}`}>
                                       {area.name}
                                     </span>
                                     <span
-                                      className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase shrink-0 ${
-                                        area.type === 'approach'
-                                          ? 'bg-purple-100 text-purple-700'
-                                          : 'bg-emerald-100 text-emerald-800'
+                                      className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wide shrink-0 ${
+                                        isApproach
+                                          ? 'bg-purple-100 text-purple-700 border border-purple-200/60'
+                                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200/60'
                                       }`}
                                     >
-                                      {area.type === 'approach' ? 'Abordagem' : 'Especialidade'}
+                                      {isApproach ? 'Abordagem' : 'Especialidade'}
                                     </span>
                                   </div>
                                   {area.description && (
-                                    <p className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">
+                                    <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
                                       {area.description}
                                     </p>
                                   )}
@@ -1068,9 +1090,11 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                           })}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-400 italic py-2">
-                          Nenhuma área específica configurada para esta especialidade. Módulos padrão serão ativados.
-                        </p>
+                        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                          <p className="text-xs text-slate-600 font-medium">
+                            Esta profissão não possui subespecialidades ou abordagens específicas cadastradas. Todos os recursos gerais do Zemda serão ativados automaticamente.
+                          </p>
+                        </div>
                       )}
                     </div>
                   )}

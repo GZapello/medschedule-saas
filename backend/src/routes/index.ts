@@ -105,6 +105,7 @@ api.get('/v1/public/verify-document/:verificationToken', DigitalCertificateContr
 api.get('/v1/taxonomy/categories', TaxonomyController.listCategories);
 api.get('/v1/taxonomy/professions', TaxonomyController.listProfessions);
 api.get('/v1/taxonomy/specialties', TaxonomyController.listSpecialties);
+api.get('/v1/taxonomy/practice-areas', CapabilityController.getPracticeAreas);
 
 // Página Pública da Clínica & Agendamento Online (/c/:slug)
 api.get('/v1/public/tenants/:slug', TenantController.getPublicProfile);

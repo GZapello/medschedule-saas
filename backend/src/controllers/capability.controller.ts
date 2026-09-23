@@ -21,7 +21,7 @@ export class CapabilityController {
    */
   public static getPracticeAreas(req: Request, res: Response): void {
     try {
-      const professionId = String(req.query.professionId || '');
+      const professionId = String(req.query.professionId || req.query.profession || req.query.id || req.query.slug || '').trim();
       if (!professionId) {
         res.status(400).json({ error: 'professionId é obrigatório' });
         return;

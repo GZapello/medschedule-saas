@@ -4,6 +4,7 @@ export interface RegistrationProfessionOption {
   id: string;
   label: string;
   name?: string;
+  canonicalId?: string;
   canonicalName: string;
   accessLabel: string;
   displayOption: string;
