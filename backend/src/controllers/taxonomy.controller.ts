@@ -168,7 +168,7 @@ export class TaxonomyController {
         const modules = primaryModule ? [primaryModule, 'ZemdaBody'] : ['Recursos gerais do Zemda', 'ZemdaBody'];
         const accessLabel = modules.join(' + ');
         const displayOption = `${p.name} — ${accessLabel}`;
-        const isAdministrative = p.category_is_clinical === 0 || p.category_id === 'cat-admin';
+        const isAdministrative = resolution.taxonomyCategory === 'ADMINISTRATIVE' || p.category_is_clinical === 0 || p.category_id === 'cat-admin';
         return {
           ...p,
           label: p.name,
@@ -179,7 +179,9 @@ export class TaxonomyController {
           modules,
           accessLabel,
           displayOption,
-          administrative: isAdministrative
+          administrative: isAdministrative,
+          taxonomyCategory: resolution.taxonomyCategory,
+          isSpecificAlias: resolution.isSpecificAlias
         };
       });
 

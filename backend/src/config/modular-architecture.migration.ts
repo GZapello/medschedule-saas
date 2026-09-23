@@ -542,6 +542,24 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
  */
 function reconcileLegacyProfessionsAndCapabilities(rawDb: DatabaseSync): void {
   try {
+    // Assegura que especialidades médicas e odontológicas existam na tabela professions
+    const detailedProfs = [
+      { id: 'prof-neurologista', cat_id: 'cat-med', name: 'Neurologista', slug: 'neurologista', reg_label: 'CRM', reg_req: 1 },
+      { id: 'prof-geriatra', cat_id: 'cat-med', name: 'Geriatra', slug: 'geriatra', reg_label: 'CRM', reg_req: 1 },
+      { id: 'prof-endocrinologista', cat_id: 'cat-med', name: 'Endocrinologista', slug: 'endocrinologista', reg_label: 'CRM', reg_req: 1 },
+      { id: 'prof-ortopedista', cat_id: 'cat-med', name: 'Ortopedista', slug: 'ortopedista', reg_label: 'CRM', reg_req: 1 },
+      { id: 'prof-reumatologista', cat_id: 'cat-med', name: 'Reumatologista', slug: 'reumatologista', reg_label: 'CRM', reg_req: 1 },
+      { id: 'prof-clinico-geral', cat_id: 'cat-med', name: 'Clínico Geral', slug: 'clinico-geral', reg_label: 'CRM', reg_req: 1 },
+      { id: 'prof-ortodontista', cat_id: 'cat-odonto', name: 'Ortodontista', slug: 'ortodontista', reg_label: 'CRO', reg_req: 1 }
+    ];
+    const insProfStmt = rawDb.prepare(`
+      INSERT OR IGNORE INTO professions (id, category_id, name, slug, registration_board_label, registration_required, active)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `);
+    for (const dp of detailedProfs) {
+      insProfStmt.run(dp.id, dp.cat_id, dp.name, dp.slug, dp.reg_label, dp.reg_req);
+    }
+
     const profs = rawDb.prepare(`
       SELECT p.id as prof_id, p.user_id, p.tenant_id, p.profession_id, p.name as prof_name,
              u.profession_name as user_prof_name, u.profession_id as user_prof_id
@@ -592,15 +610,16 @@ function reconcileLegacyProfessionsAndCapabilities(rawDb: DatabaseSync): void {
         } catch (_) {}
       }
 
-      // Se usuário não tiver áreas cadastradas mas houver área inferida, vincula na tabela
-      if (p.user_id && p.tenant_id && resolution.inferredAreaId) {
+      // Se usuário não tiver áreas cadastradas mas houver área automática/inferida, vincula na tabela
+      const autoArea = resolution.automaticPracticeAreaId || resolution.inferredAreaId;
+      if (p.user_id && p.tenant_id && autoArea) {
         try {
           const countRow = rawDb.prepare('SELECT count(*) as c FROM user_practice_areas WHERE user_id = ? AND tenant_id = ?').get(p.user_id, p.tenant_id) as any;
           if (!countRow || countRow.c === 0) {
             rawDb.prepare(`
               INSERT OR IGNORE INTO user_practice_areas (user_id, practice_area_id, tenant_id)
               VALUES (?, ?, ?)
-            `).run(p.user_id, resolution.inferredAreaId, p.tenant_id);
+            `).run(p.user_id, autoArea, p.tenant_id);
           }
         } catch (_) {}
       }

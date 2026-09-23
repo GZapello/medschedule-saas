@@ -12,7 +12,7 @@ import { ensureDefaultClinicService } from '../services/default-service.service'
 import { EmailService } from '../services/email.service';
 import { TrialNotificationService } from '../services/trial-notification.service';
 import { CapabilityService } from '../services/capability.service';
-import { resolveProfessionModule } from '../utils/profession-module';
+import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
 import { REGISTRATION_PROFESSIONS } from '../types/professions';
 
 
@@ -56,13 +56,18 @@ export class TenantController {
       const rawProfession = (req.body.profession || req.body.managerProfession || req.body.professionName || '').trim();
       const professionIdInput = (req.body.professionId || req.body.managerProfessionId || '').trim();
 
-      const matchedCatalogProf = REGISTRATION_PROFESSIONS.find(
-        p => p.id === (REGISTRATION_PROFESSION_ALIASES[professionIdInput] || professionIdInput) ||
-             (p.id === 'prof-dentista' && (professionIdInput === 'prof-dentista' || rawProfession.toLowerCase() === 'dentista')) ||
-             (p.id === 'prof-personal-trainer' && (professionIdInput === 'prof-personal-trainer' || rawProfession.toLowerCase() === 'personal trainer')) ||
-             (p.id === 'prof-outro-saude' && (professionIdInput === 'other_health' || rawProfession.toLowerCase() === 'outra profissão da saúde')) ||
-             p.label.toLowerCase() === rawProfession.toLowerCase()
-      );
+      let matchedCatalogProf = REGISTRATION_PROFESSIONS.find(p => p.id === professionIdInput);
+      if (!matchedCatalogProf && professionIdInput && REGISTRATION_PROFESSION_ALIASES[professionIdInput]) {
+        matchedCatalogProf = REGISTRATION_PROFESSIONS.find(p => p.id === REGISTRATION_PROFESSION_ALIASES[professionIdInput]);
+      }
+      if (!matchedCatalogProf) {
+        matchedCatalogProf = REGISTRATION_PROFESSIONS.find(
+          p => (p.id === 'prof-dentista' && (professionIdInput === 'prof-dentista' || rawProfession.toLowerCase() === 'dentista')) ||
+               (p.id === 'prof-personal-trainer' && (professionIdInput === 'prof-personal-trainer' || rawProfession.toLowerCase() === 'personal trainer')) ||
+               (p.id === 'prof-outro-saude' && (professionIdInput === 'other_health' || rawProfession.toLowerCase() === 'outra profissão da saúde')) ||
+               p.label.toLowerCase() === rawProfession.toLowerCase()
+        );
+      }
 
       const resolvedProfId = matchedCatalogProf?.id || (professionIdInput ? professionIdInput : null);
       const resolvedProfName = rawProfession || matchedCatalogProf?.label || null;
@@ -72,12 +77,14 @@ export class TenantController {
       const managerRegistrationNumber = req.body.managerRegistrationNumber || req.body.registrationNumber || null;
       const zemdaBodyEnabled = req.body.zemdaBodyEnabled;
 
-      const { module: activeModule, flags: modFlags } = resolveProfessionModule({
+      const professionResolution = resolveCanonicalProfession({
         id: resolvedProfId,
         name: resolvedProfName,
         slug: resolvedProfSlug,
         registrationType: resolvedBoardLabel
       });
+      const activeModule = professionResolution.commercialModule;
+      const modFlags = professionResolution.flags;
 
       if (!responsibleName || !email || !password) {
         res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios' });
@@ -257,14 +264,14 @@ export class TenantController {
             profession_id, profession_name, practice_areas, registration_type, registration_number,
             terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
             zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled,
             created_at, updated_at
           ) VALUES (
             ?, ?, ?, ?, ?, 'clinic_admin', ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, datetime('now'), datetime('now'),
             ?, ?, ?, ?,
-            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
             datetime('now'), datetime('now')
           )
         `).run(
@@ -272,7 +279,7 @@ export class TenantController {
           resolvedProfId, resolvedProfName, managerPracticeAreas || null, resolvedBoardLabel, managerRegistrationNumber || null,
           CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION,
           modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
-          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled
+          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled
         );
 
         // 5. Salva a prova documental do aceite legal na tabela legal_acceptances
@@ -297,12 +304,12 @@ export class TenantController {
             id, tenant_id, user_id, role, status, is_manager,
             profession_id, profession_name, profession_custom, practice_areas, permissions_json,
             zemda_body_enabled, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, created_at
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, created_at
           ) VALUES (
             ?, ?, ?, 'clinic_admin', ?, 1,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, datetime('now')
+            ?, ?, ?, ?, ?, datetime('now')
           )
         `).run(
           'cu-' + uuidv4().slice(0, 8),
@@ -316,7 +323,7 @@ export class TenantController {
           initialPermissions,
           isZemdaBodyOpted ? 1 : 0,
           modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
-          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled
+          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled
         );
 
         // 7. Se o gestor também for profissional de saúde clínico, cria o registro em professionals
@@ -327,8 +334,8 @@ export class TenantController {
               id, tenant_id, user_id, name, profession_id, profession_name,
               registration_type, registration_number, practice_areas, bio, active,
               zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             createdProfId,
             tenantId,
@@ -347,7 +354,8 @@ export class TenantController {
             modFlags.zemda_fono_enabled,
             modFlags.zemda_pp_enabled,
             modFlags.zemda_psico_enabled,
-            modFlags.zemda_personal_enabled
+            modFlags.zemda_personal_enabled,
+            modFlags.zemda_med_enabled
           );
         }
 
@@ -393,8 +401,18 @@ export class TenantController {
         throw txErr;
       }
 
+      let areasToSet: string[] = [];
       if (req.body.practiceAreaIds && Array.isArray(req.body.practiceAreaIds)) {
-        CapabilityService.setUserPracticeAreas(userId, tenantId, req.body.practiceAreaIds);
+        areasToSet = req.body.practiceAreaIds.filter(Boolean);
+      }
+      if (areasToSet.length === 0 && (professionResolution.automaticPracticeAreaId || professionResolution.inferredAreaId)) {
+        const autoId = professionResolution.automaticPracticeAreaId || professionResolution.inferredAreaId;
+        if (autoId) {
+          areasToSet = [autoId];
+        }
+      }
+      if (areasToSet.length > 0) {
+        CapabilityService.setUserPracticeAreas(userId, tenantId, areasToSet);
       }
 
       if (startTrial) {

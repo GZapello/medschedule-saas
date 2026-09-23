@@ -1,4 +1,4 @@
-import { resolveProfessionModule } from '../utils/profession-module';
+import { resolveProfessionModule, resolveCanonicalProfession, ProfessionTaxonomyCategory } from '../utils/profession-module';
 
 export interface RegistrationProfessionOption {
   id: string;
@@ -13,6 +13,8 @@ export interface RegistrationProfessionOption {
   modules: string[];
   slug?: string;
   administrative?: boolean;
+  taxonomyCategory?: ProfessionTaxonomyCategory;
+  isSpecificAlias?: boolean;
 }
 
 // Existing database aliases are represented once in the public selector.
@@ -21,6 +23,7 @@ export const REGISTRATION_PROFESSION_ALIASES: Record<string, string> = {
   // Odontologia
   "prof-cirurgiao-dentista": "prof-dentista",
   "prof-odontologia": "prof-dentista",
+  "prof-ortodontista": "prof-dentista",
   // Enfermagem
   "prof-enfermagem": "prof-enfermeiro",
   // Fisioterapia
@@ -40,6 +43,7 @@ export const REGISTRATION_PROFESSION_ALIASES: Record<string, string> = {
   "prof-ortopedista": "prof-medico",
   "prof-endocrinologista": "prof-medico",
   "prof-reumatologista": "prof-medico",
+  "prof-clinico-geral": "prof-medico",
   // Veterinária
   "prof-medicina-veterinaria": "prof-veterinario",
   // Nutrição
@@ -240,6 +244,13 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "boardLabel": "CRM"
   },
   {
+    "id": "prof-clinico-geral",
+    "label": "Clínico Geral",
+    "canonicalName": "Clínico Geral",
+    "slug": "clinico-geral",
+    "boardLabel": "CRM"
+  },
+  {
     "id": "prof-coach",
     "label": "Coach / Mentor de Carreira",
     "canonicalName": "Coach / Mentor de Carreira",
@@ -270,6 +281,20 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "label": "Dermatologista",
     "canonicalName": "Dermatologista",
     "slug": "dermatologista",
+    "boardLabel": "CRM"
+  },
+  {
+    "id": "prof-endocrinologista",
+    "label": "Endocrinologista",
+    "canonicalName": "Endocrinologista",
+    "slug": "endocrinologista",
+    "boardLabel": "CRM"
+  },
+  {
+    "id": "prof-geriatra",
+    "label": "Geriatra",
+    "canonicalName": "Geriatra",
+    "slug": "geriatra",
     "boardLabel": "CRM"
   },
   {
@@ -321,6 +346,27 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "boardLabel": "CRP"
   },
   {
+    "id": "prof-neurologista",
+    "label": "Neurologista",
+    "canonicalName": "Neurologista",
+    "slug": "neurologista",
+    "boardLabel": "CRM"
+  },
+  {
+    "id": "prof-ortopedista",
+    "label": "Ortopedista",
+    "canonicalName": "Ortopedista",
+    "slug": "ortopedista",
+    "boardLabel": "CRM"
+  },
+  {
+    "id": "prof-ortodontista",
+    "label": "Ortodontista",
+    "canonicalName": "Ortodontista",
+    "slug": "ortodontista",
+    "boardLabel": "CRO"
+  },
+  {
     "id": "prof-osteopata",
     "label": "Osteopata",
     "canonicalName": "Osteopata",
@@ -358,6 +404,13 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "label": "Psiquiatra",
     "canonicalName": "Psiquiatra",
     "slug": "psiquiatra",
+    "boardLabel": "CRM"
+  },
+  {
+    "id": "prof-reumatologista",
+    "label": "Reumatologista",
+    "canonicalName": "Reumatologista",
+    "slug": "reumatologista",
     "boardLabel": "CRM"
   },
   {
@@ -411,9 +464,24 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
 ];
 
 export const REGISTRATION_PROFESSIONS: RegistrationProfessionOption[] = OPTIONS.map(option => {
-  // Descriptive only. The server continues to enforce actual access independently.
-  const { module } = resolveProfessionModule({id:option.id, name:option.canonicalName, slug:option.slug, registrationType:option.boardLabel});
+  const resolution = resolveCanonicalProfession({
+    id: option.id,
+    name: option.canonicalName,
+    slug: option.slug,
+    registrationType: option.boardLabel
+  });
+  const module = resolution.commercialModule;
   const modules = [module || 'Recursos gerais do Zemda', 'ZemdaBody'];
   const accessLabel = modules.join(' + ');
-  return {...option, ...(module ? {module} : {}), modules, accessLabel, displayOption:option.label + ' — ' + accessLabel};
+  return {
+    ...option,
+    canonicalId: resolution.canonicalId,
+    canonicalName: resolution.canonicalName,
+    ...(module ? { module } : {}),
+    modules,
+    accessLabel,
+    displayOption: option.label + ' — ' + accessLabel,
+    taxonomyCategory: resolution.taxonomyCategory,
+    isSpecificAlias: resolution.isSpecificAlias
+  };
 });

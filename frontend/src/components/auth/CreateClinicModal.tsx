@@ -163,8 +163,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     const loadAreas = async () => {
       try {
-        const selectedProf = professionOptions.find(p => p.id === formData.profession);
-        const queryParam = selectedProf?.canonicalId || formData.profession;
+        const queryParam = formData.profession;
 
         let resData: any = null;
         try {
@@ -183,17 +182,14 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         lastLoadedProfessionRef.current = formData.profession;
         setPracticeAreas(items);
 
-        // Pré-seleciona a área especializada se for alias específico (ex: psiquiatria, pediatria, etc.)
+        // Se for alias específico com área única inferida, auto-seleciona
         const inferred = items.find(a => (a as any).isInferredForAlias);
         if (inferred) {
           setSelectedPracticeAreaIds([inferred.id]);
-        } else if (items.length > 0 && selectedPracticeAreaIds.length === 0) {
-          const defaultMed = items.find(a => a.id === 'pa-med-clinica');
-          if (defaultMed && (formData.profession === 'prof-medico' || formData.profession === 'prof-medicina')) {
-            setSelectedPracticeAreaIds(['pa-med-clinica']);
-          }
         } else {
-          // Preserva seleções existentes do usuário se forem válidas para a profissão atual
+          // Para profissões canônicas genéricas (Médico, Fisioterapeuta, etc.):
+          // Preserva seleções válidas prévias se o usuário já havia marcado,
+          // caso contrário mantém vazio para escolha ativa do profissional.
           setSelectedPracticeAreaIds(prev => prev.filter(id => items.some(a => a.id === id)));
         }
       } catch (err) {
@@ -732,7 +728,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto">
       <div
         className={`bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[92dvh] sm:rounded-3xl flex flex-col ${
-          step === 'plans' ? 'sm:max-w-4xl' : step === 'profession' ? 'sm:max-w-2xl' : 'sm:max-w-xl'
+          step === 'plans' ? 'sm:max-w-4xl' : step === 'profession' ? 'sm:max-w-2xl sm:min-h-[680px]' : 'sm:max-w-xl'
         } overflow-hidden shadow-2xl border border-slate-100 transition-all duration-300`}
       >
         {/* Top Header com Marca e Fechar */}
@@ -1013,87 +1009,126 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                     </div>
                   )}
 
-                  {/* Seleção Interativa de Áreas de Atuação e Abordagens (Multiselect Cards) */}
-                  {formData.profession && (
-                    <div className="mt-5 pt-5 border-t border-slate-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
-                          Áreas de Atuação & Abordagens Clínicas
-                        </label>
-                        <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
-                          {selectedPracticeAreaIds.length === 0
-                            ? 'Opcional • Selecione'
-                            : `${selectedPracticeAreaIds.length} selecionada${selectedPracticeAreaIds.length > 1 ? 's' : ''}`}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 mb-3">
-                        Escolha suas áreas para pré-configurar recursos clínicos, escalas e prescrições ideais.
-                      </p>
-
-                      {loadingPracticeAreas ? (
-                        <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2.5 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                          <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
-                          <span className="font-medium">Carregando áreas de atuação recomendadas...</span>
-                        </div>
-                      ) : practiceAreas.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 sm:max-h-72 overflow-y-auto pr-1">
-                          {practiceAreas.map(area => {
-                            const isSelected = selectedPracticeAreaIds.includes(area.id);
-                            const isApproach = (area.type || '').toUpperCase().includes('APPROACH');
+                  {/* Seleção Interativa de Áreas de Atuação e Abordagens */}
+                  {formData.profession && (loadingPracticeAreas || practiceAreas.length > 0) && (
+                    <div className="mt-5 pt-5 border-t border-slate-200 animate-in fade-in duration-200">
+                      {practiceAreas.length === 1 && practiceAreas[0].isInferredForAlias ? (
+                        /* CASO 2 e 3: Título que já é uma especialidade ou abordagem específica */
+                        <div>
+                          {(() => {
+                            const isApproach = String(practiceAreas[0].type || '').toUpperCase().includes('APPROACH');
                             return (
-                              <button
-                                type="button"
-                                key={area.id}
-                                onClick={() => {
-                                  setSelectedPracticeAreaIds(prev =>
-                                    isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
-                                  );
-                                }}
-                                className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer select-none ${
-                                  isSelected
-                                    ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
-                                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
-                                }`}
-                              >
-                                <div
-                                  className={`w-4.5 h-4.5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
-                                    isSelected
-                                      ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
-                                      : 'border-slate-300 bg-white'
-                                  }`}
-                                >
-                                  {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              <>
+                                <div className="flex items-center justify-between mb-2">
+                                  <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                                    {isApproach ? 'Abordagem Clínica Vinculada' : 'Especialidade Vinculada'}
+                                  </label>
+                                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                                    Definida Automaticamente
+                                  </span>
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center justify-between gap-1.5">
-                                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-teal-950 font-black' : 'text-slate-800'}`}>
-                                      {area.name}
-                                    </span>
-                                    <span
-                                      className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wide shrink-0 ${
-                                        isApproach
-                                          ? 'bg-purple-100 text-purple-700 border border-purple-200/60'
-                                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200/60'
-                                      }`}
-                                    >
-                                      {isApproach ? 'Abordagem' : 'Especialidade'}
-                                    </span>
+                                <div className="p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/90 text-teal-950 flex items-start gap-3 shadow-2xs">
+                                  <div className="w-7 h-7 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                                    <Check className="w-4 h-4 stroke-[3]" />
                                   </div>
-                                  {area.description && (
-                                    <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
-                                      {area.description}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-sm font-black text-teal-950">
+                                        {practiceAreas[0].name}
+                                      </span>
+                                      <span className="text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200/60">
+                                        {isApproach ? 'Abordagem' : 'Especialidade'}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-teal-800 mt-1">
+                                      Recursos e diretrizes clínicas pré-configurados para <strong>{practiceAreas[0].name}</strong>.
                                     </p>
-                                  )}
+                                    <p className="text-[11px] text-slate-500 mt-2 border-t border-teal-200/60 pt-1.5">
+                                      💡 Caso atue em <strong>múltiplas especialidades</strong>, selecione a profissão genérica correspondente (ex: Medicina, Odontologia ou Fisioterapia) para selecionar mais de uma.
+                                    </p>
+                                  </div>
                                 </div>
-                              </button>
+                              </>
                             );
-                          })}
+                          })()}
                         </div>
                       ) : (
-                        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
-                          <p className="text-xs text-slate-600 font-medium">
-                            Esta profissão não possui subespecialidades ou abordagens específicas cadastradas. Todos os recursos gerais do Zemda serão ativados automaticamente.
+                        /* CASO 1 e 4: Profissão canônica genérica com áreas irmãs/pares */
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                              Áreas de Atuação & Abordagens Clínicas
+                            </label>
+                            <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
+                              {selectedPracticeAreaIds.length === 0
+                                ? 'Opcional • Selecione'
+                                : `${selectedPracticeAreaIds.length} selecionada${selectedPracticeAreaIds.length > 1 ? 's' : ''}`}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mb-3">
+                            Escolha uma ou mais áreas para pré-configurar recursos clínicos, escalas e prescrições ideais.
                           </p>
+
+                          {loadingPracticeAreas ? (
+                            <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2.5 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                              <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
+                              <span className="font-medium">Carregando áreas de atuação recomendadas...</span>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 sm:max-h-72 overflow-y-auto pr-1">
+                              {practiceAreas.map(area => {
+                                const isSelected = selectedPracticeAreaIds.includes(area.id);
+                                const isApproach = (area.type || '').toUpperCase().includes('APPROACH');
+                                return (
+                                  <button
+                                    type="button"
+                                    key={area.id}
+                                    onClick={() => {
+                                      setSelectedPracticeAreaIds(prev =>
+                                        isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
+                                      );
+                                    }}
+                                    className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer select-none ${
+                                      isSelected
+                                        ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
+                                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+                                    }`}
+                                  >
+                                    <div
+                                      className={`w-4.5 h-4.5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                        isSelected
+                                          ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                                          : 'border-slate-300 bg-white'
+                                      }`}
+                                    >
+                                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <span className={`text-xs font-bold truncate ${isSelected ? 'text-teal-950 font-black' : 'text-slate-800'}`}>
+                                          {area.name}
+                                        </span>
+                                        <span
+                                          className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wide shrink-0 ${
+                                            isApproach
+                                              ? 'bg-purple-100 text-purple-700 border border-purple-200/60'
+                                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200/60'
+                                          }`}
+                                        >
+                                          {isApproach ? 'Abordagem' : 'Especialidade'}
+                                        </span>
+                                      </div>
+                                      {area.description && (
+                                        <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                                          {area.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

@@ -33,18 +33,49 @@ export class CapabilityService {
    */
   public static getPracticeAreas(professionId: string): any[] {
     const cleanId = (professionId || '').trim();
+    if (!cleanId) return [];
+
     const resolution = resolveCanonicalProfession({ id: cleanId, name: cleanId, slug: cleanId });
+
+    // CASO 2 & 3: Título que já é uma especialidade ou abordagem específica
+    // Retorna ESTRITAMENTE a própria especialidade/área vinculada, eliminando falsas hierarquias
+    if (resolution.isSpecificAlias && (resolution.automaticPracticeAreaId || resolution.inferredAreaId)) {
+      const targetAreaId = resolution.automaticPracticeAreaId || resolution.inferredAreaId;
+      const singleRow = db.prepare(`
+        SELECT id, profession_id, name, slug, type, description
+        FROM practice_areas
+        WHERE id = ? AND active = 1
+      `).get(targetAreaId) as any;
+
+      if (singleRow) {
+        return [{
+          ...singleRow,
+          isInferredForAlias: true,
+          isSpecificLocked: true
+        }];
+      }
+      return [];
+    }
+
+    // Se a profissão não tem módulo clínico, não possui áreas
+    if (!resolution.commercialModule) {
+      return [];
+    }
+
+    // CASO 1 & 4: Profissão canônica genérica (Médico, Fisioterapeuta, Psicólogo, etc.)
+    // Retorna todas as especialidades/áreas no mesmo nível hierárquico como pares
     const canonical = resolution.canonicalId;
     const rows = db.prepare(`
       SELECT id, profession_id, name, slug, type, description
       FROM practice_areas
-      WHERE (profession_id = ? OR profession_id = ?) AND active = 1
+      WHERE profession_id = ? AND active = 1
       ORDER BY name ASC
-    `).all(canonical, professionId) as any[];
+    `).all(canonical) as any[];
 
     return rows.map(r => ({
       ...r,
-      isInferredForAlias: resolution.inferredAreaId ? r.id === resolution.inferredAreaId : false
+      isInferredForAlias: false,
+      isSpecificLocked: false
     }));
   }
 
@@ -130,8 +161,9 @@ export class CapabilityService {
     let userAreaIds = this.getUserPracticeAreas(userId, tenantId);
 
     // Se usuário não tiver áreas cadastradas, infere a área inicial correspondente a partir da resolução canônica
-    if (userAreaIds.length === 0 && resolution.inferredAreaId) {
-      userAreaIds = [resolution.inferredAreaId];
+    const autoAreaId = resolution.automaticPracticeAreaId || resolution.inferredAreaId;
+    if (userAreaIds.length === 0 && autoAreaId) {
+      userAreaIds = [autoAreaId];
     }
 
     // 3. Busca opcionais ativos pelo usuário

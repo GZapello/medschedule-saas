@@ -23,10 +23,11 @@ export interface PracticeArea {
   profession_id: string;
   name: string;
   slug: string;
-  type: 'practice_area' | 'approach';
+  type: 'SPECIALTY' | 'AREA' | 'APPROACH' | 'METHOD' | 'practice_area' | 'approach' | string;
   description?: string;
   active?: boolean;
   isInferredForAlias?: boolean;
+  isSpecificLocked?: boolean;
 }
 
 export interface ComputedUserCapabilities {

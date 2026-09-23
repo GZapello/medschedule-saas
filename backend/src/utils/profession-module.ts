@@ -37,13 +37,26 @@ export interface ResolveProfessionInput {
   registrationType?: string | null;
 }
 
+export type ProfessionTaxonomyCategory =
+  | 'CANONICAL'            // Profissão canônica genérica (Médico, Fisioterapeuta, etc.)
+  | 'SPECIALTY_ALIAS'      // Título que é uma especialidade direta (Cardiologista, etc.)
+  | 'APPROACH_ALIAS'       // Título que é uma abordagem clínica direta (Psicanalista, etc.)
+  | 'GENERAL_ALIAS'        // Título sinônimo geral (Medicina, Fisioterapia, etc.)
+  | 'HEALTH_SUPPORT'       // Profissão de apoio / outra área de saúde sem módulo clínico dedicado (Enfermeiro, etc.)
+  | 'ADMINISTRATIVE'       // Função administrativa / gestão
+  | 'NON_CLINICAL';        // Outras áreas não clínicas (Advogado, etc.)
+
 export interface CanonicalProfessionResolution {
   canonicalId: string;
   canonicalName: string;
   commercialModule: ZemdaModule | null;
   flags: ModuleFlags;
+  taxonomyCategory: ProfessionTaxonomyCategory;
+  isSpecificAlias: boolean;
   inferredAreaId?: string;
   inferredAreaName?: string;
+  automaticPracticeAreaId?: string;
+  automaticPracticeAreaName?: string;
   boardLabel?: string;
 }
 
@@ -62,7 +75,320 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
 
   const combined = `${pId} ${pName} ${pSlug}`.toLowerCase();
 
-  // 1. Psicopedagogia (Verificado antes de Psicologia para evitar colisão com "psico")
+  // =========================================================================
+  // 1. ÁREAS DE SAÚDE DE APOIO & OUTRAS (Verificadas antes para evitar falsos positivos)
+  // =========================================================================
+
+  // 1.1 Biomedicina (DEVE ser verificada antes de Medicina para não colidir com 'medic')
+  if (
+    pId === 'prof-biomedicina' ||
+    pSlug === 'biomedicina' ||
+    combined.includes('biomedic') ||
+    regType === 'CRBM'
+  ) {
+    return {
+      canonicalId: 'prof-biomedicina',
+      canonicalName: 'Biomédico(a)',
+      commercialModule: null,
+      boardLabel: 'CRBM',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  // 1.2 Medicina Veterinária (DEVE ser verificada antes de Medicina para não colidir com 'médic')
+  if (
+    pId === 'prof-veterinario' ||
+    pId === 'prof-medicina-veterinaria' ||
+    pSlug === 'veterinario' ||
+    pSlug === 'medicina-veterinaria' ||
+    combined.includes('veterin') ||
+    regType === 'CRMV'
+  ) {
+    return {
+      canonicalId: 'prof-veterinario',
+      canonicalName: 'Médico(a) Veterinário(a)',
+      commercialModule: null,
+      boardLabel: 'CRMV',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  // 1.3 Enfermagem e Técnico de Enfermagem
+  if (
+    pId === 'prof-tec-enfermagem' ||
+    pSlug === 'tecnico-enfermagem' ||
+    combined.includes('tec-enfermagem') ||
+    combined.includes('técnico de enfermagem') ||
+    combined.includes('tecnico de enfermagem') ||
+    combined.includes('tecnico enfermagem')
+  ) {
+    return {
+      canonicalId: 'prof-tec-enfermagem',
+      canonicalName: 'Técnico(a) de Enfermagem',
+      commercialModule: null,
+      boardLabel: 'COREN',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  if (
+    pId === 'prof-enfermeiro' ||
+    pId === 'prof-enfermagem' ||
+    pSlug === 'enfermeiro' ||
+    pSlug === 'enfermagem' ||
+    combined.includes('enferm') ||
+    regType === 'COREN'
+  ) {
+    return {
+      canonicalId: 'prof-enfermeiro',
+      canonicalName: 'Enfermeiro(a)',
+      commercialModule: null,
+      boardLabel: 'COREN',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  // 1.4 Farmácia
+  if (
+    pId === 'prof-farmacia' ||
+    pSlug === 'farmacia' ||
+    combined.includes('farmac') ||
+    regType === 'CRF'
+  ) {
+    return {
+      canonicalId: 'prof-farmacia',
+      canonicalName: 'Farmacêutico(a)',
+      commercialModule: null,
+      boardLabel: 'CRF',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  // 1.5 Serviço Social
+  if (
+    pId === 'prof-servico-social' ||
+    pSlug === 'servico-social' ||
+    combined.includes('serviço social') ||
+    combined.includes('servico social') ||
+    combined.includes('assistente social') ||
+    regType === 'CRESS'
+  ) {
+    return {
+      canonicalId: 'prof-servico-social',
+      canonicalName: 'Assistente Social',
+      commercialModule: null,
+      boardLabel: 'CRESS',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  // 1.6 Terapias Complementares / Apoio
+  if (pId === 'prof-musicoterapia' || combined.includes('musicoterap')) {
+    return {
+      canonicalId: 'prof-musicoterapia',
+      canonicalName: 'Musicoterapeuta',
+      commercialModule: null,
+      boardLabel: 'UBAM',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  if (pId === 'prof-arteterapia' || combined.includes('arteterap')) {
+    return {
+      canonicalId: 'prof-arteterapia',
+      canonicalName: 'Arteterapeuta',
+      commercialModule: null,
+      boardLabel: 'UBAAT',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  if (pId === 'prof-podologia' || combined.includes('podolog')) {
+    return {
+      canonicalId: 'prof-podologia',
+      canonicalName: 'Podólogo(a)',
+      commercialModule: null,
+      boardLabel: 'Registro',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  if (pId === 'prof-acupuntura' || combined.includes('acupuntur')) {
+    return {
+      canonicalId: 'prof-acupuntura',
+      canonicalName: 'Acupunturista',
+      commercialModule: null,
+      boardLabel: 'Registro',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  if (pId === 'prof-esteticista' || combined.includes('esteticist') || combined.includes('estética facial')) {
+    return {
+      canonicalId: 'prof-esteticista',
+      canonicalName: 'Esteticista',
+      commercialModule: null,
+      boardLabel: 'Registro Técnico',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  if (pId === 'prof-doula' || combined.includes('doula') || combined.includes('amamentação')) {
+    return {
+      canonicalId: 'prof-doula',
+      canonicalName: 'Doula / Consultora de Amamentação',
+      commercialModule: null,
+      boardLabel: 'Certificação',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  if (pId === 'prof-instrutor-pilates' || combined.includes('pilates')) {
+    return {
+      canonicalId: 'prof-instrutor-pilates',
+      canonicalName: 'Instrutor de Pilates',
+      commercialModule: null,
+      boardLabel: 'Certificação',
+      taxonomyCategory: 'HEALTH_SUPPORT',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  // =========================================================================
+  // 2. FUNÇÕES ADMINISTRATIVAS E GESTÃO
+  // =========================================================================
+  if (
+    pId === 'prof-administrador' ||
+    pId === 'prof-gestor' ||
+    pId === 'prof-auxiliar-adm' ||
+    pId === 'prof-recepcionista' ||
+    pId === 'prof-secretaria' ||
+    pId === 'prof-financeiro' ||
+    pId === 'prof-rh' ||
+    pId === 'prof-coord-clinica' ||
+    pId === 'prof-direcao-tecnica' ||
+    pSlug === 'administrador' ||
+    pSlug === 'gestor' ||
+    pSlug === 'recepcionista' ||
+    pSlug === 'secretaria' ||
+    pSlug === 'financeiro' ||
+    pSlug === 'recursos-humanos' ||
+    pSlug === 'coordenacao-clinica' ||
+    pSlug === 'direcao-tecnica' ||
+    combined.includes('recepcionista') ||
+    combined.includes('secretári') ||
+    combined.includes('secretari') ||
+    combined.includes('financeiro') ||
+    combined.includes('recursos humanos') ||
+    combined.includes('coordenação clínica') ||
+    combined.includes('direção técnica') ||
+    combined.includes('auxiliar administrativo')
+  ) {
+    let name = 'Administrador da Clínica';
+    let board = 'CRA';
+    if (pId === 'prof-recepcionista' || combined.includes('recepcionista')) {
+      name = 'Recepcionista';
+      board = undefined as any;
+    } else if (pId === 'prof-secretaria' || combined.includes('secretar')) {
+      name = 'Secretário(a)';
+      board = undefined as any;
+    } else if (pId === 'prof-auxiliar-adm' || combined.includes('auxiliar')) {
+      name = 'Auxiliar Administrativo';
+      board = undefined as any;
+    } else if (pId === 'prof-financeiro' || combined.includes('financeiro')) {
+      name = 'Financeiro';
+      board = undefined as any;
+    } else if (pId === 'prof-rh' || combined.includes('recursos humanos')) {
+      name = 'Recursos Humanos';
+      board = undefined as any;
+    } else if (pId === 'prof-coord-clinica' || combined.includes('coordena')) {
+      name = 'Coordenação Clínica';
+      board = undefined as any;
+    } else if (pId === 'prof-direcao-tecnica' || combined.includes('direção') || combined.includes('direcao')) {
+      name = 'Direção Técnica';
+      board = undefined as any;
+    }
+
+    return {
+      canonicalId: pId || 'prof-administrador',
+      canonicalName: name,
+      commercialModule: null,
+      boardLabel: board,
+      taxonomyCategory: 'ADMINISTRATIVE',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  // =========================================================================
+  // 3. ÁREAS NÃO CLÍNICAS (Outros domínios)
+  // =========================================================================
+  if (
+    pId === 'prof-advogado' ||
+    pId === 'prof-contador' ||
+    pId === 'prof-consultor' ||
+    pId === 'prof-coach' ||
+    pId === 'prof-cabeleireiro' ||
+    pId === 'prof-lash-designer' ||
+    pId === 'prof-adestrador' ||
+    pId === 'prof-professor-particular' ||
+    pId === 'prof-tutor-escolar' ||
+    pId === 'prof-outro' ||
+    combined.includes('advogad') ||
+    combined.includes('contador') ||
+    combined.includes('consultor') ||
+    combined.includes('coach') ||
+    combined.includes('cabeleireir') ||
+    combined.includes('barbeiro') ||
+    combined.includes('lash') ||
+    combined.includes('sobrancelha') ||
+    combined.includes('adestrador') ||
+    combined.includes('professor particular') ||
+    combined.includes('tutor')
+  ) {
+    let board: string | undefined = undefined;
+    if (combined.includes('advogad') || regType === 'OAB') board = 'OAB';
+    else if (combined.includes('contador') || regType === 'CRC') board = 'CRC';
+
+    return {
+      canonicalId: pId || 'prof-outro',
+      canonicalName: normInput.name || 'Outro Profissional',
+      commercialModule: null,
+      boardLabel: board,
+      taxonomyCategory: 'NON_CLINICAL',
+      isSpecificAlias: false,
+      flags: makeFlags(null)
+    };
+  }
+
+  // =========================================================================
+  // 4. PSICOPEDAGOGIA (Verificado antes de Psicologia para não colidir com 'psico')
+  // =========================================================================
   if (
     pId === 'prof-psicopedagogo' ||
     pId === 'prof-psicopedagogia' ||
@@ -71,18 +397,21 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('psicopedag') ||
     regType === 'ABPP'
   ) {
+    const isGeneralAlias = pId === 'prof-psicopedagogia' || pSlug === 'psicopedagogia';
     return {
       canonicalId: 'prof-psicopedagogo',
       canonicalName: 'Psicopedagogo',
       commercialModule: 'ZemdaPP',
       boardLabel: 'ABPp',
-      inferredAreaId: 'pa-pp-clinica',
-      inferredAreaName: 'Psicopedagogia Clínica',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
       flags: makeFlags('ZemdaPP')
     };
   }
 
-  // 2. Personal Trainer / Educação Física (Verificado com prioridade para cobrir todos os aliases)
+  // =========================================================================
+  // 5. PERSONAL TRAINER / EDUCAÇÃO FÍSICA
+  // =========================================================================
   if (
     pId === 'prof-personal-trainer' ||
     pId === 'prof-educacao-fisica' ||
@@ -100,84 +429,67 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('musculacao') ||
     regType === 'CREF'
   ) {
+    const isGeneralAlias = pId === 'prof-educacao-fisica' || pSlug === 'educacao-fisica';
     return {
       canonicalId: 'prof-personal-trainer',
       canonicalName: 'Personal Trainer / Profissional de Educação Física',
       commercialModule: 'ZemdaPersonal',
       boardLabel: 'CREF',
-      inferredAreaId: 'pa-personal-musculacao',
-      inferredAreaName: 'Musculação & Hipertrofia',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
       flags: makeFlags('ZemdaPersonal')
     };
   }
 
-  // 3. Medicina Geral e Subespecialidades Médicas (Aliases médicos)
+  // =========================================================================
+  // 6. MEDICINA E ESPECIALIDADES MÉDICAS (CRM)
+  // =========================================================================
+  // A. Aliases de Especialidade Específica
   if (
-    pId === 'prof-medico' ||
-    pId === 'prof-medicina' ||
-    pId === 'prof-cardiologista' ||
-    pId === 'prof-dermatologista' ||
-    pId === 'prof-pediatra' ||
-    pId === 'prof-psiquiatra' ||
-    pId === 'prof-neurologista' ||
-    pId === 'prof-geriatra' ||
-    pId === 'prof-ortopedista' ||
-    pId === 'prof-endocrinologista' ||
-    pId === 'prof-reumatologista' ||
-    pSlug === 'medico' ||
-    pSlug === 'medicina' ||
-    pSlug === 'cardiologista' ||
-    pSlug === 'dermatologista' ||
-    pSlug === 'pediatra' ||
-    pSlug === 'psiquiatra' ||
-    pSlug === 'neurologista' ||
-    pSlug === 'geriatra' ||
-    pSlug === 'ortopedista' ||
-    pSlug === 'endocrinologista' ||
-    pSlug === 'reumatologista' ||
-    combined.includes('médic') ||
-    combined.includes('medic') ||
-    combined.includes('cardiolog') ||
-    combined.includes('dermatolog') ||
-    combined.includes('pediatr') ||
-    combined.includes('psiquiatr') ||
-    combined.includes('neurolog') ||
-    combined.includes('geriatr') ||
-    combined.includes('ortoped') ||
-    combined.includes('endocrin') ||
-    combined.includes('reumatolog') ||
-    regType === 'CRM'
+    pId === 'prof-cardiologista' || pSlug === 'cardiologista' || combined.includes('cardiolog') ||
+    pId === 'prof-dermatologista' || pSlug === 'dermatologista' || combined.includes('dermatolog') ||
+    pId === 'prof-psiquiatra' || pSlug === 'psiquiatra' || combined.includes('psiquiatr') ||
+    pId === 'prof-neurologista' || pSlug === 'neurologista' || combined.includes('neurolog') ||
+    pId === 'prof-pediatra' || pSlug === 'pediatra' || combined.includes('pediatr') ||
+    pId === 'prof-geriatra' || pSlug === 'geriatra' || combined.includes('geriatr') ||
+    pId === 'prof-endocrinologista' || pSlug === 'endocrinologista' || combined.includes('endocrin') ||
+    pId === 'prof-ortopedista' || pSlug === 'ortopedista' || combined.includes('ortoped') ||
+    pId === 'prof-reumatologista' || pSlug === 'reumatologista' || combined.includes('reumatolog') ||
+    pId === 'prof-clinico-geral' || pSlug === 'clinico-geral' || combined.includes('clinico geral') || combined.includes('clínico geral')
   ) {
-    let inferredAreaId = 'pa-med-clinica';
-    let inferredAreaName = 'Clínica Médica';
+    let areaId = 'pa-med-clinica';
+    let areaName = 'Clínica Médica';
 
-    if (pId === 'prof-psiquiatra' || combined.includes('psiquiatr')) {
-      inferredAreaId = 'pa-med-psiquiatria';
-      inferredAreaName = 'Psiquiatria';
-    } else if (pId === 'prof-cardiologista' || combined.includes('cardiolog')) {
-      inferredAreaId = 'pa-med-cardio';
-      inferredAreaName = 'Cardiologia';
+    if (pId === 'prof-cardiologista' || combined.includes('cardiolog')) {
+      areaId = 'pa-med-cardio';
+      areaName = 'Cardiologia';
     } else if (pId === 'prof-dermatologista' || combined.includes('dermatolog')) {
-      inferredAreaId = 'pa-med-dermato';
-      inferredAreaName = 'Dermatologia';
-    } else if (pId === 'prof-pediatra' || combined.includes('pediatr')) {
-      inferredAreaId = 'pa-med-pediatria';
-      inferredAreaName = 'Pediatria';
+      areaId = 'pa-med-dermato';
+      areaName = 'Dermatologia';
+    } else if (pId === 'prof-psiquiatra' || combined.includes('psiquiatr')) {
+      areaId = 'pa-med-psiquiatria';
+      areaName = 'Psiquiatria';
     } else if (pId === 'prof-neurologista' || combined.includes('neurolog')) {
-      inferredAreaId = 'pa-med-neuro';
-      inferredAreaName = 'Neurologia';
+      areaId = 'pa-med-neuro';
+      areaName = 'Neurologia';
+    } else if (pId === 'prof-pediatra' || combined.includes('pediatr')) {
+      areaId = 'pa-med-pediatria';
+      areaName = 'Pediatria';
     } else if (pId === 'prof-geriatra' || combined.includes('geriatr')) {
-      inferredAreaId = 'pa-med-geriatria';
-      inferredAreaName = 'Geriatria';
+      areaId = 'pa-med-geriatria';
+      areaName = 'Geriatria';
     } else if (pId === 'prof-endocrinologista' || combined.includes('endocrin')) {
-      inferredAreaId = 'pa-med-endocrino';
-      inferredAreaName = 'Endocrinologia';
+      areaId = 'pa-med-endocrino';
+      areaName = 'Endocrinologia';
     } else if (pId === 'prof-ortopedista' || combined.includes('ortoped')) {
-      inferredAreaId = 'pa-med-ortopedia';
-      inferredAreaName = 'Ortopedia e Traumatologia';
+      areaId = 'pa-med-ortopedia';
+      areaName = 'Ortopedia e Traumatologia';
     } else if (pId === 'prof-reumatologista' || combined.includes('reumatolog')) {
-      inferredAreaId = 'pa-med-reumato';
-      inferredAreaName = 'Reumatologia';
+      areaId = 'pa-med-reumato';
+      areaName = 'Reumatologia';
+    } else if (pId === 'prof-clinico-geral' || combined.includes('clinico geral') || combined.includes('clínico geral')) {
+      areaId = 'pa-med-clinica';
+      areaName = 'Clínica Médica';
     }
 
     return {
@@ -185,39 +497,63 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalName: 'Médico',
       commercialModule: 'ZemdaMed',
       boardLabel: 'CRM',
-      inferredAreaId,
-      inferredAreaName,
+      taxonomyCategory: 'SPECIALTY_ALIAS',
+      isSpecificAlias: true,
+      inferredAreaId: areaId,
+      inferredAreaName: areaName,
+      automaticPracticeAreaId: areaId,
+      automaticPracticeAreaName: areaName,
       flags: makeFlags('ZemdaMed')
     };
   }
 
-  // 4. Psicologia Clínica e Subespecialidades
+  // B. Medicina Canônica Genérica (Médico / Medicina)
   if (
-    pId === 'prof-psicologo' ||
-    pId === 'prof-psicologia' ||
-    pId === 'prof-neuropsicologo' ||
-    pId === 'prof-psicanalista' ||
-    pId === 'prof-terapeuta-familiar' ||
-    pSlug === 'psicologo' ||
-    pSlug === 'psicologia' ||
-    pSlug === 'neuropsicologo' ||
-    pSlug === 'psicanalista' ||
-    pSlug === 'terapeuta-familiar' ||
-    combined.includes('psicólog') ||
-    combined.includes('psicolog') ||
-    combined.includes('neuropsicól') ||
-    combined.includes('neuropsicol') ||
-    combined.includes('psicanal') ||
-    regType === 'CRP'
+    pId === 'prof-medico' ||
+    pId === 'prof-medicina' ||
+    pSlug === 'medico' ||
+    pSlug === 'medicina' ||
+    combined.includes('médic') ||
+    combined.includes('medic') ||
+    regType === 'CRM'
   ) {
-    let inferredAreaId = 'pa-psico-clinica';
-    let inferredAreaName = 'Psicologia Clínica';
+    const isGeneralAlias = pId === 'prof-medicina' || pSlug === 'medicina';
+    return {
+      canonicalId: 'prof-medico',
+      canonicalName: 'Médico',
+      commercialModule: 'ZemdaMed',
+      boardLabel: 'CRM',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
+      flags: makeFlags('ZemdaMed')
+    };
+  }
+
+  // =========================================================================
+  // 7. PSICOLOGIA CLÍNICA, ESPECIALIDADES E ABORDAGENS (CRP)
+  // =========================================================================
+  // A. Aliases de Especialidade ou Abordagem
+  if (
+    pId === 'prof-neuropsicologo' || pSlug === 'neuropsicologo' || combined.includes('neuropsic') ||
+    pId === 'prof-psicanalista' || pSlug === 'psicanalista' || combined.includes('psicanal') ||
+    pId === 'prof-terapeuta-familiar' || pSlug === 'terapeuta-familiar' || combined.includes('terapeuta familiar')
+  ) {
+    let areaId = 'pa-psico-clinica';
+    let areaName = 'Psicologia Clínica';
+    let category: ProfessionTaxonomyCategory = 'APPROACH_ALIAS';
+
     if (pId === 'prof-neuropsicologo' || combined.includes('neuropsic')) {
-      inferredAreaId = 'pa-psico-neuro';
-      inferredAreaName = 'Neuropsicologia';
+      areaId = 'pa-psico-neuro';
+      areaName = 'Neuropsicologia';
+      category = 'SPECIALTY_ALIAS';
     } else if (pId === 'prof-psicanalista' || combined.includes('psicanal')) {
-      inferredAreaId = 'pa-psico-psicanalise';
-      inferredAreaName = 'Psicanálise';
+      areaId = 'pa-psico-psicanalise';
+      areaName = 'Psicanálise';
+      category = 'APPROACH_ALIAS';
+    } else if (pId === 'prof-terapeuta-familiar' || combined.includes('terapeuta familiar')) {
+      areaId = 'pa-psico-outro';
+      areaName = 'Terapia Familiar e de Casal';
+      category = 'APPROACH_ALIAS';
     }
 
     return {
@@ -225,13 +561,41 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalName: 'Psicólogo',
       commercialModule: 'ZemdaPsico',
       boardLabel: 'CRP',
-      inferredAreaId,
-      inferredAreaName,
+      taxonomyCategory: category,
+      isSpecificAlias: true,
+      inferredAreaId: areaId,
+      inferredAreaName: areaName,
+      automaticPracticeAreaId: areaId,
+      automaticPracticeAreaName: areaName,
       flags: makeFlags('ZemdaPsico')
     };
   }
 
-  // 5. Fonoaudiologia
+  // B. Psicologia Canônica Genérica
+  if (
+    pId === 'prof-psicologo' ||
+    pId === 'prof-psicologia' ||
+    pSlug === 'psicologo' ||
+    pSlug === 'psicologia' ||
+    combined.includes('psicólog') ||
+    combined.includes('psicolog') ||
+    regType === 'CRP'
+  ) {
+    const isGeneralAlias = pId === 'prof-psicologia' || pSlug === 'psicologia';
+    return {
+      canonicalId: 'prof-psicologo',
+      canonicalName: 'Psicólogo',
+      commercialModule: 'ZemdaPsico',
+      boardLabel: 'CRP',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
+      flags: makeFlags('ZemdaPsico')
+    };
+  }
+
+  // =========================================================================
+  // 8. FONOAUDIOLOGIA (CRFa)
+  // =========================================================================
   if (
     pId === 'prof-fonoaudiologo' ||
     pId === 'prof-fonoaudiologia' ||
@@ -240,18 +604,21 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('fono') ||
     regType === 'CRFA'
   ) {
+    const isGeneralAlias = pId === 'prof-fonoaudiologia' || pSlug === 'fonoaudiologia';
     return {
       canonicalId: 'prof-fonoaudiologo',
       canonicalName: 'Fonoaudiólogo',
       commercialModule: 'ZemdaFono',
       boardLabel: 'CRFa',
-      inferredAreaId: 'pa-fono-linguagem',
-      inferredAreaName: 'Linguagem',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
       flags: makeFlags('ZemdaFono')
     };
   }
 
-  // 6. Terapia Ocupacional
+  // =========================================================================
+  // 9. TERAPIA OCUPACIONAL (CREFITO)
+  // =========================================================================
   if (
     pId === 'prof-terapeuta-ocupacional' ||
     pId === 'prof-terapia-ocupacional' ||
@@ -261,18 +628,21 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('terapia ocupacional') ||
     combined.includes('terapeuta ocupacional')
   ) {
+    const isGeneralAlias = pId === 'prof-terapia-ocupacional' || pSlug === 'terapia-ocupacional';
     return {
       canonicalId: 'prof-terapeuta-ocupacional',
       canonicalName: 'Terapeuta Ocupacional',
       commercialModule: 'ZemdaTO',
       boardLabel: 'CREFITO',
-      inferredAreaId: 'pa-to-pediatria',
-      inferredAreaName: 'Pediatria',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
       flags: makeFlags('ZemdaTO')
     };
   }
 
-  // 7. Nutrição
+  // =========================================================================
+  // 10. NUTRIÇÃO (CRN)
+  // =========================================================================
   if (
     pId === 'prof-nutricionista' ||
     pId === 'prof-nutricao' ||
@@ -281,54 +651,95 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('nutri') ||
     regType === 'CRN'
   ) {
+    const isGeneralAlias = pId === 'prof-nutricao' || pSlug === 'nutricao';
     return {
       canonicalId: 'prof-nutricionista',
       canonicalName: 'Nutricionista',
       commercialModule: 'ZemdaNutri',
       boardLabel: 'CRN',
-      inferredAreaId: 'pa-nutri-clinica',
-      inferredAreaName: 'Nutrição Clínica',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
       flags: makeFlags('ZemdaNutri')
     };
   }
 
-  // 8. Fisioterapia e abordagens corporais
+  // =========================================================================
+  // 11. FISIOTERAPIA E ABORDAGENS CORPORAIS (CREFITO)
+  // =========================================================================
+  // A. Aliases de Abordagens Específicas
   if (
-    pId === 'prof-fisioterapeuta' ||
-    pId === 'prof-fisioterapia' ||
-    pId === 'prof-osteopata' ||
-    pId === 'prof-quiropraxista' ||
-    pSlug === 'fisioterapeuta' ||
-    pSlug === 'fisioterapia' ||
-    pSlug === 'osteopata' ||
-    pSlug === 'quiropraxista' ||
-    combined.includes('fisio') ||
-    combined.includes('physio') ||
-    combined.includes('osteopat') ||
-    combined.includes('quiroprax')
+    pId === 'prof-osteopata' || pSlug === 'osteopata' || combined.includes('osteopat') ||
+    pId === 'prof-quiropraxista' || pSlug === 'quiropraxista' || combined.includes('quiroprax')
   ) {
-    let inferredAreaId = 'pa-fisio-traumato';
-    let inferredAreaName = 'Traumato-Ortopédica';
-    if (pId === 'prof-osteopata' || combined.includes('osteopat')) {
-      inferredAreaId = 'pa-fisio-osteo';
-      inferredAreaName = 'Osteopatia';
-    } else if (pId === 'prof-quiropraxista' || combined.includes('quiroprax')) {
-      inferredAreaId = 'pa-fisio-quiro';
-      inferredAreaName = 'Quiropraxia';
+    let areaId = 'pa-fisio-osteo';
+    let areaName = 'Osteopatia';
+    let board = 'Registro';
+
+    if (pId === 'prof-quiropraxista' || combined.includes('quiroprax')) {
+      areaId = 'pa-fisio-quiro';
+      areaName = 'Quiropraxia';
+      board = 'ABQ';
     }
 
     return {
       canonicalId: 'prof-fisioterapeuta',
       canonicalName: 'Fisioterapeuta',
       commercialModule: 'ZemdaFisio',
-      boardLabel: 'CREFITO',
-      inferredAreaId,
-      inferredAreaName,
+      boardLabel: board,
+      taxonomyCategory: 'APPROACH_ALIAS',
+      isSpecificAlias: true,
+      inferredAreaId: areaId,
+      inferredAreaName: areaName,
+      automaticPracticeAreaId: areaId,
+      automaticPracticeAreaName: areaName,
       flags: makeFlags('ZemdaFisio')
     };
   }
 
-  // 9. Cirurgião-Dentista / Odontologia
+  // B. Fisioterapia Canônica Genérica
+  if (
+    pId === 'prof-fisioterapeuta' ||
+    pId === 'prof-fisioterapia' ||
+    pSlug === 'fisioterapeuta' ||
+    pSlug === 'fisioterapia' ||
+    combined.includes('fisio') ||
+    combined.includes('physio')
+  ) {
+    const isGeneralAlias = pId === 'prof-fisioterapia' || pSlug === 'fisioterapia';
+    return {
+      canonicalId: 'prof-fisioterapeuta',
+      canonicalName: 'Fisioterapeuta',
+      commercialModule: 'ZemdaFisio',
+      boardLabel: 'CREFITO',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
+      flags: makeFlags('ZemdaFisio')
+    };
+  }
+
+  // =========================================================================
+  // 12. CIRURGIÃO-DENTISTA / ODONTOLOGIA (CRO)
+  // =========================================================================
+  // A. Aliases de Especialidade Odontológica
+  if (
+    pId === 'prof-ortodontista' || pSlug === 'ortodontista' || combined.includes('ortodont')
+  ) {
+    return {
+      canonicalId: 'prof-dentista',
+      canonicalName: 'Cirurgião-Dentista',
+      commercialModule: 'ZemdaOdonto',
+      boardLabel: 'CRO',
+      taxonomyCategory: 'SPECIALTY_ALIAS',
+      isSpecificAlias: true,
+      inferredAreaId: 'pa-odonto-orto',
+      inferredAreaName: 'Ortodontia',
+      automaticPracticeAreaId: 'pa-odonto-orto',
+      automaticPracticeAreaName: 'Ortodontia',
+      flags: makeFlags('ZemdaOdonto')
+    };
+  }
+
+  // B. Odontologia Canônica Genérica
   if (
     pId === 'prof-dentista' ||
     pId === 'prof-cirurgiao-dentista' ||
@@ -338,43 +749,30 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'odontologia' ||
     combined.includes('odonto') ||
     combined.includes('dentis') ||
-    combined.includes('cirurgi') ||
     regType === 'CRO'
   ) {
+    const isGeneralAlias = pId === 'prof-odontologia' || pSlug === 'odontologia';
     return {
       canonicalId: 'prof-dentista',
       canonicalName: 'Cirurgião-Dentista',
       commercialModule: 'ZemdaOdonto',
       boardLabel: 'CRO',
-      inferredAreaId: 'pa-odonto-geral',
-      inferredAreaName: 'Clínica Geral',
+      taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
+      isSpecificAlias: false,
       flags: makeFlags('ZemdaOdonto')
     };
   }
 
-  // 10. Funções Administrativas / Outros
-  if (
-    pId === 'prof-administrador' ||
-    pId === 'prof-gestor' ||
-    pSlug === 'administrador' ||
-    combined.includes('administrador') ||
-    combined.includes('gestor')
-  ) {
-    return {
-      canonicalId: 'prof-administrador',
-      canonicalName: 'Administrador da Clínica',
-      commercialModule: null,
-      boardLabel: 'CRA',
-      flags: makeFlags(null)
-    };
-  }
-
-  // Fallback seguro: Outro Profissional da Saúde
+  // =========================================================================
+  // 13. FALLBACK SEGURO: OUTRO PROFISSIONAL DA SAÚDE
+  // =========================================================================
   return {
     canonicalId: pId || 'prof-outro-saude',
     canonicalName: normInput.name || 'Outro Profissional da Saúde',
     commercialModule: null,
-    boardLabel: regType || undefined,
+    boardLabel: regType || 'Conselho/Registro',
+    taxonomyCategory: 'HEALTH_SUPPORT',
+    isSpecificAlias: false,
     flags: makeFlags(null)
   };
 }
