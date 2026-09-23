@@ -46,6 +46,8 @@ export class SandboxService {
       finalAreaIds = [resolution.inferredAreaId];
     }
 
+    const flags = resolution.flags;
+
     // 2. Cria Tenant Sandbox Isolado
     db.prepare(`
       INSERT INTO tenants (
@@ -64,10 +66,18 @@ export class SandboxService {
     db.prepare(`
       INSERT INTO users (
         id, tenant_id, name, email, password_hash, role, status,
-        profession_id, profession_name, practice_areas, created_at, updated_at
+        profession_id, profession_name, practice_areas,
+        zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled,
+        zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled,
+        zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled,
+        created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, 'sandbox_hash', 'professional', 'active',
-        ?, ?, ?, datetime('now'), datetime('now')
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        datetime('now'), datetime('now')
       )
     `).run(
       sandboxUserId,
@@ -76,25 +86,63 @@ export class SandboxService {
       `sandbox-${sessionId}@zemda.test`,
       canonicalProfId,
       profName,
-      finalAreaIds.join(', ')
+      finalAreaIds.join(', '),
+      flags.zemda_fisio_enabled,
+      flags.zemda_odonto_enabled,
+      flags.zemda_nutri_enabled,
+      flags.zemda_to_enabled,
+      flags.zemda_fono_enabled,
+      flags.zemda_pp_enabled,
+      flags.zemda_psico_enabled,
+      flags.zemda_personal_enabled,
+      flags.zemda_med_enabled
     );
 
     // 4. Cria Vínculo clinic_users Simulado
     db.prepare(`
       INSERT INTO clinic_users (
-        id, tenant_id, user_id, role, status, is_manager, zemda_personal_enabled, created_at
+        id, tenant_id, user_id, role, status, is_manager,
+        zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled,
+        zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled,
+        zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled,
+        zemda_body_enabled, created_at
       ) VALUES (
-        ?, ?, ?, 'professional', 'active', 0, ?, datetime('now')
+        ?, ?, ?, 'professional', 'active', 0,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        1, datetime('now')
       )
-    `).run('cu-' + sessionId, sandboxTenantId, sandboxUserId, commercialModule === 'ZemdaPersonal' ? 1 : 0);
+    `).run(
+      'cu-' + sessionId,
+      sandboxTenantId,
+      sandboxUserId,
+      flags.zemda_fisio_enabled,
+      flags.zemda_odonto_enabled,
+      flags.zemda_nutri_enabled,
+      flags.zemda_to_enabled,
+      flags.zemda_fono_enabled,
+      flags.zemda_pp_enabled,
+      flags.zemda_psico_enabled,
+      flags.zemda_personal_enabled,
+      flags.zemda_med_enabled
+    );
 
     // 5. Cria Cadastro em professionals
     db.prepare(`
       INSERT INTO professionals (
         id, tenant_id, user_id, name, profession_id, registration_type,
-        registration_number, practice_areas, zemda_personal_enabled, active, created_at, updated_at
+        registration_number, practice_areas,
+        zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled,
+        zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled,
+        zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled,
+        active, created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, '123456-TESTE', ?, ?, 1, datetime('now'), datetime('now')
+        ?, ?, ?, ?, ?, ?, '123456-TESTE', ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        1, datetime('now'), datetime('now')
       )
     `).run(
       sandboxProfId,
@@ -104,7 +152,15 @@ export class SandboxService {
       canonicalProfId,
       regBoard,
       finalAreaIds.join(', '),
-      commercialModule === 'ZemdaPersonal' ? 1 : 0
+      flags.zemda_fisio_enabled,
+      flags.zemda_odonto_enabled,
+      flags.zemda_nutri_enabled,
+      flags.zemda_to_enabled,
+      flags.zemda_fono_enabled,
+      flags.zemda_pp_enabled,
+      flags.zemda_psico_enabled,
+      flags.zemda_personal_enabled,
+      flags.zemda_med_enabled
     );
 
     // 6. Registra Áreas de Atuação na Sessão
@@ -151,9 +207,15 @@ export class SandboxService {
     );
 
     const permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'create_patient', 'edit_patient', 'access_zemda_body'];
-    if (commercialModule === 'ZemdaPersonal') {
-      permissions.push('access_zemda_personal');
-    }
+    if (flags.zemda_personal_enabled === 1) permissions.push('access_zemda_personal');
+    if (flags.zemda_med_enabled === 1) permissions.push('access_zemda_med');
+    if (flags.zemda_fisio_enabled === 1) permissions.push('access_zemda_fisio');
+    if (flags.zemda_odonto_enabled === 1) permissions.push('access_zemda_odonto');
+    if (flags.zemda_nutri_enabled === 1) permissions.push('access_zemda_nutri');
+    if (flags.zemda_to_enabled === 1) permissions.push('access_zemda_to');
+    if (flags.zemda_fono_enabled === 1) permissions.push('access_zemda_fono');
+    if (flags.zemda_psico_enabled === 1) permissions.push('access_zemda_psico');
+    if (flags.zemda_pp_enabled === 1) permissions.push('access_zemda_pp');
 
     const userObj = {
       id: sandboxUserId,
@@ -165,6 +227,8 @@ export class SandboxService {
       professionalId: sandboxProfId,
       professionId: canonicalProfId,
       professionName: profName,
+      canonicalProfessionId: canonicalProfId,
+      canonicalProfessionName: profName,
       registrationType: regBoard,
       registrationNumber: '123456-TESTE',
       practiceAreas: finalAreaIds.join(', '),
@@ -172,6 +236,16 @@ export class SandboxService {
       commercialModule,
       capabilities: capabilities.activeCapabilities,
       permissions,
+      zemdaMedEnabled: flags.zemda_med_enabled === 1,
+      zemdaFisioEnabled: flags.zemda_fisio_enabled === 1,
+      zemdaOdontoEnabled: flags.zemda_odonto_enabled === 1,
+      zemdaNutriEnabled: flags.zemda_nutri_enabled === 1,
+      zemdaToEnabled: flags.zemda_to_enabled === 1,
+      zemdaFonoEnabled: flags.zemda_fono_enabled === 1,
+      zemdaPsicoEnabled: flags.zemda_psico_enabled === 1,
+      zemdaPPEnabled: flags.zemda_pp_enabled === 1,
+      zemdaPersonalEnabled: flags.zemda_personal_enabled === 1,
+      zemdaBodyEnabled: true,
       isSandbox: true,
       sandboxSessionId: sessionId,
       sandboxPlanCode: planCode

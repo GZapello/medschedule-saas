@@ -1,5 +1,5 @@
 import { completeProfessionalProfile } from '../utils/professional-profile';
-import { resolveProfessionModule } from '../utils/profession-module';
+import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
@@ -222,12 +222,13 @@ export class AuthController {
       const isEligibleUser = user.role !== 'superadmin' && (isProfessionalUser || isManagerUser);
 
       // Resolução centralizada com exclusividade mútua baseada na profissão oficial atual
-      const { flags: modFlags } = resolveProfessionModule({
+      const professionResolution = resolveCanonicalProfession({
         id: profDetails?.profession_id,
         name: profDetails?.profession_name,
         slug: profDetails?.profession_slug,
         registrationType: profDetails?.registration_type
       });
+      const modFlags = professionResolution.flags;
 
       const zemdaFisioEnabled = isEligibleUser && modFlags.zemda_fisio_enabled === 1;
       const zemdaOdontoEnabled = isEligibleUser && modFlags.zemda_odonto_enabled === 1;
@@ -275,6 +276,8 @@ export class AuthController {
           privacyAcceptedAt: user.privacy_accepted_at || null,
           professionalId: profDetails?.professional_id,
           professionId: profDetails?.profession_id,
+          canonicalProfessionId: professionResolution.canonicalId,
+          canonicalProfessionName: professionResolution.canonicalName,
           professionName: profDetails?.profession_name,
           professionSlug: profDetails?.profession_slug,
           registrationType: profDetails?.registration_type,
@@ -421,12 +424,13 @@ export class AuthController {
       const isEligibleUser = user.role !== 'superadmin' && (isProfessionalUser || isManagerUser);
 
       // Resolução centralizada com exclusividade mútua baseada na profissão oficial atual
-      const { flags: modFlags } = resolveProfessionModule({
+      const professionResolution = resolveCanonicalProfession({
         id: profDetails?.profession_id,
         name: profDetails?.profession_name,
         slug: profDetails?.profession_slug,
         registrationType: profDetails?.registration_type
       });
+      const modFlags = professionResolution.flags;
 
       const zemdaFisioEnabled = isEligibleUser && modFlags.zemda_fisio_enabled === 1;
       const zemdaOdontoEnabled = isEligibleUser && modFlags.zemda_odonto_enabled === 1;
@@ -473,6 +477,8 @@ export class AuthController {
           privacyAcceptedAt: user.privacy_accepted_at || null,
           professionalId: profDetails?.professional_id,
           professionId: profDetails?.profession_id,
+          canonicalProfessionId: professionResolution.canonicalId,
+          canonicalProfessionName: professionResolution.canonicalName,
           professionName: profDetails?.profession_name,
           professionSlug: profDetails?.profession_slug,
           registrationType: profDetails?.registration_type,
@@ -491,7 +497,7 @@ export class AuthController {
           zemdaPersonalEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
           zemdaBodyEnabled,
-          commercialModule: computedCaps?.commercialModule || null,
+          commercialModule: computedCaps?.commercialModule || professionResolution.commercialModule || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
           selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []

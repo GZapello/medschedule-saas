@@ -138,6 +138,9 @@ export function migrateModularArchitecture(rawDb: DatabaseSync): void {
   addColIfMissing('users', 'zemda_med_enabled', 'INTEGER DEFAULT 0');
   addColIfMissing('professionals', 'zemda_med_enabled', 'INTEGER DEFAULT 0');
 
+  // Assegura existência idempotente de profissões canônicas (sem reativar desativadas)
+  ensureCanonicalProfessions(rawDb);
+
   // Seed de Capabilities
   seedCapabilities(rawDb);
 
@@ -152,9 +155,6 @@ export function migrateModularArchitecture(rawDb: DatabaseSync): void {
 }
 
 function seedCapabilities(rawDb: DatabaseSync): void {
-  const count = (rawDb.prepare('SELECT count(*) as c FROM capabilities').get() as any)?.c || 0;
-  if (count > 0) return;
-
   const caps = [
     // CORE
     { id: 'CORE_SCHEDULE', category: 'CORE', name: 'Agenda Interativa', description: 'Agendamentos, horários, salas e slots' },
@@ -235,10 +235,49 @@ function seedCapabilities(rawDb: DatabaseSync): void {
   }
 }
 
-function seedPracticeAreas(rawDb: DatabaseSync): void {
-  const count = (rawDb.prepare('SELECT count(*) as c FROM practice_areas').get() as any)?.c || 0;
-  if (count > 0) return;
+function ensureCanonicalProfessions(rawDb: DatabaseSync): void {
+  const baseProfs = [
+    { id: 'prof-medico', cat_id: 'cat-med', name: 'Medicina', slug: 'medicina', reg_label: 'CRM', reg_req: 1 },
+    { id: 'prof-fisioterapeuta', cat_id: 'cat-reab', name: 'Fisioterapia', slug: 'fisioterapia', reg_label: 'CREFITO', reg_req: 1 },
+    { id: 'prof-fonoaudiologo', cat_id: 'cat-fono', name: 'Fonoaudiologia', slug: 'fonoaudiologia', reg_label: 'CRFa', reg_req: 1 },
+    { id: 'prof-terapeuta-ocupacional', cat_id: 'cat-reab', name: 'Terapia Ocupacional', slug: 'terapia-ocupacional', reg_label: 'CREFITO', reg_req: 1 },
+    { id: 'prof-psicologo', cat_id: 'cat-mental', name: 'Psicologia', slug: 'psicologia', reg_label: 'CRP', reg_req: 1 },
+    { id: 'prof-psicopedagogo', cat_id: 'cat-mental', name: 'Psicopedagogia', slug: 'psicopedagogia', reg_label: 'ABPp', reg_req: 0 },
+    { id: 'prof-nutricionista', cat_id: 'cat-nutri', name: 'Nutrição', slug: 'nutricao', reg_label: 'CRN', reg_req: 1 },
+    { id: 'prof-personal-trainer', cat_id: 'cat-esporte', name: 'Personal Trainer', slug: 'personal-trainer', reg_label: 'CREF', reg_req: 1 },
+    { id: 'prof-dentista', cat_id: 'cat-odonto', name: 'Odontologia', slug: 'odontologia', reg_label: 'CRO', reg_req: 1 },
+    { id: 'prof-administrador', cat_id: 'cat-outros', name: 'Administrador da Clínica', slug: 'administrador', reg_label: 'CRA', reg_req: 0 },
 
+    // Especialidades com ID próprio
+    { id: 'prof-neurologista', cat_id: 'cat-med', name: 'Neurologista', slug: 'neurologista', reg_label: 'CRM', reg_req: 1 },
+    { id: 'prof-geriatra', cat_id: 'cat-med', name: 'Geriatra', slug: 'geriatra', reg_label: 'CRM', reg_req: 1 },
+    { id: 'prof-endocrinologista', cat_id: 'cat-med', name: 'Endocrinologista', slug: 'endocrinologista', reg_label: 'CRM', reg_req: 1 },
+    { id: 'prof-ortopedista', cat_id: 'cat-med', name: 'Ortopedista', slug: 'ortopedista', reg_label: 'CRM', reg_req: 1 },
+    { id: 'prof-reumatologista', cat_id: 'cat-med', name: 'Reumatologista', slug: 'reumatologista', reg_label: 'CRM', reg_req: 1 },
+    { id: 'prof-clinico-geral', cat_id: 'cat-med', name: 'Clínico Geral', slug: 'clinico-geral', reg_label: 'CRM', reg_req: 1 },
+    { id: 'prof-ginecologista', cat_id: 'cat-med', name: 'Ginecologista e Obstetra', slug: 'ginecologista', reg_label: 'CRM', reg_req: 1 },
+    { id: 'prof-ortodontista', cat_id: 'cat-odonto', name: 'Ortodontista', slug: 'ortodontista', reg_label: 'CRO', reg_req: 1 }
+  ];
+
+  let deletedProfIds = new Set<string>();
+  try {
+    deletedProfIds = new Set(
+      rawDb.prepare('SELECT id FROM deleted_global_professions').all().map((r: any) => r.id)
+    );
+  } catch (_) {}
+
+  const insProfStmt = rawDb.prepare(`
+    INSERT OR IGNORE INTO professions (id, category_id, name, slug, registration_board_label, registration_required, active)
+    VALUES (?, ?, ?, ?, ?, ?, 1)
+  `);
+
+  for (const bp of baseProfs) {
+    if (deletedProfIds.has(bp.id)) continue;
+    insProfStmt.run(bp.id, bp.cat_id, bp.name, bp.slug, bp.reg_label, bp.reg_req);
+  }
+}
+
+function seedPracticeAreas(rawDb: DatabaseSync): void {
   const areas: { id: string; professionId: string; name: string; slug: string; type: string }[] = [
     // 1. Fisioterapia (prof-fisioterapeuta)
     { id: 'pa-fisio-traumato', professionId: 'prof-fisioterapeuta', name: 'Traumato-Ortopédica', slug: 'traumato-ortopedica', type: 'SPECIALTY' },
@@ -292,6 +331,7 @@ function seedPracticeAreas(rawDb: DatabaseSync): void {
     { id: 'pa-psico-tcc', professionId: 'prof-psicologo', name: 'Terapia Cognitivo-Comportamental (TCC)', slug: 'tcc', type: 'APPROACH' },
     { id: 'pa-psico-psicanalise', professionId: 'prof-psicologo', name: 'Psicanálise', slug: 'psicanalise', type: 'APPROACH' },
     { id: 'pa-psico-aba', professionId: 'prof-psicologo', name: 'Análise do Comportamento Aplicada (ABA)', slug: 'aba', type: 'APPROACH' },
+    { id: 'pa-psico-familia', professionId: 'prof-psicologo', name: 'Terapia Familiar e de Casal', slug: 'terapia-familiar-casal', type: 'APPROACH' },
     { id: 'pa-psico-outro', professionId: 'prof-psicologo', name: 'Outra abordagem de Psicologia', slug: 'outra-abordagem-psico', type: 'APPROACH' },
 
     // 5. Psicopedagogia (prof-psicopedagogo)
@@ -347,11 +387,17 @@ function seedPracticeAreas(rawDb: DatabaseSync): void {
     { id: 'pa-med-cardio', professionId: 'prof-medico', name: 'Cardiologia', slug: 'cardiologia', type: 'SPECIALTY' },
     { id: 'pa-med-dermato', professionId: 'prof-medico', name: 'Dermatologia', slug: 'dermatologia', type: 'SPECIALTY' },
     { id: 'pa-med-reumato', professionId: 'prof-medico', name: 'Reumatologia', slug: 'reumatologia', type: 'SPECIALTY' },
+    { id: 'pa-med-gineco', professionId: 'prof-medico', name: 'Ginecologia e Obstetrícia', slug: 'ginecologia-obstetricia', type: 'SPECIALTY' },
     { id: 'pa-med-outro', professionId: 'prof-medico', name: 'Outra especialidade Médica', slug: 'outra-area-med', type: 'SPECIALTY' }
   ];
 
   const stmt = rawDb.prepare(`
     INSERT OR IGNORE INTO practice_areas (id, profession_id, name, slug, type, active)
+    VALUES (?, ?, ?, ?, ?, 1)
+  `);
+
+  const stmtSpec = rawDb.prepare(`
+    INSERT OR IGNORE INTO specialties (id, profession_id, name, slug, color, active)
     VALUES (?, ?, ?, ?, ?, 1)
   `);
 
@@ -362,20 +408,41 @@ function seedPracticeAreas(rawDb: DatabaseSync): void {
     );
   } catch (_) {}
 
+  let existingProfIds = new Set<string>();
+  try {
+    existingProfIds = new Set(
+      rawDb.prepare('SELECT id FROM professions').all().map((r: any) => r.id)
+    );
+  } catch (_) {}
+
   for (const a of areas) {
     if (deletedProfIds.has(a.professionId)) continue;
+    if (!existingProfIds.has(a.professionId)) continue;
     stmt.run(a.id, a.professionId, a.name, a.slug, a.type);
+    stmtSpec.run(a.id, a.professionId, a.name, a.slug, '#6366f1');
   }
 }
 
 function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
-  const count = (rawDb.prepare('SELECT count(*) as c FROM profession_capabilities').get() as any)?.c || 0;
-  if (count > 0) return;
-
-  const insertProfCap = rawDb.prepare(`
+  const insertProfCapRaw = rawDb.prepare(`
     INSERT OR IGNORE INTO profession_capabilities (profession_id, capability_id, rule)
     VALUES (?, ?, ?)
   `);
+
+  let existingProfIds = new Set<string>();
+  try {
+    existingProfIds = new Set(
+      rawDb.prepare('SELECT id FROM professions').all().map((r: any) => r.id)
+    );
+  } catch (_) {}
+
+  const insertProfCap = {
+    run: (profId: string, capId: string, rule: string) => {
+      if (existingProfIds.has(profId)) {
+        insertProfCapRaw.run(profId, capId, rule);
+      }
+    }
+  };
 
   // Regras padrão de cada profissão (DEFAULT, OPTIONAL, HIDDEN)
   // 1. Fisioterapia
@@ -458,71 +525,215 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   adminOptionals.forEach(c => insertProfCap.run('prof-administrador', c, 'OPTIONAL'));
   adminHiddens.forEach(c => insertProfCap.run('prof-administrador', c, 'HIDDEN'));
 
-  // Regras por área médica específica (Presets médicos):
-  const insertAreaCap = rawDb.prepare(`
+  // Regras por área de atuação / especialidade (Presets por Practice Area):
+  const insertAreaCapRaw = rawDb.prepare(`
     INSERT OR IGNORE INTO practice_area_capabilities (practice_area_id, capability_id, rule)
     VALUES (?, ?, ?)
   `);
 
-  // Neurologia
+  let existingAreaIds = new Set<string>();
+  try {
+    existingAreaIds = new Set(
+      rawDb.prepare('SELECT id FROM practice_areas').all().map((r: any) => r.id)
+    );
+  } catch (_) {}
+
+  const insertAreaCap = {
+    run: (areaId: string, capId: string, rule: string) => {
+      if (existingAreaIds.has(areaId)) {
+        insertAreaCapRaw.run(areaId, capId, rule);
+      }
+    }
+  };
+
+  // Presets - Fisioterapia
+  ['BODY_MAP', 'PAIN_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'FUNCTIONAL_TESTS', 'HOME_EXERCISES'].forEach(c => insertAreaCap.run('pa-fisio-traumato', c, 'DEFAULT'));
+  ['FUNCTIONAL_ASSESSMENT', 'POSTURE_GAIT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'ADL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fisio-neuro', c, 'DEFAULT'));
+  ['FUNCTIONAL_TESTS', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'BODY_MAP', 'PAIN_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fisio-esportiva', c, 'DEFAULT'));
+  ['ANTHROPOMETRY', 'BODY_COMPOSITION'].forEach(c => insertAreaCap.run('pa-fisio-esportiva', c, 'OPTIONAL'));
+  ['FUNCTIONAL_ASSESSMENT', 'PAIN_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fisio-respiratoria', c, 'DEFAULT'));
+  ['FUNCTIONAL_ASSESSMENT', 'PHYSICAL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fisio-cardio', c, 'DEFAULT'));
+  ['FUNCTIONAL_ASSESSMENT', 'POSTURE_GAIT', 'ADL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fisio-pediatrica', c, 'DEFAULT'));
+  ['FUNCTIONAL_ASSESSMENT', 'POSTURE_GAIT', 'ADL_ASSESSMENT', 'PAIN_ASSESSMENT', 'MOBILITY_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fisio-geronto', c, 'DEFAULT'));
+  ['BODY_MAP', 'PAIN_ASSESSMENT', 'FUNCTIONAL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fisio-mulher', c, 'DEFAULT'));
+  ['BODY_MAP', 'ANTHROPOMETRY'].forEach(c => insertAreaCap.run('pa-fisio-dermato', c, 'DEFAULT'));
+  ['BODY_MAP', 'PAIN_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'POSTURE_GAIT'].forEach(c => {
+    insertAreaCap.run('pa-fisio-quiro', c, 'DEFAULT');
+    insertAreaCap.run('pa-fisio-osteo', c, 'DEFAULT');
+  });
+
+  // Presets - Fonoaudiologia
+  ['COMMUNICATION_ASSESSMENT', 'FONO_SPECIFIC'].forEach(c => {
+    insertAreaCap.run('pa-fono-linguagem', c, 'DEFAULT');
+    insertAreaCap.run('pa-fono-ling-infantil', c, 'DEFAULT');
+  });
+  ['LEARNING_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fono-linguagem', c, 'OPTIONAL'));
+  ['AUDIOLOGY'].forEach(c => insertAreaCap.run('pa-fono-audio', c, 'DEFAULT'));
+  ['FONO_SPECIFIC', 'COMMUNICATION_ASSESSMENT'].forEach(c => {
+    insertAreaCap.run('pa-fono-mo', c, 'DEFAULT');
+    insertAreaCap.run('pa-fono-voz', c, 'DEFAULT');
+    insertAreaCap.run('pa-fono-fluencia', c, 'DEFAULT');
+  });
+  ['FONO_SPECIFIC', 'ADL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fono-disfagia', c, 'DEFAULT'));
+  ['COMMUNICATION_ASSESSMENT', 'AAC_COMMUNICATION', 'BEHAVIOR_ASSESSMENT', 'FONO_SPECIFIC'].forEach(c => {
+    insertAreaCap.run('pa-fono-tea', c, 'DEFAULT');
+    insertAreaCap.run('pa-fono-aba', c, 'DEFAULT');
+  });
+  ['AAC_COMMUNICATION', 'COMMUNICATION_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fono-comunicacao', c, 'DEFAULT'));
+  ['LEARNING_ASSESSMENT', 'COMMUNICATION_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fono-aprendizagem', c, 'DEFAULT'));
+
+  // Presets - Terapia Ocupacional
+  ['SENSORY_ASSESSMENT', 'ADL_ASSESSMENT', 'OCCUPATIONAL_PART'].forEach(c => {
+    insertAreaCap.run('pa-to-integ-sensorial', c, 'DEFAULT');
+    insertAreaCap.run('pa-to-estimulacao', c, 'DEFAULT');
+  });
+  ['ADL_ASSESSMENT', 'OCCUPATIONAL_PART', 'FUNCTIONAL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-to-avd', c, 'DEFAULT'));
+  ['ADL_ASSESSMENT', 'OCCUPATIONAL_PART', 'SENSORY_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-to-pediatria', c, 'DEFAULT'));
+  ['BEHAVIOR_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-to-pediatria', c, 'OPTIONAL'));
+  ['ADL_ASSESSMENT', 'OCCUPATIONAL_PART', 'FUNCTIONAL_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH'].forEach(c => {
+    insertAreaCap.run('pa-to-neuro', c, 'DEFAULT');
+    insertAreaCap.run('pa-to-reab-fisica', c, 'DEFAULT');
+  });
+  ['ADL_ASSESSMENT', 'OCCUPATIONAL_PART', 'FUNCTIONAL_ASSESSMENT', 'SENSORY_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-to-geronto', c, 'DEFAULT'));
+  ['OCCUPATIONAL_PART', 'ADL_ASSESSMENT', 'BEHAVIOR_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-to-mental', c, 'DEFAULT'));
+  ['OCCUPATIONAL_PART', 'ADL_ASSESSMENT', 'AAC_COMMUNICATION'].forEach(c => insertAreaCap.run('pa-to-tec-assistiva', c, 'DEFAULT'));
+  ['BEHAVIOR_ASSESSMENT', 'ADL_ASSESSMENT', 'OCCUPATIONAL_PART'].forEach(c => insertAreaCap.run('pa-to-aba', c, 'DEFAULT'));
+
+  // Presets - Psicologia
+  ['BEHAVIOR_ASSESSMENT'].forEach(c => {
+    insertAreaCap.run('pa-psico-clinica', c, 'DEFAULT');
+    insertAreaCap.run('pa-psico-tcc', c, 'DEFAULT');
+    insertAreaCap.run('pa-psico-psicanalise', c, 'DEFAULT');
+    insertAreaCap.run('pa-psico-aba', c, 'DEFAULT');
+    insertAreaCap.run('pa-psico-familia', c, 'DEFAULT');
+    insertAreaCap.run('pa-psico-infantil', c, 'DEFAULT');
+    insertAreaCap.run('pa-psico-adolescente', c, 'DEFAULT');
+    insertAreaCap.run('pa-psico-adulto', c, 'DEFAULT');
+    insertAreaCap.run('pa-psico-hospitalar', c, 'DEFAULT');
+  });
+  ['LEARNING_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-psico-neuro', c, 'DEFAULT'));
+  ['BEHAVIOR_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-psico-neuro', c, 'DEFAULT'));
+  ['LEARNING_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-psico-infantil', c, 'OPTIONAL'));
+
+  // Presets - Psicopedagogia
+  ['LEARNING_ASSESSMENT'].forEach(c => {
+    insertAreaCap.run('pa-pp-clinica', c, 'DEFAULT');
+    insertAreaCap.run('pa-pp-escolar', c, 'DEFAULT');
+    insertAreaCap.run('pa-pp-aprendizagem', c, 'DEFAULT');
+    insertAreaCap.run('pa-pp-leitura-escrita', c, 'DEFAULT');
+    insertAreaCap.run('pa-pp-matematica', c, 'DEFAULT');
+    insertAreaCap.run('pa-pp-funcoes-exec', c, 'DEFAULT');
+    insertAreaCap.run('pa-pp-atencao-memoria', c, 'DEFAULT');
+    insertAreaCap.run('pa-pp-desenvolvimento', c, 'DEFAULT');
+  });
+  ['BEHAVIOR_ASSESSMENT'].forEach(c => {
+    insertAreaCap.run('pa-pp-funcoes-exec', c, 'OPTIONAL');
+    insertAreaCap.run('pa-pp-atencao-memoria', c, 'OPTIONAL');
+  });
+
+  // Presets - Nutrição
+  ['NUTRITION_SPECIFIC', 'ANTHROPOMETRY', 'BODY_COMPOSITION'].forEach(c => {
+    insertAreaCap.run('pa-nutri-clinica', c, 'DEFAULT');
+    insertAreaCap.run('pa-nutri-esportiva', c, 'DEFAULT');
+  });
+  ['PHYSICAL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-nutri-esportiva', c, 'OPTIONAL'));
+  ['NUTRITION_SPECIFIC', 'ANTHROPOMETRY'].forEach(c => {
+    insertAreaCap.run('pa-nutri-materno', c, 'DEFAULT');
+    insertAreaCap.run('pa-nutri-mulher', c, 'DEFAULT');
+    insertAreaCap.run('pa-nutri-geronto', c, 'DEFAULT');
+  });
+  ['NUTRITION_SPECIFIC', 'BEHAVIOR_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-nutri-comportamental', c, 'DEFAULT'));
+
+  // Presets - Personal Trainer
+  ['TRAINING_PRESCRIBE', 'PHYSICAL_ASSESSMENT', 'ANTHROPOMETRY', 'BODY_COMPOSITION'].forEach(c => {
+    insertAreaCap.run('pa-personal-musculacao', c, 'DEFAULT');
+    insertAreaCap.run('pa-personal-funcional', c, 'DEFAULT');
+    insertAreaCap.run('pa-personal-condicionamento', c, 'DEFAULT');
+  });
+  ['MOBILITY_ASSESSMENT', 'POSTURE_GAIT'].forEach(c => {
+    insertAreaCap.run('pa-personal-funcional', c, 'OPTIONAL');
+    insertAreaCap.run('pa-personal-musculacao', c, 'OPTIONAL');
+  });
+  ['TRAINING_PRESCRIBE', 'PHYSICAL_ASSESSMENT', 'FUNCTIONAL_ASSESSMENT', 'MOBILITY_ASSESSMENT'].forEach(c => {
+    insertAreaCap.run('pa-personal-idosos', c, 'DEFAULT');
+  });
+  ['TRAINING_PRESCRIBE', 'PHYSICAL_ASSESSMENT', 'BODY_COMPOSITION', 'FUNCTIONAL_TESTS'].forEach(c => {
+    insertAreaCap.run('pa-personal-esportivo', c, 'DEFAULT');
+  });
+  ['TRAINING_PRESCRIBE', 'PHYSICAL_ASSESSMENT', 'ANTHROPOMETRY'].forEach(c => {
+    insertAreaCap.run('pa-personal-emagrecimento', c, 'DEFAULT');
+    insertAreaCap.run('pa-personal-gestantes', c, 'DEFAULT');
+  });
+
+  // Presets - Odontologia
+  ['pa-odonto-geral', 'pa-odonto-orto', 'pa-odonto-endo', 'pa-odonto-perio', 'pa-odonto-implante', 'pa-odonto-pediatria', 'pa-odonto-cirurgia', 'pa-odonto-protese', 'pa-odonto-estetica', 'pa-odonto-outro'].forEach(areaId => {
+    insertAreaCap.run(areaId, 'ODONTO_SPECIFIC', 'DEFAULT');
+  });
+
+  // Presets - Medicina
+  ['CORE_DOCUMENTS', 'CORE_PRESCRIPTIONS', 'CORE_EXAM_REQUEST', 'CORE_EXAMS_RECEIVED', 'MEDICAL_BASE', 'MEDICAL_VITAL_SIGNS', 'MEDICAL_PHYSICAL_EXAM'].forEach(c => {
+    insertAreaCap.run('pa-med-clinica', c, 'DEFAULT');
+  });
   ['MEDICAL_NEURO', 'BODY_MAP', 'FUNCTIONAL_ASSESSMENT', 'MUSCLE_STRENGTH', 'POSTURE_GAIT', 'MOBILITY_ASSESSMENT', 'FUNCTIONAL_TESTS', 'CLINICAL_SCALES'].forEach(c => {
     insertAreaCap.run('pa-med-neuro', c, 'DEFAULT');
   });
   ['ADL_ASSESSMENT', 'COMMUNICATION_ASSESSMENT', 'ANTHROPOMETRY'].forEach(c => {
     insertAreaCap.run('pa-med-neuro', c, 'OPTIONAL');
   });
-
-  // Psiquiatria
   ['BEHAVIOR_ASSESSMENT', 'CLINICAL_SCALES'].forEach(c => {
     insertAreaCap.run('pa-med-psiquiatria', c, 'DEFAULT');
   });
   ['CORE_AI', 'LEARNING_ASSESSMENT'].forEach(c => {
     insertAreaCap.run('pa-med-psiquiatria', c, 'OPTIONAL');
   });
-
-  // Pediatria
   ['ANTHROPOMETRY', 'CLINICAL_SCALES'].forEach(c => {
     insertAreaCap.run('pa-med-pediatria', c, 'DEFAULT');
   });
   ['LEARNING_ASSESSMENT', 'COMMUNICATION_ASSESSMENT', 'BODY_MAP'].forEach(c => {
     insertAreaCap.run('pa-med-pediatria', c, 'OPTIONAL');
   });
-
-  // Geriatria
   ['ADL_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'POSTURE_GAIT', 'PAIN_ASSESSMENT', 'CLINICAL_SCALES'].forEach(c => {
     insertAreaCap.run('pa-med-geriatria', c, 'DEFAULT');
   });
-
-  // Ortopedia
   ['BODY_MAP', 'PAIN_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'FUNCTIONAL_TESTS'].forEach(c => {
     insertAreaCap.run('pa-med-ortopedia', c, 'DEFAULT');
   });
-
-  // Cardiologia
   ['MEDICAL_VITAL_SIGNS', 'ANTHROPOMETRY'].forEach(c => {
     insertAreaCap.run('pa-med-cardio', c, 'DEFAULT');
   });
-
-  // Dermatologia
   ['BODY_MAP'].forEach(c => {
     insertAreaCap.run('pa-med-dermato', c, 'DEFAULT');
   });
-
-  // Endocrinologia
   ['ANTHROPOMETRY', 'BODY_COMPOSITION'].forEach(c => {
     insertAreaCap.run('pa-med-endocrino', c, 'DEFAULT');
   });
-
-  // Reumatologia
   ['PAIN_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'BODY_MAP', 'FUNCTIONAL_ASSESSMENT'].forEach(c => {
     insertAreaCap.run('pa-med-reumato', c, 'DEFAULT');
   });
+  ['CORE_DOCUMENTS', 'CORE_PRESCRIPTIONS', 'CORE_EXAM_REQUEST', 'CORE_EXAMS_RECEIVED', 'MEDICAL_BASE', 'MEDICAL_VITAL_SIGNS', 'MEDICAL_PHYSICAL_EXAM', 'ANTHROPOMETRY'].forEach(c => {
+    insertAreaCap.run('pa-med-gineco', c, 'DEFAULT');
+  });
 
   // Regras de Planos Comerciais (plan_capabilities)
-  const insertPlanCap = rawDb.prepare(`
+  const insertPlanCapRaw = rawDb.prepare(`
     INSERT OR IGNORE INTO plan_capabilities (plan_id, capability_id)
     VALUES (?, ?)
   `);
+
+  let existingPlanIds = new Set<string>();
+  try {
+    existingPlanIds = new Set(
+      rawDb.prepare('SELECT id FROM plans').all().map((r: any) => r.id)
+    );
+  } catch (_) {}
+
+  const insertPlanCap = {
+    run: (planId: string, capId: string) => {
+      if (existingPlanIds.has(planId)) {
+        insertPlanCapRaw.run(planId, capId);
+      }
+    }
+  };
 
   const allCaps = (rawDb.prepare('SELECT id FROM capabilities').all() as any[]).map(c => c.id);
   // No plano 'zemda-CLINIC' e 'plan-clinic', todas as capabilities estão disponíveis:
@@ -550,13 +761,23 @@ function reconcileLegacyProfessionsAndCapabilities(rawDb: DatabaseSync): void {
       { id: 'prof-ortopedista', cat_id: 'cat-med', name: 'Ortopedista', slug: 'ortopedista', reg_label: 'CRM', reg_req: 1 },
       { id: 'prof-reumatologista', cat_id: 'cat-med', name: 'Reumatologista', slug: 'reumatologista', reg_label: 'CRM', reg_req: 1 },
       { id: 'prof-clinico-geral', cat_id: 'cat-med', name: 'Clínico Geral', slug: 'clinico-geral', reg_label: 'CRM', reg_req: 1 },
+      { id: 'prof-ginecologista', cat_id: 'cat-med', name: 'Ginecologista e Obstetra', slug: 'ginecologista', reg_label: 'CRM', reg_req: 1 },
       { id: 'prof-ortodontista', cat_id: 'cat-odonto', name: 'Ortodontista', slug: 'ortodontista', reg_label: 'CRO', reg_req: 1 }
     ];
+
+    let deletedProfIds = new Set<string>();
+    try {
+      deletedProfIds = new Set(
+        rawDb.prepare('SELECT id FROM deleted_global_professions').all().map((r: any) => r.id)
+      );
+    } catch (_) {}
+
     const insProfStmt = rawDb.prepare(`
       INSERT OR IGNORE INTO professions (id, category_id, name, slug, registration_board_label, registration_required, active)
       VALUES (?, ?, ?, ?, ?, ?, 1)
     `);
     for (const dp of detailedProfs) {
+      if (deletedProfIds.has(dp.id)) continue;
       insProfStmt.run(dp.id, dp.cat_id, dp.name, dp.slug, dp.reg_label, dp.reg_req);
     }
 

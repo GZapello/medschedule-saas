@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { db } from '../config/database';
 import { CapabilityService } from '../services/capability.service';
 import { logAudit } from '../middlewares/audit.middleware';
 
@@ -101,6 +102,22 @@ export class CapabilityController {
       const { practiceAreaIds } = req.body;
       if (!Array.isArray(practiceAreaIds)) {
         res.status(400).json({ error: 'practiceAreaIds deve ser um array de IDs' });
+        return;
+      }
+
+      // Validação rigorosa: busca profissão do usuário e rejeita áreas incompatíveis
+      const userProf = db.prepare(`
+        SELECT p.profession_id as p_prof_id, u.profession_id as u_prof_id, u.profession_name, cu.profession_custom
+        FROM users u
+        LEFT JOIN professionals p ON p.user_id = u.id AND p.tenant_id = ?
+        LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+        WHERE u.id = ?
+      `).get(req.tenantId, req.tenantId, req.user.userId) as any;
+
+      const rawProf = userProf?.p_prof_id || userProf?.u_prof_id || userProf?.profession_custom || userProf?.profession_name;
+      const validation = CapabilityService.validatePracticeAreasForProfession(rawProf, practiceAreaIds);
+      if (!validation.valid) {
+        res.status(400).json({ error: validation.error });
         return;
       }
 

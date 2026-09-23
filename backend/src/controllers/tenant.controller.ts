@@ -86,6 +86,17 @@ export class TenantController {
       const activeModule = professionResolution.commercialModule;
       const modFlags = professionResolution.flags;
 
+      if (req.body.practiceAreaIds && Array.isArray(req.body.practiceAreaIds) && req.body.practiceAreaIds.length > 0) {
+        const areaValidation = CapabilityService.validatePracticeAreasForProfession(
+          resolvedProfId || resolvedProfName,
+          req.body.practiceAreaIds
+        );
+        if (!areaValidation.valid) {
+          res.status(400).json({ error: areaValidation.error });
+          return;
+        }
+      }
+
       if (!responsibleName || !email || !password) {
         res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios' });
         return;

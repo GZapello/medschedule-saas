@@ -42,6 +42,22 @@ export const SuperAdminLaboratoryView: React.FC = () => {
     hiddenCount: number;
   }>({ defaultCount: 0, optionalCount: 0, hiddenCount: 0 });
 
+  // Carrega catálogo dinâmico de profissões ativas do SuperAdmin
+  useEffect(() => {
+    ApiClient.get<any[]>('/v1/taxonomy/professions')
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setProfessions(data);
+          if (!data.some(p => p.id === selectedProfId)) {
+            setSelectedProfId(data[0].id);
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('Erro ao carregar catálogo dinâmico no Laboratório:', err);
+      });
+  }, []);
+
   // Carrega áreas de atuação quando troca de profissão
   useEffect(() => {
     let isCurrent = true;
@@ -221,10 +237,10 @@ export const SuperAdminLaboratoryView: React.FC = () => {
                 }`}
               >
                 <div className={`text-xs font-black truncate ${isSelected ? 'text-purple-950' : 'text-slate-800'}`}>
-                  {prof.label}
+                  {prof.label || prof.name}
                 </div>
                 <div className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
-                  {prof.boardLabel || 'Profissional'}
+                  {prof.boardLabel || prof.registration_board_label || 'Profissional'}
                 </div>
               </button>
             );

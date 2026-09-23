@@ -38,6 +38,8 @@ interface AuthContextType {
   isZemdaMed: boolean;
   isZemdaBody: boolean;
   commercialModule: string | null;
+  canonicalProfessionId?: string | null;
+  canonicalProfessionName?: string | null;
   capabilities: string[];
   practiceAreaIds: string[];
   selectedOptionalCapabilities: string[];
@@ -216,7 +218,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const combinedProf = `${profId} ${profName} ${profSlug}`.toLowerCase();
 
-  // Dedução estrita do módulo primário ativo baseado na profissão atual
+  // Resolução do módulo primário ativo baseado prioritariamente na fonte única do backend
   let activeModule:
     | 'ZemdaFono'
     | 'ZemdaTO'
@@ -227,131 +229,134 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     | 'ZemdaOdonto'
     | 'ZemdaPersonal'
     | 'ZemdaMed'
-    | null = null;
+    | null = (currentUser?.commercialModule as any) || null;
 
-  if (
-    profId === 'prof-psicopedagogo' ||
-    profId === 'prof-psicopedagogia' ||
-    profSlug === 'psicopedagogo' ||
-    profSlug === 'psicopedagogia' ||
-    combinedProf.includes('psicopedag') ||
-    regType === 'ABPP'
-  ) {
-    activeModule = 'ZemdaPP';
-  } else if (
-    profId === 'prof-psicologo' ||
-    profId === 'prof-psicologia' ||
-    profId === 'prof-neuropsicologo' ||
-    profId === 'prof-psicanalista' ||
-    profId === 'prof-terapeuta-familiar' ||
-    profSlug === 'psicologo' ||
-    profSlug === 'psicologia' ||
-    profSlug === 'neuropsicologo' ||
-    profSlug === 'psicanalista' ||
-    combinedProf.includes('psicólog') ||
-    combinedProf.includes('psicolog') ||
-    combinedProf.includes('neuropsicól') ||
-    combinedProf.includes('neuropsicol') ||
-    combinedProf.includes('psicanal') ||
-    regType === 'CRP'
-  ) {
-    activeModule = 'ZemdaPsico';
-  } else if (
-    profId === 'prof-fonoaudiologo' ||
-    profId === 'prof-fonoaudiologia' ||
-    profSlug === 'fonoaudiologo' ||
-    profSlug === 'fonoaudiologia' ||
-    combinedProf.includes('fono') ||
-    regType === 'CRFA'
-  ) {
-    activeModule = 'ZemdaFono';
-  } else if (
-    profId === 'prof-terapeuta-ocupacional' ||
-    profId === 'prof-terapia-ocupacional' ||
-    profSlug === 'terapeuta-ocupacional' ||
-    profSlug === 'terapia-ocupacional' ||
-    combinedProf.includes('ocupacional') ||
-    combinedProf.includes('terapia ocupacional') ||
-    combinedProf.includes('terapeuta ocupacional')
-  ) {
-    activeModule = 'ZemdaTO';
-  } else if (
-    profId === 'prof-nutricionista' ||
-    profId === 'prof-nutricao' ||
-    profSlug === 'nutricionista' ||
-    profSlug === 'nutricao' ||
-    combinedProf.includes('nutri') ||
-    regType === 'CRN'
-  ) {
-    activeModule = 'ZemdaNutri';
-  } else if (
-    profId === 'prof-fisioterapeuta' ||
-    profId === 'prof-fisioterapia' ||
-    profSlug === 'fisioterapeuta' ||
-    profSlug === 'fisioterapia' ||
-    combinedProf.includes('fisio') ||
-    combinedProf.includes('physio')
-  ) {
-    activeModule = 'ZemdaFisio';
-  } else if (
-    profId === 'prof-dentista' ||
-    profId === 'prof-cirurgiao-dentista' ||
-    profId === 'prof-odontologia' ||
-    profSlug === 'dentista' ||
-    profSlug === 'cirurgiao-dentista' ||
-    profSlug === 'odontologia' ||
-    combinedProf.includes('odonto') ||
-    combinedProf.includes('dentis') ||
-    combinedProf.includes('cirurgi') ||
-    regType === 'CRO'
-  ) {
-    activeModule = 'ZemdaOdonto';
-  } else if (
-    profId === 'prof-personal-trainer' ||
-    profId === 'prof-educacao-fisica' ||
-    profId === 'prof-educador-fisico' ||
-    profId === 'personal_trainer' ||
-    profSlug === 'personal-trainer' ||
-    profSlug === 'educacao-fisica' ||
-    combinedProf.includes('personal') ||
-    combinedProf.includes('educação física') ||
-    combinedProf.includes('educacao fisica') ||
-    combinedProf.includes('educador físico') ||
-    combinedProf.includes('educador fisico') ||
-    combinedProf.includes('treinamento físico') ||
-    combinedProf.includes('musculação') ||
-    combinedProf.includes('musculacao') ||
-    regType === 'CREF'
-  ) {
-    activeModule = 'ZemdaPersonal';
-  } else if (
-    profId === 'prof-medico' ||
-    profId === 'prof-medicina' ||
-    profId === 'prof-cardiologista' ||
-    profId === 'prof-dermatologista' ||
-    profId === 'prof-pediatra' ||
-    profId === 'prof-psiquiatra' ||
-    profId === 'prof-neurologista' ||
-    profId === 'prof-geriatra' ||
-    profId === 'prof-ortopedista' ||
-    profId === 'prof-endocrinologista' ||
-    profId === 'prof-reumatologista' ||
-    profSlug === 'medico' ||
-    profSlug === 'medicina' ||
-    profSlug === 'cardiologista' ||
-    profSlug === 'dermatologista' ||
-    profSlug === 'pediatra' ||
-    profSlug === 'psiquiatra' ||
-    profSlug === 'neurologista' ||
-    profSlug === 'geriatra' ||
-    profSlug === 'ortopedista' ||
-    profSlug === 'endocrinologista' ||
-    profSlug === 'reumatologista' ||
-    combinedProf.includes('médic') ||
-    combinedProf.includes('medic') ||
-    regType === 'CRM'
-  ) {
-    activeModule = 'ZemdaMed';
+  // Fallback retroativo para sessões legadas sem commercialModule populado
+  if (!activeModule) {
+    if (
+      profId === 'prof-psicopedagogo' ||
+      profId === 'prof-psicopedagogia' ||
+      profSlug === 'psicopedagogo' ||
+      profSlug === 'psicopedagogia' ||
+      combinedProf.includes('psicopedag') ||
+      regType === 'ABPP'
+    ) {
+      activeModule = 'ZemdaPP';
+    } else if (
+      profId === 'prof-psicologo' ||
+      profId === 'prof-psicologia' ||
+      profId === 'prof-neuropsicologo' ||
+      profId === 'prof-psicanalista' ||
+      profId === 'prof-terapeuta-familiar' ||
+      profSlug === 'psicologo' ||
+      profSlug === 'psicologia' ||
+      profSlug === 'neuropsicologo' ||
+      profSlug === 'psicanalista' ||
+      combinedProf.includes('psicólog') ||
+      combinedProf.includes('psicolog') ||
+      combinedProf.includes('neuropsicól') ||
+      combinedProf.includes('neuropsicol') ||
+      combinedProf.includes('psicanal') ||
+      regType === 'CRP'
+    ) {
+      activeModule = 'ZemdaPsico';
+    } else if (
+      profId === 'prof-fonoaudiologo' ||
+      profId === 'prof-fonoaudiologia' ||
+      profSlug === 'fonoaudiologo' ||
+      profSlug === 'fonoaudiologia' ||
+      combinedProf.includes('fono') ||
+      regType === 'CRFA'
+    ) {
+      activeModule = 'ZemdaFono';
+    } else if (
+      profId === 'prof-terapeuta-ocupacional' ||
+      profId === 'prof-terapia-ocupacional' ||
+      profSlug === 'terapeuta-ocupacional' ||
+      profSlug === 'terapia-ocupacional' ||
+      combinedProf.includes('ocupacional') ||
+      combinedProf.includes('terapia ocupacional') ||
+      combinedProf.includes('terapeuta ocupacional')
+    ) {
+      activeModule = 'ZemdaTO';
+    } else if (
+      profId === 'prof-nutricionista' ||
+      profId === 'prof-nutricao' ||
+      profSlug === 'nutricionista' ||
+      profSlug === 'nutricao' ||
+      combinedProf.includes('nutri') ||
+      regType === 'CRN'
+    ) {
+      activeModule = 'ZemdaNutri';
+    } else if (
+      profId === 'prof-fisioterapeuta' ||
+      profId === 'prof-fisioterapia' ||
+      profSlug === 'fisioterapeuta' ||
+      profSlug === 'fisioterapia' ||
+      combinedProf.includes('fisio') ||
+      combinedProf.includes('physio')
+    ) {
+      activeModule = 'ZemdaFisio';
+    } else if (
+      profId === 'prof-dentista' ||
+      profId === 'prof-cirurgiao-dentista' ||
+      profId === 'prof-odontologia' ||
+      profSlug === 'dentista' ||
+      profSlug === 'cirurgiao-dentista' ||
+      profSlug === 'odontologia' ||
+      combinedProf.includes('odonto') ||
+      combinedProf.includes('dentis') ||
+      combinedProf.includes('cirurgi') ||
+      regType === 'CRO'
+    ) {
+      activeModule = 'ZemdaOdonto';
+    } else if (
+      profId === 'prof-personal-trainer' ||
+      profId === 'prof-educacao-fisica' ||
+      profId === 'prof-educador-fisico' ||
+      profId === 'personal_trainer' ||
+      profSlug === 'personal-trainer' ||
+      profSlug === 'educacao-fisica' ||
+      combinedProf.includes('personal') ||
+      combinedProf.includes('educação física') ||
+      combinedProf.includes('educacao fisica') ||
+      combinedProf.includes('educador físico') ||
+      combinedProf.includes('educador fisico') ||
+      combinedProf.includes('treinamento físico') ||
+      combinedProf.includes('musculação') ||
+      combinedProf.includes('musculacao') ||
+      regType === 'CREF'
+    ) {
+      activeModule = 'ZemdaPersonal';
+    } else if (
+      profId === 'prof-medico' ||
+      profId === 'prof-medicina' ||
+      profId === 'prof-cardiologista' ||
+      profId === 'prof-dermatologista' ||
+      profId === 'prof-pediatra' ||
+      profId === 'prof-psiquiatra' ||
+      profId === 'prof-neurologista' ||
+      profId === 'prof-geriatra' ||
+      profId === 'prof-ortopedista' ||
+      profId === 'prof-endocrinologista' ||
+      profId === 'prof-reumatologista' ||
+      profSlug === 'medico' ||
+      profSlug === 'medicina' ||
+      profSlug === 'cardiologista' ||
+      profSlug === 'dermatologista' ||
+      profSlug === 'pediatra' ||
+      profSlug === 'psiquiatra' ||
+      profSlug === 'neurologista' ||
+      profSlug === 'geriatra' ||
+      profSlug === 'ortopedista' ||
+      profSlug === 'endocrinologista' ||
+      profSlug === 'reumatologista' ||
+      combinedProf.includes('médic') ||
+      combinedProf.includes('medic') ||
+      regType === 'CRM'
+    ) {
+      activeModule = 'ZemdaMed';
+    }
   }
 
   const userPermissions = (currentUser as any)?.permissions || [];
@@ -382,18 +387,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     activeModule === 'ZemdaPersonal' ||
     currentUser?.commercialModule === 'ZemdaPersonal' ||
     Boolean((currentUser as any)?.zemdaPersonalEnabled) ||
-    Boolean((currentUser as any)?.zemda_personal_enabled) ||
-    Boolean(currentUser?.capabilities?.includes('TRAINING_PRESCRIBE'))
+    Boolean((currentUser as any)?.zemda_personal_enabled)
   );
   const isZemdaPersonal = isPersonalTrainer;
 
-  // ZemdaMed: Nova vertical médica integral com 10 especialidades
+  // ZemdaMed: Vertical médica integral
   const isDoctor = isEligibleStaff && (
     activeModule === 'ZemdaMed' ||
     currentUser?.commercialModule === 'ZemdaMed' ||
-    Boolean(currentUser?.zemdaMedEnabled) ||
-    Boolean(currentUser?.capabilities?.includes('medical_consultations')) ||
-    Boolean(currentUser?.capabilities?.includes('MEDICAL_BASE'))
+    Boolean(currentUser?.zemdaMedEnabled)
   );
   const isZemdaMed = isDoctor;
 
@@ -462,6 +464,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaMed,
         isZemdaBody,
         commercialModule,
+        canonicalProfessionId: currentUser?.canonicalProfessionId || currentUser?.professionId || null,
+        canonicalProfessionName: currentUser?.canonicalProfessionName || currentUser?.professionName || null,
         capabilities,
         practiceAreaIds,
         selectedOptionalCapabilities,

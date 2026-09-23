@@ -19,6 +19,8 @@ export interface User {
   privacyAcceptedAt?: string | null;
   professionalId?: string;
   professionId?: string;
+  canonicalProfessionId?: string;
+  canonicalProfessionName?: string;
   professionName?: string;
   professionSlug?: string;
   registrationType?: string;

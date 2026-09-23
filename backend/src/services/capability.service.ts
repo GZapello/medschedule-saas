@@ -80,6 +80,64 @@ export class CapabilityService {
   }
 
   /**
+   * Valida se uma lista de practiceAreaIds é compatível com a profissão.
+   * Regras:
+   * a) Existem no catálogo (practice_areas) e estão ativas (active = 1);
+   * b) Pertencem à profissão canônica do usuário (profession_id == canonicalProfessionId);
+   * c) Se a profissão for um alias específico (ex: Cardiologista), não permitir que adicione áreas de outras especialidades.
+   */
+  public static validatePracticeAreasForProfession(
+    rawProfIdOrName?: string | null,
+    practiceAreaIds?: string[] | null
+  ): { valid: boolean; error?: string } {
+    if (!practiceAreaIds || practiceAreaIds.length === 0) {
+      return { valid: true };
+    }
+
+    const resolution = resolveCanonicalProfession({ id: rawProfIdOrName || '', name: rawProfIdOrName || '' });
+    const canonicalProfId = resolution.canonicalId;
+
+    // Se a profissão for um alias específico (ex: Cardiologista, Neurologista, etc.)
+    const specificTargetAreaId = resolution.automaticPracticeAreaId || resolution.inferredAreaId;
+    if (resolution.isSpecificAlias && specificTargetAreaId) {
+      for (const areaId of practiceAreaIds) {
+        if (areaId !== specificTargetAreaId) {
+          return {
+            valid: false,
+            error: `Área de atuação ${areaId} não pertence à profissão ${canonicalProfId}`
+          };
+        }
+      }
+    }
+
+    const placeholders = practiceAreaIds.map(() => '?').join(',');
+    const foundRows = db.prepare(`
+      SELECT id, profession_id, active FROM practice_areas
+      WHERE id IN (${placeholders})
+    `).all(...practiceAreaIds) as { id: string; profession_id: string; active: number }[];
+
+    const foundMap = new Map(foundRows.map(r => [r.id, r]));
+
+    for (const areaId of practiceAreaIds) {
+      const row = foundMap.get(areaId);
+      if (!row || row.active !== 1) {
+        return {
+          valid: false,
+          error: `Área de atuação ${areaId} não existe ou está inativa no catálogo.`
+        };
+      }
+      if (row.profession_id !== canonicalProfId) {
+        return {
+          valid: false,
+          error: `Área de atuação ${areaId} não pertence à profissão ${canonicalProfId}`
+        };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  /**
    * Obtém as áreas de atuação salvas para um usuário
    */
   public static getUserPracticeAreas(userId: string, tenantId: string): string[] {

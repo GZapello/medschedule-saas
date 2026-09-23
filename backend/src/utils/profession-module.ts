@@ -455,6 +455,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pId === 'prof-endocrinologista' || pSlug === 'endocrinologista' || combined.includes('endocrin') ||
     pId === 'prof-ortopedista' || pSlug === 'ortopedista' || combined.includes('ortoped') ||
     pId === 'prof-reumatologista' || pSlug === 'reumatologista' || combined.includes('reumatolog') ||
+    pId === 'prof-ginecologista' || pSlug === 'ginecologista' || combined.includes('ginecolog') || combined.includes('obstetr') ||
     pId === 'prof-clinico-geral' || pSlug === 'clinico-geral' || combined.includes('clinico geral') || combined.includes('clínico geral')
   ) {
     let areaId = 'pa-med-clinica';
@@ -487,6 +488,9 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     } else if (pId === 'prof-reumatologista' || combined.includes('reumatolog')) {
       areaId = 'pa-med-reumato';
       areaName = 'Reumatologia';
+    } else if (pId === 'prof-ginecologista' || combined.includes('ginecolog') || combined.includes('obstetr')) {
+      areaId = 'pa-med-gineco';
+      areaName = 'Ginecologia e Obstetrícia';
     } else if (pId === 'prof-clinico-geral' || combined.includes('clinico geral') || combined.includes('clínico geral')) {
       areaId = 'pa-med-clinica';
       areaName = 'Clínica Médica';
@@ -551,7 +555,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       areaName = 'Psicanálise';
       category = 'APPROACH_ALIAS';
     } else if (pId === 'prof-terapeuta-familiar' || combined.includes('terapeuta familiar')) {
-      areaId = 'pa-psico-outro';
+      areaId = 'pa-psico-familia';
       areaName = 'Terapia Familiar e de Casal';
       category = 'APPROACH_ALIAS';
     }

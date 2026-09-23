@@ -111,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-med',
           label: 'ZemdaMed (Medicina)',
           icon: Stethoscope,
-          visible: isDoctor || isZemdaMed || commercialModule === 'ZemdaMed' || hasCapability('MEDICAL_BASE') || hasCapability('medical_consultations')
+          visible: isDoctor || isZemdaMed || commercialModule === 'ZemdaMed'
         },
         {
           id: 'zemda-body',
@@ -123,49 +123,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-fisio',
           label: 'ZemdaFisio (Fisioterapia)',
           icon: Activity,
-          visible: isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio' || hasCapability('MOBILITY_ASSESSMENT')
+          visible: isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio'
         },
         {
           id: 'zemda-odonto',
           label: 'ZemdaOdonto (Odontologia)',
           icon: Smile,
-          visible: isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto' || hasCapability('ODONTO_SPECIFIC')
+          visible: isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto'
         },
         {
           id: 'zemda-nutri',
           label: 'ZemdaNutri (Nutrição)',
           icon: Apple,
-          visible: isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri' || hasCapability('NUTRITION_SPECIFIC')
+          visible: isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri'
         },
         {
           id: 'zemda-to',
           label: 'ZemdaTO (Terapia Ocupacional)',
           icon: Hand,
-          visible: isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO' || hasCapability('ADL_ASSESSMENT')
+          visible: isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO'
         },
         {
           id: 'zemda-fono',
           label: 'ZemdaFono (Fonoaudiologia)',
           icon: Mic,
-          visible: isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono' || hasCapability('FONO_SPECIFIC')
+          visible: isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono'
         },
         {
           id: 'zemda-psico',
           label: 'ZemdaPsico (Psicologia)',
           icon: Brain,
-          visible: isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico' || hasCapability('BEHAVIOR_ASSESSMENT')
+          visible: isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico'
         },
         {
           id: 'zemda-pp',
           label: 'ZemdaPP (Psicopedagogia)',
           icon: GraduationCap,
-          visible: isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP' || hasCapability('LEARNING_ASSESSMENT')
+          visible: isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP'
         },
         {
           id: 'zemda-personal',
           label: 'ZemdaPersonal (Treinamento)',
           icon: Dumbbell,
-          visible: isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal' || hasCapability('TRAINING_PRESCRIBE')
+          visible: isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal'
         },
         { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
       ]
