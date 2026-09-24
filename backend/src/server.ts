@@ -143,12 +143,13 @@ app.all(['/api', '/api/*', '/v1', '/v1/*'], (req, res) => {
 });
 
 
-// Servir downloads de executáveis oficiais (Windows e Android)
-const downloadsDir = path.resolve(__dirname, '../public/downloads');
-if (fs.existsSync(downloadsDir)) {
-  console.log(`[Downloads API] Servindo executáveis estáticos de: ${downloadsDir}`);
-  app.use('/downloads', express.static(downloadsDir));
-}
+// Links antigos /downloads/<arquivo> já divulgados continuam funcionando, redirecionando para os instaladores atuais
+app.get('/downloads/:file', (req, res) => {
+  const file = req.params.file.toLowerCase();
+  if (file.endsWith('.apk')) return res.redirect(301, '/api/v1/public/download-android');
+  if (file.endsWith('.exe')) return res.redirect(301, '/api/v1/public/download-windows');
+  res.status(404).json({ success: false, error: 'Arquivo não encontrado.', code: 'ROUTE_NOT_FOUND' });
+});
 
 // Servir uploads de imagens e mídias
 const uploadsDir = path.resolve(__dirname, '../public/uploads');

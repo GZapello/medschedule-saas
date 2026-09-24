@@ -21,9 +21,10 @@ frontend/android/app/build/
 frontend/android/.gradle/
 .gradle/
 
-# Binários pesados
+# Binários pesados (instaladores são publicados no GitHub Releases, ver docs/INSTALADORES.md)
 *.exe
-!backend/public/downloads/*.exe
+*.apk
+*.aab
 
 # Variáveis de ambiente secretas
 .env

@@ -1,8 +1,6 @@
 import { PersonalPostureAIController } from '../controllers/personal-posture-ai.controller';
 import { Router } from 'express';
 import { mountBillingRoutes, subscriptionGate } from '../controllers/billing.controller';
-import path from 'path';
-import fs from 'fs';
 import { AuthController } from '../controllers/auth.controller';
 import { TaxonomyController } from '../controllers/taxonomy.controller';
 import { TenantController } from '../controllers/tenant.controller';
@@ -139,110 +137,15 @@ api.get('/v1/public/app-version', (req, res) => {
   });
 });
 
-// Download do Instalador Desktop para Windows (.exe)
-// Download do Instalador Windows (.exe)
+// Instaladores ficam no GitHub Releases (fora do git); a URL pode ser trocada por variável de ambiente.
+const RELEASES_DOWNLOAD_URL = 'https://github.com/GZapello/medschedule-saas/releases/latest/download';
+
 api.get('/v1/public/download-windows', (req, res) => {
-  const possiblePaths = [
-    path.resolve(process.cwd(), 'backend/public/downloads'),
-    path.resolve(process.cwd(), '../backend/public/downloads'),
-    path.resolve(process.cwd(), 'public/downloads'),
-    path.resolve(__dirname, '../public/downloads'),
-    path.resolve(__dirname, '../../public/downloads'),
-    path.resolve(__dirname, '../../../desktop/dist'),
-    path.resolve(__dirname, '../../desktop/dist'),
-    path.resolve(process.cwd(), 'desktop/dist'),
-    path.resolve(process.cwd(), '../desktop/dist')
-  ];
-
-  let foundFile: string | null = null;
-  for (const dir of possiblePaths) {
-    if (fs.existsSync(dir)) {
-      const files = fs.readdirSync(dir);
-      // Procura primeiro pelo instalador Setup da versão mais recente (ex: 1.1.2)
-      const setupFiles = files
-        .filter(f => f.toLowerCase().endsWith('.exe') && f.toLowerCase().includes('setup'))
-        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }));
-      if (setupFiles.length > 0) {
-        foundFile = path.join(dir, setupFiles[0]);
-        break;
-      }
-      // Ou qualquer outro .exe
-      const anyExe = files.find(f => f.toLowerCase().endsWith('.exe'));
-      if (anyExe) {
-        foundFile = path.join(dir, anyExe);
-        break;
-      }
-    }
-  }
-
-  if (foundFile && fs.existsSync(foundFile)) {
-    const filename = 'Zemda Setup 1.1.2.exe';
-    console.log(`[Downloads] Enviando instalador Windows: ${foundFile}`);
-    return res.download(foundFile, filename, (err) => {
-      if (err && !res.headersSent) {
-        console.error('[Downloads] Erro ao enviar instalador Windows:', err);
-        res.status(500).json({ error: 'Erro ao transferir o instalador' });
-      }
-    });
-  }
-
-  res.status(404).json({
-    error: 'Instalador Windows (.exe) não encontrado no servidor no momento.',
-    message: 'O aplicativo desktop para Windows está pronto para ser compilado.',
-    hint: 'Execute o comando de geração do instalador no diretório desktop.'
-  });
+  res.redirect(302, process.env.DOWNLOAD_WINDOWS_URL || `${RELEASES_DOWNLOAD_URL}/Zemda-Setup.exe`);
 });
 
-// Download do Aplicativo Android (.apk)
 api.get('/v1/public/download-android', (req, res) => {
-  const possiblePaths = [
-    path.resolve(process.cwd(), 'backend/public/downloads'),
-    path.resolve(process.cwd(), '../backend/public/downloads'),
-    path.resolve(process.cwd(), 'public/downloads'),
-    path.resolve(__dirname, '../public/downloads'),
-    path.resolve(__dirname, '../../public/downloads'),
-    path.resolve(process.cwd(), 'android/Zemda.apk'),
-    path.resolve(process.cwd(), '../android/Zemda.apk'),
-    path.resolve(__dirname, '../../../android/app/build/outputs/apk/debug'),
-    path.resolve(__dirname, '../../../android/app/build/outputs/apk/release'),
-    path.resolve(__dirname, '../../android/app/build/outputs/apk/debug'),
-    path.resolve(process.cwd(), 'android/app/build/outputs/apk/debug')
-  ];
-
-  let foundFile: string | null = null;
-  for (const dirOrFile of possiblePaths) {
-    if (fs.existsSync(dirOrFile)) {
-      const stat = fs.statSync(dirOrFile);
-      if (stat.isFile() && dirOrFile.toLowerCase().endsWith('.apk')) {
-        foundFile = dirOrFile;
-        break;
-      } else if (stat.isDirectory()) {
-        const files = fs.readdirSync(dirOrFile);
-        const apkFile = files.find(f => f.toLowerCase() === 'zemda.apk') || files.find(f => f.toLowerCase().endsWith('.apk'));
-        if (apkFile) {
-          foundFile = path.join(dirOrFile, apkFile);
-          break;
-        }
-      }
-    }
-  }
-
-  if (foundFile && fs.existsSync(foundFile)) {
-    const filename = 'Zemda.apk';
-    console.log(`[Downloads] Enviando APK Android: ${foundFile}`);
-    return res.download(foundFile, filename, (err) => {
-      if (err && !res.headersSent) {
-        console.error('[Downloads] Erro ao enviar APK Android:', err);
-        res.status(500).json({ error: 'Erro ao transferir o APK' });
-      }
-    });
-  }
-
-  res.status(404).json({
-    error: 'Aplicativo Android (.apk) ainda não foi gerado no servidor.',
-    message: 'O projeto Android está pronto para compilação com Gradle.',
-    hint: 'Execute a compilação do APK no diretório android.'
-  });
+  res.redirect(302, process.env.DOWNLOAD_ANDROID_URL || `${RELEASES_DOWNLOAD_URL}/Zemda.apk`);
 });
 
 // ==========================================

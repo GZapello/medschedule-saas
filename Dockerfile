@@ -44,9 +44,6 @@ COPY --from=backend-builder /app/backend/src/config/schema.sql ./src/config/sche
 # Copia os assets compilados do frontend SPA
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Copia arquivos públicos de downloads (APK Android)
-COPY backend/public ./public
-
 # Garante o diretório de dados persistente para o banco SQLite
 RUN mkdir -p /data
 
