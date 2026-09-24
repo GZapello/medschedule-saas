@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import path from 'path';
 import { db } from '../config/database';
 import { r2StorageService } from '../services/r2-storage.service';
+import { logAudit } from '../middlewares/audit.middleware';
 
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
@@ -53,6 +54,55 @@ export function canonicalizeClinicId(tenantId: string): string {
   return tenantId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
 }
 
+/**
+ * Controle de acesso a anexos clínicos (LGPD — checklist 5.9).
+ *
+ * Anexo CLÍNICO = vinculado a um paciente/aluno: tem patient_id real (diferente de
+ * null/'clinic'/'exercises') OU a chave do objeto fica sob clinics/{clinicId}/patients/...
+ * (exames, testes externos, fotos de evolução/avaliação física, documentos clínicos).
+ *
+ * Anexo NÃO clínico = imagens da biblioteca de exercícios (ZemdaPersonal, incluindo o
+ * catálogo global) e assets da clínica (clinics/{clinicId}/clinic/... ou .../exercises/...).
+ * Esses continuam acessíveis a qualquer usuário autenticado da clínica, como antes.
+ *
+ * Somente clinic_admin e professional acessam anexos clínicos. SuperAdmin, recepção,
+ * secretaria, financeiro, assistente e paciente são bloqueados — mesma regra de
+ * hasClinicalAccess() em clinical.controller.ts (superadmin não vê conteúdo clínico).
+ */
+const CLINICAL_FILE_ROLES = ['clinic_admin', 'professional'];
+const PATIENT_OBJECT_KEY_RE = /^clinics\/[^/]+\/patients\/([^/]+)\//;
+
+function canAccessClinicalFiles(req: Request): boolean {
+  return CLINICAL_FILE_ROLES.includes(String(req.user?.role || ''));
+}
+
+function isRealPatientId(patientId: unknown): boolean {
+  const pid = String(patientId ?? '').trim();
+  return pid !== '' && pid !== 'clinic' && pid !== 'exercises';
+}
+
+function isPatientObjectKey(objectKey: unknown): boolean {
+  return PATIENT_OBJECT_KEY_RE.test(String(objectKey || ''));
+}
+
+export function isClinicalAttachment(file: { patient_id?: string | null; object_key?: string | null }): boolean {
+  return isRealPatientId(file.patient_id) || isPatientObjectKey(file.object_key);
+}
+
+/** patient_id para a trilha de auditoria (coluna ou, na falta dela, o segmento da chave). */
+function auditPatientId(file: { patient_id?: string | null; object_key?: string | null }): string | null {
+  if (isRealPatientId(file.patient_id)) return String(file.patient_id);
+  const match = PATIENT_OBJECT_KEY_RE.exec(String(file.object_key || ''));
+  return match ? match[1] : null;
+}
+
+function denyClinicalFileAccess(res: Response): void {
+  res.status(403).json({
+    error: 'Acesso restrito: somente profissionais de saúde e gestores da clínica podem acessar anexos clínicos de pacientes (Sigilo LGPD).',
+    code: 'CLINICAL_PRIVACY_RESTRICTION'
+  });
+}
+
 export class FileController {
   /**
    * POST /api/files/upload-ticket ou /api/v1/files/upload-ticket
@@ -84,6 +134,12 @@ export class FileController {
       const isExercise = safeCategory === 'exercises' || safeCategory.includes('exercise') || patientId === 'exercises';
       const isAssessment = safeCategory.startsWith('personal_assessment') || safeCategory === 'personal-assessments';
       const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || isExercise;
+
+      // Fotos de avaliação e anexos de paciente geram chave em clinics/{id}/patients/... (anexo clínico)
+      if ((isAssessment || !isClinicOrExerciseAsset) && !canAccessClinicalFiles(req)) {
+        denyClinicalFileAccess(res);
+        return;
+      }
 
       if ((!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || fileSize === undefined || fileSize === null) {
         res.status(400).json({
@@ -245,6 +301,11 @@ export class FileController {
       const safeCategory = String(category || 'general').trim();
       const isClinicOrExerciseAsset = !patientId || patientId === 'exercises' || patientId === 'clinic' || safeCategory === 'exercises';
 
+      if (!isClinicOrExerciseAsset && !canAccessClinicalFiles(req)) {
+        denyClinicalFileAccess(res);
+        return;
+      }
+
       if ((!isClinicOrExerciseAsset && !patientId) || !filename || !mimeType || fileSize === undefined || fileSize === null) {
         res.status(400).json({
           error: 'filename, mimeType e fileSize são obrigatórios' + (!isClinicOrExerciseAsset ? ' (e patientId para arquivos de pacientes)' : '')
@@ -363,6 +424,12 @@ export class FileController {
         res.status(400).json({
           error: 'objectKey, filename, mimeType e fileSize são obrigatórios' + (!isClinicOrExerciseAsset ? ' (e patientId para arquivos de pacientes)' : '')
         });
+        return;
+      }
+
+      const isClinicalUpload = !isClinicOrExerciseAsset || isPatientObjectKey(objectKey);
+      if (isClinicalUpload && !canAccessClinicalFiles(req)) {
+        denyClinicalFileAccess(res);
         return;
       }
 
@@ -563,6 +630,13 @@ export class FileController {
         }
       }
 
+      if (isClinicalUpload) {
+        logAudit(req, 'UPLOAD_PATIENT_FILE', 'file_attachments', attachmentId, {
+          category: safeCategory,
+          patient_id: auditPatientId({ patient_id: targetPatientId, object_key: objectKey })
+        });
+      }
+
       // Gera exclusivamente URL temporária assinada pelo Cloudflare Worker
       const nowInSeconds = Math.floor(Date.now() / 1000);
       const readPayload = {
@@ -655,6 +729,19 @@ export class FileController {
         return;
       }
 
+      const isClinical = isClinicalAttachment(file);
+      if (isClinical && !canAccessClinicalFiles(req)) {
+        denyClinicalFileAccess(res);
+        return;
+      }
+      if (isClinical) {
+        // Trilha de auditoria da visualização/download: nunca registra URL assinada nem token
+        logAudit(req, 'VIEW_PATIENT_FILE', 'file_attachments', file.id, {
+          category: file.category,
+          patient_id: auditPatientId(file)
+        });
+      }
+
       // Se armazenado no R2, gera exclusivamente URL assinada temporária do Cloudflare Worker (5 minutos)
       if (file.storage_provider === 'cloudflare_r2') {
         const signingSecret = getSigningSecret();
@@ -740,6 +827,12 @@ export class FileController {
         return;
       }
 
+      const isClinical = file ? isClinicalAttachment(file) : isPatientObjectKey(targetObjectKey);
+      if (isClinical && !canAccessClinicalFiles(req)) {
+        denyClinicalFileAccess(res);
+        return;
+      }
+
       // Exercise media may be referenced by historical workout snapshots or saved templates.
       if (file?.category === 'exercises' || String(targetObjectKey).includes('/exercises/')) {
         res.status(409).json({ error: 'Imagem de exercício preservada para o histórico. Remova apenas o vínculo no exercício.' });
@@ -789,6 +882,13 @@ export class FileController {
         db.prepare('DELETE FROM file_attachments WHERE object_key = ? AND (clinic_id = ? OR clinic_id = ?)').run(targetObjectKey, tenantId, sanitizedClinicId);
       }
 
+      if (isClinical) {
+        logAudit(req, 'DELETE_PATIENT_FILE', 'file_attachments', file?.id || undefined, {
+          category: file?.category ?? null,
+          patient_id: auditPatientId(file || { object_key: targetObjectKey })
+        });
+      }
+
       res.status(200).json({
         success: true,
         message: 'Arquivo excluído com sucesso do Cloudflare R2 e do banco de dados'
@@ -817,6 +917,12 @@ export class FileController {
         return;
       }
 
+      // Listagem por paciente é sempre conteúdo clínico
+      if (!canAccessClinicalFiles(req)) {
+        denyClinicalFileAccess(res);
+        return;
+      }
+
       let query = `
         SELECT id, clinic_id, patient_id, appointment_id, uploaded_by,
                storage_provider, object_key, original_filename, mime_type,
@@ -834,6 +940,12 @@ export class FileController {
       query += ' ORDER BY created_at DESC';
 
       const files = db.prepare(query).all(...params) as any[];
+
+      logAudit(req, 'LIST_PATIENT_FILES', 'file_attachments', String(patientId), {
+        patient_id: String(patientId),
+        category: category ? String(category).trim() : null,
+        count: files.length
+      });
 
       res.status(200).json({ files });
     } catch (err: any) {
