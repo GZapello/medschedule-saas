@@ -36,8 +36,36 @@ export function registerPublicSite(app: express.Express, frontendDist?: string):
 
 
 
-if (!frontendDist) return;
-  app.use(express.static(frontendDist, { index: false }));
+  if (!frontendDist) return;
+
+  app.use(express.static(frontendDist, {
+    index: false,
+    setHeaders: (res: Response, filePath: string) => {
+      const normalized = filePath.replace(/\\/g, '/');
+      if (normalized.includes('/assets/')) {
+        // Assets com hash único gerados pelo bundler (Vite) recebem cache longo imutável
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (normalized.endsWith('index.html')) {
+        // index.html nunca deve ser mantido em cache pelo navegador
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }
+  }));
+
+  // Bloqueio rigoroso de assets ausentes: NUNCA retornar index.html para chunks ou assets estáticos inexistentes
+  app.all(['/assets/*', '/assets'], (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(404).send('Asset not found');
+  });
+
+  app.all(/\.(js|css|map|wasm|woff2?|ttf|eot)$/, (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.status(404).send('Static file not found');
+  });
 
   // Qualquer rota da interface web que não seja API ou health check retorna o index.html com SSR / pré-renderização de SEO
   app.get('*', (req: Request, res: Response, next: NextFunction) => {
@@ -67,6 +95,11 @@ if (!frontendDist) return;
         const isPublic = isPublicRoute(normPath);
         const isInternal = isValidInternalRoute(normPath);
         const isLegit = isPublic || isInternal;
+
+        // Cabeçalhos universais de cache para HTML da aplicação: sempre valida com servidor
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
 
         if (isInternal && !isPublic) {
           // Páginas privadas / autenticadas recebem cabeçalho noindex estrito

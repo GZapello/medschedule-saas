@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Info,
@@ -99,6 +99,13 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
   const [multiSelectMode, setMultiSelectMode] = useState<boolean>(false);
   const [selectedToothHistory, setSelectedToothHistory] = useState<number | null>(null);
 
+  // Sincronizar estado interno com currentData sempre que atualizado externamente ou via API
+  useEffect(() => {
+    if (currentData) {
+      setData(currentData);
+    }
+  }, [currentData]);
+
   // Cores por condição
   const getConditionColor = (condId?: string) => {
     if (!condId || condId === 'healthy') return '#ffffff';
@@ -108,7 +115,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
   const isAnterior = (tooth: number) => {
     const num = tooth % 10;
-    return num >= 1 && num <= 3; // 11-13, 21-23, 31-33, 41-43
+    return num >= 1 && num <= 3; // 11-13, 21-23, 31-33, 41-43, 51-53, 61-63, 71-73, 81-83
   };
 
   const isUpper = (tooth: number) => (tooth >= 11 && tooth <= 28) || (tooth >= 51 && tooth <= 65);
@@ -124,24 +131,70 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
     const currentTooth = data[toothNumber] || {};
     const cond = DENTAL_CONDITIONS.find(c => c.id === activeCondition);
+    const isUpperTooth = isUpper(toothNumber);
+    const innerFaceKey: ToothFace = isUpperTooth ? 'palatina' : 'lingual';
 
     let updatedTooth: ToothStatus = { ...currentTooth };
+    let emittedChanges: any[] = [];
 
-    if (cond?.affectsWholeTooth || face === 'whole') {
-      // Se já estava com essa condição, remove (toggle)
+    if (cond?.affectsWholeTooth) {
+      // Condição de dente inteiro (canal, implante, coroa, ausente, etc.)
       if (updatedTooth.whole === activeCondition) {
         delete updatedTooth.whole;
       } else {
         updatedTooth.whole = activeCondition;
       }
+      emittedChanges.push({
+        toothNumber,
+        face: 'whole',
+        condition: updatedTooth.whole || 'healthy',
+        previousCondition: currentTooth.whole
+      });
+    } else if (face === 'whole') {
+      // Usuário clicou no botão "Faces/Dente" com uma condição de FACE selecionada (cárie, restauração, selante, etc.)
+      // NUNCA salvar no 'whole' - aplicar nas 5 faces anatômicas
+      const faces: ToothFace[] = ['vestibular', innerFaceKey, 'mesial', 'distal', 'oclusal'];
+      const allActive = faces.every(f => (updatedTooth as any)[f] === activeCondition);
+
+      // Limpar whole caso existisse por erro anterior
+      if (updatedTooth.whole === activeCondition) {
+        delete updatedTooth.whole;
+      }
+
+      faces.forEach(f => {
+        const prev = (currentTooth as any)[f];
+        if (allActive) {
+          delete (updatedTooth as any)[f];
+        } else {
+          (updatedTooth as any)[f] = activeCondition;
+        }
+        emittedChanges.push({
+          toothNumber,
+          face: f,
+          condition: allActive ? 'healthy' : activeCondition,
+          previousCondition: prev
+        });
+      });
     } else {
-      // Face específica
+      // Clique em face específica (vestibular, lingual/palatina, mesial, distal, oclusal)
       const currentFaceVal = (updatedTooth as any)[face];
       if (currentFaceVal === activeCondition) {
         delete (updatedTooth as any)[face];
       } else {
         (updatedTooth as any)[face] = activeCondition;
       }
+
+      // Garantir que a condição de face nunca corrompa o 'whole'
+      if (updatedTooth.whole === activeCondition) {
+        delete updatedTooth.whole;
+      }
+
+      emittedChanges.push({
+        toothNumber,
+        face,
+        condition: (updatedTooth as any)[face] || 'healthy',
+        previousCondition: currentFaceVal
+      });
     }
 
     const updatedData: OdontogramData = {
@@ -151,15 +204,8 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
     setData(updatedData);
 
-    const changeRecord = {
-      toothNumber,
-      face,
-      condition: activeCondition,
-      previousCondition: face === 'whole' ? currentTooth.whole : (currentTooth as any)[face]
-    };
-
     if (onChange) {
-      onChange(updatedData, [changeRecord]);
+      onChange(updatedData, emittedChanges);
     }
 
     if (onToothClick) {
@@ -180,16 +226,33 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
     const updatedData = { ...data };
     const changes: any[] = [];
 
+    // Determina a face real de destino: 'whole' somente para condições de dente inteiro;
+    // Para condições de face, aplicar na oclusal (ou vestibular para facetas)
+    const targetFace: ToothFace = cond?.affectsWholeTooth
+      ? 'whole'
+      : (cond?.id === 'veneer' ? 'vestibular' : 'oclusal');
+
     for (const tooth of selectedTeeth) {
       const toothStatus = { ...(updatedData[tooth] || {}) };
+      const prevVal = targetFace === 'whole' ? toothStatus.whole : (toothStatus as any)[targetFace];
+
       if (cond?.affectsWholeTooth) {
         toothStatus.whole = activeCondition;
       } else {
-        // Aplica na oclusal/incisal ou inteira
-        toothStatus.oclusal = activeCondition;
+        (toothStatus as any)[targetFace] = activeCondition;
+        // Previne qualquer presença indevida no campo 'whole'
+        if (toothStatus.whole === activeCondition) {
+          delete toothStatus.whole;
+        }
       }
+
       updatedData[tooth] = toothStatus;
-      changes.push({ toothNumber: tooth, face: 'whole', condition: activeCondition });
+      changes.push({
+        toothNumber: tooth,
+        face: targetFace,
+        condition: activeCondition,
+        previousCondition: prevVal
+      });
     }
 
     setData(updatedData);
@@ -207,7 +270,17 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
     // Faces: Superior usa Palatina no lugar de Lingual
     const innerFaceKey: ToothFace = isUpperTooth ? 'palatina' : 'lingual';
-    const outerFaceKey: ToothFace = 'vestibular';
+
+    // Orientação anatômica de Mesial e Distal em relação à linha média (centro da arcada):
+    // Quadrantes 1, 4, 5 e 8 ficam no lado DIREITO do paciente (lado ESQUERDO da tela):
+    // Linha média fica à DIREITA -> Mesial é à DIREITA e Distal é à ESQUERDA.
+    // Quadrantes 2, 3, 6 e 7 ficam no lado ESQUERDO do paciente (lado DIREITO da tela):
+    // Linha média fica à ESQUERDA -> Mesial é à ESQUERDA e Distal é à DIREITA.
+    const quadrant = Math.floor(toothNumber / 10);
+    const isRightQuadrant = quadrant === 1 || quadrant === 4 || quadrant === 5 || quadrant === 8;
+
+    const leftFaceKey: ToothFace = isRightQuadrant ? 'distal' : 'mesial';
+    const rightFaceKey: ToothFace = isRightQuadrant ? 'mesial' : 'distal';
 
     const wholeCond = toothStatus.whole;
     const isMissing = wholeCond === 'missing';
@@ -220,9 +293,11 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
 
     const vestColor = getConditionColor(toothStatus.vestibular);
     const lingPalColor = getConditionColor((toothStatus as any)[innerFaceKey]);
-    const mesialColor = getConditionColor(toothStatus.mesial);
-    const distalColor = getConditionColor(toothStatus.distal);
+    const leftColor = getConditionColor((toothStatus as any)[leftFaceKey]);
+    const rightColor = getConditionColor((toothStatus as any)[rightFaceKey]);
     const oclusalColor = getConditionColor(toothStatus.oclusal);
+
+    const cond = DENTAL_CONDITIONS.find(c => c.id === activeCondition);
 
     return (
       <div
@@ -235,10 +310,10 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             if (onToothClick) onToothClick(toothNumber);
           }
         }}
-        className={`relative flex flex-col items-center p-1.5 rounded-xl border transition-all cursor-pointer ${
+        className={`relative flex flex-col items-center p-1 sm:p-1.5 rounded-xl border transition-all cursor-pointer flex-shrink-0 ${
           isSelected
             ? 'bg-cyan-100/60 border-cyan-500 shadow-md ring-2 ring-cyan-400'
-            : 'bg-white border-slate-200 hover:border-cyan-400 hover:shadow-sm'
+            : 'bg-white border-slate-200 hover:border-cyan-400 hover:shadow-xs'
         }`}
       >
         {/* Número do Dente (FDI) */}
@@ -255,7 +330,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
         </div>
 
         {/* Desenho Anatômico / Gráfico de Faces (SVG Interativo) */}
-        <div className="relative w-12 h-12">
+        <div className="relative w-9 h-9 sm:w-11 sm:h-11">
           {/* Marcador de Dente Ausente (X Preto) */}
           {isMissing ? (
             <svg viewBox="0 0 50 50" className="w-full h-full text-slate-800">
@@ -278,7 +353,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             </div>
           ) : (
             /* 5 Faces Geométricas Interativas */
-            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-sm select-none">
+            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xs select-none">
               {/* Face Superior (Vestibular nos superiores, Lingual nos inferiores) */}
               <polygon
                 points="15,15 85,15 65,35 35,35"
@@ -287,7 +362,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                 strokeWidth="2"
                 className="cursor-pointer hover:brightness-90 transition-all"
                 onClick={(e) => handleFaceClick(toothNumber, isUpperTooth ? 'vestibular' : innerFaceKey, e)}
-              />
+              >
+                <title>{isUpperTooth ? 'Vestibular (V)' : (innerFaceKey === 'palatina' ? 'Palatina (P)' : 'Lingual (L)')}</title>
+              </polygon>
 
               {/* Face Inferior (Palatina/Lingual nos superiores, Vestibular nos inferiores) */}
               <polygon
@@ -297,27 +374,33 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                 strokeWidth="2"
                 className="cursor-pointer hover:brightness-90 transition-all"
                 onClick={(e) => handleFaceClick(toothNumber, isUpperTooth ? innerFaceKey : 'vestibular', e)}
-              />
+              >
+                <title>{isUpperTooth ? (innerFaceKey === 'palatina' ? 'Palatina (P)' : 'Lingual (L)') : 'Vestibular (V)'}</title>
+              </polygon>
 
-              {/* Face Esquerda (Mesial ou Distal conforme quadrante) */}
+              {/* Face Esquerda (Distal em Q1/Q4/Q5/Q8; Mesial em Q2/Q3/Q6/Q7) */}
               <polygon
                 points="15,15 35,35 35,65 15,85"
-                fill={distalColor}
+                fill={leftColor}
                 stroke="#64748b"
                 strokeWidth="2"
                 className="cursor-pointer hover:brightness-90 transition-all"
-                onClick={(e) => handleFaceClick(toothNumber, 'distal', e)}
-              />
+                onClick={(e) => handleFaceClick(toothNumber, leftFaceKey, e)}
+              >
+                <title>{leftFaceKey === 'mesial' ? 'Mesial (M) — voltada para a linha média' : 'Distal (D)'}</title>
+              </polygon>
 
-              {/* Face Direita */}
+              {/* Face Direita (Mesial em Q1/Q4/Q5/Q8; Distal em Q2/Q3/Q6/Q7) */}
               <polygon
                 points="85,15 65,35 65,65 85,85"
-                fill={mesialColor}
+                fill={rightColor}
                 stroke="#64748b"
                 strokeWidth="2"
                 className="cursor-pointer hover:brightness-90 transition-all"
-                onClick={(e) => handleFaceClick(toothNumber, 'mesial', e)}
-              />
+                onClick={(e) => handleFaceClick(toothNumber, rightFaceKey, e)}
+              >
+                <title>{rightFaceKey === 'mesial' ? 'Mesial (M) — voltada para a linha média' : 'Distal (D)'}</title>
+              </polygon>
 
               {/* Face Central: Oclusal (ou Incisal em dentes anteriores) */}
               {anterior ? (
@@ -332,7 +415,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                   strokeWidth="2"
                   className="cursor-pointer hover:brightness-90 transition-all"
                   onClick={(e) => handleFaceClick(toothNumber, 'oclusal', e)}
-                />
+                >
+                  <title>Incisal (I)</title>
+                </rect>
               ) : (
                 <rect
                   x="35"
@@ -345,7 +430,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                   strokeWidth="2"
                   className="cursor-pointer hover:brightness-90 transition-all"
                   onClick={(e) => handleFaceClick(toothNumber, 'oclusal', e)}
-                />
+                >
+                  <title>Oclusal (O)</title>
+                </rect>
               )}
             </svg>
           )}
@@ -353,7 +440,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
           {/* Indicador de Braquete Ortodôntico */}
           {isBracket && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-3.5 h-3.5 bg-orange-500 rounded border border-white shadow-sm flex items-center justify-center text-[7px] font-bold text-white">
+              <div className="w-3.5 h-3.5 bg-orange-500 rounded border border-white shadow-xs flex items-center justify-center text-[7px] font-bold text-white">
                 #
               </div>
             </div>
@@ -370,11 +457,11 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
           {!readOnly && viewMode !== 'initial' && (
             <button
               type="button"
-              title="Aplicar condição no dente inteiro"
+              title={cond?.affectsWholeTooth ? "Aplicar condição no dente inteiro" : "Aplicar condição em todas as faces"}
               onClick={(e) => handleFaceClick(toothNumber, 'whole', e)}
-              className="text-[9px] font-bold text-slate-500 hover:text-cyan-600 hover:underline px-1 py-0.5"
+              className="text-[9px] font-bold text-slate-500 hover:text-cyan-600 hover:underline px-0.5 py-0.5"
             >
-              Face
+              {cond?.affectsWholeTooth ? 'Dente' : 'Faces'}
             </button>
           )}
           {onOpenToothDossier && (
@@ -395,10 +482,54 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
     );
   };
 
+  // Renderizador unificado da arcada dentária completa:
+  // Mostra todos os dentes juntos, centralizados no desktop, sem scrolls separados nos quadrantes.
+  // No mobile/tablet, mantém um único scroll horizontal por arcada.
+  const renderArchRow = (
+    rightTeeth: number[],
+    leftTeeth: number[],
+    isCompareInitial = false,
+    isDeciduous = false
+  ) => {
+    return (
+      <div className="w-full overflow-x-auto pb-1.5 scrollbar-thin">
+        <div className={`flex items-center justify-center min-w-max mx-auto p-2 sm:p-2.5 rounded-2xl border transition-all ${
+          isDeciduous
+            ? 'bg-cyan-50/50 border-cyan-200'
+            : isCompareInitial
+              ? 'bg-white border-cyan-200'
+              : 'bg-white/90 border-slate-200 shadow-xs'
+        }`}>
+          {/* Quadrante Direito (do Paciente) - Exibido à Esquerda da tela (Ex: 18..11 ou 48..41) */}
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {rightTeeth.map((tooth) => renderTooth(tooth, isCompareInitial))}
+          </div>
+
+          {/* Linha Média Visual com destaque vertical entre 11|21, 41|31, 51|61, 81|71 */}
+          <div
+            className="flex flex-col items-center justify-center px-1 sm:px-2 select-none group flex-shrink-0"
+            title="Linha Média Dental"
+          >
+            <div className="h-2 w-[2px] bg-cyan-400 group-hover:bg-cyan-500 transition-colors" />
+            <span className="text-[9px] sm:text-[10px] font-black uppercase text-cyan-700 dark:text-cyan-400 tracking-tighter my-0.5 px-0.5">
+              Média
+            </span>
+            <div className="h-6 sm:h-9 w-[2px] bg-cyan-500 group-hover:bg-cyan-600 rounded-full transition-colors" />
+          </div>
+
+          {/* Quadrante Esquerdo (do Paciente) - Exibido à Direita da tela (Ex: 21..28 ou 31..38) */}
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {leftTeeth.map((tooth) => renderTooth(tooth, isCompareInitial))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Barra de Ferramentas do Odontograma */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white border border-slate-200 rounded-2xl shadow-xs">
         {/* Modos de visualização: Atual vs Inicial vs Comparativo */}
         <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
           <button
@@ -406,7 +537,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             onClick={() => setViewMode('current')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
               viewMode === 'current'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
             }`}
           >
@@ -417,7 +548,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             onClick={() => setViewMode('initial')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
               viewMode === 'initial'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
             }`}
           >
@@ -428,7 +559,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             onClick={() => setViewMode('compare')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
               viewMode === 'compare'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
             }`}
           >
@@ -444,7 +575,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             onClick={() => setDentitionType('permanent')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
               dentitionType === 'permanent'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -455,7 +586,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             onClick={() => setDentitionType('deciduous')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
               dentitionType === 'deciduous'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -466,7 +597,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             onClick={() => setDentitionType('mixed')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
               dentitionType === 'mixed'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -496,7 +627,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
               <button
                 type="button"
                 onClick={applyConditionToSelected}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700 shadow-sm flex items-center gap-1.5 animate-pulse"
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-600 text-white hover:bg-cyan-700 shadow-xs flex items-center gap-1.5 animate-pulse"
               >
                 <PlusCircle className="w-3.5 h-3.5" />
                 Aplicar em {selectedTeeth.length} dente(s)
@@ -514,8 +645,8 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-cyan-600" />
               Condição a Aplicar (Selecione e clique na face ou dente):
             </span>
-            <span className="text-[11px] text-slate-500 font-medium">
-              V: Vestibular | L/P: Lingual ou Palatina | M: Mesial | D: Distal | O/I: Oclusal/Incisal
+            <span className="text-[11px] text-slate-500 font-medium hidden md:inline">
+              V: Vestibular | L/P: Lingual ou Palatina | M: Mesial (voltada à linha média) | D: Distal | O/I: Oclusal/Incisal
             </span>
           </div>
 
@@ -527,7 +658,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                   key={c.id}
                   type="button"
                   onClick={() => setActiveCondition(c.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-xs ${
                     isSelected
                       ? 'bg-white border-cyan-500 ring-2 ring-cyan-400 text-cyan-950 scale-105'
                       : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
@@ -546,7 +677,7 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
       )}
 
       {/* Exibição Odontograma: Arcada Superior e Inferior */}
-      <div className="bg-slate-50/70 border border-slate-200 rounded-3xl p-6 space-y-8 shadow-sm">
+      <div className="bg-slate-50/70 border border-slate-200 rounded-3xl p-4 sm:p-6 space-y-6 sm:space-y-8 shadow-xs">
         {/* ARCADA SUPERIOR */}
         <div className="space-y-4">
           {(dentitionType === 'permanent' || dentitionType === 'mixed') && (
@@ -555,16 +686,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                 <span className="text-xs font-black uppercase tracking-wider text-slate-600">
                   Arcada Superior Permanente (Maxila) — Quadrante 1 & 2
                 </span>
-                <span className="text-[11px] text-slate-500 font-bold">Direita ← | → Esquerda</span>
+                <span className="text-[11px] text-slate-500 font-bold">18 a 11 (Dir) | 21 a 28 (Esq)</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex justify-end gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
-                  {UPPER_RIGHT.map((tooth) => renderTooth(tooth))}
-                </div>
-                <div className="flex justify-start gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
-                  {UPPER_LEFT.map((tooth) => renderTooth(tooth))}
-                </div>
-              </div>
+              {renderArchRow(UPPER_RIGHT, UPPER_LEFT, false, false)}
             </div>
           )}
 
@@ -574,25 +698,18 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                 <span className="text-xs font-black uppercase tracking-wider text-cyan-700">
                   Arcada Superior Decídua (Infantil) — Quadrante 5 & 6
                 </span>
-                <span className="text-[11px] text-slate-500 font-bold">55 a 51 ← | → 61 a 65</span>
+                <span className="text-[11px] text-slate-500 font-bold">55 a 51 (Dir) | 61 a 65 (Esq)</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex justify-end gap-1.5 p-2.5 bg-cyan-50/60 rounded-2xl border border-cyan-200 overflow-x-auto">
-                  {DECIDUOUS_UPPER_RIGHT.map((tooth) => renderTooth(tooth))}
-                </div>
-                <div className="flex justify-start gap-1.5 p-2.5 bg-cyan-50/60 rounded-2xl border border-cyan-200 overflow-x-auto">
-                  {DECIDUOUS_UPPER_LEFT.map((tooth) => renderTooth(tooth))}
-                </div>
-              </div>
+              {renderArchRow(DECIDUOUS_UPPER_RIGHT, DECIDUOUS_UPPER_LEFT, false, true)}
             </div>
           )}
         </div>
 
-        {/* Divisor com Linha Média */}
-        <div className="relative flex items-center justify-center">
+        {/* Divisor com Linha Média Horizontal (Plano Oclusal) */}
+        <div className="relative flex items-center justify-center py-1">
           <div className="w-full border-t border-dashed border-slate-300" />
           <span className="absolute bg-white px-3 py-0.5 rounded-full border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
-            Plano Oclusal / Linha Média
+            Plano Oclusal
           </span>
         </div>
 
@@ -604,16 +721,9 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                 <span className="text-xs font-black uppercase tracking-wider text-cyan-700">
                   Arcada Inferior Decídua (Infantil) — Quadrante 8 & 7
                 </span>
-                <span className="text-[11px] text-slate-500 font-bold">85 a 81 ← | → 71 a 75</span>
+                <span className="text-[11px] text-slate-500 font-bold">85 a 81 (Dir) | 71 a 75 (Esq)</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex justify-end gap-1.5 p-2.5 bg-cyan-50/60 rounded-2xl border border-cyan-200 overflow-x-auto">
-                  {DECIDUOUS_LOWER_RIGHT.map((tooth) => renderTooth(tooth))}
-                </div>
-                <div className="flex justify-start gap-1.5 p-2.5 bg-cyan-50/60 rounded-2xl border border-cyan-200 overflow-x-auto">
-                  {DECIDUOUS_LOWER_LEFT.map((tooth) => renderTooth(tooth))}
-                </div>
-              </div>
+              {renderArchRow(DECIDUOUS_LOWER_RIGHT, DECIDUOUS_LOWER_LEFT, false, true)}
             </div>
           )}
 
@@ -623,22 +733,15 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
                 <span className="text-xs font-black uppercase tracking-wider text-slate-600">
                   Arcada Inferior Permanente (Mandíbula) — Quadrante 4 & 3
                 </span>
-                <span className="text-[11px] text-slate-500 font-bold">Direita ← | → Esquerda</span>
+                <span className="text-[11px] text-slate-500 font-bold">48 a 41 (Dir) | 31 a 38 (Esq)</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex justify-end gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
-                  {LOWER_RIGHT.map((tooth) => renderTooth(tooth))}
-                </div>
-                <div className="flex justify-start gap-1.5 p-2.5 bg-white/80 rounded-2xl border border-slate-200 overflow-x-auto">
-                  {LOWER_LEFT.map((tooth) => renderTooth(tooth))}
-                </div>
-              </div>
+              {renderArchRow(LOWER_RIGHT, LOWER_LEFT, false, false)}
             </div>
           )}
         </div>
       </div>
 
-      {/* MODO COMPARATIVO (Mostra lado a lado se ativo) */}
+      {/* MODO COMPARATIVO (Mostra lado a lado com a mesma unificação de arcada) */}
       {viewMode === 'compare' && (
         <div className="p-5 bg-cyan-50/50 border border-cyan-200 rounded-3xl space-y-4">
           <div className="flex items-center gap-2">
@@ -648,29 +751,16 @@ export const OdontogramCanvas: React.FC<OdontogramCanvasProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex justify-end gap-1.5 p-2 bg-white rounded-2xl border border-cyan-100 overflow-x-auto">
-              {UPPER_RIGHT.map((tooth) => renderTooth(tooth, true))}
-            </div>
-            <div className="flex justify-start gap-1.5 p-2 bg-white rounded-2xl border border-cyan-100 overflow-x-auto">
-              {UPPER_LEFT.map((tooth) => renderTooth(tooth, true))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex justify-end gap-1.5 p-2 bg-white rounded-2xl border border-cyan-100 overflow-x-auto">
-              {LOWER_RIGHT.map((tooth) => renderTooth(tooth, true))}
-            </div>
-            <div className="flex justify-start gap-1.5 p-2 bg-white rounded-2xl border border-cyan-100 overflow-x-auto">
-              {LOWER_LEFT.map((tooth) => renderTooth(tooth, true))}
-            </div>
+          <div className="space-y-4">
+            {renderArchRow(UPPER_RIGHT, UPPER_LEFT, true, false)}
+            {renderArchRow(LOWER_RIGHT, LOWER_LEFT, true, false)}
           </div>
         </div>
       )}
 
       {/* Histórico do Dente Selecionado */}
       {selectedToothHistory && (
-        <div className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-sm">
+        <div className="p-4 bg-white border border-slate-200 rounded-2xl space-y-3 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <History className="w-4 h-4 text-cyan-600" />
