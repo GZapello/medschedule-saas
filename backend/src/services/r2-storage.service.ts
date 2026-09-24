@@ -11,6 +11,31 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 
+/** Cliente S3 apontando para o Cloudflare R2, ou null se as credenciais não estiverem configuradas. */
+export function buildR2Client(): S3Client | null {
+  const accountId = process.env.R2_ACCOUNT_ID || '';
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID || '';
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
+  const endpoint =
+    process.env.R2_ENDPOINT ||
+    (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+
+  if (!accessKeyId || !secretAccessKey || !endpoint) {
+    return null;
+  }
+  return new S3Client({
+    region: 'auto',
+    endpoint,
+    credentials: {
+      accessKeyId,
+      secretAccessKey
+    },
+    forcePathStyle: true,
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED'
+  });
+}
+
 export class R2StorageService {
   private client: S3Client | null = null;
   private bucketName: string;
@@ -19,29 +44,9 @@ export class R2StorageService {
   private mockObjects: Set<string> = new Set();
 
   constructor() {
-    const accountId = process.env.R2_ACCOUNT_ID || '';
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID || '';
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY || '';
     this.bucketName = process.env.R2_BUCKET_NAME || 'zemda-files';
-
-    const endpoint =
-      process.env.R2_ENDPOINT ||
-      (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
-
-    if (accessKeyId && secretAccessKey && (endpoint || accountId)) {
-      this.client = new S3Client({
-        region: 'auto',
-        endpoint: endpoint || `https://${accountId}.r2.cloudflarestorage.com`,
-        credentials: {
-          accessKeyId,
-          secretAccessKey
-        },
-        forcePathStyle: true,
-        requestChecksumCalculation: 'WHEN_REQUIRED',
-        responseChecksumValidation: 'WHEN_REQUIRED'
-      });
-      this.isConfigured = true;
-    }
+    this.client = buildR2Client();
+    this.isConfigured = this.client !== null;
   }
 
   get isConfiguredClient(): boolean {

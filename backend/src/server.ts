@@ -95,6 +95,10 @@ BillingWebhookService.start();
 import { NotificationService } from './services/notification.service';
 NotificationService.startBackgroundWorker(30000);
 
+// Backups periódicos do banco (ativos por padrão em produção; ver docs/BACKUP.md)
+import { startBackupScheduler } from './services/backup.service';
+startBackupScheduler();
+
 // Redirecionamento canônico de www.zemda.com.br para https://zemda.com.br
 app.use((req, res, next) => {
   const host = req.headers.host || '';

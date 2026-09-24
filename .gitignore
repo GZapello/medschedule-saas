@@ -11,6 +11,9 @@ estokei/
 *.sqlite
 *.db*
 saas_schedule.db*
+backups/
+*.sqlite.gz*
+*.restoring
 
 # Builds e Temporários
 frontend/dist/

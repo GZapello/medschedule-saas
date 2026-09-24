@@ -7,6 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "backup": "node dist/scripts/backup-cli.js",
     "test": "npm run build && node run-tests.cjs",
     "test:billing": "npm run build && node test-billing.cjs",
     "test:posture": "npm run build && node test-personal-posture.cjs",

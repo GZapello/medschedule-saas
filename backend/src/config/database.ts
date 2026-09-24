@@ -10,8 +10,8 @@ import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
 import { migrateRemoveOutOfScopeProfessions } from './remove-out-of-scope-professions.migration';
 import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
+import { dbPath } from './db-path';
 
-const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
