@@ -337,9 +337,10 @@ export class AppointmentController {
           `).run(resolvedPatientId, tenantId, fullName, phone, email || null, isChild ? 1 : 0, notes || null);
 
           if (isChild && guardianName) {
+            // O agendamento público não coleta a autorização do responsável: fica pendente para a clínica registrar.
             db.prepare(`
-              INSERT INTO guardians (id, tenant_id, patient_id, full_name, phone, relationship, is_primary)
-              VALUES (?, ?, ?, ?, ?, 'legal_guardian', 1)
+              INSERT INTO guardians (id, tenant_id, patient_id, full_name, phone, relationship, is_primary, authorization_signed)
+              VALUES (?, ?, ?, ?, ?, 'legal_guardian', 1, 0)
             `).run('grd-' + uuidv4().slice(0, 8), tenantId, resolvedPatientId, guardianName, guardianPhone || phone);
           }
         }

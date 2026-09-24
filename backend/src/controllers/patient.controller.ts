@@ -4,6 +4,21 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { validateAndFormatBrazilianPhone } from '../utils/phone-validator';
 
+// Autorização do responsável informada pelo cliente (camelCase ou snake_case); undefined = não informada.
+function informedAuthorization(g: any): 0 | 1 | undefined {
+  const value = g?.authorizationSigned ?? g?.authorization_signed;
+  if (value === undefined || value === null) return undefined;
+  return value === true || value === 1 || value === '1' || value === 'true' ? 1 : 0;
+}
+
+const digitsOnly = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+const normalizedName = (v: unknown) => String(v ?? '').trim().toLowerCase();
+
+// Valores aceitos pelo CHECK de guardians.relationship (schema.sql); outros viram 'other'.
+const GUARDIAN_RELATIONSHIPS = ['mother', 'father', 'legal_guardian', 'tutor', 'other'];
+const validRelationship = (value: unknown) =>
+  typeof value === 'string' && GUARDIAN_RELATIONSHIPS.includes(value) ? value : 'other';
+
 export class PatientController {
   static list(req: Request, res: Response): void {
     try {
@@ -222,12 +237,12 @@ export class PatientController {
               tenantId,
               patientId,
               g.fullName,
-              g.relationship || 'mother',
+              g.relationship ? validRelationship(g.relationship) : 'mother',
               g.cpf || null,
               g.phone,
               g.email || null,
               g.isPrimary ? 1 : 0,
-              g.authorizationSigned ? 1 : 1
+              informedAuthorization(g) ?? 0
             );
           }
         }
@@ -356,27 +371,47 @@ export class PatientController {
 
       // Atualiza responsáveis se informados
       if (Array.isArray(guardians)) {
-        db.prepare('DELETE FROM guardians WHERE patient_id = ? AND tenant_id = ?').run(id, tenantId);
+        // Os responsáveis são regravados; a autorização já registrada de um mesmo responsável
+        // (mesmo id, CPF ou nome) é mantida quando o cliente não informa um novo valor.
+        const previous = db.prepare(
+          'SELECT id, full_name, cpf, relationship, authorization_signed FROM guardians WHERE patient_id = ? AND tenant_id = ?'
+        ).all(id, tenantId) as Array<{ id: string; full_name: string; cpf: string | null; relationship: string; authorization_signed: number }>;
+        const reused = new Set<string>();
+        const findPrevious = (g: any, gName: string) => {
+          const available = previous.filter(p => !reused.has(p.id));
+          const cpfDigits = digitsOnly(g.cpf);
+          return (g.id && available.find(p => p.id === g.id))
+            || (cpfDigits && available.find(p => digitsOnly(p.cpf) === cpfDigits))
+            || available.find(p => normalizedName(p.full_name) === normalizedName(gName));
+        };
+
         const insertGrd = db.prepare(`
           INSERT INTO guardians (id, tenant_id, patient_id, full_name, relationship, cpf, phone, email, is_primary, authorization_signed)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
-        for (const g of guardians) {
-          const gName = g.full_name || g.fullName;
-          if (gName) {
-            insertGrd.run(
-              'grd-' + uuidv4().slice(0, 8),
-              tenantId,
-              id,
-              gName,
-              g.relationship || 'Responsável',
-              g.cpf || null,
-              g.phone || null,
-              g.email || null,
-              g.is_primary !== undefined ? (g.is_primary ? 1 : 0) : 1
-            );
+        // Atômico: se algum responsável falhar, os anteriores não são perdidos.
+        db.transaction(() => {
+          db.prepare('DELETE FROM guardians WHERE patient_id = ? AND tenant_id = ?').run(id, tenantId);
+          for (const g of guardians) {
+            const gName = g.full_name || g.fullName;
+            if (gName) {
+              const match = findPrevious(g, gName);
+              if (match) reused.add(match.id);
+              insertGrd.run(
+                match?.id ?? 'grd-' + uuidv4().slice(0, 8),
+                tenantId,
+                id,
+                gName,
+                g.relationship ? validRelationship(g.relationship) : (match?.relationship ?? 'other'),
+                g.cpf || null,
+                g.phone || null,
+                g.email || null,
+                g.is_primary !== undefined ? (g.is_primary ? 1 : 0) : 1,
+                informedAuthorization(g) ?? match?.authorization_signed ?? 0
+              );
+            }
           }
-        }
+        })();
       }
 
       logAudit(req, 'UPDATE_PATIENT', 'patients', id);

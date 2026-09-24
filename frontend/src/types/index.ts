@@ -201,6 +201,7 @@ export interface Guardian {
   phone: string;
   email?: string;
   is_primary: number;
+  authorization_signed?: number;
 }
 
 export interface Patient {

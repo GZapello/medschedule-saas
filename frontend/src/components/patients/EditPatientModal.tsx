@@ -52,6 +52,8 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
   const [guardianRelationship, setGuardianRelationship] = useState<string>('mother');
   const [guardianPhone, setGuardianPhone] = useState<string>('');
   const [guardianCpf, setGuardianCpf] = useState<string>('');
+  const [guardianId, setGuardianId] = useState<string | null>(null);
+  const [guardianAuthorized, setGuardianAuthorized] = useState<boolean>(false);
 
   // Convênio / Plano de Saúde
   const [healthInsuranceProvider, setHealthInsuranceProvider] = useState<string>('');
@@ -91,11 +93,15 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
         setGuardianRelationship(primaryG.relationship || 'mother');
         setGuardianPhone(primaryG.phone || '');
         setGuardianCpf(primaryG.cpf || '');
+        setGuardianId(primaryG.id || null);
+        setGuardianAuthorized(Number(primaryG.authorization_signed) === 1);
       } else {
         setGuardianName('');
         setGuardianRelationship('mother');
         setGuardianPhone('');
         setGuardianCpf('');
+        setGuardianId(null);
+        setGuardianAuthorized(false);
       }
     };
 
@@ -159,11 +165,13 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
       const guardians = isChild
         ? [
             {
+              id: guardianId,
               fullName: guardianName,
               relationship: guardianRelationship,
               phone: guardianPhone,
               cpf: guardianCpf || null,
-              isPrimary: true
+              isPrimary: true,
+              authorizationSigned: guardianAuthorized
             }
           ]
         : [];
@@ -275,7 +283,6 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
                     >
                       <option value="mother">Mãe</option>
                       <option value="father">Pai</option>
-                      <option value="grandparent">Avô / Avó</option>
                       <option value="legal_guardian">Tutor(a) / Guardião Legal</option>
                       <option value="other">Outro</option>
                     </select>
@@ -302,6 +309,22 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
                     />
                   </div>
                 </div>
+
+                <label className="flex items-start gap-2 text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={guardianAuthorized}
+                    onChange={e => setGuardianAuthorized(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-semibold">Autorização do responsável coletada</span>
+                    {!guardianAuthorized && (
+                      <span className="ml-1.5 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold uppercase">Autorização pendente</span>
+                    )}
+                    <span className="block text-slate-500">Marque somente se o responsável assinou a autorização (termo físico ou digital).</span>
+                  </span>
+                </label>
               </div>
             )}
 

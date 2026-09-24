@@ -782,6 +782,11 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                       <div key={g.id} className="bg-white p-3.5 rounded-xl border border-pink-200 text-xs">
                         <div className="font-bold text-slate-900">{g.full_name} ({g.relationship})</div>
                         <div className="text-slate-500 mt-1">Telefone: {g.phone} • CPF: {g.cpf || '—'}</div>
+                        {Number(g.authorization_signed) === 1 ? (
+                          <span className="inline-block mt-2 px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase">Autorização registrada</span>
+                        ) : (
+                          <span className="inline-block mt-2 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold uppercase">Autorização pendente</span>
+                        )}
                       </div>
                     ))}
                   </div>

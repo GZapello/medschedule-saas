@@ -39,6 +39,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
   const [guardianRelationship, setGuardianRelationship] = useState<string>('mother');
   const [guardianPhone, setGuardianPhone] = useState<string>('');
   const [guardianCpf, setGuardianCpf] = useState<string>('');
+  const [guardianAuthorized, setGuardianAuthorized] = useState<boolean>(false);
 
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -87,7 +88,8 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
               relationship: guardianRelationship,
               phone: guardianPhone,
               cpf: guardianCpf || null,
-              isPrimary: true
+              isPrimary: true,
+              authorizationSigned: guardianAuthorized
             }
           ]
         : [];
@@ -267,6 +269,19 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
                   />
                 </div>
               </div>
+
+              <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={guardianAuthorized}
+                  onChange={e => setGuardianAuthorized(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="font-semibold">Autorização do responsável coletada</span>
+                  <span className="block text-slate-500">Marque somente se o responsável assinou a autorização (termo físico ou digital). Sem isso, o cadastro fica com autorização pendente.</span>
+                </span>
+              </label>
             </div>
           )}
 
