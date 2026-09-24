@@ -16,7 +16,7 @@ export class EmailVerificationController {
         return;
       }
 
-      if (purpose !== 'clinic_registration' && purpose !== 'password_reset') {
+      if (purpose !== 'clinic_registration' && purpose !== 'password_reset' && purpose !== 'invite_registration') {
         res.status(400).json({ error: 'Finalidade de verificação não suportada' });
         return;
       }
@@ -74,7 +74,7 @@ export class EmailVerificationController {
         return;
       }
 
-      if (purpose !== 'clinic_registration' && purpose !== 'password_reset') {
+      if (purpose !== 'clinic_registration' && purpose !== 'password_reset' && purpose !== 'invite_registration') {
         res.status(400).json({ error: 'Finalidade de verificação não suportada' });
         return;
       }

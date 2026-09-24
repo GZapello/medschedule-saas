@@ -965,6 +965,7 @@ export class AuthController {
     try {
       const {
         token,
+        emailVerificationToken,
         name,
         email,
         password,
@@ -995,6 +996,26 @@ export class AuthController {
 
       const cleanEmail = email.trim().toLowerCase();
       const cleanToken = token.trim();
+
+      // Validação obrigatória do token de confirmação de e-mail (código de 6 dígitos)
+      if (!emailVerificationToken) {
+        res.status(400).json({ error: 'É obrigatório validar o e-mail com o código de 6 dígitos antes de concluir o cadastro' });
+        return;
+      }
+
+      const tokenValidation = EmailService.verifyVerificationToken(
+        emailVerificationToken,
+        cleanEmail,
+        'invite_registration'
+      );
+
+      if (!tokenValidation.valid) {
+        res.status(400).json({
+          code: 'EMAIL_VERIFICATION_EXPIRED',
+          error: tokenValidation.error || 'Token de verificação de e-mail inválido ou expirado'
+        });
+        return;
+      }
 
       // Transação atômica para validar o convite e registrar o usuário
       const transaction = db.transaction(() => {
@@ -1286,6 +1307,11 @@ export class AuthController {
       });
 
       completeRegister();
+
+      // Consome o token de verificação de e-mail agora que o cadastro foi concluído com sucesso
+      if (tokenValidation.payload?.verificationId) {
+        EmailService.consumeVerificationToken(tokenValidation.payload.verificationId);
+      }
 
       // Computa capabilities completas imediatamente no primeiro login
       const computedCaps = CapabilityService.computeUserCapabilities(userId, tenantId);

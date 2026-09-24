@@ -772,6 +772,17 @@ const AppContent: React.FC = () => {
 
   // Se o usuário está acessando link único de convite da clínica (/convite/:clinicSlug/:token ou /convite/:token)
   if (activeInvite) {
+    // Se o usuário já está autenticado, não deve permanecer preso no convite: abre diretamente o dashboard
+    if (currentUser) {
+      setActiveInvite(null);
+      setCurrentView('dashboard');
+      try {
+        sessionStorage.setItem('activeView', 'dashboard');
+      } catch (_) {}
+      window.history.replaceState({}, '', '/dashboard');
+      return null;
+    }
+
     return (
       <InviteRegisterView
         clinicSlug={activeInvite.clinicSlug}
@@ -781,6 +792,14 @@ const AppContent: React.FC = () => {
           window.history.pushState(null, '', '/');
           setPublicView('login');
           setAuthInitialAction('login');
+        }}
+        onSuccess={() => {
+          setActiveInvite(null);
+          setCurrentView('dashboard');
+          try {
+            sessionStorage.setItem('activeView', 'dashboard');
+          } catch (_) {}
+          window.history.replaceState({}, '', '/dashboard');
         }}
       />
     );

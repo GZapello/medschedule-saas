@@ -88,6 +88,9 @@ export class EmailService {
       headline = 'Recuperação de Senha';
       leadText = 'Recebemos uma solicitação para redefinir a senha da sua conta no Zemda. Utilize o código de verificação abaixo:';
       noteText = 'O código expira em 10 minutos. Se você não solicitou a recuperação da sua senha, desconsidere esta mensagem. Sua conta permanece totalmente protegida.';
+    } else if (purpose === 'invite_registration') {
+      headline = 'Confirmação de Convite';
+      leadText = 'Para concluir seu cadastro como colaborador e acessar sua clínica no Zemda, utilize o código de verificação abaixo:';
     } else if (isExistingAccount) {
       existingAccountNotice = `
         <div style="background-color: #f8fafc; border-left: 3px solid #0d9488; padding: 12px 16px; margin: 0 0 20px; border-radius: 6px;">
@@ -147,7 +150,7 @@ export class EmailService {
       return { success: false, error: 'E-mail informado é inválido' };
     }
 
-    if (purpose !== 'clinic_registration' && purpose !== 'password_reset') {
+    if (purpose !== 'clinic_registration' && purpose !== 'password_reset' && purpose !== 'invite_registration') {
       return { success: false, error: 'Finalidade de verificação não suportada' };
     }
 
@@ -331,7 +334,7 @@ export class EmailService {
       return { success: false, error: 'Código de verificação deve conter 6 dígitos' };
     }
 
-    if (purpose !== 'clinic_registration' && purpose !== 'password_reset') {
+    if (purpose !== 'clinic_registration' && purpose !== 'password_reset' && purpose !== 'invite_registration') {
       return { success: false, error: 'Finalidade de verificação não suportada' };
     }
 
@@ -475,7 +478,8 @@ export class EmailService {
       return { valid: false, error: 'Token de verificação de e-mail inválido ou adulterado' };
     }
 
-    if (!decoded || !decoded.verified || decoded.purpose !== expectedPurpose) {
+    const matchesPurpose = decoded.purpose === expectedPurpose || (expectedPurpose === 'invite_registration' && decoded.purpose === 'clinic_registration');
+    if (!decoded || !decoded.verified || !matchesPurpose) {
       return { valid: false, error: 'Token de verificação de e-mail inválido' };
     }
 
@@ -489,7 +493,7 @@ export class EmailService {
       SELECT *
       FROM email_verifications
       WHERE id = ? AND email = ? AND purpose = ?
-    `).get(decoded.verificationId, cleanExpected, expectedPurpose) as EmailVerificationRecord | undefined;
+    `).get(decoded.verificationId, cleanExpected, decoded.purpose) as EmailVerificationRecord | undefined;
 
     if (!record) {
       return { valid: false, error: 'Registro de verificação de e-mail não encontrado' };
