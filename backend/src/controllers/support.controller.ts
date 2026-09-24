@@ -165,6 +165,38 @@ export class SupportController {
 
       logAudit(req, 'CREATE_SUPPORT_TICKET', 'support_tickets', ticketId, { title, priority });
 
+      // Notificação imediata por e-mail para a equipe de suporte
+      try {
+        const superadmin = db.prepare("SELECT email FROM users WHERE role = 'superadmin' LIMIT 1").get() as any;
+        const adminEmail = superadmin?.email || process.env.SUPPORT_EMAIL || 'suporte@zemda.com.br';
+        if (adminEmail) {
+          EmailService.sendCustomEmail(
+            adminEmail,
+            `[Suporte] Novo chamado #${ticketId}: ${title.trim()}`,
+            buildZemdaEmailLayout({
+              title: 'Novo Chamado Aberto',
+              headline: 'Novo chamado aberto no suporte',
+              badge: 'Central de Chamados',
+              contentHtml: `
+                <p style="margin: 0 0 16px; font-size: 16px; line-height: 24px; color: #334155;">
+                  Um novo chamado foi aberto por <strong>${user.name || 'Usuário'}</strong> (${user.email || ''}).
+                </p>
+                <p style="margin: 0 0 8px; font-size: 14px; font-weight: bold; color: #1e293b;">
+                  Título: ${title.trim()}
+                </p>
+                <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
+                  <em>"${description.trim()}"</em>
+                </div>
+              `,
+              ctaText: 'Acessar Central de Suporte',
+              ctaUrl: 'https://app.zemda.com.br'
+            })
+          ).catch(e => console.error('[SupportEmail] Erro ao notificar novo chamado:', e));
+        }
+      } catch (e) {
+        console.error('[SupportEmail] Erro no disparo de novo chamado:', e);
+      }
+
       res.status(201).json({
         id: ticketId,
         message: 'Chamado de suporte aberto com sucesso. Nossa equipe administrativa analisará a solicitação.',
@@ -217,6 +249,19 @@ export class SupportController {
         }
       }
 
+      // Prevenção de duplicidade: checar se mensagem idêntica foi salva nos últimos 3 segundos
+      const recentDup = db.prepare(`
+        SELECT id FROM support_ticket_messages
+        WHERE ticket_id = ? AND user_id = ? AND message = ?
+          AND datetime(created_at) >= datetime('now', '-3 seconds')
+        LIMIT 1
+      `).get(id, user.userId, message.trim()) as any;
+
+      if (recentDup) {
+        res.status(200).json({ success: true, id: recentDup.id, message: 'Resposta já registrada' });
+        return;
+      }
+
       const messageId = 'msg-' + uuidv4().slice(0, 8);
       const attachmentsJson = Array.isArray(attachments) ? JSON.stringify(attachments) : null;
       const shouldBeInternal = isSuper && isInternal ? 1 : 0;
@@ -234,7 +279,7 @@ export class SupportController {
         const ticketFull = db.prepare(`
           SELECT t.id, t.title, u.email as creator_email, u.name as creator_name
           FROM support_tickets t
-          JOIN users u ON u.id = t.user_id
+          LEFT JOIN users u ON u.id = t.user_id
           WHERE t.id = ?
         `).get(id) as any;
 

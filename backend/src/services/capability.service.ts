@@ -249,13 +249,25 @@ export class CapabilityService {
    */
   public static setUserPracticeAreas(userId: string, tenantId: string, practiceAreaIds: string[]): void {
     db.prepare('DELETE FROM user_practice_areas WHERE user_id = ? AND tenant_id = ?').run(userId, tenantId);
+    if (!practiceAreaIds || practiceAreaIds.length === 0) return;
+
+    const cleanIds = practiceAreaIds.map(id => (typeof id === 'string' ? id.trim() : '')).filter(Boolean);
+    if (cleanIds.length === 0) return;
+
+    // Filter to only IDs that actually exist in practice_areas to satisfy FK constraint
+    const placeholders = cleanIds.map(() => '?').join(',');
+    const existingRows = db.prepare(`
+      SELECT id FROM practice_areas WHERE id IN (${placeholders})
+    `).all(...cleanIds) as { id: string }[];
+    const validIds = new Set(existingRows.map(r => r.id));
+
     const insertStmt = db.prepare(`
       INSERT OR IGNORE INTO user_practice_areas (user_id, practice_area_id, tenant_id)
       VALUES (?, ?, ?)
     `);
-    for (const paId of practiceAreaIds) {
-      if (paId && paId.trim()) {
-        insertStmt.run(userId, paId.trim(), tenantId);
+    for (const paId of cleanIds) {
+      if (validIds.has(paId)) {
+        insertStmt.run(userId, paId, tenantId);
       }
     }
   }

@@ -285,6 +285,9 @@ export const StaffManagementView: React.FC = () => {
       showToast('Cargo, profissão e áreas de atuação atualizados!', 'success');
       setEditingRoleUser(null);
       loadStaff();
+      if (reloadSession) {
+        await reloadSession();
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar dados do funcionário', 'error');
     }

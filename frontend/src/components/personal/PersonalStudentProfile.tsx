@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
   Dumbbell,
@@ -94,6 +94,87 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   const [editHeight, setEditHeight] = useState<number | ''>('');
   const [editRestrictions, setEditRestrictions] = useState('');
   const [savingStudent, setSavingStudent] = useState(false);
+
+  // Foto do Aluno e Lightbox
+  const [showPhotoLightbox, setShowPhotoLightbox] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Por favor, selecione um arquivo de imagem válido', 'error');
+      return;
+    }
+
+    try {
+      setUploadingPhoto(true);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = async () => {
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const base64 = canvas.toDataURL('image/jpeg', 0.85);
+            try {
+              await ApiClient.put(`/v1/personal/students/${studentId}`, {
+                avatar_url: base64
+              });
+              showToast('Foto do aluno atualizada com sucesso!', 'success');
+              loadAllStudentData();
+            } catch (err: any) {
+              showToast(err.message || 'Erro ao salvar foto', 'error');
+            }
+          }
+          setUploadingPhoto(false);
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Erro ao processar imagem:', err);
+      showToast('Erro ao processar imagem', 'error');
+      setUploadingPhoto(false);
+    } finally {
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Deseja realmente remover a foto do aluno?')) return;
+    try {
+      setUploadingPhoto(true);
+      await ApiClient.put(`/v1/personal/students/${studentId}`, {
+        avatar_url: null,
+        photo_url: null
+      });
+      showToast('Foto do aluno removida com sucesso!', 'success');
+      loadAllStudentData();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao remover foto', 'error');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const handleOpenEditStudent = () => {
     if (!student) return;
@@ -219,11 +300,27 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
     }
   };
 
-  if (loading || !student) {
+  if (loading) {
     return (
       <div className="py-24 text-center text-slate-400 text-xs flex flex-col items-center gap-3">
         <div className="w-10 h-10 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
         Carregando prontuário e dados de treinamento do aluno...
+      </div>
+    );
+  }
+
+  if (!student) {
+    return (
+      <div className="py-16 text-center text-slate-500 text-xs flex flex-col items-center gap-3 bg-white rounded-3xl border border-slate-200 p-8 shadow-sm max-w-md mx-auto my-8">
+        <AlertCircle className="w-10 h-10 text-amber-500" />
+        <h3 className="font-bold text-slate-800 text-sm">Aluno não encontrado</h3>
+        <p className="text-slate-500 text-xs">O aluno selecionado não foi localizado ou o identificador é inválido.</p>
+        <button
+          onClick={onBack}
+          className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+        >
+          Voltar para Lista de Alunos
+        </button>
       </div>
     );
   }
@@ -286,12 +383,55 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
       {/* Cartão de Perfil do Aluno */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-50 border-2 border-indigo-200 text-indigo-700 flex items-center justify-center font-black text-xl uppercase overflow-hidden shadow-inner">
-            {student.avatar_url ? (
-              <img src={student.avatar_url} alt="" className="w-full h-full object-cover" />
-            ) : (
-              student.name.slice(0, 2)
-            )}
+          <div className="relative group shrink-0">
+            <input
+              type="file"
+              ref={photoInputRef}
+              onChange={handlePhotoSelect}
+              accept="image/*"
+              className="hidden"
+            />
+            <div
+              onClick={() => {
+                if (student.avatar_url) setShowPhotoLightbox(true);
+                else photoInputRef.current?.click();
+              }}
+              title={student.avatar_url ? "Clique para ampliar a foto" : "Clique para enviar uma foto"}
+              className={`w-20 h-20 rounded-2xl bg-indigo-50 border-2 border-indigo-200 text-indigo-700 flex items-center justify-center font-black text-2xl uppercase overflow-hidden shadow-inner cursor-pointer hover:border-indigo-400 transition-all ${uploadingPhoto ? 'opacity-50 pointer-events-none' : ''}`}
+            >
+              {uploadingPhoto ? (
+                <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              ) : student.avatar_url ? (
+                <img src={student.avatar_url} alt={student.name} className="w-full h-full object-cover" />
+              ) : (
+                student.name.slice(0, 2)
+              )}
+            </div>
+
+            {/* Quick action buttons beneath/on avatar */}
+            <div className="absolute -bottom-1 -right-1 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  photoInputRef.current?.click();
+                }}
+                title="Trocar / Enviar Foto"
+                className="w-6 h-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+              >
+                <Camera className="w-3 h-3" />
+              </button>
+              {student.avatar_url && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  title="Remover Foto"
+                  className="w-6 h-6 bg-rose-600 hover:bg-rose-700 text-white rounded-full flex items-center justify-center shadow-md transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
 
           <div>
@@ -876,6 +1016,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
         student={student}
         workouts={workouts}
         latestAssessment={assessments[0] || null}
+        assessmentsList={assessments}
+        workoutLogs={logs}
       />
 
       {/* MODAL DE COMPARAÇÃO DE AVALIAÇÕES */}
@@ -1059,6 +1201,43 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           patientName={student.name}
           onClose={() => setShowPreviousRecordsModal(false)}
         />
+      )}
+
+      {/* LIGHTBOX DE FOTO DO ALUNO */}
+      {showPhotoLightbox && student.avatar_url && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setShowPhotoLightbox(false)}
+        >
+          <div className="relative max-w-2xl max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPhotoLightbox(false);
+                  photoInputRef.current?.click();
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Trocar Foto
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPhotoLightbox(false)}
+                className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <img
+              src={student.avatar_url}
+              alt={student.name}
+              className="max-h-[85vh] w-auto max-w-full rounded-2xl shadow-2xl object-contain border border-white/20"
+            />
+            <p className="mt-2 text-white/80 text-xs font-semibold">{student.name}</p>
+          </div>
+        </div>
       )}
     </div>
   );

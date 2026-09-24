@@ -533,6 +533,14 @@ export class PersonalController {
         ORDER BY w.division ASC
       `).all(id, tenantId) as any[];
 
+      for (const w of workouts) {
+        w.exercises = db.prepare(`
+          SELECT * FROM personal_workout_exercises
+          WHERE workout_id = ? AND tenant_id = ?
+          ORDER BY order_index ASC
+        `).all(w.id, tenantId) as any[];
+      }
+
       // Últimas 3 avaliações
       const recentAssessments = db.prepare(`
         SELECT id, assessment_date, weight, height, bmi, body_fat_percentage, muscle_mass_kg, lean_mass_kg, fat_mass_kg, protocol
@@ -716,7 +724,8 @@ export class PersonalController {
       }
 
       const effectiveName = (name !== undefined || fullName !== undefined) ? String(name || fullName || '').trim() : null;
-      const effectivePhoto = avatar_url !== undefined ? avatar_url : (photo_url !== undefined ? photo_url : null);
+      const photoProvided = avatar_url !== undefined || photo_url !== undefined;
+      const cleanPhoto = photoProvided ? (avatar_url || photo_url || null) : null;
       const isActive = status !== undefined ? (status === 'active' ? 1 : 0) : (active !== undefined ? (active ? 1 : 0) : null);
 
       const tx = db.transaction(() => {
@@ -728,13 +737,15 @@ export class PersonalController {
             birth_date = COALESCE(?, birth_date),
             cpf = COALESCE(?, cpf),
             gender = COALESCE(?, gender),
-            photo_url = COALESCE(?, photo_url),
+            photo_url = CASE WHEN ? = 1 THEN ? ELSE photo_url END,
             active = COALESCE(?, active),
             updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
         `).run(
           effectiveName, phone ? String(phone).trim() : null, email ? String(email).trim() : null,
-          birth_date || birthDate || null, cpf || null, gender || null, effectivePhoto, isActive, id, tenantId
+          birth_date || birthDate || null, cpf || null, gender || null,
+          photoProvided ? 1 : 0, cleanPhoto,
+          isActive, id, tenantId
         );
 
         const existingProfile = db.prepare('SELECT id FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(id, tenantId) as any;

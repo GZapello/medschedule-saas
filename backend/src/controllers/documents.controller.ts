@@ -12,6 +12,9 @@ import { isDentistOrClinicManager } from './dentistry.controller';
 import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 import { hasPsychopedagogyAccess } from './psychopedagogy.controller';
 import { hasPsychologyAccess } from './psychology.controller';
+import { isMedicalProfessionalOrClinicManager } from './medical.controller';
+import { isUserPersonalTrainer } from './personal.controller';
+import { resolveCanonicalProfession } from '../utils/profession-module';
 
 export class DocumentsController {
   static consultationStatus(req: Request, res: Response): void {
@@ -548,13 +551,67 @@ export class DocumentsController {
       }
 
       const moduleAccess: Record<string, (request: Request) => boolean> = {
-        ZemdaNutri: isNutritionistOrClinicManager, ZemdaTO: isOccupationalTherapistOrClinicManager,
-        ZemdaFono: isSpeechTherapistOrClinicManager, ZemdaOdonto: isDentistOrClinicManager, ZemdaFisio: isPhysiotherapistOrClinicManager,
+        ZemdaNutri: isNutritionistOrClinicManager,
+        ZemdaTO: isOccupationalTherapistOrClinicManager,
+        ZemdaFono: isSpeechTherapistOrClinicManager,
+        ZemdaOdonto: isDentistOrClinicManager,
+        ZemdaFisio: isPhysiotherapistOrClinicManager,
         ZemdaPP: (request: Request) => hasPsychopedagogyAccess(request, appt.patient_id),
-        ZemdaPsico: (request: Request) => hasPsychologyAccess(request, appt.patient_id)
+        ZemdaPsico: (request: Request) => hasPsychologyAccess(request, appt.patient_id),
+        ZemdaMed: (request: Request) => {
+          if (isMedicalProfessionalOrClinicManager(request)) return true;
+          const userProf = db.prepare(`
+            SELECT p.id, p.profession_id, pr.name, pr.slug
+            FROM professionals p
+            LEFT JOIN professions pr ON pr.id = p.profession_id
+            WHERE p.user_id = ? AND p.tenant_id = ?
+          `).get(request.user!.userId, request.tenantId!) as any;
+          if (userProf) {
+            const res = resolveCanonicalProfession({ id: userProf.profession_id, name: userProf.name, slug: userProf.slug });
+            if (res.commercialModule === 'ZemdaMed') return true;
+          }
+          return false;
+        },
+        ZemdaPersonal: (request: Request) => {
+          if (isUserPersonalTrainer(request.user!.userId, request.tenantId!)) return true;
+          const userProf = db.prepare(`
+            SELECT p.id, p.profession_id, pr.name, pr.slug
+            FROM professionals p
+            LEFT JOIN professions pr ON pr.id = p.profession_id
+            WHERE p.user_id = ? AND p.tenant_id = ?
+          `).get(request.user!.userId, request.tenantId!) as any;
+          if (userProf) {
+            const res = resolveCanonicalProfession({ id: userProf.profession_id, name: userProf.name, slug: userProf.slug });
+            if (res.commercialModule === 'ZemdaPersonal') return true;
+          }
+          return false;
+        }
       };
-      if (evolution?.moduleType && evolution.moduleType !== 'general' && (!moduleAccess[evolution.moduleType] || !moduleAccess[evolution.moduleType](req))) {
-        res.status(403).json({ error: 'Sem permissão para este módulo clínico.' }); return;
+
+      if (evolution?.moduleType && evolution.moduleType !== 'general') {
+        const checker = moduleAccess[evolution.moduleType];
+        let hasAccess = checker ? checker(req) : false;
+
+        // Fallback: se o usuário autenticado for o profissional atribuído ao agendamento
+        if (!hasAccess && appt.professional_id) {
+          const assignedProf = db.prepare(`
+            SELECT p.id, p.profession_id, pr.name, pr.slug
+            FROM professionals p
+            LEFT JOIN professions pr ON pr.id = p.profession_id
+            WHERE p.id = ? AND p.user_id = ? AND p.tenant_id = ?
+          `).get(appt.professional_id, req.user!.userId, tenantId) as any;
+          if (assignedProf) {
+            const resolved = resolveCanonicalProfession({ id: assignedProf.profession_id, name: assignedProf.name, slug: assignedProf.slug });
+            if (resolved.commercialModule === evolution.moduleType) {
+              hasAccess = true;
+            }
+          }
+        }
+
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Sem permissão para este módulo clínico.' });
+          return;
+        }
       }
 
       const saveOnly = req.body.saveOnly === true;

@@ -7,6 +7,7 @@ interface ZemdaBodyModalProps {
   onClose: () => void;
   patientId: string;
   patientName?: string;
+  assessmentId?: string;
   appointmentId?: string;
   professionalId?: string;
   professionalName?: string;
@@ -20,6 +21,7 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
   onClose,
   patientId,
   patientName,
+  assessmentId,
   appointmentId,
   professionalId,
   professionalName,
@@ -77,6 +79,7 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           <ZemdaBodyWorkspace
             patientId={patientId}
+            initialAssessmentId={assessmentId}
             appointmentId={appointmentId}
             professionalId={professionalId}
             module={module}

@@ -23,6 +23,30 @@ import {
 } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
 
+const getCouncilForProfession = (prof?: Profession | null, profNameOrId?: string): string => {
+  if (prof?.registration_board_label) return prof.registration_board_label;
+  if ((prof as any)?.boardLabel) return (prof as any).boardLabel;
+  const target = `${prof?.name || ''} ${prof?.slug || ''} ${profNameOrId || ''}`.toLowerCase();
+  if (target.includes('dentist') || target.includes('odonto')) return 'CRO';
+  if (target.includes('médic') || target.includes('medic')) return 'CRM';
+  if (target.includes('fisioterap') || target.includes('fisio')) return 'CREFITO';
+  if (target.includes('psicólog') || target.includes('psicolog') || target.includes('psicanal')) return 'CRP';
+  if (target.includes('nutri')) return 'CRN';
+  if (target.includes('fono')) return 'CRFa';
+  if (target.includes('ocupacional')) return 'CREFITO';
+  if (target.includes('psicopedag')) return 'ABPp';
+  if (target.includes('personal') || target.includes('educa')) return 'CREF';
+  if (target.includes('enferm')) return 'COREN';
+  if (target.includes('farmac')) return 'CRF';
+  if (target.includes('biomedic')) return 'CRBM';
+  if (target.includes('veterin')) return 'CRMV';
+  if (target.includes('social')) return 'CRESS';
+  if (target.includes('advog')) return 'OAB';
+  if (target.includes('contad')) return 'CRC';
+  if (target.includes('administra') || target.includes('gestor')) return 'CRA';
+  return 'Conselho';
+};
+
 export const ProfessionalsView: React.FC = () => {
   const { showToast } = useToast();
   const { reloadSession } = useAuth();
@@ -437,12 +461,7 @@ export const ProfessionalsView: React.FC = () => {
                       const newPId = e.target.value;
                       setProfessionId(newPId);
                       const selProf = professions.find(p => p.id === newPId);
-                      const isPhysio = selProf?.slug?.includes('fisio') || selProf?.name?.toLowerCase().includes('fisio');
-                      if (isPhysio) {
-                        setRegistrationType('CREFITO');
-                      } else if (selProf?.registration_board_label) {
-                        setRegistrationType(selProf.registration_board_label);
-                      }
+                      setRegistrationType(getCouncilForProfession(selProf, newPId));
                       const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
                       setSpecialtyId(matching.length > 0 ? matching[0].id : '');
                     }}
@@ -719,6 +738,8 @@ export const ProfessionalsView: React.FC = () => {
                       setEditSpecialtyName('');
                       const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
                       setEditSpecialtyId(matching.length > 0 ? matching[0].id : '');
+                      const selProf = professions.find(p => p.id === newPId);
+                      setEditRegistrationType(getCouncilForProfession(selProf, newPId));
                     }}
                     className={`w-full border rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                       isProfessionUnlocked

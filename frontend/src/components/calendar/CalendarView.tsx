@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -17,7 +17,9 @@ import {
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
-  Stethoscope
+  Stethoscope,
+  Coffee,
+  Ban
 } from 'lucide-react';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AppointmentConsultation } from '../clinical/AppointmentConsultation';
@@ -44,6 +46,71 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   // Filtros
   const [selectedProf, setSelectedProf] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedProfSchedule, setSelectedProfSchedule] = useState<{ schedules: any[]; blockedTimes: any[] } | null>(null);
+
+  useEffect(() => {
+    if (selectedProf && selectedProf !== 'all') {
+      ApiClient.get<any>(`/v1/professionals/${selectedProf}`)
+        .then(res => {
+          setSelectedProfSchedule({
+            schedules: res.schedules || [],
+            blockedTimes: res.blockedTimes || []
+          });
+        })
+        .catch(err => {
+          console.warn('[CalendarView] Erro ao carregar escala do profissional:', err);
+          setSelectedProfSchedule(null);
+        });
+    } else {
+      setSelectedProfSchedule(null);
+    }
+  }, [selectedProf]);
+
+  const getSlotAvailability = useCallback((dateStr: string, timeSlot: string) => {
+    if (!selectedProf || selectedProf === 'all' || !selectedProfSchedule) {
+      return { available: true };
+    }
+
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const dateObj = new Date(year, month - 1, day, 12, 0, 0);
+    const dayOfWeek = dateObj.getDay();
+
+    const daySchedule = selectedProfSchedule.schedules?.find((s: any) => s.day_of_week === dayOfWeek);
+
+    if (!daySchedule || !daySchedule.is_active) {
+      return { available: false, reason: 'Fora da escala' };
+    }
+
+    const slotMinutes = parseInt(timeSlot.slice(0, 2), 10) * 60 + parseInt(timeSlot.slice(3, 5), 10);
+    const startMinutes = parseInt(daySchedule.start_time.slice(0, 2), 10) * 60 + parseInt(daySchedule.start_time.slice(3, 5), 10);
+    const endMinutes = parseInt(daySchedule.end_time.slice(0, 2), 10) * 60 + parseInt(daySchedule.end_time.slice(3, 5), 10);
+
+    if (slotMinutes < startMinutes || slotMinutes >= endMinutes) {
+      return { available: false, reason: 'Fora da escala' };
+    }
+
+    if (daySchedule.break_start && daySchedule.break_end) {
+      const breakStart = parseInt(daySchedule.break_start.slice(0, 2), 10) * 60 + parseInt(daySchedule.break_start.slice(3, 5), 10);
+      const breakEnd = parseInt(daySchedule.break_end.slice(0, 2), 10) * 60 + parseInt(daySchedule.break_end.slice(3, 5), 10);
+      if (slotMinutes >= breakStart && slotMinutes < breakEnd) {
+        return { available: false, reason: 'Intervalo', isBreak: true };
+      }
+    }
+
+    if (Array.isArray(selectedProfSchedule.blockedTimes)) {
+      const slotDateTimeStr = `${dateStr}T${timeSlot}:00`;
+      const isBlocked = selectedProfSchedule.blockedTimes.some((b: any) => {
+        const bStart = (b.start_datetime || '').slice(0, 19);
+        const bEnd = (b.end_datetime || '').slice(0, 19);
+        return slotDateTimeStr >= bStart && slotDateTimeStr < bEnd;
+      });
+      if (isBlocked) {
+        return { available: false, reason: 'Bloqueado', isBlocked: true };
+      }
+    }
+
+    return { available: true };
+  }, [selectedProf, selectedProfSchedule]);
 
   // Modal de Detalhes
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
@@ -425,16 +492,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                   {weekDays.map((dayDate, dayIdx) => {
                     const dayStr = formatDateLocal(dayDate);
                     const slotStartPrefix = `${dayStr}T${timeSlot}`;
+                    const availability = getSlotAvailability(dayStr, timeSlot);
 
                     // Filtra agendamentos nesta data e hora
                     const slotAppts = filteredAppointments.filter(a => {
                       return a.start_time.startsWith(slotStartPrefix.slice(0, 13)); // Match no início da hora
                     });
 
+                    const isAvailable = availability.available;
+
                     return (
                       <div
                         key={dayIdx}
                         onClick={(e) => {
+                          if (!isAvailable) return;
                           if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-empty-slot') === 'true') {
                             onOpenNewAppointment({
                               date: dayStr,
@@ -443,8 +514,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             });
                           }
                         }}
-                        className="border-r border-slate-100 last:border-r-0 p-1 relative hover:bg-indigo-50/40 transition-colors group/slot cursor-pointer min-h-[75px]"
-                        title={`Clique para agendar às ${timeSlot} (${dayDate.toLocaleDateString('pt-BR')})`}
+                        className={`border-r border-slate-100 last:border-r-0 p-1 relative transition-colors min-h-[75px] ${
+                          !isAvailable && slotAppts.length === 0
+                            ? 'bg-slate-100/70 select-none cursor-not-allowed'
+                            : 'hover:bg-indigo-50/40 group/slot cursor-pointer'
+                        }`}
+                        title={
+                          !isAvailable && slotAppts.length === 0
+                            ? `${availability.reason || 'Indisponível'} (${dayDate.toLocaleDateString('pt-BR')} às ${timeSlot})`
+                            : `Clique para agendar às ${timeSlot} (${dayDate.toLocaleDateString('pt-BR')})`
+                        }
                       >
                         {slotAppts.map(appt => (
                           <div
@@ -468,14 +547,32 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                           </div>
                         ))}
                         {slotAppts.length === 0 && (
-                          <div
-                            data-empty-slot="true"
-                            className="h-full w-full min-h-[50px] flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
-                          >
-                            <span data-empty-slot="true" className="text-[10px] font-semibold text-indigo-600 bg-white border border-indigo-200 px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
-                              <Plus className="w-3 h-3" /> {timeSlot}
-                            </span>
-                          </div>
+                          !isAvailable ? (
+                            <div className="h-full w-full min-h-[50px] flex items-center justify-center p-1 text-center">
+                              {availability.isBreak ? (
+                                <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                  <Coffee className="w-3 h-3 text-amber-700" /> Intervalo
+                                </span>
+                              ) : availability.isBlocked ? (
+                                <span className="text-[10px] font-bold text-rose-800 bg-rose-100/80 border border-rose-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                  <Ban className="w-3 h-3 text-rose-700" /> Bloqueado
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-slate-400">
+                                  Fora da escala
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div
+                              data-empty-slot="true"
+                              className="h-full w-full min-h-[50px] flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
+                            >
+                              <span data-empty-slot="true" className="text-[10px] font-semibold text-indigo-600 bg-white border border-indigo-200 px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
+                                <Plus className="w-3 h-3" /> {timeSlot}
+                              </span>
+                            </div>
+                          )
                         )}
                       </div>
                     );
@@ -508,19 +605,35 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           <div className="divide-y divide-slate-100">
             {timeSlots.map(timeSlot => {
               const currentDateStr = formatDateLocal(currentDate);
+              const availability = getSlotAvailability(currentDateStr, timeSlot);
               const slotAppts = filteredAppointments.filter(a =>
                 a.start_time.startsWith(`${currentDateStr}T${timeSlot.slice(0, 2)}`)
               );
+              const isAvailable = availability.available;
+
               return (
                 <div
                   key={timeSlot}
                   onClick={(e) => {
+                    if (!isAvailable) return;
                     if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-empty-slot') === 'true') {
-                      onOpenNewAppointment({ date: currentDateStr, time: timeSlot });
+                      onOpenNewAppointment({
+                        date: currentDateStr,
+                        time: timeSlot,
+                        professionalId: selectedProf !== 'all' ? selectedProf : undefined
+                      });
                     }
                   }}
-                  className="py-2.5 px-3 flex items-start gap-4 hover:bg-indigo-50/30 rounded-xl cursor-pointer transition-colors group"
-                  title={`Clique para agendar às ${timeSlot}`}
+                  className={`py-2.5 px-3 flex items-start gap-4 rounded-xl transition-colors ${
+                    !isAvailable && slotAppts.length === 0
+                      ? 'bg-slate-50/80 cursor-not-allowed select-none opacity-80'
+                      : 'hover:bg-indigo-50/30 cursor-pointer group'
+                  }`}
+                  title={
+                    !isAvailable && slotAppts.length === 0
+                      ? `${availability.reason || 'Indisponível'} às ${timeSlot}`
+                      : `Clique para agendar às ${timeSlot}`
+                  }
                 >
                   <div className="w-16 text-xs font-bold text-slate-400 group-hover:text-indigo-600 pt-1">
                     {timeSlot}
@@ -551,6 +664,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             </div>
                           </div>
                         ))}
+                      </div>
+                    ) : !isAvailable ? (
+                      <div className="text-xs font-medium py-1">
+                        {availability.isBreak ? (
+                          <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-md">
+                            <Coffee className="w-3.5 h-3.5 text-amber-700" /> Intervalo / Almoço
+                          </span>
+                        ) : availability.isBlocked ? (
+                          <span className="inline-flex items-center gap-1.5 font-bold text-rose-800 bg-rose-100/80 border border-rose-300 px-2 py-0.5 rounded-md">
+                            <Ban className="w-3.5 h-3.5 text-rose-700" /> Horário Bloqueado
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">Fora da escala do profissional</span>
+                        )}
                       </div>
                     ) : (
                       <div data-empty-slot="true" className="py-2 text-xs text-slate-400 group-hover:text-indigo-600 flex items-center gap-1.5">

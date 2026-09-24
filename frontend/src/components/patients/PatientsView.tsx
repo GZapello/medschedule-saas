@@ -24,16 +24,36 @@ import {
 interface PatientsViewProps {
   onOpenNewPatient: () => void;
   onNavigate?: (view: string) => void;
+  initialPatientId?: string | null;
+  onSelectPatient?: (patientId: string | null) => void;
 }
 
-export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, onNavigate }) => {
+export const PatientsView: React.FC<PatientsViewProps> = ({
+  onOpenNewPatient,
+  onNavigate,
+  initialPatientId,
+  onSelectPatient
+}) => {
   const { clientTermLabel } = useAuth();
   const { showToast } = useToast();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(initialPatientId || null);
   const [editingPatientId, setEditingPatientId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialPatientId !== undefined) {
+      setSelectedPatientId(initialPatientId);
+    }
+  }, [initialPatientId]);
+
+  const handleSelectPatient = (id: string | null) => {
+    setSelectedPatientId(id);
+    if (onSelectPatient) {
+      onSelectPatient(id);
+    }
+  };
 
   // Notifica o contexto da IA quando um paciente é selecionado/desselecionado
   useEffect(() => {
@@ -60,7 +80,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, on
   }, [searchTerm]);
 
   const handleOpenDetail = (patientId: string) => {
-    setSelectedPatientId(patientId);
+    handleSelectPatient(patientId);
   };
 
   return (
@@ -198,7 +218,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({ onOpenNewPatient, on
       {selectedPatientId && (
         <PatientProfileModal
           patientId={selectedPatientId}
-          onClose={() => setSelectedPatientId(null)}
+          onClose={() => handleSelectPatient(null)}
           onUpdated={fetchPatients}
         />
       )}

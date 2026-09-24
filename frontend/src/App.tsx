@@ -114,6 +114,97 @@ function updateDocumentSeo(options: {
   }
 }
 
+export const VIEW_TO_PATH: Record<string, string> = {
+  dashboard: '/dashboard',
+  calendar: '/agenda',
+  patients: '/pacientes',
+  clinical: '/atendimentos',
+  'zemda-body': '/mapa-corporal',
+  'zemda-med': '/zemda-med',
+  'zemda-personal': '/zemda-personal',
+  'zemda-fisio': '/zemda-fisio',
+  'zemda-odonto': '/zemda-odonto',
+  'nutrition-workspace': '/zemda-nutri',
+  'occupational-therapy-workspace': '/zemda-to',
+  'speech-therapy-workspace': '/zemda-fono',
+  'zemda-psico': '/zemda-psico',
+  'psychopedagogy-workspace': '/zemda-pp',
+  professionals: '/profissionais',
+  services: '/servicos',
+  financial: '/financeiro',
+  receipts: '/recibos',
+  staff: '/equipe',
+  schedules: '/horarios',
+  budgets: '/orcamentos',
+  payroll: '/comissoes',
+  inventory: '/estoque',
+  'pending-exams': '/exames-pendentes',
+  'support-tickets': '/suporte',
+  reports: '/relatorios',
+  settings: '/configuracoes',
+  superadmin: '/superadmin',
+  billing: '/assinatura'
+};
+
+export const PATH_TO_VIEW: Record<string, string> = {
+  '/dashboard': 'dashboard',
+  '/agenda': 'calendar',
+  '/pacientes': 'patients',
+  '/atendimentos': 'clinical',
+  '/mapa-corporal': 'zemda-body',
+  '/zemda-med': 'zemda-med',
+  '/zemda-personal': 'zemda-personal',
+  '/zemda-fisio': 'zemda-fisio',
+  '/zemda-odonto': 'zemda-odonto',
+  '/zemda-nutri': 'nutrition-workspace',
+  '/zemda-to': 'occupational-therapy-workspace',
+  '/zemda-fono': 'speech-therapy-workspace',
+  '/zemda-psico': 'zemda-psico',
+  '/zemda-pp': 'psychopedagogy-workspace',
+  '/profissionais': 'professionals',
+  '/servicos': 'services',
+  '/financeiro': 'financial',
+  '/recibos': 'receipts',
+  '/equipe': 'staff',
+  '/horarios': 'schedules',
+  '/orcamentos': 'budgets',
+  '/comissoes': 'payroll',
+  '/estoque': 'inventory',
+  '/exames-pendentes': 'pending-exams',
+  '/suporte': 'support-tickets',
+  '/relatorios': 'reports',
+  '/configuracoes': 'settings',
+  '/superadmin': 'superadmin',
+  '/assinatura': 'billing'
+};
+
+export function parseRouteFromPath(pathname: string): { view: string; subId?: string } | null {
+  const clean = pathname.replace(/\/+$/, '') || '/';
+
+  // Sub-rotas específicas
+  const personalStudentMatch = clean.match(/^\/zemda-personal\/(?:alunos\/)?([^/]+)$/);
+  if (personalStudentMatch) {
+    return { view: 'zemda-personal', subId: personalStudentMatch[1] };
+  }
+
+  const patientMatch = clean.match(/^\/pacientes\/([^/]+)$/);
+  if (patientMatch) {
+    return { view: 'patients', subId: patientMatch[1] };
+  }
+
+  if (PATH_TO_VIEW[clean]) {
+    return { view: PATH_TO_VIEW[clean] };
+  }
+
+  // Fallback para views cujo nome direto seja /viewName
+  const direct = clean.replace(/^\//, '');
+  if (VIEW_TO_PATH[direct]) {
+    return { view: direct };
+  }
+
+  return null;
+}
+
 const AppContent: React.FC = () => {
   const {
     currentUser,
@@ -145,7 +236,43 @@ const AppContent: React.FC = () => {
   } = useAuth();
 
   const { summary: billingSummary } = useBillingSummary();
-  const [currentView, setCurrentView] = useState<string>('dashboard');
+
+  // Resolução inicial de rota para suportar F5, histórico e links diretos
+  const getInitialRoute = () => {
+    const parsed = parseRouteFromPath(window.location.pathname);
+    if (parsed) return parsed;
+    const saved = sessionStorage.getItem('activeView');
+    if (saved && (VIEW_TO_PATH[saved] || PATH_TO_VIEW[`/${saved}`])) {
+      return { view: saved };
+    }
+    return { view: 'dashboard' };
+  };
+
+  const initialRoute = useRef(getInitialRoute()).current;
+  const [currentView, setCurrentView] = useState<string>(initialRoute.view);
+  const [subRouteId, setSubRouteId] = useState<string | null>(initialRoute.subId || null);
+
+  const handleNavigateView = (view: string, subId?: string | null) => {
+    if ((view === 'superadmin' || view === 'audit') && currentUserRef.current?.role !== 'superadmin') {
+      return;
+    }
+    setCurrentView(view);
+    setSubRouteId(subId || null);
+    sessionStorage.setItem('activeView', view);
+
+    // Determina URL canônica da rota
+    let targetPath = VIEW_TO_PATH[view] || `/${view}`;
+    if (view === 'zemda-personal' && subId) {
+      targetPath = `/zemda-personal/alunos/${subId}`;
+    } else if (view === 'patients' && subId) {
+      targetPath = `/pacientes/${subId}`;
+    }
+
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ view, subId }, '', targetPath);
+    }
+  };
+
   const [billingReturnHome, setBillingReturnHome] = useState(() => window.location.pathname === '/' && sessionStorage.getItem('zemda-billing-return-home') === '1');
   const leaveBillingHome = () => {
     sessionStorage.removeItem('zemda-billing-return-home');
@@ -282,7 +409,7 @@ const AppContent: React.FC = () => {
         if ((detail.view === 'superadmin' || detail.view === 'audit') && currentUserRef.current?.role !== 'superadmin') {
           return;
         }
-        setCurrentView(detail.view);
+        handleNavigateView(detail.view, detail.subId || null);
       }
     };
 
@@ -419,13 +546,21 @@ const AppContent: React.FC = () => {
       }
     };
 
-    const handleBrowserBack = () => {
-      // Public history must follow the URL selected by the browser, not push Home.
-      if (currentUser) handleBackButton();
-    };
-
     const handleSyncUrlState = () => {
-      if (!currentUser) setPublicView(window.location.pathname === '/login' || window.location.pathname === '/cadastro' ? 'login' : 'landing');
+      if (currentUserRef.current) {
+        const parsed = parseRouteFromPath(window.location.pathname);
+        if (parsed) {
+          setCurrentView(parsed.view);
+          setSubRouteId(parsed.subId || null);
+          sessionStorage.setItem('activeView', parsed.view);
+        } else if (window.location.pathname === '/' || window.location.pathname === '') {
+          setCurrentView('dashboard');
+          setSubRouteId(null);
+          sessionStorage.setItem('activeView', 'dashboard');
+        }
+      }
+
+      if (!currentUserRef.current) setPublicView(window.location.pathname === '/login' || window.location.pathname === '/cadastro' ? 'login' : 'landing');
       const cleanPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
       if (cleanPath === 'termos-de-uso') {
         setActiveLegalPage('terms');
@@ -486,7 +621,6 @@ const AppContent: React.FC = () => {
     };
 
     window.addEventListener('android-back-button', handleBackButton);
-    window.addEventListener('popstate', handleBrowserBack);
     window.addEventListener('popstate', handleSyncUrlState);
     document.addEventListener('click', handleDocumentClick);
 
@@ -518,7 +652,6 @@ const AppContent: React.FC = () => {
 
     return () => {
       window.removeEventListener('android-back-button', handleBackButton);
-      window.removeEventListener('popstate', handleBrowserBack);
       window.removeEventListener('popstate', handleSyncUrlState);
       document.removeEventListener('click', handleDocumentClick);
       if (cleanupCapacitorListener) {
@@ -852,14 +985,14 @@ const AppContent: React.FC = () => {
       <Navbar
         onToggleSidebar={() => setSidebarOpen(prev => !prev)}
         onOpenAI={() => setIsAIOpen(true)}
-        onNavigate={setCurrentView}
+        onNavigate={handleNavigateView}
       />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Responsive Sidebar */}
         <Sidebar
           currentView={currentView}
-          onNavigate={setCurrentView}
+          onNavigate={handleNavigateView}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
         />
@@ -868,7 +1001,7 @@ const AppContent: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
           {currentView === 'dashboard' && (
             <DashboardView
-              onNavigate={setCurrentView}
+              onNavigate={handleNavigateView}
               onOpenNewAppointment={handleOpenNewAppointment}
               onOpenNewPatient={() => setIsNewPatientOpen(true)}
             />
@@ -881,7 +1014,9 @@ const AppContent: React.FC = () => {
           {currentView === 'patients' && (
             <PatientsView
               onOpenNewPatient={() => setIsNewPatientOpen(true)}
-              onNavigate={setCurrentView}
+              onNavigate={handleNavigateView}
+              initialPatientId={subRouteId}
+              onSelectPatient={(pId) => handleNavigateView('patients', pId)}
             />
           )}
 
@@ -907,7 +1042,10 @@ const AppContent: React.FC = () => {
 
           {currentView === 'zemda-personal' && (
             (isPersonalTrainer || isZemdaPersonal || currentUser?.commercialModule === 'ZemdaPersonal' || hasCapability('TRAINING_PRESCRIBE') || hasCapability('PHYSICAL_ASSESSMENT') || isSuperAdmin) ? (
-              <ZemdaPersonalView />
+              <ZemdaPersonalView
+                initialStudentId={subRouteId}
+                onSelectStudent={(sId) => handleNavigateView('zemda-personal', sId)}
+              />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
                 <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mb-4">
@@ -918,7 +1056,7 @@ const AppContent: React.FC = () => {
                   O módulo ZemdaPersonal é de uso exclusivo para profissionais cuja profissão cadastrada seja <strong>Personal Trainer / Educação Física</strong> (CREF) ou com credencial correspondente.
                 </p>
                 <button
-                  onClick={() => setCurrentView('dashboard')}
+                  onClick={() => handleNavigateView('dashboard')}
                   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
                 >
                   Voltar ao Início

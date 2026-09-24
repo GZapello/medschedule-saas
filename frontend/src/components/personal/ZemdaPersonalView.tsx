@@ -26,14 +26,35 @@ import { PersonalWorkoutBuilder } from './PersonalWorkoutBuilder';
 import { PersonalAssessmentModal } from './PersonalAssessmentModal';
 import { PersonalAIAssistantModal } from './PersonalAIAssistantModal';
 
-export const ZemdaPersonalView: React.FC = () => {
+interface ZemdaPersonalViewProps {
+  initialStudentId?: string | null;
+  onSelectStudent?: (studentId: string | null) => void;
+}
+
+export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
+  initialStudentId,
+  onSelectStudent
+}) => {
   const { showToast } = useToast();
 
   // Abas principais
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'students' | 'exercises' | 'templates' | 'calendar'>('dashboard');
 
   // Aluno atualmente selecionado para ver perfil detalhado
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || null);
+
+  useEffect(() => {
+    if (initialStudentId !== undefined) {
+      setSelectedStudentId(initialStudentId);
+    }
+  }, [initialStudentId]);
+
+  const handleSelectStudent = (id: string | null) => {
+    setSelectedStudentId(id);
+    if (onSelectStudent) {
+      onSelectStudent(id);
+    }
+  };
 
   // Dados do Dashboard
   const [dashboardData, setDashboardData] = useState<{
@@ -202,7 +223,7 @@ export const ZemdaPersonalView: React.FC = () => {
         patient_id: studentId
       });
       showToast('Modelo de treino aplicado ao aluno com sucesso!', 'success');
-      setSelectedStudentId(studentId);
+      handleSelectStudent(studentId);
     } catch (err) {
       showToast('Erro ao aplicar modelo', 'error');
     }
@@ -250,7 +271,7 @@ export const ZemdaPersonalView: React.FC = () => {
                     <div
                       key={s.id}
                       onClick={() => {
-                        setSelectedStudentId(s.id);
+                        handleSelectStudent(s.id);
                         setSearchResults(null);
                         setSearchQuery('');
                       }}
@@ -292,7 +313,7 @@ export const ZemdaPersonalView: React.FC = () => {
                     <div
                       key={w.id}
                       onClick={() => {
-                        setSelectedStudentId(w.patient_id);
+                        handleSelectStudent(w.patient_id);
                         setSearchResults(null);
                         setSearchQuery('');
                       }}
@@ -322,7 +343,7 @@ export const ZemdaPersonalView: React.FC = () => {
         <PersonalStudentProfile
           studentId={selectedStudentId}
           onBack={() => {
-            setSelectedStudentId(null);
+            handleSelectStudent(null);
             loadDashboard();
             loadStudents();
           }}
@@ -470,7 +491,7 @@ export const ZemdaPersonalView: React.FC = () => {
                   {students.map((s) => (
                     <div
                       key={s.id}
-                      onClick={() => setSelectedStudentId(s.id)}
+                      onClick={() => handleSelectStudent(s.id)}
                       className="py-3.5 px-3 flex items-center justify-between hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors group"
                     >
                       <div className="flex items-center gap-3.5">

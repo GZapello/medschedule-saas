@@ -26,9 +26,24 @@ export class PatientController {
       const params: any[] = [tenantId];
 
       if (search && typeof search === 'string' && search.trim().length > 0) {
-        const term = `%${search.trim()}%`;
-        query += ` AND (p.full_name LIKE ? OR p.cpf LIKE ? OR p.phone LIKE ? OR p.email LIKE ?)`;
-        params.push(term, term, term, term);
+        const raw = search.trim();
+        const term = `%${raw}%`;
+        const digits = raw.replace(/\D/g, '');
+        if (digits.length >= 3) {
+          const digitsTerm = `%${digits}%`;
+          query += ` AND (
+            p.full_name LIKE ? OR 
+            p.cpf LIKE ? OR 
+            REPLACE(REPLACE(REPLACE(COALESCE(p.cpf, ''), '.', ''), '-', ''), ' ', '') LIKE ? OR
+            p.phone LIKE ? OR 
+            REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(p.phone, ''), '(', ''), ')', ''), '-', ''), ' ', '') LIKE ? OR
+            p.email LIKE ?
+          )`;
+          params.push(term, term, digitsTerm, term, digitsTerm, term);
+        } else {
+          query += ` AND (p.full_name LIKE ? OR p.cpf LIKE ? OR p.phone LIKE ? OR p.email LIKE ?)`;
+          params.push(term, term, term, term);
+        }
       }
 
       query += ' ORDER BY p.full_name ASC';

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 import { CapabilityService } from '../services/capability.service';
+import { resolveCanonicalProfession } from '../utils/profession-module';
 
 export function isMedicalProfessionalOrClinicManager(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
@@ -18,7 +19,33 @@ export function isMedicalProfessionalOrClinicManager(req: Request): boolean {
   if (req.user.role === 'superadmin' && !(req as any).isSandboxSession) return true;
 
   // Validação por capability
-  return CapabilityService.hasCapability(req.user.userId, req.tenantId, 'MEDICAL_BASE');
+  if (CapabilityService.hasCapability(req.user.userId, req.tenantId, 'MEDICAL_BASE')) {
+    return true;
+  }
+
+  // Fallback seguro: verifica se o usuário ou o profissional vinculado é médico ou possui ZemdaMed habilitado
+  const user = db.prepare(`
+    SELECT u.profession_id, u.profession_name, u.zemda_med_enabled,
+           p.profession_id as p_prof_id, pr.slug as p_slug, pr.name as p_name,
+           cu.profession_custom, cu.zemda_med_enabled as cu_zemda_med_enabled
+    FROM users u
+    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
+    LEFT JOIN professionals p ON p.user_id = u.id AND p.tenant_id = ?
+    LEFT JOIN professions pr ON pr.id = p.profession_id
+    WHERE u.id = ?
+  `).get(req.tenantId, req.tenantId, req.user.userId) as any;
+
+  if (user) {
+    if (user.zemda_med_enabled === 1 || user.cu_zemda_med_enabled === 1) return true;
+    const profKey = user.p_prof_id || user.profession_id || user.profession_custom || '';
+    const profName = user.p_name || user.profession_name || '';
+    const resolution = resolveCanonicalProfession({ id: profKey, name: profName, slug: user.p_slug });
+    if (resolution.commercialModule === 'ZemdaMed' || resolution.canonicalId === 'prof-medico') {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export class MedicalController {
@@ -266,9 +293,9 @@ export class MedicalController {
       db.prepare(`
         INSERT INTO records (
           id, tenant_id, patient_id, appointment_id, professional_id,
-          session_date, title, clinical_evolution, technical_notes, is_sealed,
+          session_date, title, clinical_evolution, technical_notes, is_sealed, module_type,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'ZemdaMed', datetime('now'), datetime('now'))
       `).run(
         recordId, tenantId, patientId, appointmentId || null, profId,
         recDate, recTitle, fullEvolutionText, clinicalPayload

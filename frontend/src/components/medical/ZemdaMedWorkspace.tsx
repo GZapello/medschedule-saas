@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -241,9 +241,104 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
   // Pacientes e Seleção
   const [patients, setPatients] = useState<any[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>(() => {
+    return initialPatientId || sessionStorage.getItem('zemda_med_active_patient_id') || '';
+  });
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [searchPatient, setSearchPatient] = useState<string>('');
+  const [searchLoading, setSearchLoading] = useState<boolean>(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const debounceSearchRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (initialPatientId) {
+      setSelectedPatientId(initialPatientId);
+      sessionStorage.setItem('zemda_med_active_patient_id', initialPatientId);
+    }
+  }, [initialPatientId]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSearchChange = (query: string) => {
+    setSearchPatient(query);
+    setIsDropdownOpen(true);
+
+    if (debounceSearchRef.current) {
+      clearTimeout(debounceSearchRef.current);
+    }
+
+    if (!query.trim()) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    // Filtro local instantâneo (zero delay)
+    const term = query.trim().toLowerCase();
+    const termClean = term.replace(/\D/g, '');
+    const localMatches = patients.filter(p => {
+      const name = (p.full_name || p.name || '').toLowerCase();
+      const cpfClean = (p.cpf || '').replace(/\D/g, '');
+      const phone = (p.phone || '').toLowerCase();
+      const email = (p.email || '').toLowerCase();
+      return (
+        name.includes(term) ||
+        (termClean.length >= 2 && cpfClean.includes(termClean)) ||
+        (p.cpf || '').toLowerCase().includes(term) ||
+        phone.includes(term) ||
+        email.includes(term)
+      );
+    });
+    setSearchResults(localMatches);
+
+    // Busca remota debounced (~300ms)
+    debounceSearchRef.current = setTimeout(async () => {
+      try {
+        setSearchLoading(true);
+        const res = await ApiClient.get<any[]>(`/v1/patients?search=${encodeURIComponent(query.trim())}`);
+        if (Array.isArray(res)) {
+          setSearchResults(res);
+          setPatients(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const newOnes = res.filter(p => !existingIds.has(p.id));
+            return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+          });
+        }
+      } catch (err) {
+        console.error('Erro na busca de pacientes:', err);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+  };
+
+  const handleSelectPatient = (p: any) => {
+    setSelectedPatientId(p.id);
+    setSelectedPatient(p);
+    setSearchPatient('');
+    setIsDropdownOpen(false);
+    sessionStorage.setItem('zemda_med_active_patient_id', p.id);
+    loadPatientConsultations(p.id);
+  };
+
+  const handleClearPatient = () => {
+    setSelectedPatientId('');
+    setSelectedPatient(null);
+    setSearchPatient('');
+    setIsDropdownOpen(false);
+    sessionStorage.removeItem('zemda_med_active_patient_id');
+    setConsultationsHistory([]);
+  };
 
   // Preset de Especialidade Ativo
   const [activePreset, setActivePreset] = useState<string>(() => {
@@ -755,35 +850,147 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       </div>
 
       {/* Seleção do Paciente */}
-      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs">
-        <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-2">
-          1. Selecionar {clientTermLabel}
-        </label>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder={`Buscar ${clientTermLabel.toLowerCase()} por nome ou CPF...`}
-              value={searchPatient}
-              onChange={e => setSearchPatient(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-sm rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
-            />
-          </div>
-
-          <select
-            value={selectedPatientId}
-            onChange={e => setSelectedPatientId(e.target.value)}
-            className="px-4 py-2.5 text-sm rounded-2xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-teal-500 outline-none min-w-[240px]"
-          >
-            <option value="">Selecione na lista...</option>
-            {filteredPatients.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.full_name || p.name} {p.cpf ? `(${p.cpf})` : ''}
-              </option>
-            ))}
-          </select>
+      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-600">
+            1. {clientTermLabel} em Atendimento
+          </label>
+          {selectedPatient && (
+            <button
+              type="button"
+              onClick={handleClearPatient}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+            >
+              Trocar {clientTermLabel.toLowerCase()}
+            </button>
+          )}
         </div>
+
+        {selectedPatient ? (
+          <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-teal-600 text-white font-extrabold text-sm flex items-center justify-center shadow-xs">
+                {selectedPatient.full_name ? selectedPatient.full_name.slice(0, 2).toUpperCase() : 'PA'}
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {selectedPatient.full_name || selectedPatient.name}
+                </h3>
+                <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap mt-0.5">
+                  {selectedPatient.cpf && (
+                    <span>CPF: <strong className="text-slate-800">{selectedPatient.cpf}</strong></span>
+                  )}
+                  {selectedPatient.phone && (
+                    <span>Telefone: <strong className="text-slate-800">{selectedPatient.phone}</strong></span>
+                  )}
+                  {selectedPatient.email && (
+                    <span className="text-slate-500">{selectedPatient.email}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleClearPatient}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 shadow-2xs transition-colors cursor-pointer"
+            >
+              Trocar
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div ref={searchContainerRef} className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder={`Buscar ${clientTermLabel.toLowerCase()} por nome, CPF, telefone ou e-mail...`}
+                value={searchPatient}
+                onChange={e => handleSearchChange(e.target.value)}
+                onFocus={() => {
+                  if (searchPatient.trim()) setIsDropdownOpen(true);
+                }}
+                className="w-full pl-10 pr-10 py-2.5 text-sm rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+              />
+              {searchPatient && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchPatient('');
+                    setSearchResults([]);
+                    setIsDropdownOpen(false);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                  title="Limpar pesquisa"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+
+              {/* Dropdown de Resultados da Pesquisa Autocomplete */}
+              {isDropdownOpen && searchPatient.trim().length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 max-h-72 overflow-y-auto divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-100">
+                  {searchLoading && searchResults.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+                      <span>Buscando pacientes...</span>
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    searchResults.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleSelectPatient(p)}
+                        className="w-full text-left p-3.5 hover:bg-teal-50 transition-colors flex items-center justify-between gap-3 group cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-slate-100 group-hover:bg-teal-600 group-hover:text-white text-slate-600 flex items-center justify-center font-bold text-xs transition-colors shrink-0">
+                            {p.full_name ? p.full_name.slice(0, 2).toUpperCase() : 'PA'}
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-slate-900 group-hover:text-teal-900">
+                              {p.full_name || p.name}
+                            </div>
+                            <div className="text-xs text-slate-500 flex items-center gap-3 flex-wrap">
+                              {p.cpf && <span>CPF: <strong className="text-slate-700">{p.cpf}</strong></span>}
+                              {p.phone && <span>Tel: <strong className="text-slate-700">{p.phone}</strong></span>}
+                              {p.email && <span className="text-slate-400">{p.email}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-xs font-bold text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          Selecionar →
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-xs text-slate-500">
+                      Nenhum paciente encontrado com este termo.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Seletor alternativo na lista geral */}
+            <select
+              value={selectedPatientId}
+              onChange={e => {
+                const found = patients.find(p => p.id === e.target.value);
+                if (found) handleSelectPatient(found);
+                else setSelectedPatientId(e.target.value);
+              }}
+              className="px-4 py-2.5 text-sm rounded-2xl border border-slate-200 bg-white font-medium focus:ring-2 focus:ring-teal-500 outline-none min-w-[220px]"
+            >
+              <option value="">Ou escolha na lista...</option>
+              {filteredPatients.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name || p.name} {p.cpf ? `(${p.cpf})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Seletor Compacto Discreto para Médicos com Múltiplas Especialidades */}

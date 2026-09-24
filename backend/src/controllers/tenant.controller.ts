@@ -413,18 +413,29 @@ export class TenantController {
         throw txErr;
       }
 
-      let areasToSet: string[] = [];
+      let rawPracticeAreas: string[] = [];
       if (req.body.practiceAreaIds && Array.isArray(req.body.practiceAreaIds)) {
-        areasToSet = req.body.practiceAreaIds.filter(Boolean);
+        rawPracticeAreas = req.body.practiceAreaIds.filter(Boolean);
       }
-      if (areasToSet.length === 0 && (professionResolution.automaticPracticeAreaId || professionResolution.inferredAreaId)) {
+
+      // Separa áreas médicas de áreas de atuação gerais
+      const medSpecsFromAreas = rawPracticeAreas.filter(a => typeof a === 'string' && a.startsWith('med-spec-'));
+      const medPasFromAreas = rawPracticeAreas.filter(a => typeof a === 'string' && a.startsWith('med-pa-'));
+      let generalPracticeAreas = rawPracticeAreas.filter(a => typeof a === 'string' && !a.startsWith('med-spec-') && !a.startsWith('med-pa-'));
+
+      if (generalPracticeAreas.length === 0 && (professionResolution.automaticPracticeAreaId || professionResolution.inferredAreaId)) {
         const autoId = professionResolution.automaticPracticeAreaId || professionResolution.inferredAreaId;
-        if (autoId) {
-          areasToSet = [autoId];
+        if (autoId && !autoId.startsWith('med-spec-') && !autoId.startsWith('med-pa-')) {
+          generalPracticeAreas = [autoId];
         }
       }
-      if (areasToSet.length > 0) {
-        CapabilityService.setUserPracticeAreas(userId, tenantId, areasToSet);
+
+      if (generalPracticeAreas.length > 0) {
+        try {
+          CapabilityService.setUserPracticeAreas(userId, tenantId, generalPracticeAreas);
+        } catch (capErr) {
+          console.warn('[TenantController.registerPublic] Aviso ao gravar áreas de atuação gerais:', capErr);
+        }
       }
 
       // Persistência da Árvore Clínica de Medicina (ZemdaMed)
@@ -441,7 +452,7 @@ export class TenantController {
           }
           // Se nenhuma especialidade médica foi explicitada, verifica se veio nas áreas ou usa padrão
           if (medSpecs.length === 0) {
-            const specFromAreas = areasToSet.find(a => a.startsWith('med-spec-'));
+            const specFromAreas = medSpecsFromAreas[0];
             medSpecs = [specFromAreas || 'med-spec-clinica'];
           }
 
@@ -449,8 +460,7 @@ export class TenantController {
           if (req.body.medicalPracticeAreaIds && Array.isArray(req.body.medicalPracticeAreaIds)) {
             medPas = req.body.medicalPracticeAreaIds.filter(Boolean);
           }
-          const pasFromAreas = areasToSet.filter(a => a.startsWith('med-pa-'));
-          for (const pa of pasFromAreas) {
+          for (const pa of medPasFromAreas) {
             if (!medPas.includes(pa)) medPas.push(pa);
           }
 

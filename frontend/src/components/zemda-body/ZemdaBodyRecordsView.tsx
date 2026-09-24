@@ -313,6 +313,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
           }}
           patientId={viewingAssessment.patient_id}
           patientName={selectedPatient?.full_name}
+          assessmentId={viewingAssessment.id}
           appointmentId={viewingAssessment.appointment_id}
           professionalId={viewingAssessment.professional_id}
           professionalName={viewingAssessment.professional_name}

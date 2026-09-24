@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { resolveProfessionModule } from './profession-module';
 
 export const PRIMARY_CLINICAL_MODULES = [
+  'ZemdaMed',
   'ZemdaFono',
   'ZemdaOdonto',
   'ZemdaTO',

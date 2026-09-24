@@ -669,7 +669,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         const specId = practiceAreas[0].medicalSpecialtyId!;
         medSpecialtyIdsToSend = [specId];
         medPracticeAreaIdsToSend = selectedPracticeAreaIds;
-        allPracticeAreaIdsToSend = selectedPracticeAreaIds;
+        allPracticeAreaIdsToSend = [];
         const subNames = practiceAreas
           .filter(pa => selectedPracticeAreaIds.includes(pa.id))
           .map(pa => pa.name);
@@ -677,7 +677,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       } else if (isGenericDoc) {
         medSpecialtyIdsToSend = selectedMedicalSpecialtyIds;
         medPracticeAreaIdsToSend = selectedMedicalPracticeAreaIds;
-        allPracticeAreaIdsToSend = [...selectedMedicalSpecialtyIds, ...selectedMedicalPracticeAreaIds];
+        allPracticeAreaIdsToSend = [];
         const specNames = medicalTree
           .filter(s => selectedMedicalSpecialtyIds.includes(s.id))
           .map(s => s.name);

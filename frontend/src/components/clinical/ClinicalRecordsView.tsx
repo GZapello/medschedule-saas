@@ -397,9 +397,33 @@ export const ClinicalRecordsView: React.FC = () => {
                         {/* ZEMDABODY INTEGRADO AO PRONTUÁRIO */}
                         {(() => {
                           const bodyAss = patientBodyAssessments.find(
-                            ba => (r.appointment_id && ba.appointment_id === r.appointment_id) || ba.assessment_date === r.session_date
+                            ba => (r.appointment_id && ba.appointment_id === r.appointment_id)
                           );
                           if (!bodyAss) return null;
+
+                          let parsedNotes: any = null;
+                          let displayNotes = '';
+                          let regionsList: string[] = [];
+                          let hasDrawings = false;
+
+                          if (bodyAss.notes) {
+                            try {
+                              parsedNotes = JSON.parse(bodyAss.notes);
+                              if (typeof parsedNotes === 'object' && parsedNotes !== null) {
+                                displayNotes = parsedNotes.clinicalNotes || '';
+                                if (Array.isArray(parsedNotes.selectedRegions) && parsedNotes.selectedRegions.length > 0) {
+                                  regionsList = parsedNotes.selectedRegions;
+                                }
+                                if (Array.isArray(parsedNotes.drawings) && parsedNotes.drawings.length > 0) {
+                                  hasDrawings = true;
+                                }
+                              } else {
+                                displayNotes = String(bodyAss.notes);
+                              }
+                            } catch {
+                              displayNotes = String(bodyAss.notes);
+                            }
+                          }
 
                           return (
                             <div className="bg-gradient-to-br from-teal-50/80 via-emerald-50/40 to-slate-50 border border-teal-200/90 rounded-2xl p-4 my-3 shadow-2xs">
@@ -413,7 +437,8 @@ export const ClinicalRecordsView: React.FC = () => {
                                       ZemdaBody • Mapa Corporal
                                     </span>
                                     <span className="text-xs font-bold text-slate-800">
-                                      {bodyAss.total_markers || 0} marcadores clínicos • Modelo {bodyAss.body_model === 'male' ? 'Masculino' : 'Feminino'}
+                                      {bodyAss.total_markers || regionsList.length || 0} regiões marcadas
+                                      {hasDrawings ? ' • Com anotações de caneta' : ''} • Modelo {bodyAss.body_model === 'male' ? 'Masculino' : 'Feminino'}
                                     </span>
                                   </div>
                                 </div>
@@ -429,10 +454,19 @@ export const ClinicalRecordsView: React.FC = () => {
                                 </button>
                               </div>
 
-                              {bodyAss.notes && (
-                                <p className="text-xs text-slate-600 bg-white/80 p-2.5 rounded-xl border border-teal-100 mt-2">
-                                  <strong>Observações corporais:</strong> {bodyAss.notes}
-                                </p>
+                              {(displayNotes || regionsList.length > 0) && (
+                                <div className="text-xs text-slate-600 bg-white/80 p-2.5 rounded-xl border border-teal-100 mt-2 space-y-1">
+                                  {regionsList.length > 0 && (
+                                    <p>
+                                      <strong>Regiões anatômicas:</strong> {regionsList.join(', ')}
+                                    </p>
+                                  )}
+                                  {displayNotes && (
+                                    <p>
+                                      <strong>Observações clínicas:</strong> {displayNotes}
+                                    </p>
+                                  )}
+                                </div>
                               )}
                             </div>
                           );
@@ -816,6 +850,7 @@ export const ClinicalRecordsView: React.FC = () => {
           onClose={() => setViewingBodyAssessment(null)}
           patientId={viewingBodyAssessment.patient_id}
           patientName={patients.find(p => p.id === viewingBodyAssessment.patient_id)?.full_name}
+          assessmentId={viewingBodyAssessment.id}
           appointmentId={viewingBodyAssessment.appointment_id}
           professionalId={viewingBodyAssessment.professional_id}
           professionalName={viewingBodyAssessment.professional_name}

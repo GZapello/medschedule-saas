@@ -561,12 +561,32 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     showToast('Download do documento Word (.docx) iniciado!', 'success');
   };
 
-  if (loading || !patientData) {
+  if (loading) {
     return (
       <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-3xl shadow-xl flex items-center gap-3 text-slate-700">
           <div className="w-6 h-6 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
           <span className="font-semibold text-sm">Carregando prontuário 360°...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!patientData || !patientData.patient) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center gap-3 text-slate-700 max-w-sm text-center">
+          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <span className="font-bold text-sm text-slate-800">Paciente não encontrado</span>
+          <p className="text-xs text-slate-500">O cadastro do paciente solicitado não foi localizado ou o identificador é inválido.</p>
+          <button
+            onClick={onClose}
+            className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl cursor-pointer"
+          >
+            Fechar
+          </button>
         </div>
       </div>
     );

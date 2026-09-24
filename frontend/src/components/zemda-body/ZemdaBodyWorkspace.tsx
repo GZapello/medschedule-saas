@@ -24,6 +24,7 @@ import {
 
 interface ZemdaBodyWorkspaceProps {
   patientId: string;
+  initialAssessmentId?: string;
   appointmentId?: string;
   professionalId?: string;
   module?: string;
@@ -34,6 +35,7 @@ interface ZemdaBodyWorkspaceProps {
 
 export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
   patientId,
+  initialAssessmentId,
   appointmentId,
   professionalId,
   module = 'general',
@@ -44,13 +46,21 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
   const { showToast } = useToast();
 
   // Estados principais da Avaliação
-  const [assessmentId, setAssessmentId] = useState<string | null>(null);
+  const [assessmentId, setAssessmentId] = useState<string | null>(initialAssessmentId || null);
+  const assessmentIdRef = useRef<string | null>(initialAssessmentId || null);
   const [bodyModel, setBodyModel] = useState<'female' | 'male'>(initialBodyModel);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [drawings, setDrawings] = useState<BodyStroke[]>([]);
   const [clinicalNotes, setClinicalNotes] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [savingStatus, setSavingStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  useEffect(() => {
+    if (initialAssessmentId) {
+      setAssessmentId(initialAssessmentId);
+      assessmentIdRef.current = initialAssessmentId;
+    }
+  }, [initialAssessmentId]);
 
   // Identificação automática da profissão do usuário logado
   const { isNutritionist, isZemdaNutri } = useAuth();
@@ -81,12 +91,16 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
         setLoading(true);
         let res: any = null;
 
-        if (appointmentId) {
+        const targetId = initialAssessmentId || assessmentIdRef.current;
+        if (targetId) {
+          res = await ApiClient.get<any>(`/v1/body-assessments/${targetId}`);
+        } else if (appointmentId) {
           res = await ApiClient.get<any>(`/v1/body-assessments/appointment/${appointmentId}`);
         }
 
         if (res?.assessment) {
           setAssessmentId(res.assessment.id);
+          assessmentIdRef.current = res.assessment.id;
           if (res.assessment.body_model) {
             setBodyModel(res.assessment.body_model);
           }
@@ -126,28 +140,15 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
 
           // Se não havia nos notes, carrega de body_drawings
           if (loadedDrawings.length === 0 && res.drawings) {
-            if (Array.isArray(res.drawings.front)) {
+            if (Array.isArray(res.drawings.front) && res.drawings.front.length > 0) {
               loadedDrawings = res.drawings.front;
-            } else if (Array.isArray(res.drawings.all)) {
+            } else if (Array.isArray(res.drawings.all) && res.drawings.all.length > 0) {
               loadedDrawings = res.drawings.all;
             }
           }
 
           setSelectedRegions(loadedRegions);
           setDrawings(loadedDrawings);
-        } else if (!readOnly) {
-          // Cria nova avaliação para o agendamento
-          const createRes = await ApiClient.post<any>('/v1/body-assessments', {
-            patientId,
-            appointmentId: appointmentId || null,
-            professionalId: professionalId || null,
-            module,
-            bodyModel,
-            assessmentDate: new Date().toISOString().split('T')[0]
-          });
-          if (createRes?.assessmentId) {
-            setAssessmentId(createRes.assessmentId);
-          }
         }
       } catch (err: any) {
         console.error('Erro ao carregar mapa corporal:', err);
@@ -158,7 +159,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
     }
 
     loadData();
-  }, [patientId, appointmentId, professionalId, module, readOnly]);
+  }, [patientId, initialAssessmentId, appointmentId, professionalId, module, readOnly]);
 
   // Função central de persistência
   const saveAssessmentData = useCallback(
@@ -180,8 +181,10 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
           clinicalNotes: notesToSave
         });
 
+        const currentActiveId = assessmentIdRef.current;
+
         const res = await ApiClient.post<any>('/v1/body-assessments', {
-          id: assessmentId || undefined,
+          id: currentActiveId || undefined,
           patientId,
           appointmentId: appointmentId || null,
           professionalId: professionalId || null,
@@ -191,8 +194,9 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
           assessmentDate: new Date().toISOString().split('T')[0]
         });
 
-        const activeId = assessmentId || res?.assessmentId;
-        if (!assessmentId && res?.assessmentId) {
+        const activeId = currentActiveId || res?.assessmentId;
+        if (res?.assessmentId) {
+          assessmentIdRef.current = res.assessmentId;
           setAssessmentId(res.assessmentId);
         }
 
@@ -241,7 +245,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
         }
       }
     },
-    [assessmentId, patientId, appointmentId, professionalId, module, readOnly, showToast]
+    [patientId, appointmentId, professionalId, module, readOnly, showToast]
   );
 
   // Debounce para persistência automática
