@@ -54,6 +54,10 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
   const [guardianCpf, setGuardianCpf] = useState<string>('');
   const [guardianId, setGuardianId] = useState<string | null>(null);
   const [guardianAuthorized, setGuardianAuthorized] = useState<boolean>(false);
+  // O PUT regrava a lista inteira de responsáveis: campos e responsáveis que o formulário
+  // não exibe são reenviados como vieram, senão o backend os apaga.
+  const [guardianEmail, setGuardianEmail] = useState<string | null>(null);
+  const [otherGuardians, setOtherGuardians] = useState<any[]>([]);
 
   // Convênio / Plano de Saúde
   const [healthInsuranceProvider, setHealthInsuranceProvider] = useState<string>('');
@@ -95,6 +99,8 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
         setGuardianCpf(primaryG.cpf || '');
         setGuardianId(primaryG.id || null);
         setGuardianAuthorized(Number(primaryG.authorization_signed) === 1);
+        setGuardianEmail(primaryG.email || null);
+        setOtherGuardians(guardians.filter((g: any) => g !== primaryG));
       } else {
         setGuardianName('');
         setGuardianRelationship('mother');
@@ -102,10 +108,13 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
         setGuardianCpf('');
         setGuardianId(null);
         setGuardianAuthorized(false);
+        setGuardianEmail(null);
+        setOtherGuardians([]);
       }
     };
 
-    if (initialData && initialData.full_name) {
+    // Só usa initialData se trouxer os responsáveis; sem eles o salvamento apagaria os existentes.
+    if (initialData && initialData.full_name && Array.isArray(initialData.guardians)) {
       populateFromData(initialData, initialData.guardians || []);
     } else {
       // Busca dados completos do endpoint
@@ -170,9 +179,21 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
               relationship: guardianRelationship,
               phone: guardianPhone,
               cpf: guardianCpf || null,
+              email: guardianEmail,
               isPrimary: true,
               authorizationSigned: guardianAuthorized
-            }
+            },
+            ...otherGuardians.map((g: any) => ({
+              id: g.id,
+              fullName: g.full_name,
+              relationship: g.relationship,
+              phone: g.phone,
+              cpf: g.cpf,
+              email: g.email,
+              // snake_case: é o campo que o PUT lê (ausente = principal)
+              is_primary: Number(g.is_primary) === 1,
+              authorizationSigned: Number(g.authorization_signed) === 1
+            }))
           ]
         : [];
 
