@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   RotateCcw,
   Stethoscope,
-  Coffee,
   Ban
 } from 'lucide-react';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
@@ -842,13 +841,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         }}
                         className={`border-r border-slate-100 last:border-r-0 p-1 relative transition-colors min-h-[75px] ${
                           !isAvailable && slotAppts.length === 0
-                            ? 'bg-slate-100/70 select-none cursor-not-allowed'
+                            ? 'select-none cursor-default'
                             : 'hover:bg-indigo-50/40 group/slot cursor-pointer'
                         }`}
                         title={
-                          !isAvailable && slotAppts.length === 0
-                            ? `${availability.reason || 'Indisponível'} (${dayDate.toLocaleDateString('pt-BR')} às ${timeSlot})`
-                            : `Clique para agendar às ${timeSlot} (${dayDate.toLocaleDateString('pt-BR')})`
+                          slotAppts.length > 0
+                            ? undefined
+                            : availability.isBlocked
+                            ? `Horário Bloqueado (${dayDate.toLocaleDateString('pt-BR')} às ${timeSlot})`
+                            : isAvailable
+                            ? `Clique para agendar às ${timeSlot} (${dayDate.toLocaleDateString('pt-BR')})`
+                            : undefined
                         }
                       >
                         {slotAppts.map(appt => (
@@ -874,21 +877,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         ))}
                         {slotAppts.length === 0 && (
                           !isAvailable ? (
-                            <div className="h-full w-full min-h-[50px] flex items-center justify-center p-1 text-center">
-                              {availability.isBreak ? (
-                                <span className="text-[10px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                  <Coffee className="w-3 h-3 text-amber-700" /> Intervalo
-                                </span>
-                              ) : availability.isBlocked ? (
+                            availability.isBlocked ? (
+                              <div className="h-full w-full min-h-[50px] flex items-center justify-center p-1 text-center">
                                 <span className="text-[10px] font-bold text-rose-800 bg-rose-100/80 border border-rose-300 px-1.5 py-0.5 rounded flex items-center gap-1">
                                   <Ban className="w-3 h-3 text-rose-700" /> Bloqueado
                                 </span>
-                              ) : (
-                                <span className="text-[10px] font-medium text-slate-400">
-                                  {availability.reason || 'Fora da escala'}
-                                </span>
-                              )}
-                            </div>
+                              </div>
+                            ) : null
                           ) : (
                             <div
                               data-empty-slot="true"
@@ -952,13 +947,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                   }}
                   className={`py-2.5 px-3 flex items-start gap-4 rounded-xl transition-colors ${
                     !isAvailable && slotAppts.length === 0
-                      ? 'bg-slate-50/80 cursor-not-allowed select-none opacity-80'
+                      ? 'cursor-default select-none'
                       : 'hover:bg-indigo-50/30 cursor-pointer group'
                   }`}
                   title={
-                    !isAvailable && slotAppts.length === 0
-                      ? `${availability.reason || 'Indisponível'} às ${timeSlot}`
-                      : `Clique para agendar às ${timeSlot}`
+                    slotAppts.length > 0
+                      ? undefined
+                      : availability.isBlocked
+                      ? `Horário Bloqueado às ${timeSlot}`
+                      : isAvailable
+                      ? `Clique para agendar às ${timeSlot}`
+                      : undefined
                   }
                 >
                   <div className="w-16 text-xs font-bold text-slate-400 group-hover:text-indigo-600 pt-1">
@@ -992,21 +991,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         ))}
                       </div>
                     ) : !isAvailable ? (
-                      <div className="text-xs font-medium py-1">
-                        {availability.isBreak ? (
-                          <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-md">
-                            <Coffee className="w-3.5 h-3.5 text-amber-700" /> Intervalo
-                          </span>
-                        ) : availability.isBlocked ? (
+                      availability.isBlocked ? (
+                        <div className="text-xs font-medium py-1">
                           <span className="inline-flex items-center gap-1.5 font-bold text-rose-800 bg-rose-100/80 border border-rose-300 px-2 py-0.5 rounded-md">
                             <Ban className="w-3.5 h-3.5 text-rose-700" /> Bloqueado
                           </span>
-                        ) : (
-                          <span className="text-slate-400 font-medium">
-                            {availability.reason || 'Fora da escala'}
-                          </span>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="py-2 min-h-[36px]" />
+                      )
                     ) : (
                       <div data-empty-slot="true" className="py-2 text-xs text-slate-400 group-hover:text-indigo-600 flex items-center gap-1.5">
                         <Plus className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100" />
