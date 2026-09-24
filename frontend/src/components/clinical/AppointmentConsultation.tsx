@@ -49,10 +49,12 @@ export function AppointmentConsultation({
     isPersonalTrainer,
     isZemdaPersonal,
     isZemdaBody,
-    currentUser
+    currentUser,
+    hasCapability
   } = useAuth();
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
+  const [showAACBoard, setShowAACBoard] = useState(false);
 
   const deducedModuleFromProfession =
     (isDoctor || isZemdaMed || (currentUser?.professionName || '').toLowerCase().includes('médic') || (currentUser?.professionName || '').toLowerCase().includes('medic') || (appointment.service_name || '').toLowerCase().includes('médic')) ? 'ZemdaMed' :
@@ -175,6 +177,17 @@ export function AppointmentConsultation({
             >
               <Activity className="w-3.5 h-3.5" /> ZemdaBody (Mapa Corporal)
             </button>
+
+            {hasCapability('AAC_BOARD_USE') && (
+              <button
+                type="button"
+                onClick={() => setShowAACBoard(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 cursor-pointer"
+                title="Abrir Prancha de Comunicação CAA"
+              >
+                <MessageSquareHeart className="w-3.5 h-3.5 text-purple-600" /> Prancha CAA
+              </button>
+            )}
           </div>
         </div>
 
@@ -188,6 +201,17 @@ export function AppointmentConsultation({
             onClose={onClose}
           />
         </div>
+
+        {showAACBoard && (
+          <React.Suspense fallback={null}>
+            <LazyAACBoardModal
+              isOpen={showAACBoard}
+              onClose={() => setShowAACBoard(false)}
+              patientId={appointment.patient_id}
+              patientName={appointment.patient_name}
+            />
+          </React.Suspense>
+        )}
       </div>
     );
   }
@@ -230,6 +254,16 @@ export function AppointmentConsultation({
                   <Activity className="w-3.5 h-3.5" /> ZemdaBody
                 </button>
               )}
+              {hasCapability('AAC_BOARD_USE') && (
+                <button
+                  type="button"
+                  onClick={() => setShowAACBoard(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 cursor-pointer"
+                  title="Abrir Prancha de Comunicação CAA"
+                >
+                  <MessageSquareHeart className="w-3.5 h-3.5 text-purple-600" /> Prancha CAA
+                </button>
+              )}
             </div>
           </div>
           <div className="p-4 sm:p-6 max-w-7xl mx-auto">
@@ -239,6 +273,16 @@ export function AppointmentConsultation({
               lockStudentContext={true}
             />
           </div>
+          {showAACBoard && (
+            <React.Suspense fallback={null}>
+              <LazyAACBoardModal
+                isOpen={showAACBoard}
+                onClose={() => setShowAACBoard(false)}
+                patientId={appointment.patient_id}
+                patientName={appointment.patient_name}
+              />
+            </React.Suspense>
+          )}
         </div>
       );
     }
@@ -278,6 +322,16 @@ export function AppointmentConsultation({
                 <Activity className="w-3.5 h-3.5" /> ZemdaBody
               </button>
             )}
+            {hasCapability('AAC_BOARD_USE') && (
+              <button
+                type="button"
+                onClick={() => setShowAACBoard(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 cursor-pointer"
+                title="Abrir Prancha de Comunicação CAA"
+              >
+                <MessageSquareHeart className="w-3.5 h-3.5 text-purple-600" /> Prancha CAA
+              </button>
+            )}
           </div>
         </div>
         <Workspace
@@ -286,35 +340,57 @@ export function AppointmentConsultation({
           initialAppointmentId={appointment.id}
           onFinishConsultation={onFinished}
         />
+        {showAACBoard && (
+          <React.Suspense fallback={null}>
+            <LazyAACBoardModal
+              isOpen={showAACBoard}
+              onClose={() => setShowAACBoard(false)}
+              patientId={appointment.patient_id}
+              patientName={appointment.patient_name}
+            />
+          </React.Suspense>
+        )}
       </div>
     );
   }
 
   // Padrão: Prontuário / QuickConsultationModal com acesso ao Módulo Especializado e ZemdaBody
   return (
-    <QuickConsultationModal
-      appointment={{
-        ...appointment,
-        clinical_module: effectiveModuleType
-      }}
-      moduleType={effectiveModuleType || 'general'}
-      onClose={onClose}
-      onFinished={onFinished}
-      onOpenZemdaBody={isZemdaBody ? () => setActiveTab('zemda_body') : undefined}
-      onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
-      specializedModuleName={
-        effectiveModuleType === 'ZemdaMed' ? 'ZemdaMed' :
-        effectiveModuleType === 'ZemdaPsico' ? 'ZemdaPsico' :
-        effectiveModuleType === 'ZemdaPP' ? 'ZemdaPP' :
-        effectiveModuleType === 'ZemdaFono' ? 'ZemdaFono' :
-        effectiveModuleType === 'ZemdaOdonto' ? 'ZemdaOdonto' :
-        effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
-        effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
-        effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
-        effectiveModuleType === 'ZemdaPersonal' ? 'ZemdaPersonal' :
-        effectiveModuleType === 'general' ? `Atendimento Clínico • ${currentUser?.canonicalProfessionName || currentUser?.professionName || 'Geral'}` :
-        (isDoctor || isZemdaMed ? 'ZemdaMed' : isPersonalTrainer || isZemdaPersonal ? 'ZemdaPersonal' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
-      }
-    />
+    <>
+      <QuickConsultationModal
+        appointment={{
+          ...appointment,
+          clinical_module: effectiveModuleType
+        }}
+        moduleType={effectiveModuleType || 'general'}
+        onClose={onClose}
+        onFinished={onFinished}
+        onOpenZemdaBody={isZemdaBody ? () => setActiveTab('zemda_body') : undefined}
+        onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
+        specializedModuleName={
+          effectiveModuleType === 'ZemdaMed' ? 'ZemdaMed' :
+          effectiveModuleType === 'ZemdaPsico' ? 'ZemdaPsico' :
+          effectiveModuleType === 'ZemdaPP' ? 'ZemdaPP' :
+          effectiveModuleType === 'ZemdaFono' ? 'ZemdaFono' :
+          effectiveModuleType === 'ZemdaOdonto' ? 'ZemdaOdonto' :
+          effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
+          effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
+          effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
+          effectiveModuleType === 'ZemdaPersonal' ? 'ZemdaPersonal' :
+          effectiveModuleType === 'general' ? `Atendimento Clínico • ${currentUser?.canonicalProfessionName || currentUser?.professionName || 'Geral'}` :
+          (isDoctor || isZemdaMed ? 'ZemdaMed' : isPersonalTrainer || isZemdaPersonal ? 'ZemdaPersonal' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
+        }
+      />
+      {showAACBoard && (
+        <React.Suspense fallback={null}>
+          <LazyAACBoardModal
+            isOpen={showAACBoard}
+            onClose={() => setShowAACBoard(false)}
+            patientId={appointment.patient_id}
+            patientName={appointment.patient_name}
+          />
+        </React.Suspense>
+      )}
+    </>
   );
 }

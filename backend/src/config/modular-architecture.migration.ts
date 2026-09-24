@@ -584,7 +584,7 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   fisioHiddens.forEach(c => insertProfCap.run('prof-fisioterapeuta', c, 'HIDDEN'));
 
   // 2. Fonoaudiologia
-  const fonoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'COMMUNICATION_ASSESSMENT', 'FONO_SPECIFIC', 'AUDIOLOGY', 'AAC_COMMUNICATION'];
+  const fonoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'COMMUNICATION_ASSESSMENT', 'FONO_SPECIFIC', 'AUDIOLOGY', 'AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE'];
   const fonoOptionals = ['LEARNING_ASSESSMENT', 'BODY_MAP', 'BEHAVIOR_ASSESSMENT', 'ADL_ASSESSMENT'];
   const fonoHiddens = ['ODONTO_SPECIFIC', 'TRAINING_PRESCRIBE', 'BODY_COMPOSITION', 'MEDICAL_BASE'];
   fonoDefaults.forEach(c => insertProfCap.run('prof-fonoaudiologo', c, 'DEFAULT'));
