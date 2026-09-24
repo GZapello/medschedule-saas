@@ -180,6 +180,8 @@ export const ProfessionalsView: React.FC = () => {
       setPracticeAreas('');
       setSlug('');
       fetchData();
+      window.dispatchEvent(new CustomEvent('zemda-schedule-updated'));
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
     } catch (err: any) {
       showToast(err.message || 'Erro ao cadastrar profissional', 'error');
     }

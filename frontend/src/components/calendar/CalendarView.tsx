@@ -48,12 +48,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedProfSchedule, setSelectedProfSchedule] = useState<{ schedules: any[]; blockedTimes: any[] } | null>(null);
 
-  useEffect(() => {
-    if (selectedProf && selectedProf !== 'all') {
-      ApiClient.get<any>(`/v1/professionals/${selectedProf}`)
+  const fetchSelectedProfSchedule = useCallback((profId: string) => {
+    if (profId && profId !== 'all') {
+      ApiClient.get<any>(`/v1/professionals/${profId}`)
         .then(res => {
           setSelectedProfSchedule({
-            schedules: res.schedules || [],
+            schedules: (res.schedules || []).map((s: any) => ({
+              ...s,
+              day_of_week: Number(s.day_of_week),
+              is_active: Boolean(s.is_active)
+            })),
             blockedTimes: res.blockedTimes || []
           });
         })
@@ -64,6 +68,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     } else {
       setSelectedProfSchedule(null);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchSelectedProfSchedule(selectedProf);
+  }, [selectedProf, fetchSelectedProfSchedule]);
+
+  const selectedProfRef = React.useRef(selectedProf);
+  useEffect(() => {
+    selectedProfRef.current = selectedProf;
   }, [selectedProf]);
 
   const getSlotAvailability = useCallback((dateStr: string, timeSlot: string) => {
@@ -80,8 +93,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         return { available: true };
       }
 
+      // Utiliza estritamente a escala persistida no banco deste profissional
       const activeSchedules = (selectedProfSchedule.schedules || []).filter(
-        (s: any) => s.day_of_week === dayOfWeek && (s.is_active === 1 || s.is_active === true)
+        (s: any) => Number(s.day_of_week) === Number(dayOfWeek) && Boolean(s.is_active)
       );
 
       if (activeSchedules.length === 0) {
@@ -92,13 +106,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       let breakConflict = false;
 
       for (const sched of activeSchedules) {
+        if (!sched.start_time || !sched.end_time) continue;
         const startMin = parseInt(sched.start_time.slice(0, 2), 10) * 60 + parseInt(sched.start_time.slice(3, 5), 10);
         const endMin = parseInt(sched.end_time.slice(0, 2), 10) * 60 + parseInt(sched.end_time.slice(3, 5), 10);
 
         const insideShift = slotMinutes >= startMin && slotEndMinutes <= endMin;
         let insideBreak = false;
 
-        if (sched.break_start && sched.break_end) {
+        if (insideShift && sched.break_start && sched.break_end) {
           const bStart = parseInt(sched.break_start.slice(0, 2), 10) * 60 + parseInt(sched.break_start.slice(3, 5), 10);
           const bEnd = parseInt(sched.break_end.slice(0, 2), 10) * 60 + parseInt(sched.break_end.slice(3, 5), 10);
           if (slotMinutes < bEnd && slotEndMinutes > bStart) {
@@ -144,10 +159,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     for (const p of activeProfs) {
       const pScheds = (p as any).schedules || [];
       const activeScheds = pScheds.filter(
-        (s: any) => Number(s.day_of_week) === dayOfWeek && (s.is_active === 1 || s.is_active === true)
+        (s: any) => Number(s.day_of_week) === Number(dayOfWeek) && Boolean(s.is_active)
       );
 
       for (const s of activeScheds) {
+        if (!s.start_time || !s.end_time) continue;
         const startMin = parseInt(s.start_time.slice(0, 2), 10) * 60 + parseInt(s.start_time.slice(3, 5), 10);
         const endMin = parseInt(s.end_time.slice(0, 2), 10) * 60 + parseInt(s.end_time.slice(3, 5), 10);
         if (slotMinutes >= startMin && slotEndMinutes <= endMin) {
@@ -159,9 +175,23 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               insideBreak = true;
             }
           }
+
           if (!insideBreak) {
-            anyProfWorking = true;
-            break;
+            // Checa se o profissional não possui bloqueio pontual (férias, atestado, etc.)
+            let isBlocked = false;
+            if (Array.isArray((p as any).blockedTimes)) {
+              const slotDateTimeStr = `${dateStr}T${timeSlot}:00`;
+              isBlocked = (p as any).blockedTimes.some((b: any) => {
+                const bStart = (b.start_datetime || '').slice(0, 19);
+                const bEnd = (b.end_datetime || '').slice(0, 19);
+                return slotDateTimeStr >= bStart && slotDateTimeStr < bEnd;
+              });
+            }
+
+            if (!isBlocked) {
+              anyProfWorking = true;
+              break;
+            }
           }
         }
       }
@@ -254,14 +284,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
   useEffect(() => {
     fetchCalendarData();
+    if (selectedProfRef.current && selectedProfRef.current !== 'all') {
+      fetchSelectedProfSchedule(selectedProfRef.current);
+    }
+
     const handleRemoteUpdate = () => {
       fetchCalendarData();
+      if (selectedProfRef.current && selectedProfRef.current !== 'all') {
+        fetchSelectedProfSchedule(selectedProfRef.current);
+      }
     };
+
     window.addEventListener('zemda-appointment-updated', handleRemoteUpdate);
+    window.addEventListener('zemda-schedule-updated', handleRemoteUpdate);
+
     return () => {
       window.removeEventListener('zemda-appointment-updated', handleRemoteUpdate);
+      window.removeEventListener('zemda-schedule-updated', handleRemoteUpdate);
     };
-  }, []);
+  }, [fetchSelectedProfSchedule]);
 
   // Atualização automática na virada do dia (23:59 -> 00:00)
   useEffect(() => {
@@ -467,7 +508,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           : (prof as any).schedules || [];
 
         const activeScheds = profSchedules.filter((s: any) =>
-          Number(s.day_of_week) === dayOfWeek && (s.is_active === 1 || s.is_active === true)
+          Number(s.day_of_week) === Number(dayOfWeek) && Boolean(s.is_active)
         );
 
         for (const s of activeScheds) {

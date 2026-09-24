@@ -108,18 +108,16 @@ export const WorkSchedulesView: React.FC = () => {
         `/v1/professionals/${profId}`
       );
       if (!res.schedules || res.schedules.length === 0) {
-        const defaultShifts: Shift[] = [
-          { day_of_week: 0, start_time: '08:00', end_time: '12:00', break_start: null, break_end: null, is_active: false },
-          { day_of_week: 1, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
-          { day_of_week: 2, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
-          { day_of_week: 3, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
-          { day_of_week: 4, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
-          { day_of_week: 5, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
-          { day_of_week: 6, start_time: '08:00', end_time: '12:00', break_start: null, break_end: null, is_active: true },
-        ];
-        setShifts(defaultShifts);
+        // Nunca simula escala ativa no frontend: reflete exatamente a ausência de escala no banco
+        setShifts([]);
       } else {
-        setShifts(res.schedules);
+        setShifts(
+          res.schedules.map(s => ({
+            ...s,
+            day_of_week: Number(s.day_of_week),
+            is_active: Boolean(s.is_active)
+          }))
+        );
       }
       setBlockedTimes(res.blockedTimes || []);
     } catch (err: any) {
@@ -162,11 +160,11 @@ export const WorkSchedulesView: React.FC = () => {
     if (currentlyHasActive) {
       // Desativa todos os turnos deste dia
       setShifts(prev =>
-        prev.map(s => (s.day_of_week === dayOfWeek ? { ...s, is_active: false } : s))
+        prev.map(s => (Number(s.day_of_week) === dayOfWeek ? { ...s, is_active: false } : s))
       );
     } else {
       // Se não há nenhum turno neste dia, adiciona um turno padrão das 08h às 18h com almoço
-      const existing = shifts.filter(s => s.day_of_week === dayOfWeek);
+      const existing = shifts.filter(s => Number(s.day_of_week) === dayOfWeek);
       if (existing.length === 0) {
         setShifts(prev => [
           ...prev,
@@ -181,7 +179,7 @@ export const WorkSchedulesView: React.FC = () => {
         ]);
       } else {
         setShifts(prev =>
-          prev.map(s => (s.day_of_week === dayOfWeek ? { ...s, is_active: true } : s))
+          prev.map(s => (Number(s.day_of_week) === dayOfWeek ? { ...s, is_active: true } : s))
         );
       }
     }
@@ -207,7 +205,11 @@ export const WorkSchedulesView: React.FC = () => {
       } else {
         showToast(res.message || 'Horários atualizados com sucesso.', 'success');
       }
-      loadProfessionalDetails(selectedProfId);
+      await loadProfessionalDetails(selectedProfId);
+
+      // Dispara eventos globais para sincronizar Agenda Interativa imediatamente sem exigir F5
+      window.dispatchEvent(new CustomEvent('zemda-schedule-updated', { detail: { professionalId: selectedProfId } }));
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar horários de trabalho', 'error');
     } finally {
@@ -234,7 +236,10 @@ export const WorkSchedulesView: React.FC = () => {
       setBlockTitle('');
       setBlockStart('');
       setBlockEnd('');
-      loadProfessionalDetails(selectedProfId);
+      await loadProfessionalDetails(selectedProfId);
+
+      window.dispatchEvent(new CustomEvent('zemda-schedule-updated', { detail: { professionalId: selectedProfId } }));
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar bloqueio', 'error');
     }
@@ -246,7 +251,10 @@ export const WorkSchedulesView: React.FC = () => {
     try {
       await ApiClient.delete(`/v1/professionals/blocks/${blockId}`);
       showToast('Bloqueio removido!', 'success');
-      loadProfessionalDetails(selectedProfId);
+      await loadProfessionalDetails(selectedProfId);
+
+      window.dispatchEvent(new CustomEvent('zemda-schedule-updated', { detail: { professionalId: selectedProfId } }));
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
     } catch (err: any) {
       showToast(err.message || 'Erro ao remover bloqueio', 'error');
     }
@@ -377,6 +385,15 @@ export const WorkSchedulesView: React.FC = () => {
               </span>
             )}
           </div>
+
+          {shifts.filter(s => Boolean(s.is_active)).length === 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-amber-900 text-xs flex items-center gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Nenhum dia ativo configurado:</strong> Este profissional está atualmente sem escala de trabalho ativa no banco de dados (aparece como "Fora da escala" na Agenda). Marque os dias da semana desejados abaixo e clique em <strong>Salvar Grade de Horários</strong> para registrar a escala.
+              </span>
+            </div>
+          )}
 
           <div className="space-y-3">
             {DAYS_NAMES.map((dayName, dayIndex) => {
