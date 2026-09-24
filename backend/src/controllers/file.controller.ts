@@ -42,6 +42,12 @@ export function getSigningSecret(): string {
   return secret;
 }
 
+export function getSigningSecretFingerprint(secret?: string): string | null {
+  const sec = secret || process.env.ZEMDA_FILES_SIGNING_SECRET;
+  if (!sec) return null;
+  return crypto.createHash('sha256').update(sec).digest('hex').substring(0, 8);
+}
+
 export function canonicalizeClinicId(tenantId: string): string {
   if (!tenantId) return '';
   return tenantId.trim().replace(/[^a-zA-Z0-9_-]/g, '');
@@ -213,7 +219,8 @@ export class FileController {
       res.status(200).json({
         uploadUrl,
         uploadToken,
-        objectKey
+        objectKey,
+        signingSecretFingerprint: getSigningSecretFingerprint(signingSecret)
       });
     } catch (err: any) {
       console.error('[FileController.createUploadTicket] Erro:', err);
@@ -470,8 +477,12 @@ export class FileController {
       });
 
       if (!existsInR2) {
+        const isForbidden = statusHead === 403 || statusGetFallback === 403;
         res.status(400).json({
-          error: 'O arquivo não foi localizado no Cloudflare R2. Conclua o upload direto antes de confirmar.',
+          error: isForbidden
+            ? 'ZEMDA_FILES_SIGNING_SECRET do backend e do Cloudflare Worker são diferentes. O arquivo não foi localizado no Cloudflare R2.'
+            : 'O arquivo não foi localizado no Cloudflare R2. Conclua o upload direto antes de confirmar.',
+          detail: isForbidden ? 'Worker retornou HTTP 403 (Assinatura inválida) na validação.' : undefined,
           objectKey
         });
         return;
@@ -828,6 +839,118 @@ export class FileController {
     } catch (err: any) {
       console.error('[FileController.listPatientFiles] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar anexos do paciente' });
+    }
+  }
+
+  /**
+   * GET /api/files/diagnostic ou /api/v1/files/diagnostic
+   * Diagnóstico seguro entre ZEMDA_FILES_SIGNING_SECRET do backend e do Cloudflare Worker.
+   * Compara exclusivamente fingerprints SHA-256 (primeiros 8 caracteres), sem nunca registrar ou expor o segredo real.
+   */
+  static async getDiagnostic(req: Request, res: Response): Promise<void> {
+    try {
+      const backendSecret = process.env.ZEMDA_FILES_SIGNING_SECRET;
+      const backendConfigured = Boolean(backendSecret);
+      const backendFingerprint = backendConfigured ? getSigningSecretFingerprint(backendSecret) : null;
+
+      const workerBaseUrl = (process.env.ZEMDA_FILES_WORKER_URL || 'https://zemda-files-worker.gabrielkz1510.workers.dev').replace(/\/+$/, '');
+      let workerHealth: any = null;
+      let workerError: string | null = null;
+      let workerReachable = false;
+
+      try {
+        const workerRes = await fetch(`${workerBaseUrl}/health`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        workerReachable = true;
+        if (workerRes.ok) {
+          workerHealth = await workerRes.json();
+        } else {
+          workerError = `Worker respondeu com status HTTP ${workerRes.status}`;
+        }
+      } catch (fetchErr: any) {
+        workerError = `Falha de conexão com Cloudflare Worker: ${fetchErr?.message || fetchErr}`;
+      }
+
+      const workerConfigured = workerHealth?.signingSecretConfigured ?? false;
+      const workerFingerprint = workerHealth?.signingSecretFingerprint ?? null;
+
+      // Diagnóstico comparativo seguro: NUNCA expor ou registrar o segredo real
+      if (!backendConfigured) {
+        res.status(500).json({
+          ok: false,
+          match: false,
+          backendConfigured: false,
+          workerConfigured,
+          workerReachable,
+          message: 'ZEMDA_FILES_SIGNING_SECRET não está configurado no backend.'
+        });
+        return;
+      }
+
+      if (!workerReachable) {
+        res.status(502).json({
+          ok: false,
+          match: false,
+          backendConfigured: true,
+          backendFingerprint,
+          workerConfigured: false,
+          workerReachable: false,
+          error: workerError,
+          message: 'Não foi possível contatar o Cloudflare Worker para validar o segredo.'
+        });
+        return;
+      }
+
+      if (!workerConfigured || !workerFingerprint) {
+        res.status(500).json({
+          ok: false,
+          match: false,
+          backendConfigured: true,
+          backendFingerprint,
+          workerConfigured: false,
+          workerFingerprint: null,
+          workerReachable: true,
+          message: 'ZEMDA_FILES_SIGNING_SECRET não está configurado no Cloudflare Worker.'
+        });
+        return;
+      }
+
+      const match = backendFingerprint === workerFingerprint;
+
+      if (!match) {
+        console.warn('[FileController.getDiagnostic] Divergência de assinatura detectada:', {
+          backendFingerprint,
+          workerFingerprint
+        });
+        res.status(200).json({
+          ok: false,
+          match: false,
+          backendConfigured: true,
+          workerConfigured: true,
+          backendFingerprint,
+          workerFingerprint,
+          message: 'ZEMDA_FILES_SIGNING_SECRET do backend e do Cloudflare Worker são diferentes.'
+        });
+        return;
+      }
+
+      res.status(200).json({
+        ok: true,
+        match: true,
+        backendConfigured: true,
+        workerConfigured: true,
+        signingSecretFingerprint: backendFingerprint,
+        message: 'ZEMDA_FILES_SIGNING_SECRET sincronizado com sucesso entre backend e Cloudflare Worker.'
+      });
+    } catch (err: any) {
+      console.error('[FileController.getDiagnostic] Erro:', err);
+      res.status(500).json({
+        ok: false,
+        match: false,
+        error: 'Erro interno ao executar diagnóstico de arquivos'
+      });
     }
   }
 }

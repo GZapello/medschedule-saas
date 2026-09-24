@@ -945,6 +945,8 @@ api.get('/v1/audit', requireRole('superadmin'), AuditController.list);
 // ==========================================
 // ARMAZENAMENTO CLOUDFLARE R2 & ANEXOS
 // ==========================================
+api.get('/v1/files/diagnostic', FileController.getDiagnostic);
+api.get('/files/diagnostic', FileController.getDiagnostic);
 api.post('/v1/files/upload-ticket', requireTenant, FileController.createUploadTicket);
 api.post('/files/upload-ticket', requireTenant, FileController.createUploadTicket);
 api.post('/v1/files/upload-url', requireTenant, FileController.getUploadUrl);

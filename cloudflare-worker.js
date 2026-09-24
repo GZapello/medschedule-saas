@@ -55,6 +55,14 @@ async function verifyHmacSha256(payloadBase64, signatureBase64, secret) {
   return await crypto.subtle.verify('HMAC', key, sigBytes, dataBytes);
 }
 
+async function getSecretFingerprint(secret) {
+  if (!secret || typeof secret !== 'string') return null;
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(secret));
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').substring(0, 8);
+}
+
 function parseAndValidateToken(rawToken, secret) {
   if (!rawToken || typeof rawToken !== 'string') {
     throw new Error('Token ausente');
@@ -92,17 +100,25 @@ export default {
     }
 
     const secret = env.ZEMDA_FILES_SIGNING_SECRET;
-    if (!secret) {
-      return new Response(JSON.stringify({ error: 'ZEMDA_FILES_SIGNING_SECRET não configurado' }), {
-        status: 500,
+
+    // 1. GET /health
+    if (url.pathname === '/health' && request.method === 'GET') {
+      const configured = Boolean(secret);
+      const fingerprint = configured ? await getSecretFingerprint(secret) : null;
+      return new Response(JSON.stringify({
+        ok: true,
+        service: 'zemda-files-worker',
+        signingSecretConfigured: configured,
+        signingSecretFingerprint: fingerprint,
+      }), {
+        status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 
-    // 1. GET /health
-    if (url.pathname === '/health' && request.method === 'GET') {
-      return new Response(JSON.stringify({ ok: true, service: 'zemda-files-worker' }), {
-        status: 200,
+    if (!secret) {
+      return new Response(JSON.stringify({ error: 'ZEMDA_FILES_SIGNING_SECRET não configurado' }), {
+        status: 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
@@ -122,7 +138,11 @@ export default {
 
         const isValidSig = await verifyHmacSha256(payloadBase64, signatureBase64, secret);
         if (!isValidSig) {
-          return new Response(JSON.stringify({ error: 'Assinatura do token inválida' }), {
+          const fingerprint = await getSecretFingerprint(secret);
+          return new Response(JSON.stringify({
+            error: 'Assinatura inválida',
+            signingSecretFingerprint: fingerprint,
+          }), {
             status: 403,
             headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
           });
@@ -221,7 +241,11 @@ export default {
         const { payloadBase64, signatureBase64, payload } = parseAndValidateToken(token, secret);
         const isValidSig = await verifyHmacSha256(payloadBase64, signatureBase64, secret);
         if (!isValidSig) {
-          return new Response(JSON.stringify({ error: 'Assinatura inválida' }), {
+          const fingerprint = await getSecretFingerprint(secret);
+          return new Response(JSON.stringify({
+            error: 'Assinatura inválida',
+            signingSecretFingerprint: fingerprint,
+          }), {
             status: 403,
             headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
           });
@@ -329,7 +353,11 @@ export default {
         const { payloadBase64, signatureBase64, payload } = parseAndValidateToken(token, secret);
         const isValidSig = await verifyHmacSha256(payloadBase64, signatureBase64, secret);
         if (!isValidSig) {
-          return new Response(JSON.stringify({ error: 'Assinatura inválida' }), {
+          const fingerprint = await getSecretFingerprint(secret);
+          return new Response(JSON.stringify({
+            error: 'Assinatura inválida',
+            signingSecretFingerprint: fingerprint,
+          }), {
             status: 403,
             headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
           });

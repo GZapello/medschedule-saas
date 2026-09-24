@@ -250,6 +250,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
         uploadUrl: string;
         uploadToken: string;
         objectKey: string;
+        signingSecretFingerprint?: string;
       }>('/files/upload-ticket', {
         filename: optimizedFile.name,
         mimeType: optimizedFile.type || 'image/jpeg',
@@ -294,6 +295,36 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
 
       if (!putResponse.ok) {
         const errorDetail = workerResult?.detail || workerResult?.error || '';
+        const workerFp = workerResult?.signingSecretFingerprint;
+        const backendFp = ticketResponse?.signingSecretFingerprint;
+
+        // Se o Worker rejeitar com 403 (Assinatura inválida), diagnostica se os segredos são divergentes
+        if (putResponse.status === 403) {
+          if (workerFp && backendFp && workerFp !== backendFp) {
+            throw new Error(
+              'ZEMDA_FILES_SIGNING_SECRET do backend e do Cloudflare Worker são diferentes.'
+            );
+          }
+
+          // Se a fingerprint não veio diretamente no 403 do worker, consulta o diagnóstico do backend
+          try {
+            const diag = await ApiClient.get<{ match?: boolean; message?: string }>('/files/diagnostic');
+            if (diag && diag.match === false) {
+              throw new Error(
+                diag.message || 'ZEMDA_FILES_SIGNING_SECRET do backend e do Cloudflare Worker são diferentes.'
+              );
+            }
+          } catch (diagErr: any) {
+            if (diagErr?.message?.includes('ZEMDA_FILES_SIGNING_SECRET')) {
+              throw diagErr;
+            }
+          }
+
+          if (String(errorDetail).toLowerCase().includes('assinatura') || String(errorDetail).toLowerCase().includes('signature')) {
+            throw new Error('ZEMDA_FILES_SIGNING_SECRET do backend e do Cloudflare Worker são diferentes.');
+          }
+        }
+
         throw new Error(
           errorDetail
             ? `Falha no upload para o Worker: ${errorDetail}`
