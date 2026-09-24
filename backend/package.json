@@ -7,6 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "test": "npm run build && node run-tests.cjs",
     "test:billing": "npm run build && node test-billing.cjs",
     "test:exercises": "npm run build && node test-exercise-library.cjs && node test-personal-expansion-and-students.cjs",
     "exercises:audit": "node audit-and-sync-exercise-images.cjs",
