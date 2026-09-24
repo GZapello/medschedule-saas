@@ -208,9 +208,10 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
       }
     ]);
 
-    // 2. Se fala instantânea estiver ligada, reproduz a palavra do cartão
+    // 2. Se fala instantânea estiver ligada, reproduz APENAS a palavra/termo do cartão
+    // A montagem de frases completas é realizada na faixa de frase pelo botão 'Falar'
     if (speakOnClick) {
-      speakText(card.spoken_text || card.label);
+      speakText(card.label);
     }
 
     // 3. Se o cartão possui vínculo para abrir outra página, navega para ela
@@ -299,11 +300,11 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
     >
       <div
         className={`bg-white w-full h-full flex flex-col overflow-hidden shadow-2xl transition-all ${
-          isFullscreen ? 'rounded-none' : 'rounded-3xl max-w-7xl max-h-[96vh] border border-slate-200'
+          isFullscreen ? 'rounded-none' : 'rounded-2xl sm:rounded-3xl max-w-7xl max-h-[96vh] sm:h-[94vh] border border-slate-200'
         }`}
       >
         {/* Barra Superior / Header */}
-        <div className="flex flex-wrap items-center justify-between px-4 sm:px-6 py-3 bg-white border-b border-slate-200 gap-2 shrink-0">
+        <div className="flex flex-wrap items-center justify-between px-4 sm:px-6 py-2.5 bg-white border-b border-slate-200 gap-2 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-2xl bg-purple-100 text-purple-700 shadow-2xs">
               <MessageSquareHeart className="w-5 h-5" />

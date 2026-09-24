@@ -167,8 +167,26 @@ export function migrateAACBoard(rawDb: DatabaseSync): void {
     }
   };
 
+  // Assegura existência da especialidade/área de Comunicação e Linguagem na Terapia Ocupacional
+  try {
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO practice_areas (id, profession_id, name, slug, type, description, active)
+      VALUES (
+        'pa-to-comunicacao',
+        'prof-terapeuta-ocupacional',
+        'Comunicação e Linguagem',
+        'comunicacao-linguagem',
+        'SPECIALTY',
+        'Comunicação Aumentativa e Alternativa (CAA) e intervenções de comunicação funcional na TO',
+        1
+      )
+    `).run();
+    existingAreaIds.add('pa-to-comunicacao');
+  } catch (_) {}
+
   // Terapia Ocupacional - Áreas com AAC DEFAULT (USE e MANAGE)
   const toAacAreas = [
+    'pa-to-comunicacao',
     'pa-to-neuro',
     'pa-to-pediatria',
     'pa-to-tec-assistiva',
@@ -180,6 +198,8 @@ export function migrateAACBoard(rawDb: DatabaseSync): void {
     safeAreaCap(aId, 'AAC_BOARD_USE', 'DEFAULT');
     safeAreaCap(aId, 'AAC_BOARD_MANAGE', 'DEFAULT');
   }
+  safeAreaCap('pa-to-comunicacao', 'COMMUNICATION_ASSESSMENT', 'DEFAULT');
+  safeAreaCap('pa-to-comunicacao', 'AAC_COMMUNICATION', 'DEFAULT');
 
   // Fonoaudiologia - Áreas específicas com AAC DEFAULT
   const fonoAacAreas = [
@@ -282,5 +302,28 @@ export function migrateAACBoard(rawDb: DatabaseSync): void {
     }
   } catch (err) {
     console.warn('[AAC Migration] Erro ao associar planos:', err);
+  }
+
+  // 7. Sanitização de falas de cartões de templates antigos existentes no banco (restringe clique unitário à palavra do cartão)
+  try {
+    rawDb.exec(`
+      UPDATE aac_cards
+      SET spoken_text = label
+      WHERE spoken_text LIKE 'Eu quero%'
+         OR spoken_text LIKE 'Eu não quero%'
+         OR spoken_text LIKE 'Preciso%'
+         OR spoken_text LIKE 'Estou com%'
+         OR spoken_text LIKE 'Quero%'
+         OR spoken_text LIKE 'Vou abrir%'
+         OR spoken_text LIKE 'Vamos escolher%'
+         OR spoken_text LIKE 'Muito obrigado%'
+         OR spoken_text LIKE 'Oi,%'
+         OR spoken_text LIKE 'Tchau,%'
+         OR spoken_text LIKE 'Voltar para%'
+         OR spoken_text LIKE 'Está doendo%'
+         OR spoken_text LIKE 'Nossa sessão%';
+    `);
+  } catch (err) {
+    console.warn('[AAC Migration] Aviso ao sanitizar falas de cartões no banco:', err);
   }
 }

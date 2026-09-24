@@ -432,13 +432,43 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     Boolean(currentUser?.zemdaFonoEnabled)
   );
 
-  const effectiveCapabilities = isFonoProfile
+  // REGRA PARA TERAPIA OCUPACIONAL:
+  // Profissionais de TO com área/especialidade Comunicação e Linguagem ou Tecnologia Assistiva
+  // têm acesso automático à Prancha de Comunicação CAA (AAC_BOARD_USE e AAC_BOARD_MANAGE)
+  const isTOProfile = Boolean(
+    isOccupationalTherapist ||
+    isZemdaTO ||
+    commercialModule === 'ZemdaTO' ||
+    currentUser?.canonicalProfessionId === 'prof-terapeuta-ocupacional' ||
+    profId === 'prof-terapeuta-ocupacional' ||
+    (currentUser?.professionName || '').toLowerCase().includes('ocupacional') ||
+    Boolean(currentUser?.zemdaToEnabled)
+  );
+
+  const hasTOCommFocus = isTOProfile && (
+    practiceAreaIds.some(id =>
+      id.includes('comunicacao') ||
+      id.includes('linguagem') ||
+      id.includes('tec-assistiva') ||
+      id.includes('caa')
+    ) ||
+    capabilities.includes('COMMUNICATION_ASSESSMENT') ||
+    capabilities.includes('AAC_COMMUNICATION') ||
+    Boolean((currentUser as any)?.specialtyCustom?.toLowerCase().includes('comunica')) ||
+    Boolean((currentUser as any)?.specialtyCustom?.toLowerCase().includes('linguagem')) ||
+    Boolean((currentUser as any)?.specialtyCustom?.toLowerCase().includes('assistiva')) ||
+    Boolean((currentUser as any)?.specialtyCustom?.toLowerCase().includes('caa'))
+  );
+
+  const hasAACBoardAccess = isFonoProfile || hasTOCommFocus;
+
+  const effectiveCapabilities = hasAACBoardAccess
     ? Array.from(new Set([...capabilities, 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE']))
     : capabilities;
 
   const hasCapability = (capId: string): boolean => {
     if (isSuperAdmin && !isSandboxSession) return true;
-    if ((capId === 'AAC_BOARD_USE' || capId === 'AAC_BOARD_MANAGE') && isFonoProfile) {
+    if ((capId === 'AAC_BOARD_USE' || capId === 'AAC_BOARD_MANAGE') && hasAACBoardAccess) {
       return true;
     }
     return effectiveCapabilities.includes(capId);

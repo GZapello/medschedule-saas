@@ -793,22 +793,22 @@ export class AACController {
     const mainCards = [
       { label: 'Eu', spoken: 'Eu', cat: 'pronoun', col: '#fef08a', sym: '🙋', target: null },
       { label: 'Você', spoken: 'Você', cat: 'pronoun', col: '#fef08a', sym: '👉', target: null },
-      { label: 'Quero', spoken: 'Eu quero', cat: 'action', col: '#bbf7d0', sym: '🤲', target: null },
-      { label: 'Não quero', spoken: 'Eu não quero', cat: 'action', col: '#fee2e2', sym: '🚫', target: null },
+      { label: 'Quero', spoken: 'Quero', cat: 'action', col: '#bbf7d0', sym: '🤲', target: null },
+      { label: 'Não quero', spoken: 'Não quero', cat: 'action', col: '#fee2e2', sym: '🚫', target: null },
       { label: 'Sim', spoken: 'Sim', cat: 'descriptor', col: '#dcfce7', sym: '👍', target: null },
       { label: 'Não', spoken: 'Não', cat: 'descriptor', col: '#fee2e2', sym: '👎', target: null },
-      { label: 'Mais', spoken: 'Eu quero mais', cat: 'descriptor', col: '#f1f5f9', sym: '➕', target: null },
-      { label: 'Acabou', spoken: 'Acabou, terminou', cat: 'descriptor', col: '#f1f5f9', sym: '🛑', target: null },
-      { label: 'Ajuda', spoken: 'Preciso de ajuda por favor', cat: 'action', col: '#fef3c7', sym: '🆘', target: null },
-      { label: 'Banheiro', spoken: 'Preciso ir ao banheiro', cat: 'noun', col: '#fed7aa', sym: '🚽', target: null },
-      { label: 'Água', spoken: 'Quero beber água', cat: 'noun', col: '#fed7aa', sym: '💧', target: null },
-      { label: 'Comer', spoken: 'Quero comer algo gostoso', cat: 'navigation', col: '#fed7aa', sym: '🍽️', target: pageFoodId },
-      { label: 'Necessidades & Dor', spoken: 'Vou abrir necessidades e dor', cat: 'navigation', col: '#e0e7ff', sym: '🩹', target: pageNeedsId },
-      { label: 'Sentimentos', spoken: 'Quero dizer como estou me sentindo', cat: 'navigation', col: '#e0e7ff', sym: '😊', target: pageFeelingsId },
-      { label: 'Brincar / Fazer', spoken: 'Vamos escolher uma atividade', cat: 'navigation', col: '#e0e7ff', sym: '🎨', target: pageActivitiesId },
-      { label: 'Obrigado', spoken: 'Muito obrigado', cat: 'social', col: '#fbcfe8', sym: '🙏', target: null },
-      { label: 'Oi / Olá', spoken: 'Oi, tudo bem?', cat: 'social', col: '#fbcfe8', sym: '👋', target: null },
-      { label: 'Tchau', spoken: 'Tchau, até logo!', cat: 'social', col: '#fbcfe8', sym: '👋', target: null }
+      { label: 'Mais', spoken: 'Mais', cat: 'descriptor', col: '#f1f5f9', sym: '➕', target: null },
+      { label: 'Acabou', spoken: 'Acabou', cat: 'descriptor', col: '#f1f5f9', sym: '🛑', target: null },
+      { label: 'Ajuda', spoken: 'Ajuda', cat: 'action', col: '#fef3c7', sym: '🆘', target: null },
+      { label: 'Banheiro', spoken: 'Banheiro', cat: 'noun', col: '#fed7aa', sym: '🚽', target: null },
+      { label: 'Água', spoken: 'Água', cat: 'noun', col: '#fed7aa', sym: '💧', target: null },
+      { label: 'Comer', spoken: 'Comer', cat: 'navigation', col: '#fed7aa', sym: '🍽️', target: pageFoodId },
+      { label: 'Necessidades & Dor', spoken: 'Necessidades e Dor', cat: 'navigation', col: '#e0e7ff', sym: '🩹', target: pageNeedsId },
+      { label: 'Sentimentos', spoken: 'Sentimentos', cat: 'navigation', col: '#e0e7ff', sym: '😊', target: pageFeelingsId },
+      { label: 'Brincar / Fazer', spoken: 'Brincar', cat: 'navigation', col: '#e0e7ff', sym: '🎨', target: pageActivitiesId },
+      { label: 'Obrigado', spoken: 'Obrigado', cat: 'social', col: '#fbcfe8', sym: '🙏', target: null },
+      { label: 'Oi / Olá', spoken: 'Oi', cat: 'social', col: '#fbcfe8', sym: '👋', target: null },
+      { label: 'Tchau', spoken: 'Tchau', cat: 'social', col: '#fbcfe8', sym: '👋', target: null }
     ];
 
     mainCards.forEach((c, idx) => {
@@ -831,18 +831,18 @@ export class AACController {
 
     // --- PÁGINA 2: NECESSIDADES & DOR ---
     const needsCards = [
-      { label: 'Banheiro', spoken: 'Preciso ir ao banheiro urgente', cat: 'noun', col: '#fed7aa', sym: '🚽', target: null },
-      { label: 'Água', spoken: 'Estou com sede, quero beber água', cat: 'noun', col: '#fed7aa', sym: '💧', target: null },
-      { label: 'Fome', spoken: 'Estou com fome', cat: 'noun', col: '#fed7aa', sym: '🥪', target: null },
-      { label: 'Dor de Cabeça', spoken: 'Estou com dor de cabeça', cat: 'feeling', col: '#fee2e2', sym: '🤕', target: null },
-      { label: 'Dor na Barriga', spoken: 'Estou com dor na barriga', cat: 'feeling', col: '#fee2e2', sym: '🤢', target: null },
-      { label: 'Dói Aqui', spoken: 'Está doendo exatamente aqui', cat: 'feeling', col: '#fee2e2', sym: '🩹', target: null },
-      { label: 'Remédio', spoken: 'Preciso tomar meu remédio', cat: 'noun', col: '#fed7aa', sym: '💊', target: null },
-      { label: 'Frio', spoken: 'Estou com frio', cat: 'feeling', col: '#bfdbfe', sym: '🥶', target: null },
-      { label: 'Calor', spoken: 'Estou com muito calor', cat: 'feeling', col: '#fed7aa', sym: '🥵', target: null },
-      { label: 'Cansado', spoken: 'Estou cansado, quero descansar', cat: 'feeling', col: '#bfdbfe', sym: '🥱', target: null },
-      { label: 'Vontade de Dormir', spoken: 'Estou com muito sono', cat: 'feeling', col: '#bfdbfe', sym: '😴', target: null },
-      { label: 'Voltar ao Início', spoken: 'Voltar para a tela principal', cat: 'navigation', col: '#e0e7ff', sym: '🏠', target: pageMainId }
+      { label: 'Banheiro', spoken: 'Banheiro', cat: 'noun', col: '#fed7aa', sym: '🚽', target: null },
+      { label: 'Água', spoken: 'Água', cat: 'noun', col: '#fed7aa', sym: '💧', target: null },
+      { label: 'Fome', spoken: 'Fome', cat: 'noun', col: '#fed7aa', sym: '🥪', target: null },
+      { label: 'Dor de Cabeça', spoken: 'Dor de cabeça', cat: 'feeling', col: '#fee2e2', sym: '🤕', target: null },
+      { label: 'Dor na Barriga', spoken: 'Dor na barriga', cat: 'feeling', col: '#fee2e2', sym: '🤢', target: null },
+      { label: 'Dói Aqui', spoken: 'Dói aqui', cat: 'feeling', col: '#fee2e2', sym: '🩹', target: null },
+      { label: 'Remédio', spoken: 'Remédio', cat: 'noun', col: '#fed7aa', sym: '💊', target: null },
+      { label: 'Frio', spoken: 'Frio', cat: 'feeling', col: '#bfdbfe', sym: '🥶', target: null },
+      { label: 'Calor', spoken: 'Calor', cat: 'feeling', col: '#fed7aa', sym: '🥵', target: null },
+      { label: 'Cansado', spoken: 'Cansado', cat: 'feeling', col: '#bfdbfe', sym: '🥱', target: null },
+      { label: 'Vontade de Dormir', spoken: 'Sono', cat: 'feeling', col: '#bfdbfe', sym: '😴', target: null },
+      { label: 'Voltar ao Início', spoken: 'Início', cat: 'navigation', col: '#e0e7ff', sym: '🏠', target: pageMainId }
     ];
 
     needsCards.forEach((c, idx) => {
@@ -865,18 +865,18 @@ export class AACController {
 
     // --- PÁGINA 3: SENTIMENTOS ---
     const feelingsCards = [
-      { label: 'Feliz', spoken: 'Estou feliz e alegre', cat: 'feeling', col: '#bfdbfe', sym: '😃', target: null },
-      { label: 'Triste', spoken: 'Estou me sentindo triste', cat: 'feeling', col: '#bfdbfe', sym: '😢', target: null },
-      { label: 'Bravo / Irritado', spoken: 'Estou bravo e contrariado', cat: 'feeling', col: '#fee2e2', sym: '😡', target: null },
-      { label: 'Medo', spoken: 'Estou com medo', cat: 'feeling', col: '#fee2e2', sym: '😨', target: null },
-      { label: 'Calmo', spoken: 'Estou calmo e tranquilo', cat: 'feeling', col: '#bfdbfe', sym: '😌', target: null },
-      { label: 'Ansioso', spoken: 'Estou me sentindo ansioso', cat: 'feeling', col: '#fee2e2', sym: '😰', target: null },
-      { label: 'Animado', spoken: 'Estou muito animado', cat: 'feeling', col: '#bfdbfe', sym: '🤩', target: null },
-      { label: 'Frustrado', spoken: 'Estou me sentindo frustrado', cat: 'feeling', col: '#fee2e2', sym: '😤', target: null },
-      { label: 'Confortável', spoken: 'Estou me sentindo bem confortável', cat: 'feeling', col: '#dcfce7', sym: '🛋️', target: null },
-      { label: 'Desconfortável', spoken: 'Isso está desconfortável para mim', cat: 'feeling', col: '#fee2e2', sym: '😣', target: null },
-      { label: 'Muito Barulho', spoken: 'O barulho está me incomodando', cat: 'feeling', col: '#fee2e2', sym: '📢', target: null },
-      { label: 'Voltar ao Início', spoken: 'Voltar para a tela principal', cat: 'navigation', col: '#e0e7ff', sym: '🏠', target: pageMainId }
+      { label: 'Feliz', spoken: 'Feliz', cat: 'feeling', col: '#bfdbfe', sym: '😃', target: null },
+      { label: 'Triste', spoken: 'Triste', cat: 'feeling', col: '#bfdbfe', sym: '😢', target: null },
+      { label: 'Bravo / Irritado', spoken: 'Bravo', cat: 'feeling', col: '#fee2e2', sym: '😡', target: null },
+      { label: 'Medo', spoken: 'Medo', cat: 'feeling', col: '#fee2e2', sym: '😨', target: null },
+      { label: 'Calmo', spoken: 'Calmo', cat: 'feeling', col: '#bfdbfe', sym: '😌', target: null },
+      { label: 'Ansioso', spoken: 'Ansioso', cat: 'feeling', col: '#fee2e2', sym: '😰', target: null },
+      { label: 'Animado', spoken: 'Animado', cat: 'feeling', col: '#bfdbfe', sym: '🤩', target: null },
+      { label: 'Frustrado', spoken: 'Frustrado', cat: 'feeling', col: '#fee2e2', sym: '😤', target: null },
+      { label: 'Confortável', spoken: 'Confortável', cat: 'feeling', col: '#dcfce7', sym: '🛋️', target: null },
+      { label: 'Desconfortável', spoken: 'Desconfortável', cat: 'feeling', col: '#fee2e2', sym: '😣', target: null },
+      { label: 'Muito Barulho', spoken: 'Muito barulho', cat: 'feeling', col: '#fee2e2', sym: '📢', target: null },
+      { label: 'Voltar ao Início', spoken: 'Início', cat: 'navigation', col: '#e0e7ff', sym: '🏠', target: pageMainId }
     ];
 
     feelingsCards.forEach((c, idx) => {
@@ -899,18 +899,18 @@ export class AACController {
 
     // --- PÁGINA 4: ATIVIDADES & CONSULTÓRIO ---
     const activitiesCards = [
-      { label: 'Ouvir', spoken: 'Eu quero escutar', cat: 'action', col: '#bbf7d0', sym: '👂', target: null },
-      { label: 'Falar', spoken: 'Eu quero falar agora', cat: 'action', col: '#bbf7d0', sym: '🗣️', target: null },
-      { label: 'Desenhar', spoken: 'Eu quero desenhar e pintar', cat: 'action', col: '#bbf7d0', sym: '🖍️', target: null },
-      { label: 'Brinquedo', spoken: 'Quero brincar com um brinquedo', cat: 'noun', col: '#fed7aa', sym: '🧸', target: null },
-      { label: 'Jogo', spoken: 'Quero jogar um jogo', cat: 'noun', col: '#fed7aa', sym: '🎲', target: null },
-      { label: 'Música', spoken: 'Quero escutar música', cat: 'noun', col: '#fed7aa', sym: '🎵', target: null },
-      { label: 'Livro / História', spoken: 'Quero ler uma história', cat: 'noun', col: '#fed7aa', sym: '📖', target: null },
-      { label: 'Espere', spoken: 'Por favor, espere um momento', cat: 'action', col: '#fef3c7', sym: '✋', target: null },
-      { label: 'Não Entendi', spoken: 'Não entendi, pode repetir por favor?', cat: 'descriptor', col: '#f1f5f9', sym: '❓', target: null },
-      { label: 'Pausa / Descanso', spoken: 'Quero fazer uma pausa rápida', cat: 'action', col: '#bfdbfe', sym: '⏸️', target: null },
-      { label: 'Terminou a Sessão', spoken: 'Nossa sessão terminou por hoje', cat: 'social', col: '#fbcfe8', sym: '🏁', target: null },
-      { label: 'Voltar ao Início', spoken: 'Voltar para a tela principal', cat: 'navigation', col: '#e0e7ff', sym: '🏠', target: pageMainId }
+      { label: 'Ouvir', spoken: 'Ouvir', cat: 'action', col: '#bbf7d0', sym: '👂', target: null },
+      { label: 'Falar', spoken: 'Falar', cat: 'action', col: '#bbf7d0', sym: '🗣️', target: null },
+      { label: 'Desenhar', spoken: 'Desenhar', cat: 'action', col: '#bbf7d0', sym: '🖍️', target: null },
+      { label: 'Brinquedo', spoken: 'Brinquedo', cat: 'noun', col: '#fed7aa', sym: '🧸', target: null },
+      { label: 'Jogo', spoken: 'Jogo', cat: 'noun', col: '#fed7aa', sym: '🎲', target: null },
+      { label: 'Música', spoken: 'Música', cat: 'noun', col: '#fed7aa', sym: '🎵', target: null },
+      { label: 'Livro / História', spoken: 'História', cat: 'noun', col: '#fed7aa', sym: '📖', target: null },
+      { label: 'Espere', spoken: 'Espere', cat: 'action', col: '#fef3c7', sym: '✋', target: null },
+      { label: 'Não Entendi', spoken: 'Não entendi', cat: 'descriptor', col: '#f1f5f9', sym: '❓', target: null },
+      { label: 'Pausa / Descanso', spoken: 'Pausa', cat: 'action', col: '#bfdbfe', sym: '⏸️', target: null },
+      { label: 'Terminou a Sessão', spoken: 'Terminou', cat: 'social', col: '#fbcfe8', sym: '🏁', target: null },
+      { label: 'Voltar ao Início', spoken: 'Início', cat: 'navigation', col: '#e0e7ff', sym: '🏠', target: pageMainId }
     ];
 
     activitiesCards.forEach((c, idx) => {
@@ -933,18 +933,18 @@ export class AACController {
 
     // --- PÁGINA 5: ALIMENTOS & BEBIDAS ---
     const foodCards = [
-      { label: 'Água', spoken: 'Quero beber um copo de água', cat: 'noun', col: '#fed7aa', sym: '💧', target: null },
-      { label: 'Suco', spoken: 'Quero beber suco', cat: 'noun', col: '#fed7aa', sym: '🧃', target: null },
-      { label: 'Leite', spoken: 'Quero leite', cat: 'noun', col: '#fed7aa', sym: '🥛', target: null },
-      { label: 'Fruta', spoken: 'Quero comer uma fruta', cat: 'noun', col: '#fed7aa', sym: '🍎', target: null },
-      { label: 'Banana', spoken: 'Quero comer banana', cat: 'noun', col: '#fed7aa', sym: '🍌', target: null },
-      { label: 'Maçã', spoken: 'Quero comer maçã', cat: 'noun', col: '#fed7aa', sym: '🍏', target: null },
-      { label: 'Pão', spoken: 'Quero comer pão', cat: 'noun', col: '#fed7aa', sym: '🍞', target: null },
-      { label: 'Biscoito', spoken: 'Quero um biscoito', cat: 'noun', col: '#fed7aa', sym: '🍪', target: null },
-      { label: 'Comida de Sal', spoken: 'Quero meu prato de comida', cat: 'noun', col: '#fed7aa', sym: '🍲', target: null },
-      { label: 'Gostoso', spoken: 'Isso está muito gostoso!', cat: 'descriptor', col: '#dcfce7', sym: '😋', target: null },
-      { label: 'Não Gosto', spoken: 'Eu não gosto dessa comida', cat: 'descriptor', col: '#fee2e2', sym: '😖', target: null },
-      { label: 'Voltar ao Início', spoken: 'Voltar para a tela principal', cat: 'navigation', col: '#e0e7ff', sym: '🏠', target: pageMainId }
+      { label: 'Água', spoken: 'Água', cat: 'noun', col: '#fed7aa', sym: '💧', target: null },
+      { label: 'Suco', spoken: 'Suco', cat: 'noun', col: '#fed7aa', sym: '🧃', target: null },
+      { label: 'Leite', spoken: 'Leite', cat: 'noun', col: '#fed7aa', sym: '🥛', target: null },
+      { label: 'Fruta', spoken: 'Fruta', cat: 'noun', col: '#fed7aa', sym: '🍎', target: null },
+      { label: 'Banana', spoken: 'Banana', cat: 'noun', col: '#fed7aa', sym: '🍌', target: null },
+      { label: 'Maçã', spoken: 'Maçã', cat: 'noun', col: '#fed7aa', sym: '🍏', target: null },
+      { label: 'Pão', spoken: 'Pão', cat: 'noun', col: '#fed7aa', sym: '🍞', target: null },
+      { label: 'Biscoito', spoken: 'Biscoito', cat: 'noun', col: '#fed7aa', sym: '🍪', target: null },
+      { label: 'Comida de Sal', spoken: 'Comida', cat: 'noun', col: '#fed7aa', sym: '🍲', target: null },
+      { label: 'Gostoso', spoken: 'Gostoso', cat: 'descriptor', col: '#dcfce7', sym: '😋', target: null },
+      { label: 'Não Gosto', spoken: 'Não gosto', cat: 'descriptor', col: '#fee2e2', sym: '😖', target: null },
+      { label: 'Voltar ao Início', spoken: 'Início', cat: 'navigation', col: '#e0e7ff', sym: '🏠', target: pageMainId }
     ];
 
     foodCards.forEach((c, idx) => {
