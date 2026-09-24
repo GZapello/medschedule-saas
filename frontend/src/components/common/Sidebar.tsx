@@ -120,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-body',
           label: 'ZemdaBody (Mapa Corporal)',
           icon: Activity,
-          visible: isClinicAdmin || isProfessional || isZemdaBody || hasCapability('BODY_MAP')
+          visible: isClinicAdmin || isZemdaBody
         },
         {
           id: 'zemda-fisio',

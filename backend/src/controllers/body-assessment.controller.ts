@@ -6,28 +6,41 @@ import { logAudit } from '../middlewares/audit.middleware';
 /**
  * Validação de acesso ao ZemdaBody:
  * Regra:
- * - SuperAdmin SaaS: sem acesso a dados clínicos de clínicas
- * - Gerenciador da Clínica (clinic_admin): acesso total imediato a todos os recursos do ZemdaBody
- * - Profissional / Funcionário: acesso imediato e irrestrito caso o Gerenciador tenha concedido permissão
- *   (zemda_body_enabled === 1 ou 'access_zemda_body' em permissions_json).
- * - Se o Gerenciador não concedeu ou revogou a permissão: acesso bloqueado (HTTP 403).
- * - Sem travas funcionais internas adicionais ou bloqueios parciais.
+ * - SuperAdmin SaaS: sem acesso aos dados clínicos das clínicas (sempre bloqueado)
+ * - clinic_admin ativo: acesso imediato ao ZemdaBody
+ * - professional ativo e vinculado ao tenant: acesso automático ao ZemdaBody
+ * - Nenhuma profissão precisa de autorização do gerente
+ * - Usuários administrativos/não clínicos (ex: recepcionista) não recebem acesso clínico automaticamente
+ * - Sem travas funcionais internas adicionais ou permissões manuais
  */
 export function hasZemdaBodyAccess(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
   if (req.user.role === 'superadmin') return false;
-  if (req.user.role === 'clinic_admin') return true;
 
   try {
-    const cu = db.prepare('SELECT permissions_json, zemda_body_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
-    if (!cu) return false;
-    if (cu.zemda_body_enabled === 1) return true;
-    if (cu.permissions_json) {
-      const perms = JSON.parse(cu.permissions_json);
-      if (Array.isArray(perms) && perms.includes('access_zemda_body')) return true;
+    // 1. Gestor da Clínica (clinic_admin) ativo
+    if (req.user.role === 'clinic_admin') {
+      const cu = db.prepare('SELECT status FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+      if (!cu || cu.status === 'active') return true;
+      return false;
+    }
+
+    // 2. Profissional de saúde ativo vinculado ao tenant da clínica
+    const cu = db.prepare('SELECT status, role FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+    if (!cu || cu.status !== 'active') return false;
+
+    // Se o vínculo for de gestor ou profissional
+    if (cu.role === 'clinic_admin' || cu.role === 'professional' || req.user.role === 'professional') {
+      return true;
+    }
+
+    // Verifica se possui registro ativo na tabela professionals
+    const prof = db.prepare('SELECT id, active FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, req.tenantId) as any;
+    if (prof && prof.active === 1) {
+      return true;
     }
   } catch (err) {
-    console.error('[hasZemdaBodyAccess] Erro ao checar permissão:', err);
+    console.error('[hasZemdaBodyAccess] Erro ao validar acesso ao ZemdaBody:', err);
   }
   return false;
 }
@@ -47,7 +60,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -117,7 +130,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -163,7 +176,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -237,7 +250,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -324,7 +337,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -384,7 +397,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -425,7 +438,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -512,7 +525,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -566,7 +579,7 @@ export class BodyAssessmentController {
       } = req.body;
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -687,7 +700,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -750,7 +763,7 @@ export class BodyAssessmentController {
       } = req.body;
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -821,7 +834,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody não autorizado pelo Gerenciador da Clínica' });
+        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 

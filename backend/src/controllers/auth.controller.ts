@@ -239,7 +239,7 @@ export class AuthController {
       const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
       const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
       const zemdaBodyEnabled = user.role !== 'superadmin' && (
-        user.role === 'clinic_admin' || user.role === 'professional' || cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
+        user.role === 'clinic_admin' || user.role === 'professional'
       );
 
       const computedCaps = (user.tenant_id && user.role !== 'superadmin')
@@ -439,7 +439,7 @@ export class AuthController {
       const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
       const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
       const zemdaBodyEnabled = user.role !== 'superadmin' && (
-        user.role === 'clinic_admin' || user.role === 'professional' || cuRow?.zemda_body_enabled === 1 || userPermissions.includes('access_zemda_body')
+        user.role === 'clinic_admin' || user.role === 'professional'
       );
 
       const computedCaps = (user.tenant_id && user.role !== 'superadmin')

@@ -312,8 +312,8 @@ export class StaffController {
         return;
       }
 
-      // Item 11: Remove seleção manual do ZemdaPersonal
-      const sanitizedPermissions = permissions.filter((p: string) => p !== 'access_zemda_personal');
+      // Remove seleções manuais de módulos gerenciados automaticamente (ZemdaPersonal e ZemdaBody)
+      const sanitizedPermissions = permissions.filter((p: string) => p !== 'access_zemda_personal' && p !== 'access_zemda_body');
 
       // Verifica se a profissão canônica do usuário é Personal Trainer / Ed. Física
       const profRow = db.prepare('SELECT profession_id, profession_name FROM professionals WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;

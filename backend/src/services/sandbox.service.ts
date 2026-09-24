@@ -235,7 +235,7 @@ export class SandboxService {
       expiresAt
     );
 
-    const permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'create_patient', 'edit_patient', 'access_zemda_body'];
+    const permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'create_patient', 'edit_patient'];
     if (flags.zemda_personal_enabled === 1) permissions.push('access_zemda_personal');
     if (flags.zemda_med_enabled === 1) permissions.push('access_zemda_med');
     if (flags.zemda_fisio_enabled === 1) permissions.push('access_zemda_fisio');

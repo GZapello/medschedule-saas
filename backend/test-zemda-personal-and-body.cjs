@@ -128,10 +128,42 @@ async function runTests() {
       VALUES (?, ?, 'Carlos Atleta', 'carlos@aluno.com', '11988887777', '1996-05-15', 'm', 1, datetime('now'), datetime('now'))
     `).run(studentAId, tenantAId);
 
+    // Recepcionista (usuário administrativo não-clínico)
+    const receptionistId = 'user-' + uuidv4().slice(0, 8);
+    db.prepare(`
+      INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, created_at, updated_at)
+      VALUES (?, ?, 'Recepcionista Clara', 'clara@alpha.com', 'hash', 'receptionist', 'active', datetime('now'), datetime('now'))
+    `).run(receptionistId, tenantAId);
+
+    db.prepare(`
+      INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json)
+      VALUES (?, ?, ?, 'receptionist', 'active', 0, '["view_schedule"]')
+    `).run('cu-' + uuidv4().slice(0, 8), tenantAId, receptionistId);
+
+    const receptionistTokenA = generateToken({
+      userId: receptionistId,
+      tenantId: tenantAId,
+      email: 'clara@alpha.com',
+      role: 'receptionist'
+    });
+
+    // SuperAdmin (sem acesso a dados clínicos)
+    const superadminId = 'user-' + uuidv4().slice(0, 8);
+    db.prepare(`
+      INSERT INTO users (id, name, email, password_hash, role, status, created_at, updated_at)
+      VALUES (?, 'Super Admin Global', 'super@zemda.com', 'hash', 'superadmin', 'active', datetime('now'), datetime('now'))
+    `).run(superadminId);
+
+    const superadminToken = generateToken({
+      userId: superadminId,
+      email: 'super@zemda.com',
+      role: 'superadmin'
+    });
+
     // ====================================================
-    // 1. ZEMDABODY — LIBERAÇÃO TOTAL & GESTÃO DE ACESSO
+    // 1. ZEMDABODY — LIBERAÇÃO AUTOMÁTICA UNIVERSAL
     // ====================================================
-    console.log('--- 1. ZEMDABODY: LIBERAÇÃO TOTAL PELO GERENCIADOR ---');
+    console.log('--- 1. ZEMDABODY: LIBERAÇÃO AUTOMÁTICA PARA PROFISSIONAIS E GESTORES ---');
 
     // 1.1 Gestor da clínica acessa ZemdaBody diretamente
     const mgrBodyRes = await makeRequest('GET', `/api/v1/body-assessments/patient/${studentAId}`, {
@@ -141,28 +173,27 @@ async function runTests() {
     assert(mgrBodyRes.status === 200, 'Gerenciador da clínica possui acesso total imediato ao ZemdaBody (HTTP 200)');
     assert(Array.isArray(mgrBodyRes.data), 'Retorna lista de avaliações do ZemdaBody sem barreira funcional');
 
-    // 1.2 Profissional sem permissão tenta acessar ZemdaBody -> 403
-    const staffNoPermBodyRes = await makeRequest('GET', `/api/v1/body-assessments/patient/${studentAId}`, {
+    // 1.2 Profissional ativo da clínica ACESSA AUTOMATICAMENTE sem autorização do gestor (HTTP 200)
+    const staffBodyRes = await makeRequest('GET', `/api/v1/body-assessments/patient/${studentAId}`, {
       Authorization: `Bearer ${staffTokenA}`,
       'x-tenant-id': tenantAId
     });
-    assert(staffNoPermBodyRes.status === 403, 'Profissional sem permissão do gestor recebe HTTP 403 no ZemdaBody');
+    assert(staffBodyRes.status === 200, 'Profissional ativo vinculado à clínica acessa ZemdaBody automaticamente sem necessitar autorização do gestor (HTTP 200)');
+    assert(Array.isArray(staffBodyRes.data), 'Profissional recebe dados do ZemdaBody sem bloqueio');
 
-    // 1.3 Gestor concede permissão access_zemda_body
-    const grantBodyPermRes = await makeRequest('PUT', `/api/v1/staff/${staffAId}/permissions`, {
-      Authorization: `Bearer ${managerTokenA}`,
-      'x-tenant-id': tenantAId
-    }, {
-      permissions: ['view_schedule', 'access_zemda_body']
-    });
-    assert(grantBodyPermRes.status === 200, 'Gestor atualiza permissões concedendo access_zemda_body (HTTP 200)');
-
-    // 1.4 Profissional agora acessa ZemdaBody liberado
-    const staffWithPermBodyRes = await makeRequest('GET', `/api/v1/body-assessments/patient/${studentAId}`, {
-      Authorization: `Bearer ${staffTokenA}`,
+    // 1.3 Usuário administrativo/recepcionista NÃO recebe acesso clínico ao ZemdaBody (HTTP 403)
+    const recepBodyRes = await makeRequest('GET', `/api/v1/body-assessments/patient/${studentAId}`, {
+      Authorization: `Bearer ${receptionistTokenA}`,
       'x-tenant-id': tenantAId
     });
-    assert(staffWithPermBodyRes.status === 200, 'Após autorização do Gestor, profissional acessa ZemdaBody livremente (HTTP 200)');
+    assert(recepBodyRes.status === 403, 'Usuário administrativo/recepcionista recebe HTTP 403 no ZemdaBody');
+
+    // 1.4 SuperAdmin NÃO possui acesso aos dados clínicos da clínica (HTTP 403)
+    const superBodyRes = await makeRequest('GET', `/api/v1/body-assessments/patient/${studentAId}`, {
+      Authorization: `Bearer ${superadminToken}`,
+      'x-tenant-id': tenantAId
+    });
+    assert(superBodyRes.status === 403, 'SuperAdmin não tem acesso aos dados clínicos do ZemdaBody (HTTP 403)');
 
     // ====================================================
     // 2. ZEMDAPERSONAL — CONTROLE DE PERMISSÕES
@@ -189,7 +220,7 @@ async function runTests() {
       Authorization: `Bearer ${managerTokenA}`,
       'x-tenant-id': tenantAId
     }, {
-      permissions: ['view_schedule', 'access_zemda_body', 'access_zemda_personal']
+      permissions: ['view_schedule', 'access_zemda_personal']
     });
     assert(grantPersonalPermRes.status === 200, 'Gestor concede permissão access_zemda_personal (HTTP 200)');
 

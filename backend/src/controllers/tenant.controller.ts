@@ -196,8 +196,7 @@ export class TenantController {
       const ipAddress = (req.ip || req.socket?.remoteAddress || null)?.replace(/^::ffff:/, '') || null;
       const userAgent = (req.headers['user-agent'] as string) || null;
       const optInMarketing = (marketingAccepted || marketingOptIn) ? 1 : 0;
-      const isZemdaBodyOpted = zemdaBodyEnabled === true || zemdaBodyEnabled === 1 || zemdaBodyEnabled === 'true';
-      const initialPermissions = isZemdaBodyOpted ? JSON.stringify(['access_zemda_body']) : JSON.stringify([]);
+      const initialPermissions = JSON.stringify([]);
       const verificationId = tokenValidation.payload?.verificationId;
 
       let createdProfId: string | null = null;
@@ -333,7 +332,7 @@ export class TenantController {
           resolvedProfName,
           managerPracticeAreas || null,
           initialPermissions,
-          isZemdaBodyOpted ? 1 : 0,
+          1,
           modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
           modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled
         );
@@ -520,8 +519,8 @@ export class TenantController {
         registrationNumber: managerRegistrationNumber || null,
         termsVersionAccepted: CURRENT_TERMS_VERSION,
         privacyVersionAccepted: CURRENT_PRIVACY_VERSION,
-        permissions: isZemdaBodyOpted ? ['access_zemda_body'] : [],
-        zemdaBodyEnabled: isZemdaBodyOpted,
+        permissions: [],
+        zemdaBodyEnabled: true,
         zemdaFisioEnabled: modFlags.zemda_fisio_enabled === 1,
         zemdaOdontoEnabled: modFlags.zemda_odonto_enabled === 1,
         zemdaNutriEnabled: modFlags.zemda_nutri_enabled === 1,

@@ -251,7 +251,7 @@ export class ProfessionalController {
       // Cria grade de horários padrão de segunda a sexta (ativo) e fim de semana (inativo)
       createDefaultSchedules(db, tenantId, profId);
 
-      let permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'access_zemda_body'];
+      let permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient'];
       if (targetModule === 'ZemdaPersonal') {
         permissions.push('access_zemda_personal');
       } else if (targetModule === 'ZemdaMed') {

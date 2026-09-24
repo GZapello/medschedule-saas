@@ -242,22 +242,22 @@ async function runTests() {
       permissions: ['view_schedule', 'create_appointment', 'access_zemda_body']
     });
 
-    assert(updatePermsRes.status === 200, 'Atualização de permissões com access_zemda_body retorna HTTP 200');
+    assert(updatePermsRes.status === 200, 'Atualização de permissões com remoção automática de access_zemda_body retorna HTTP 200');
 
     const cuStaff = db.prepare('SELECT permissions_json, zemda_body_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(staffUserId, createdTenantId);
-    assert(cuStaff && cuStaff.zemda_body_enabled === 1, 'Flag zemda_body_enabled foi ativada como 1 no banco');
-    assert(cuStaff?.permissions_json?.includes('access_zemda_body'), 'permissions_json contém access_zemda_body');
+    assert(cuStaff && cuStaff.zemda_body_enabled === 1, 'Flag zemda_body_enabled permanece ativa');
+    assert(!cuStaff?.permissions_json?.includes('access_zemda_body'), 'permissions_json NÃO contém access_zemda_body (sanitizado)');
 
     // 3.2 Validação estática nos fontes frontend
     const staffSource = fs.readFileSync(path.resolve(__dirname, '../frontend/src/components/staff/StaffManagementView.tsx'), 'utf8');
     assert(!staffSource.includes('access_zemda_fisio'), 'Frontend StaffManagementView NÃO contém mais access_zemda_fisio');
     assert(!staffSource.includes('access_zemda_odonto'), 'Frontend StaffManagementView NÃO contém mais access_zemda_odonto');
-    assert(staffSource.includes('access_zemda_body'), 'Frontend StaffManagementView contém access_zemda_body');
+    assert(!staffSource.includes('access_zemda_body'), 'Frontend StaffManagementView NÃO contém access_zemda_body (permissão manual removida)');
 
     const authContextSource = fs.readFileSync(path.resolve(__dirname, '../frontend/src/context/AuthContext.tsx'), 'utf8');
     assert(!authContextSource.includes("userPermissions.includes('access_zemda_fisio')"), 'AuthContext não utiliza mais permissão manual para ZemdaFisio');
     assert(!authContextSource.includes("userPermissions.includes('access_zemda_odonto')"), 'AuthContext não utiliza mais permissão manual para ZemdaOdonto');
-    assert(authContextSource.includes("isZemdaBody = isClinicAdmin || userPermissions.includes('access_zemda_body')"), 'AuthContext define isZemdaBody via permissão access_zemda_body');
+    assert(!authContextSource.includes("userPermissions.includes('access_zemda_body')"), 'AuthContext não utiliza mais permissão manual access_zemda_body');
 
     const freeTrialSource = fs.readFileSync(path.resolve(__dirname, '../frontend/src/components/auth/FreeTrialActivationView.tsx'), 'utf8');
     assert(freeTrialSource.includes('Área de Atuação do Profissional'), 'FreeTrialActivationView renderiza campo obrigatório de Área de Atuação');

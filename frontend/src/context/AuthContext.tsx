@@ -403,14 +403,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ));
   const isZemdaMed = isDoctor;
 
-  // ZemdaBody: Módulo complementar universal para TODOS os profissionais clínicos e gestores
-  const isZemdaBody = isEligibleStaff && (
-    isClinicAdmin ||
-    isProfessional ||
-    userPermissions.includes('access_zemda_body') ||
-    Boolean((currentUser as any)?.zemdaBodyEnabled) ||
-    Boolean((currentUser as any)?.zemda_body_enabled)
-  );
+  // ZemdaBody: Módulo transversal automático para TODOS os profissionais clínicos e gestores ativos da clínica
+  const isZemdaBody = isEligibleStaff;
 
   const capabilities = currentUser?.capabilities || [];
   const practiceAreaIds = currentUser?.practiceAreaIds || [];
