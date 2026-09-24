@@ -194,6 +194,8 @@ function seedCapabilities(rawDb: DatabaseSync): void {
     // COMMUNICATION
     { id: 'COMMUNICATION_ASSESSMENT', category: 'COMMUNICATION', name: 'Comunicação & Linguagem', description: 'Desenvolvimento comunicativo, fala e linguagem' },
     { id: 'AAC_COMMUNICATION', category: 'COMMUNICATION', name: 'Comunicação Alternativa (CAA)', description: 'Sistemas e recursos de CAA' },
+    { id: 'AAC_BOARD_USE', category: 'COMMUNICATION', name: 'Prancha CAA (Utilização)', description: 'Permite abrir, navegar, reproduzir voz e utilizar pranchas de CAA em consultas' },
+    { id: 'AAC_BOARD_MANAGE', category: 'COMMUNICATION', name: 'Prancha CAA (Gestão e Edição)', description: 'Permite criar, editar, personalizar, duplicar e excluir pranchas, páginas e cartões de CAA' },
     { id: 'AUDIOLOGY', category: 'COMMUNICATION', name: 'Audiologia Clínica', description: 'Audiometria tonal, vocal e imitanciometria' },
 
     // LEARNING

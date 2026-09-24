@@ -150,6 +150,13 @@ if (fs.existsSync(downloadsDir)) {
   app.use('/downloads', express.static(downloadsDir));
 }
 
+// Servir uploads de imagens e mídias (como prancha CAA)
+const uploadsDir = path.resolve(__dirname, '../public/uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
+
 const possibleFrontendDistPaths = [
   process.env.FRONTEND_DIST_PATH,
   path.resolve(__dirname, '../../frontend/dist'),

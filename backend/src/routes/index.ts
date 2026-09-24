@@ -54,10 +54,12 @@ import { ClinicalDraftController } from '../controllers/clinical-draft.controlle
 import { CapabilityController } from '../controllers/capability.controller';
 import { MedicalController } from '../controllers/medical.controller';
 import { SandboxController } from '../controllers/sandbox.controller';
+import { AACController } from '../controllers/aac.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
+import { requireCapability } from '../middlewares/capability.middleware';
 
 const api = Router();
 mountBillingRoutes(api);
@@ -571,6 +573,33 @@ api.get('/v1/speech-therapy/phonemes/history/:patientId', requireTenant, require
 api.get('/v1/speech-therapy/phonemes/:patientId/history', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonemesHistory);
 
 api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.finishConsultation);
+
+// ==========================================
+// PRANCHA DE COMUNICAÇÃO CAA (TRANSVERSAL UNIVERSAL)
+// ==========================================
+// Leitura e Uso da Prancha: requer AAC_BOARD_USE
+api.get('/v1/aac/boards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_USE'), AACController.listBoards);
+api.get('/v1/aac/boards/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_USE'), AACController.getBoard);
+
+// Gestão e Edição da Prancha: requer AAC_BOARD_MANAGE
+api.post('/v1/aac/boards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.createBoard);
+api.put('/v1/aac/boards/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.updateBoard);
+api.post('/v1/aac/boards/:id/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.duplicateBoard);
+api.delete('/v1/aac/boards/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.deleteBoard);
+
+// Gestão de Páginas: requer AAC_BOARD_MANAGE
+api.post('/v1/aac/boards/:boardId/pages', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.createPage);
+api.put('/v1/aac/boards/:boardId/pages/:pageId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.updatePage);
+api.delete('/v1/aac/boards/:boardId/pages/:pageId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.deletePage);
+
+// Gestão de Cartões: requer AAC_BOARD_MANAGE
+api.post('/v1/aac/boards/:boardId/cards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.createCard);
+api.put('/v1/aac/boards/:boardId/cards/:cardId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.updateCard);
+api.delete('/v1/aac/boards/:boardId/cards/:cardId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.deleteCard);
+api.post('/v1/aac/boards/:boardId/reorder-cards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.reorderCards);
+
+// Upload de imagens personalizadas de cartões: requer AAC_BOARD_MANAGE
+api.post('/v1/aac/upload-image', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.uploadImage);
 
 // ==========================================
 // RASCUNHOS CLÍNICOS UNIVERSAIS (AUTOSAVE EM TODOS OS MÓDULOS)

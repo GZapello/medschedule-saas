@@ -10,6 +10,7 @@ import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
 import { migrateRemoveOutOfScopeProfessions } from './remove-out-of-scope-professions.migration';
 import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
+import { migrateAACBoard } from './aac-board.migration';
 
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
 const dbDir = path.dirname(dbPath);
@@ -3490,6 +3491,12 @@ function repairLegacyPhotoUrls(rawDb: any): void {
     migrateMedicalTree(rawDb);
   } catch (err) {
     console.error('[Database] Erro ao executar migrateMedicalTree:', err);
+  }
+
+  try {
+    migrateAACBoard(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateAACBoard:', err);
   }
 
   try {

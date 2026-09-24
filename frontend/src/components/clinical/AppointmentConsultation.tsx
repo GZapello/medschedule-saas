@@ -14,7 +14,9 @@ import { ZemdaPersonalView } from '../personal/ZemdaPersonalView';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
-import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell } from 'lucide-react';
+import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, MessageSquareHeart } from 'lucide-react';
+
+const LazyAACBoardModal = React.lazy(() => import('../aac/AACBoardModal'));
 
 export function AppointmentConsultation({
   appointment,
