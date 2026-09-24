@@ -25,7 +25,6 @@ if (testFiles.length === 0) {
 const KNOWN_FAILING = {
   'test-atualizacao-zemda.cjs': 'TESTE 13: cadastro de clínica com ZemdaBody retorna undefined em vez da clínica criada',
   'test-clinic-control.cjs': "fixture: tabela consultation_completions não tem mais coluna 'id' (schema desatualizado)",
-  'test-consultations.cjs': 'regra de módulo único por atendimento (ZemdaNutri x general) mudou e quebrou o cenário do teste',
   'test-legal-and-signup.cjs': 'fluxo de cadastro agora exige verificação de e-mail antes de registrar; teste ainda espera 201 direto',
   'test-manual-whatsapp-reminder.cjs': "tabela notifications não tem mais a coluna 'sent_by_user_id' (schema desatualizado)",
   'test-profession-module-transition.cjs': 'seed de profissões mudou: teste espera prof-psicologia e encontra prof-personal-trainer',
@@ -33,9 +32,7 @@ const KNOWN_FAILING = {
   'test-registration-professions.cjs': "seed de profissões não contém mais 'prof-ginecologista'",
   'test-schedule-profession-change.cjs': 'asserção sobre grade de sábado inativo não bate mais com o comportamento atual',
   'test-targeted-personal-and-default-service.cjs': 'avaliação física: nem todas as 4 fotos corporais são preservadas (bug real a investigar)',
-  'test-trial-and-modules.cjs': 'teste lê arquivos-fonte do frontend por string; trechos que ele procura (access_zemda_body) foram refatorados',
-  'test-zemda-definitive-images.cjs': 'catálogo de exercícios cresceu de 119 para 268; teste trava no número antigo. Also depende de um Worker Cloudflare real (upload R2), que não roda em CI',
-  'test-zemda-personal-and-body.cjs': 'mesma causa do test-zemda-definitive-images.cjs (catálogo de exercícios e dependência do Worker Cloudflare)'
+  'test-zemda-personal-and-body.cjs': 'catálogo de exercícios cresceu de 119 para 268 (teste trava no número antigo) e depende de um Worker Cloudflare real (upload R2), que não roda em CI'
 };
 
 const results = [];
