@@ -42,8 +42,7 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'manage_staff', label: 'Gerenciar equipe e funcionários' },
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas' },
   { id: 'view_reports', label: 'Acessar relatórios e exportar planilhas' },
-  { id: 'manage_settings', label: 'Alterar configurações da clínica' },
-  { id: 'access_zemda_personal', label: 'ZemdaPersonal (Treinamento & Personal): Acesso permitido' }
+  { id: 'manage_settings', label: 'Alterar configurações da clínica' }
 ];
 
 const PERMISSION_PRESETS = [

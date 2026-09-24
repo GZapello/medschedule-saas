@@ -8,6 +8,8 @@ import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hashPassword } from '../utils/password';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
+import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
+import { resolveCanonicalProfession } from '../utils/profession-module';
 
 /**
  * Purga com segurança colaboradores desativados há mais de 30 dias (Item 3).
@@ -254,10 +256,17 @@ export class StaffController {
         WHERE user_id = ? AND tenant_id = ?
       `).run(newRole, professionName || null, practiceAreas || null, id, tenantId);
 
-      // Sincroniza tabela professionals
+      // Sincroniza tabela professionals e taxonomia
       const existingProf = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (existingProf) {
         db.prepare('UPDATE professionals SET practice_areas = ?, active = 1 WHERE user_id = ? AND tenant_id = ?').run(practiceAreas || null, id, tenantId);
+        ProfessionTaxonomyService.updateProfessionalTaxonomy({
+          tenantId,
+          professionalId: existingProf.id,
+          newProfessionId: professionName,
+          newProfessionName: professionName,
+          practiceAreas
+        });
       } else if (newRole === 'professional') {
         const profId = 'pro-' + uuidv4().slice(0, 8);
         db.prepare(`
@@ -266,6 +275,14 @@ export class StaffController {
         `).run(profId, tenantId, id, user.name, practiceAreas || null);
 
         createDefaultSchedules(db, tenantId, profId);
+
+        ProfessionTaxonomyService.updateProfessionalTaxonomy({
+          tenantId,
+          professionalId: profId,
+          newProfessionId: professionName,
+          newProfessionName: professionName,
+          practiceAreas
+        });
       }
 
       logAudit(req, 'UPDATE_ROLE_PROFESSION', 'users', id, { role: newRole, professionName, practiceAreas });
@@ -289,15 +306,28 @@ export class StaffController {
         return;
       }
 
-      const user = db.prepare('SELECT id, tenant_id, name, role FROM users WHERE id = ?').get(id) as any;
+      const user = db.prepare('SELECT id, tenant_id, name, role, profession_id, profession_name FROM users WHERE id = ?').get(id) as any;
       if (!user || user.tenant_id !== tenantId) {
         res.status(403).json({ error: 'Acesso negado: usuário não pertence a esta clínica' });
         return;
       }
 
-      const permsJson = JSON.stringify(permissions);
+      // Item 11: Remove seleção manual do ZemdaPersonal
+      const sanitizedPermissions = permissions.filter((p: string) => p !== 'access_zemda_personal');
+
+      // Verifica se a profissão canônica do usuário é Personal Trainer / Ed. Física
+      const profRow = db.prepare('SELECT profession_id, profession_name FROM professionals WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const checkProfId = profRow?.profession_id || user.profession_id;
+      const checkProfName = profRow?.profession_name || user.profession_name;
+      const resolution = resolveCanonicalProfession({ id: checkProfId, name: checkProfName });
+
+      if (resolution.commercialModule === 'ZemdaPersonal') {
+        sanitizedPermissions.push('access_zemda_personal');
+      }
+
+      const permsJson = JSON.stringify(sanitizedPermissions);
       const zemdaBodyActive = 1; // Universal para profissionais e equipe clínica
-      const zemdaPersonalActive = permissions.includes('access_zemda_personal') ? 1 : 0;
+      const zemdaPersonalActive = resolution.commercialModule === 'ZemdaPersonal' ? 1 : 0;
       const userRole = user.role || 'professional';
       db.prepare(`
         INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, permissions_json, zemda_body_enabled, zemda_personal_enabled)

@@ -25,7 +25,7 @@ export const ClinicalAutosaveIndicator: React.FC<ClinicalAutosaveIndicatorProps>
       {status === 'saved' && (
         <span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
           <Check className="w-3 h-3 text-emerald-600" />
-          <span>{lastSavedTime ? `Salvo às ${lastSavedTime}` : 'Salvo'}</span>
+          <span>{lastSavedTime ? `Salvo automaticamente às ${lastSavedTime}` : 'Salvo automaticamente'}</span>
         </span>
       )}
 

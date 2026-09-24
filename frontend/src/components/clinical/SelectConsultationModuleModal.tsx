@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 export interface ClinicalModuleOption {
-  id: 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general';
+  id: 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general';
   name: string;
   badge: string;
   profession: string;
@@ -33,6 +33,24 @@ export interface ClinicalModuleOption {
 }
 
 export const ALL_CLINICAL_MODULES: Record<string, ClinicalModuleOption> = {
+  ZemdaMed: {
+    id: 'ZemdaMed',
+    name: 'ZemdaMed',
+    badge: 'Medicina',
+    profession: 'Medicina Geral & Especialidades',
+    description: 'Anamnese médica, hipótese diagnóstica CID-10/11, conduta, prescrição e pedidos de exames.',
+    icon: Stethoscope,
+    colorTheme: {
+      border: 'border-indigo-200 hover:border-indigo-500',
+      bg: 'bg-white hover:bg-indigo-50/50',
+      hoverBg: 'hover:bg-indigo-50',
+      text: 'text-indigo-900',
+      badgeBg: 'bg-indigo-100',
+      badgeText: 'text-indigo-800',
+      iconBg: 'bg-indigo-100 text-indigo-700',
+      iconColor: 'text-indigo-600'
+    }
+  },
   ZemdaFisio: {
     id: 'ZemdaFisio',
     name: 'ZemdaFisio',

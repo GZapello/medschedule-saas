@@ -100,8 +100,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     }
   };
 
+  const notifyAppointmentChange = () => {
+    window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+  };
+
   useEffect(() => {
     fetchCalendarData();
+    const handleRemoteUpdate = () => {
+      fetchCalendarData();
+    };
+    window.addEventListener('zemda-appointment-updated', handleRemoteUpdate);
+    return () => {
+      window.removeEventListener('zemda-appointment-updated', handleRemoteUpdate);
+    };
   }, []);
 
   // Atualização automática na virada do dia (23:59 -> 00:00)
@@ -160,6 +171,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       setSelectedAppt(null);
       setCancellingAppt(null);
       fetchCalendarData();
+      notifyAppointmentChange();
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar status', 'error');
     }
@@ -182,6 +194,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       setSelectedAppt(null);
       setSelectingModuleAppt(null);
       fetchCalendarData();
+      notifyAppointmentChange();
     } catch (err: any) {
       showToast(err.message || 'Erro ao iniciar atendimento', 'error');
     }
@@ -229,6 +242,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       setIsRescheduling(false);
       setSelectedAppt(null);
       fetchCalendarData();
+      notifyAppointmentChange();
     } catch (err: any) {
       showToast(err.message || 'Erro ao remarcar', 'error');
     }
@@ -929,6 +943,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           onFinished={() => {
             setActiveConsultationAppt(null);
             fetchCalendarData();
+            notifyAppointmentChange();
           }}
         />
       )}
@@ -950,6 +965,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           onFinished={() => {
             setFinishingAppt(null);
             fetchCalendarData();
+            notifyAppointmentChange();
           }}
         />
       )}
@@ -964,6 +980,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           onSuccess={() => {
             refreshCommunications(whatsappReminderAppt.id);
             fetchCalendarData();
+            notifyAppointmentChange();
           }}
         />
       )}

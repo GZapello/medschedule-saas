@@ -1059,7 +1059,7 @@ const AppContent: React.FC = () => {
 
           {currentView === 'staff' && <StaffManagementView />}
 
-          {currentView === 'taxonomy' && <TaxonomyView />}
+          {currentView === 'taxonomy' && isSuperAdmin && <TaxonomyView />}
 
           {currentView === 'reports' && <ReportsView />}
 
@@ -1089,7 +1089,10 @@ const AppContent: React.FC = () => {
           setNewApptPrefill(undefined);
         }}
         initialPrefill={newApptPrefill}
-        onSuccess={() => setCurrentView('calendar')}
+        onSuccess={() => {
+          window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+          setCurrentView('calendar');
+        }}
       />
 
       <NewPatientModal
@@ -1106,7 +1109,10 @@ const AppContent: React.FC = () => {
           setAiInitialTab(undefined);
           setAiAutoSend(false);
         }}
-        onAppointmentCreated={() => setCurrentView('calendar')}
+        onAppointmentCreated={() => {
+          window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+          setCurrentView('calendar');
+        }}
         activePatientId={aiActivePatientId}
         activeAppointmentId={aiActiveAppointmentId}
         initialPrompt={aiInitialPrompt}

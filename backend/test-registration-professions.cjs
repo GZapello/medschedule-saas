@@ -10,7 +10,7 @@ EmailService.verifyVerificationToken=token=>({valid:true,payload:{verificationId
 require('./dist/services/trial-notification.service').TrialNotificationService.notifyTrialStarted=async()=>{};
 const {TenantController}=require('./dist/controllers/tenant.controller');
 const before=db.prepare('SELECT id,role,profession_id,profession_name FROM users ORDER BY id').all();
-const expected={'prof-administrador':null,'prof-fonoaudiologo':'ZemdaFono','prof-fisioterapeuta':'ZemdaFisio','prof-psicologo':'ZemdaPsico','prof-enfermeiro':null,'prof-medico':null,'prof-outro-saude':null};
+const expected={'prof-administrador':null,'prof-fonoaudiologo':'ZemdaFono','prof-fisioterapeuta':'ZemdaFisio','prof-psicologo':'ZemdaPsico','prof-enfermeiro':null,'prof-medico':'ZemdaMed','prof-outro-saude':null};
 (async()=>{
  assert.equal(new Set(options.map(x=>x.id)).size,options.length);assert.equal(new Set(options.map(x=>x.label)).size,options.length);
  for(const row of db.prepare('SELECT id FROM professions WHERE tenant_id IS NULL AND active=1').all())assert.ok(options.some(x=>x.id===(aliases[row.id]||row.id)),row.id+' missing');

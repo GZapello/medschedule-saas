@@ -9,7 +9,8 @@ import {
   Lightbulb,
   CheckCircle2,
   TrendingUp,
-  Dumbbell
+  Dumbbell,
+  Lock
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -52,10 +53,9 @@ export const PersonalAIAssistantModal: React.FC<PersonalAIAssistantModalProps> =
     {
       id: 'welcome',
       sender: 'assistant',
-      text: `Olá! Sou o **Assistente de Treinamento e Fisiologia ZemdaPersonal**.
-      
-Estou integrado com os dados reais de avaliações físicas, dobras cutâneas, divisões de treino e recordes pessoais do aluno.
-Como posso ajudar no planejamento ou na análise hoje?`,
+      text: student
+        ? `Olá! Sou o **Assistente de Treinamento ZemdaPersonal** para **${student.name}**.\n\nEstou integrado com os dados reais de avaliações físicas, periodização e histórico de treinos de **${student.name}**.\nComo posso ajudar na prescrição ou análise de treino hoje?`
+        : `Olá! Sou o **Assistente de Treinamento e Fisiologia ZemdaPersonal**.\n\nEstou integrado com os dados reais de avaliações físicas, dobras cutâneas, divisões de treino e recordes pessoais do aluno.\nComo posso ajudar no planejamento ou na análise hoje?`,
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -120,7 +120,9 @@ Como posso ajudar no planejamento ou na análise hoje?`,
       {
         id: 'welcome',
         sender: 'assistant',
-        text: 'Histórico limpo. Como posso ajudar com a prescrição de treino ou avaliação física agora?',
+        text: student
+          ? `Histórico limpo. Como posso ajudar com a prescrição ou análise de treino de **${student.name}** agora?`
+          : 'Histórico limpo. Como posso ajudar com a prescrição de treino ou avaliação física agora?',
         timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       }
     ]);
@@ -167,23 +169,36 @@ Como posso ajudar no planejamento ou na análise hoje?`,
           </div>
         </div>
 
-        {/* Seletor de Contexto do Aluno */}
+        {/* Seletor ou Contexto Travado do Aluno (Item 14) */}
         <div className="px-5 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-600">Aluno em Análise:</span>
-            <select
-              value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-semibold text-slate-800 outline-none"
-            >
-              <option value="">Geral (Sem aluno específico)</option>
-              {studentsList.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {student ? (
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-600">Aluno em Análise:</span>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold rounded-lg shadow-2xs">
+                <Lock className="w-3.5 h-3.5 text-indigo-500" />
+                {student.name}
+              </span>
+              <span className="text-[11px] text-slate-500 italic hidden sm:inline">
+                (Contexto travado — para analisar outro aluno, feche e acesse pela respectiva ficha)
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-600">Aluno em Análise:</span>
+              <select
+                value={selectedStudentId}
+                onChange={(e) => setSelectedStudentId(e.target.value)}
+                className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-semibold text-slate-800 outline-none"
+              >
+                <option value="">Geral (Sem aluno específico)</option>
+                {studentsList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <span className="text-[11px] text-slate-400">
             {selectedStudentId ? 'Contexto de dobras, PRs e treinos ativos injetado' : 'Modo consultoria geral'}

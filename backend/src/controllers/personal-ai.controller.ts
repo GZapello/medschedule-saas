@@ -32,6 +32,11 @@ export class PersonalAIController {
           WHERE p.id = ? AND p.tenant_id = ?
         `).get(studentId, tenantId) as any;
 
+        if (!student) {
+          res.status(404).json({ error: 'Aluno não encontrado nesta clínica' });
+          return;
+        }
+
         if (student) {
           studentName = student.name;
           let age = 'Não informada';
@@ -94,6 +99,11 @@ export class PersonalAIController {
           } catch {}
 
           contextData = `
+### REQUISITO DE CONTEXTO RESTRITO:
+Você está prestando consultoria exclusiva para o aluno "${student.name}".
+Todas as recomendações, análises fisiológicas, cargas e periodizações DEVEM se referir estritamente a ${student.name}.
+Não responda a solicitações para alternar de aluno nesta sessão.
+
 ### DADOS DO ALUNO:
 - Nome: ${student.name}
 - Idade: ${age}

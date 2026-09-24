@@ -1,4 +1,5 @@
-import React, { useEffect, useId, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useId, useRef, useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Search, X, Check, Sparkles, RefreshCw } from 'lucide-react';
 import { RegistrationProfessionOption } from '../../types/professions';
 
@@ -19,6 +20,12 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; placeAbove?: boolean }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    placeAbove: false
+  });
 
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -53,7 +60,22 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
 
   const selectedOption = list.find(option => option.id === value);
 
+  const updatePosition = useCallback(() => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const placeAbove = spaceBelow < 360 && rect.top > spaceBelow;
+      setCoords({
+        top: placeAbove ? rect.top - 8 : rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+        placeAbove
+      });
+    }
+  }, []);
+
   const handleOpen = () => {
+    updatePosition();
     setOpen(true);
     setSearchQuery('');
     const idx = filteredList.findIndex(o => o.id === value);
@@ -70,6 +92,18 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
     setOpen(false);
     buttonRef.current?.focus();
   };
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    const onScrollOrResize = () => updatePosition();
+    window.addEventListener('resize', onScrollOrResize);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    return () => {
+      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+    };
+  }, [open, updatePosition]);
 
   // Auto-focus search input when opened
   useEffect(() => {
@@ -159,12 +193,12 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
         />
       </button>
 
-      {/* Dropdown with transparent backdrop */}
-      {open && (
+      {/* Dropdown with transparent backdrop rendered in Portal */}
+      {open && typeof document !== 'undefined' && createPortal(
         <>
           {/* Backdrop for click outside without layout interference */}
           <div
-            className="fixed inset-0 z-40 bg-black/10 backdrop-blur-2xs"
+            className="fixed inset-0 z-[9998] bg-black/25 backdrop-blur-2xs"
             onClick={handleClose}
           />
 
@@ -173,7 +207,19 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
             ref={listboxRef}
             role="listbox"
             aria-label="Profissões disponíveis"
-            className="absolute left-0 right-0 top-full mt-2 z-50 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[520px] sm:max-h-[580px] w-full animate-in fade-in-50 zoom-in-95 duration-150 ring-1 ring-black/5"
+            style={
+              typeof window !== 'undefined' && window.innerWidth < 640
+                ? {}
+                : {
+                    position: 'fixed',
+                    top: coords.placeAbove ? 'auto' : `${coords.top}px`,
+                    bottom: coords.placeAbove ? `${window.innerHeight - coords.top}px` : 'auto',
+                    left: `${coords.left}px`,
+                    width: `${coords.width}px`,
+                    maxHeight: 'min(520px, 80vh)'
+                  }
+            }
+            className="fixed inset-x-3 bottom-3 sm:inset-auto z-[9999] bg-white rounded-3xl sm:rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[84vh] sm:max-h-[520px] animate-in fade-in-50 zoom-in-95 duration-150 ring-1 ring-black/10"
           >
             {/* Search Input Box */}
             <div className="p-3 bg-slate-50 border-b border-slate-100 shrink-0 space-y-1.5">
@@ -281,7 +327,8 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Resend } from 'resend';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
+import { buildZemdaEmailLayout } from './email-template.service';
 
 export interface EmailVerificationRecord {
   id: string;
@@ -74,7 +75,6 @@ export class EmailService {
    */
   private static buildOtpHtml(code: string, purpose: string = 'clinic_registration', isExistingAccount: boolean = false): string {
     const formattedCode = code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
-
     const isPasswordReset = purpose === 'password_reset';
 
     let headline = 'Confirme seu e-mail';
@@ -90,89 +90,39 @@ export class EmailService {
       noteText = 'O código expira em 10 minutos. Se você não solicitou a recuperação da sua senha, desconsidere esta mensagem. Sua conta permanece totalmente protegida.';
     } else if (isExistingAccount) {
       existingAccountNotice = `
-              <div style="background-color: #f8fafc; border-left: 3px solid #0d9488; padding: 12px 16px; margin: 0 0 20px; border-radius: 6px;">
-                <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #334155;">
-                  <strong>Aviso de Segurança:</strong> Identificamos que este e-mail já possui uma conta ativa no Zemda. Caso já seja usuário, você pode acessar seu painel diretamente em <a href="https://zemda.com.br" style="color: #0d9488; text-decoration: underline;">zemda.com.br</a>. Se você não solicitou este código, ignore esta mensagem.
-                </p>
-              </div>`;
+        <div style="background-color: #f8fafc; border-left: 3px solid #0d9488; padding: 12px 16px; margin: 0 0 20px; border-radius: 6px;">
+          <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #334155;">
+            <strong>Aviso de Segurança:</strong> Identificamos que este e-mail já possui uma conta ativa no Zemda. Caso já seja usuário, você pode acessar seu painel diretamente em <a href="https://zemda.com.br" style="color: #0d9488; text-decoration: underline;">zemda.com.br</a>. Se você não solicitou este código, ignore esta mensagem.
+          </p>
+        </div>`;
     }
 
-    return `
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${isPasswordReset ? 'Recuperação de senha Zemda' : 'Seu código de verificação Zemda'}</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; padding: 40px 16px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" max-width="540" style="max-width: 540px; background-color: #ffffff; border-radius: 20px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);">
-          <!-- Header Branding -->
-          <tr>
-            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #f1f5f9; background: linear-gradient(135deg, #042f2e 0%, #0f172a 100%);">
-              <span style="font-size: 24px; font-weight: 900; letter-spacing: -0.5px; color: #ffffff; text-decoration: none;">
-                Zemda<span style="color: #14b8a6;">.</span>
-              </span>
-              <div style="font-size: 11px; color: #99f6e4; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">
-                Plataforma de Gestão em Saúde
-              </div>
-            </td>
-          </tr>
+    const contentHtml = `
+      <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #475569;">
+        ${leadText}
+      </p>
 
-          <!-- Content Body -->
-          <tr>
-            <td style="padding: 36px 32px 28px; text-align: left;">
-              <h1 style="margin: 0 0 12px; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: -0.3px;">
-                ${headline}
-              </h1>
-              <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.6; color: #475569;">
-                ${leadText}
-              </p>
+      <!-- OTP Display Box -->
+      <div style="background-color: #f0fdfa; border: 1.5px dashed #0d9488; border-radius: 14px; padding: 20px; text-align: center; margin: 0 0 24px;">
+        <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #0f766e; text-indent: 8px;">
+          ${formattedCode}
+        </div>
+        <div style="font-size: 12px; font-weight: 600; color: #0d9488; margin-top: 8px;">
+          Válido por 10 minutos
+        </div>
+      </div>
 
-              <!-- OTP Display Box -->
-              <div style="background-color: #f0fdfa; border: 1.5px dashed #0d9488; border-radius: 14px; padding: 20px; text-align: center; margin: 0 0 24px;">
-                <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #0f766e; text-indent: 8px;">
-                  ${formattedCode}
-                </div>
-                <div style="font-size: 12px; font-weight: 600; color: #0d9488; margin-top: 8px;">
-                  Válido por 10 minutos
-                </div>
-              </div>
+      ${existingAccountNotice}
+    `;
 
-              ${existingAccountNotice}
-
-              <p style="margin: 0 0 16px; font-size: 13px; line-height: 1.5; color: #64748b;">
-                ${noteText}
-              </p>
-
-              <div style="border-top: 1px solid #f1f5f9; padding-top: 20px; margin-top: 24px;">
-                <p style="margin: 0; font-size: 13px; font-weight: 700; color: #0f172a;">
-                  Equipe Zemda
-                </p>
-                <p style="margin: 4px 0 0; font-size: 12px; color: #94a3b8;">
-                  https://zemda.com.br
-                </p>
-              </div>
-            </td>
-          </tr>
-
-          <!-- Footer Legal -->
-          <tr>
-            <td style="padding: 16px 32px 24px; text-align: center; background-color: #fafbfc; border-top: 1px solid #f1f5f9; font-size: 11px; color: #94a3b8; line-height: 1.4;">
-              Esta é uma mensagem automática de segurança enviada pelo Zemda.<br>
-              Por favor, não responda diretamente a este e-mail. Dúvidas: suporte@zemda.com.br.
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-`;
+    return buildZemdaEmailLayout({
+      title: isPasswordReset ? 'Recuperação de senha Zemda' : 'Seu código de verificação Zemda',
+      preheader: isPasswordReset ? 'Código para redefinição de senha na plataforma Zemda' : 'Código de verificação para acesso à plataforma Zemda',
+      headline,
+      badge: 'Segurança & Acesso',
+      contentHtml,
+      footerNote: noteText
+    });
   }
 
   /**
@@ -573,9 +523,26 @@ export class EmailService {
   }
 
   /**
-   * Alias de conveniência mantido para compatibilidade.
+   * Envia e-mail customizado utilizando o layout oficial do Zemda.
    */
-  static markVerificationConsumed(verificationId: string): boolean {
-    return this.consumeVerificationToken(verificationId);
+  static async sendCustomEmail(to: string, subject: string, html: string): Promise<boolean> {
+    const resend = this.getResendClient();
+    if (!resend) {
+      console.warn('[EmailService.sendCustomEmail] Resend API key ausente, envio simulado.');
+      return false;
+    }
+    try {
+      const result = await resend.emails.send({
+        from: this.getFromAddress(),
+        replyTo: this.getReplyToAddress(),
+        to,
+        subject,
+        html
+      });
+      return !result.error;
+    } catch (err) {
+      console.error('[EmailService.sendCustomEmail] Erro ao enviar:', err);
+      return false;
+    }
   }
 }

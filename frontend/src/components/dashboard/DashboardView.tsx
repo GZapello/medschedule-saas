@@ -65,8 +65,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
+  const notifyAppointmentChange = () => {
+    window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+  };
+
   useEffect(() => {
     fetchMetrics();
+    const handleRemoteUpdate = () => {
+      fetchMetrics();
+    };
+    window.addEventListener('zemda-appointment-updated', handleRemoteUpdate);
+    return () => {
+      window.removeEventListener('zemda-appointment-updated', handleRemoteUpdate);
+    };
   }, []);
 
   const executeStartConsultation = async (appointmentId: string, selectedModule?: string) => {
@@ -87,6 +98,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       setSelectingModuleAppt(null);
       showToast('Atendimento iniciado!', 'success');
       fetchMetrics();
+      notifyAppointmentChange();
     } catch (err: any) {
       showToast(err.message || 'Erro ao iniciar atendimento', 'error');
     }
@@ -115,6 +127,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       await ApiClient.put(`/v1/appointments/${appointmentId}/status`, { status: newStatus });
       showToast(`Status atualizado para ${newStatus}!`, 'success');
       fetchMetrics();
+      notifyAppointmentChange();
     } catch (err: any) {
       showToast(err.message || 'Erro ao atualizar status', 'error');
     }
@@ -581,6 +594,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onFinished={() => {
             setQuickConsultAppt(null);
             fetchMetrics();
+            notifyAppointmentChange();
           }}
         />
       )}
@@ -599,7 +613,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <PatientProfileModal
           patientId={viewPatientId}
           onClose={() => setViewPatientId(null)}
-          onUpdated={() => fetchMetrics()}
+          onUpdated={() => {
+            fetchMetrics();
+            notifyAppointmentChange();
+          }}
         />
       )}
 
@@ -612,6 +629,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           clinicName={auth.currentTenant?.name || 'Clínica'}
           onSuccess={() => {
             fetchMetrics();
+            notifyAppointmentChange();
           }}
         />
       )}

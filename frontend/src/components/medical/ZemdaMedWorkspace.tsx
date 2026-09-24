@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 import {
   Stethoscope,
   Activity,
@@ -451,6 +453,80 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     }
   };
 
+  // Autosave Rascunho Clínico do Atendimento Médico
+  const currentDraftPayload = useMemo(() => ({
+    chiefComplaint,
+    hpi,
+    pastMedicalHistory,
+    familyHistory,
+    habitsLifestyle,
+    vitalSigns,
+    physicalExam,
+    neurologicalExam,
+    psychiatricNotes,
+    pediatricNotes,
+    geriatricNotes,
+    cardioNotes,
+    dermatoNotes,
+    orthoNotes,
+    rheumaNotes,
+    gynecoNotes,
+    endocrinoNotes,
+    gastroNotes,
+    ophtalmoNotes,
+    otorrinoNotes,
+    uroNotes,
+    soapNotes,
+    cidCode,
+    cidDescription,
+    diagnosticHypotheses,
+    clinicalConduct,
+    returnInDays
+  }), [
+    chiefComplaint, hpi, pastMedicalHistory, familyHistory, habitsLifestyle,
+    vitalSigns, physicalExam, neurologicalExam, psychiatricNotes, pediatricNotes,
+    geriatricNotes, cardioNotes, dermatoNotes, orthoNotes, rheumaNotes, gynecoNotes,
+    endocrinoNotes, gastroNotes, ophtalmoNotes, otorrinoNotes, uroNotes, soapNotes,
+    cidCode, cidDescription, diagnosticHypotheses, clinicalConduct, returnInDays
+  ]);
+
+  const autosave = useClinicalAutosave({
+    moduleType: 'medical',
+    patientId: selectedPatientId,
+    appointmentId: initialAppointmentId,
+    payload: currentDraftPayload,
+    onRestoreDraft: (restored: any) => {
+      if (!restored) return;
+      if (restored.chiefComplaint !== undefined) setChiefComplaint(restored.chiefComplaint);
+      if (restored.hpi !== undefined) setHpi(restored.hpi);
+      if (restored.pastMedicalHistory !== undefined) setPastMedicalHistory(restored.pastMedicalHistory);
+      if (restored.familyHistory !== undefined) setFamilyHistory(restored.familyHistory);
+      if (restored.habitsLifestyle !== undefined) setHabitsLifestyle(restored.habitsLifestyle);
+      if (restored.vitalSigns !== undefined) setVitalSigns(prev => ({ ...prev, ...restored.vitalSigns }));
+      if (restored.physicalExam !== undefined) setPhysicalExam(prev => ({ ...prev, ...restored.physicalExam }));
+      if (restored.neurologicalExam !== undefined) setNeurologicalExam(prev => ({ ...prev, ...restored.neurologicalExam }));
+      if (restored.psychiatricNotes !== undefined) setPsychiatricNotes(prev => ({ ...prev, ...restored.psychiatricNotes }));
+      if (restored.pediatricNotes !== undefined) setPediatricNotes(prev => ({ ...prev, ...restored.pediatricNotes }));
+      if (restored.geriatricNotes !== undefined) setGeriatricNotes(prev => ({ ...prev, ...restored.geriatricNotes }));
+      if (restored.cardioNotes !== undefined) setCardioNotes(prev => ({ ...prev, ...restored.cardioNotes }));
+      if (restored.dermatoNotes !== undefined) setDermatoNotes(prev => ({ ...prev, ...restored.dermatoNotes }));
+      if (restored.orthoNotes !== undefined) setOrthoNotes(prev => ({ ...prev, ...restored.orthoNotes }));
+      if (restored.rheumaNotes !== undefined) setRheumaNotes(prev => ({ ...prev, ...restored.rheumaNotes }));
+      if (restored.gynecoNotes !== undefined) setGynecoNotes(prev => ({ ...prev, ...restored.gynecoNotes }));
+      if (restored.endocrinoNotes !== undefined) setEndocrinoNotes(prev => ({ ...prev, ...restored.endocrinoNotes }));
+      if (restored.gastroNotes !== undefined) setGastroNotes(prev => ({ ...prev, ...restored.gastroNotes }));
+      if (restored.ophtalmoNotes !== undefined) setOphtalmoNotes(prev => ({ ...prev, ...restored.ophtalmoNotes }));
+      if (restored.otorrinoNotes !== undefined) setOtorrinoNotes(prev => ({ ...prev, ...restored.otorrinoNotes }));
+      if (restored.uroNotes !== undefined) setUroNotes(prev => ({ ...prev, ...restored.uroNotes }));
+      if (restored.soapNotes !== undefined) setSoapNotes(prev => ({ ...prev, ...restored.soapNotes }));
+      if (restored.cidCode !== undefined) setCidCode(restored.cidCode);
+      if (restored.cidDescription !== undefined) setCidDescription(restored.cidDescription);
+      if (restored.diagnosticHypotheses !== undefined) setDiagnosticHypotheses(restored.diagnosticHypotheses);
+      if (restored.clinicalConduct !== undefined) setClinicalConduct(restored.clinicalConduct);
+      if (restored.returnInDays !== undefined) setReturnInDays(restored.returnInDays);
+    }
+  });
+
   // Cálculo de IMC Automático
   useEffect(() => {
     if (vitalSigns.weight && vitalSigns.height && vitalSigns.height > 0) {
@@ -563,6 +639,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       });
 
       showToast('Consulta médica finalizada com sucesso e registrada no prontuário do paciente!', 'success');
+      await autosave.clearDraft();
       loadPatientConsultations(selectedPatientId);
 
       if (onFinishConsultation) {
@@ -576,10 +653,22 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     }
   };
 
-  const filteredPatients = patients.filter(p =>
-    (p.name || '').toLowerCase().includes(searchPatient.toLowerCase()) ||
-    (p.cpf || '').includes(searchPatient)
-  );
+  const filteredPatients = patients.filter(p => {
+    const term = (searchPatient || '').trim().toLowerCase();
+    if (!term) return true;
+    const name = (p.full_name || p.name || '').toLowerCase();
+    const cpfClean = (p.cpf || '').replace(/\D/g, '');
+    const termClean = term.replace(/\D/g, '');
+    const phone = (p.phone || '').toLowerCase();
+    const email = (p.email || '').toLowerCase();
+    return (
+      name.includes(term) ||
+      (termClean.length >= 2 && cpfClean.includes(termClean)) ||
+      (p.cpf || '').toLowerCase().includes(term) ||
+      phone.includes(term) ||
+      email.includes(term)
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -613,6 +702,15 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                 </select>
               </div>
             )}
+
+            {/* Indicador Padronizado de Autosave */}
+            <div className="ml-2">
+              <ClinicalAutosaveIndicator
+                status={autosave.autosaveStatus}
+                lastSavedTime={autosave.lastSavedTime}
+                className="bg-white/10 text-white border-white/20"
+              />
+            </div>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
@@ -630,7 +728,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                 {clientTermLabel} em Atendimento
               </div>
               <div className="text-sm font-bold text-white truncate max-w-[200px]">
-                {selectedPatient.name}
+                {selectedPatient.full_name || selectedPatient.name}
               </div>
             </div>
           )}
@@ -681,7 +779,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             <option value="">Selecione na lista...</option>
             {filteredPatients.map(p => (
               <option key={p.id} value={p.id}>
-                {p.name} {p.cpf ? `(${p.cpf})` : ''}
+                {p.full_name || p.name} {p.cpf ? `(${p.cpf})` : ''}
               </option>
             ))}
           </select>

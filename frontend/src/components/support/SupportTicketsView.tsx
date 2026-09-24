@@ -17,7 +17,8 @@ import {
   ArrowLeft,
   Filter,
   ShieldCheck,
-  Tag
+  Tag,
+  Lock
 } from 'lucide-react';
 import { SupportTicket, SupportTicketMessage } from '../../types';
 
@@ -419,30 +420,51 @@ export const SupportTicketsView: React.FC = () => {
                   })}
                 </div>
 
-                {/* Composer */}
-                <div className="p-4 border-t border-slate-200 bg-slate-50/50 flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={replyMessage}
-                    onChange={e => setReplyMessage(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendReply();
-                      }
-                    }}
-                    placeholder="Escreva uma resposta..."
-                    className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-teal-500"
-                  />
-                  <button
-                    onClick={handleSendReply}
-                    disabled={sendingReply || !replyMessage.trim()}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    Enviar
-                  </button>
-                </div>
+                {/* Composer ou Aviso de Encerramento (Itens 18 e 19) */}
+                {ticketDetails.ticket.status === 'resolved' || ticketDetails.ticket.status === 'closed' ? (
+                  <div className="p-4 border-t border-slate-200 bg-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-slate-700">
+                      <div className="p-1.5 bg-slate-200 text-slate-600 rounded-lg">
+                        <Lock className="w-4 h-4 shrink-0" />
+                      </div>
+                      <span>
+                        Este chamado foi <strong>{ticketDetails.ticket.status === 'resolved' ? 'resolvido' : 'encerrado'}</strong> e está bloqueado para novas mensagens ou anexos.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-2xs whitespace-nowrap cursor-pointer transition-all self-start sm:self-auto"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Abrir Novo Chamado
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 border-t border-slate-200 bg-slate-50/50 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={replyMessage}
+                      onChange={e => setReplyMessage(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendReply();
+                        }
+                      }}
+                      placeholder="Escreva uma resposta..."
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white focus:ring-2 focus:ring-teal-500"
+                    />
+                    <button
+                      onClick={handleSendReply}
+                      disabled={sendingReply || !replyMessage.trim()}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Enviar
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

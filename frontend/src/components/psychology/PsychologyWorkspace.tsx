@@ -36,6 +36,7 @@ import { PsychologyHistoryModal } from './PsychologyHistoryModal';
 import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
+import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 
 interface PsychologyWorkspaceProps {
   initialPatientId?: string;
@@ -843,40 +844,11 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             {/* Indicador Discreto de Autosave */}
             {selectedPatientId && (
-              <div data-tour="clinical-autosave" className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs">
-                {autosaveStatus === 'saving' && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-amber-700 text-[11px] font-medium">Salvando...</span>
-                  </>
-                )}
-                {autosaveStatus === 'saved' && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-emerald-700 text-[11px] font-medium">
-                      Salvo {lastSavedTime ? `às ${lastSavedTime}` : ''}
-                    </span>
-                  </>
-                )}
-                {autosaveStatus === 'offline' && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-orange-500" />
-                    <span className="text-orange-700 text-[11px] font-medium">Aguardando conexão (cópia local salva)</span>
-                  </>
-                )}
-                {autosaveStatus === 'error' && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-rose-500" />
-                    <span className="text-rose-700 text-[11px] font-medium">Erro ao salvar na nuvem</span>
-                  </>
-                )}
-                {autosaveStatus === 'idle' && (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-slate-300" />
-                    <span className="text-slate-500 text-[11px]">Autosave ativo</span>
-                  </>
-                )}
-              </div>
+              <ClinicalAutosaveIndicator
+                status={autosaveStatus}
+                lastSavedTime={lastSavedTime}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs"
+              />
             )}
 
             {/* Botão Assistente IA Ético */}

@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { randomUUID } from 'crypto';
 import { db } from '../config/database';
+import { buildZemdaEmailLayout } from './email-template.service';
 
 export class TrialNotificationService {
   private static getResendClient(): Resend | null {
@@ -56,23 +57,27 @@ export class TrialNotificationService {
     this.markSent(tenantId, 'TRIAL_STARTED');
 
     const formattedDate = new Date(trialEndsAt).toLocaleDateString('pt-BR');
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1e293b;">
-        <h2 style="color: #0d9488; font-size: 20px; font-weight: 700; margin-bottom: 16px;">Bem-vindo(a) ao seu Teste Grátis Zemda Solo!</h2>
-        <p>Olá <strong>${name}</strong>,</p>
-        <p>Seu período de teste grátis de 7 dias do <strong>Zemda Solo</strong> já está ativo.</p>
-        <p>Você tem acesso integral a todas as funcionalidades do sistema para sua atuação individual: agenda inteligente, prontuário eletrônico, documentos, financeiro e os recursos do seu módulo clínico especializado.</p>
-        <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 14px; border-radius: 6px; margin: 20px 0;">
-          <p style="margin: 0; font-size: 14px; color: #166534;">
-            <strong>Validade do teste:</strong> até <strong>${formattedDate}</strong> (7 dias). Sem cobrança durante este período.
-          </p>
-        </div>
-        <p>Acesse seu painel agora mesmo:</p>
-        <p><a href="https://zemda.com.br" style="display: inline-block; background-color: #0d9488; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;">Acessar o Zemda</a></p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="font-size: 12px; color: #64748b;">Dúvidas ou suporte? Entre em contato pelo e-mail <a href="mailto:suporte@zemda.com.br" style="color: #0d9488;">suporte@zemda.com.br</a>.</p>
+    const contentHtml = `
+      <p>Olá <strong>${name}</strong>,</p>
+      <p>Seu período de teste grátis de 7 dias do <strong>Zemda Solo</strong> já está ativo.</p>
+      <p>Você tem acesso integral a todas as funcionalidades do sistema para sua atuação: agenda inteligente, prontuário eletrônico, documentos, financeiro e os recursos do seu módulo clínico especializado.</p>
+      <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 14px 16px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 0; font-size: 13px; color: #166534;">
+          <strong>Validade do teste:</strong> até <strong>${formattedDate}</strong> (7 dias). Sem cobrança durante este período.
+        </p>
       </div>
     `;
+
+    const html = buildZemdaEmailLayout({
+      title: 'Bem-vindo(a) ao seu teste grátis de 7 dias - Zemda Solo',
+      preheader: 'Seu período de teste grátis já está ativo na plataforma Zemda.',
+      headline: 'Bem-vindo(a) ao seu Teste Grátis!',
+      badge: 'Teste Grátis · 7 Dias',
+      contentHtml,
+      ctaText: 'Acessar o Zemda',
+      ctaUrl: 'https://zemda.com.br',
+      footerNote: 'Dúvidas ou suporte? Entre em contato pelo e-mail suporte@zemda.com.br.'
+    });
 
     await this.sendEmail(email, 'Bem-vindo(a) ao seu teste grátis de 7 dias - Zemda Solo', html);
   }
@@ -82,17 +87,22 @@ export class TrialNotificationService {
     this.markSent(tenantId, 'TRIAL_3_DAYS');
 
     const formattedDate = new Date(trialEndsAt).toLocaleDateString('pt-BR');
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1e293b;">
-        <h2 style="color: #0f172a; font-size: 18px; font-weight: 700; margin-bottom: 16px;">Faltam 3 dias para o término do seu teste grátis</h2>
-        <p>Olá <strong>${name}</strong>,</p>
-        <p>Lembramos que seu teste grátis do <strong>Zemda Solo</strong> encerra em <strong>${formattedDate}</strong>.</p>
-        <p>Para garantir que sua rotina de atendimentos, prontuários e agenda continue sem interrupções, você pode assinar o plano Solo a qualquer momento.</p>
-        <p><a href="https://zemda.com.br/assinatura" style="display: inline-block; background-color: #0d9488; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;">Assinar Zemda Solo</a></p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="font-size: 12px; color: #64748b;">Precisa de informações sobre outros planos? Fale conosco em <a href="mailto:suporte@zemda.com.br" style="color: #0d9488;">suporte@zemda.com.br</a>.</p>
-      </div>
+    const contentHtml = `
+      <p>Olá <strong>${name}</strong>,</p>
+      <p>Lembramos que seu teste grátis do <strong>Zemda Solo</strong> encerra em <strong>${formattedDate}</strong>.</p>
+      <p>Para garantir que sua rotina de atendimentos, prontuários e agenda continue sem interrupções, você pode assinar o plano Solo a qualquer momento.</p>
     `;
+
+    const html = buildZemdaEmailLayout({
+      title: 'Faltam 3 dias para o fim do seu teste grátis - Zemda Solo',
+      preheader: `Seu teste grátis do Zemda Solo encerra em ${formattedDate}.`,
+      headline: 'Faltam 3 dias para o término do seu teste',
+      badge: 'Aviso de Teste Grátis',
+      contentHtml,
+      ctaText: 'Assinar Zemda Solo',
+      ctaUrl: 'https://zemda.com.br/assinatura',
+      footerNote: 'Precisa de informações sobre outros planos? Fale conosco em suporte@zemda.com.br.'
+    });
 
     await this.sendEmail(email, 'Faltam 3 dias para o fim do seu teste grátis - Zemda Solo', html);
   }
@@ -101,17 +111,26 @@ export class TrialNotificationService {
     if (!this.shouldSend(tenantId, 'TRIAL_1_DAY')) return;
     this.markSent(tenantId, 'TRIAL_1_DAY');
 
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1e293b;">
-        <h2 style="color: #b45309; font-size: 18px; font-weight: 700; margin-bottom: 16px;">Último dia do seu teste grátis Zemda Solo</h2>
-        <p>Olá <strong>${name}</strong>,</p>
-        <p>Seu teste grátis termina amanhã. Ao término dos 7 dias, a criação de novos atendimentos será temporariamente pausada até a ativação da sua assinatura.</p>
-        <p><strong>Fique tranquilo: todos os seus dados clínicos, pacientes, agendamentos e prontuários permanecem intactos e seguros.</strong></p>
-        <p><a href="https://zemda.com.br/assinatura" style="display: inline-block; background-color: #0d9488; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;">Assinar Zemda Solo Agora</a></p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="font-size: 12px; color: #64748b;">Dúvidas? <a href="mailto:suporte@zemda.com.br" style="color: #0d9488;">suporte@zemda.com.br</a></p>
+    const contentHtml = `
+      <p>Olá <strong>${name}</strong>,</p>
+      <p>Seu teste grátis termina amanhã. Ao término dos 7 dias, a criação de novos atendimentos será temporariamente pausada até a ativação da sua assinatura.</p>
+      <div style="background-color: #fefce8; border-left: 4px solid #f59e0b; padding: 14px 16px; border-radius: 8px; margin: 18px 0;">
+        <p style="margin: 0; font-size: 13px; color: #854d0e;">
+          <strong>Fique tranquilo:</strong> todos os seus dados clínicos, pacientes, agendamentos e prontuários permanecem intactos e seguros.
+        </p>
       </div>
     `;
+
+    const html = buildZemdaEmailLayout({
+      title: 'Seu teste grátis termina amanhã - Assine o Zemda Solo',
+      preheader: 'Último dia do seu teste grátis no Zemda Solo.',
+      headline: 'Último dia do seu teste grátis',
+      badge: 'Aviso Importante',
+      contentHtml,
+      ctaText: 'Assinar Zemda Solo Agora',
+      ctaUrl: 'https://zemda.com.br/assinatura',
+      footerNote: 'Dúvidas? Entre em contato pelo e-mail suporte@zemda.com.br.'
+    });
 
     await this.sendEmail(email, 'Seu teste grátis termina amanhã - Assine o Zemda Solo', html);
   }
@@ -120,20 +139,25 @@ export class TrialNotificationService {
     if (!this.shouldSend(tenantId, 'TRIAL_EXPIRED')) return;
     this.markSent(tenantId, 'TRIAL_EXPIRED');
 
-    const html = `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1e293b;">
-        <h2 style="color: #0f172a; font-size: 18px; font-weight: 700; margin-bottom: 16px;">Seu período de teste grátis encerrou</h2>
-        <p>Olá <strong>${name}</strong>,</p>
-        <p>Seus 7 dias de teste grátis do Zemda Solo chegaram ao fim.</p>
-        <p>Para continuar utilizando o sistema, cadastrando pacientes e emitindo prontuários, ative sua assinatura:</p>
-        <p><a href="https://zemda.com.br/assinatura" style="display: inline-block; background-color: #0d9488; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;">Reativar Acesso · Assinar Zemda Solo</a></p>
-        <p style="margin-top: 16px; font-size: 13px; color: #475569;">
-          Todos os seus registros, prontuários, pacientes e agenda continuam preservados e estarão imediatamente disponíveis assim que o plano for ativado.
-        </p>
-        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
-        <p style="font-size: 12px; color: #64748b;">Suporte e atendimento: <a href="mailto:suporte@zemda.com.br" style="color: #0d9488;">suporte@zemda.com.br</a>.</p>
-      </div>
+    const contentHtml = `
+      <p>Olá <strong>${name}</strong>,</p>
+      <p>Seus 7 dias de teste grátis do Zemda Solo chegaram ao fim.</p>
+      <p>Para continuar utilizando o sistema, cadastrando pacientes e emitindo prontuários, ative sua assinatura.</p>
+      <p style="margin-top: 14px; font-size: 13px; color: #475569;">
+        Todos os seus registros, prontuários, pacientes e agenda continuam preservados e estarão imediatamente disponíveis assim que o plano for ativado.
+      </p>
     `;
+
+    const html = buildZemdaEmailLayout({
+      title: 'Seu teste grátis do Zemda encerrou - Ative sua assinatura',
+      preheader: 'Seu período de teste grátis encerrou. Reative seu acesso.',
+      headline: 'Seu período de teste encerrou',
+      badge: 'Encerramento de Teste',
+      contentHtml,
+      ctaText: 'Reativar Acesso · Assinar Zemda Solo',
+      ctaUrl: 'https://zemda.com.br/assinatura',
+      footerNote: 'Suporte e atendimento: suporte@zemda.com.br.'
+    });
 
     await this.sendEmail(email, 'Seu teste grátis do Zemda encerrou - Ative sua assinatura', html);
   }

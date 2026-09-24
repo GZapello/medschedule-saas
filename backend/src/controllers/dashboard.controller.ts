@@ -16,6 +16,20 @@ export class DashboardController {
       const today = requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate) ? requestedDate : spDateStr;
       const monthStart = `${today.slice(0, 7)}-01`;
 
+      // Filtro de profissional se o usuário logado for 'professional' (não-admin)
+      let profFilterToday = '';
+      let profFilterMonth = '';
+      const todayParams: any[] = [tenantId, `${today}%`];
+      const countParams: any[] = [tenantId, monthStart];
+
+      if ((req as any).user && (req as any).user.role === 'professional') {
+        profFilterToday = ' AND a.professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
+        todayParams.push((req as any).user.userId, tenantId);
+
+        profFilterMonth = ' AND professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
+        countParams.push((req as any).user.userId, tenantId);
+      }
+
       // 1. Atendimentos de hoje (inclui completed, in_progress, scheduled, etc. - nunca exclui atendimentos finalizados)
       const todayApptsStmt = db.prepare(`
         SELECT 
@@ -29,13 +43,13 @@ export class DashboardController {
           (SELECT id FROM clinical_prescriptions WHERE appointment_id = a.id LIMIT 1) as prescription_id,
           (SELECT id FROM clinical_exam_requests WHERE appointment_id = a.id LIMIT 1) as exam_request_id
         FROM appointments a
-        JOIN patients pat ON pat.id = a.patient_id
-        JOIN professionals p ON p.id = a.professional_id
-        JOIN services s ON s.id = a.service_id
-        WHERE a.tenant_id = ? AND a.start_time LIKE ?
+        LEFT JOIN patients pat ON pat.id = a.patient_id
+        LEFT JOIN professionals p ON p.id = a.professional_id
+        LEFT JOIN services s ON s.id = a.service_id
+        WHERE a.tenant_id = ? AND a.start_time LIKE ? ${profFilterToday}
         ORDER BY a.start_time ASC
       `);
-      const todayAppointments = todayApptsStmt.all(tenantId, `${today}%`);
+      const todayAppointments = todayApptsStmt.all(...todayParams);
 
       // 2. Contadores do mês
       const countStmt = db.prepare(`
@@ -45,9 +59,9 @@ export class DashboardController {
           SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show_month,
           SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_month
         FROM appointments
-        WHERE tenant_id = ? AND start_time >= ?
+        WHERE tenant_id = ? AND start_time >= ? ${profFilterMonth}
       `);
-      const counts = countStmt.get(tenantId, monthStart) as any;
+      const counts = countStmt.get(...countParams) as any;
 
       // 3. Faturamento do mês
       const financeStmt = db.prepare(`

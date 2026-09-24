@@ -178,7 +178,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'work-schedules', label: 'Escala de Trabalho', icon: CalendarClock, visible: isClinicAdmin || isProfessional },
         { id: 'services', label: 'Serviços & Salas', icon: Scissors, visible: isClinicAdmin },
         { id: 'staff', label: 'Equipe & Acessos', icon: UserPlus, visible: isClinicAdmin },
-        { id: 'taxonomy', label: 'Profissões & Categorias', icon: Layers, visible: isClinicAdmin },
       ]
     },
     {
@@ -214,8 +213,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   ];
 
+  // Menu Simplificado do SuperAdmin (Item 20)
+  const superAdminCategories: NavCategory[] = [
+    {
+      id: 'superadmin_main',
+      label: 'Administração Global',
+      items: [
+        { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: true },
+        { id: 'support-tickets', label: 'Chamados', icon: LifeBuoy, visible: true },
+        { id: 'audit', label: 'Auditoria', icon: ShieldCheck, visible: true }
+      ]
+    }
+  ];
+
+  const effectiveCategories = isSuperAdmin ? superAdminCategories : categories;
+
   // Identifica qual categoria contém a view ativa inicialmente
   const getInitialOpenCategories = () => {
+    if (isSuperAdmin) {
+      return { superadmin_main: true };
+    }
     const initial: Record<string, boolean> = {
       attendance: true,
       team: false,
@@ -235,12 +252,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Mantém categoria ativa aberta caso a visualização mude
   useEffect(() => {
-    for (const cat of categories) {
+    for (const cat of effectiveCategories) {
       if (cat.items.some(item => item.id === currentView)) {
         setOpenCategories(prev => ({ ...prev, [cat.id]: true }));
       }
     }
-  }, [currentView]);
+  }, [currentView, isSuperAdmin]);
 
   const toggleCategory = (categoryId: string) => {
     setOpenCategories(prev => ({
@@ -288,7 +305,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Accordion Categories Container */}
         <div className="flex-1 overflow-y-auto py-3 px-3 space-y-2 scrollbar-thin scrollbar-thumb-slate-200">
-          {categories.map(category => {
+          {effectiveCategories.map(category => {
             const visibleItems = category.items.filter(item => item.visible);
             if (visibleItems.length === 0) return null;
 

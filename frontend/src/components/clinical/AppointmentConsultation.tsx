@@ -9,6 +9,7 @@ import { DentistryWorkspace } from '../dentistry/DentistryWorkspace';
 import { PsychologyWorkspace } from '../psychology/PsychologyWorkspace';
 import { PsychopedagogyWorkspace } from '../psychopedagogy/PsychopedagogyWorkspace';
 import { PhysiotherapyWorkspace } from '../physiotherapy/PhysiotherapyWorkspace';
+import { ZemdaMedWorkspace } from '../medical/ZemdaMedWorkspace';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { Activity, FileText, Stethoscope, ChevronLeft } from 'lucide-react';
@@ -25,6 +26,8 @@ export function AppointmentConsultation({
   onFinished: () => void;
 }) {
   const {
+    isDoctor,
+    isZemdaMed,
     isNutritionist,
     isZemdaNutri,
     isOccupationalTherapist,
@@ -48,6 +51,7 @@ export function AppointmentConsultation({
   const [error, setError] = useState('');
 
   const deducedModuleFromProfession =
+    (isDoctor || isZemdaMed || (currentUser?.professionName || '').toLowerCase().includes('médic') || (currentUser?.professionName || '').toLowerCase().includes('medic') || (appointment.service_name || '').toLowerCase().includes('médic')) ? 'ZemdaMed' :
     (isPsychopedagogue || isZemdaPP || (currentUser?.professionName || '').toLowerCase().includes('psicopedag') || (appointment.service_name || '').toLowerCase().includes('psicopedag')) ? 'ZemdaPP' :
     (isPsychologist || isZemdaPsico || (currentUser?.professionName || '').toLowerCase().includes('psicolog')) ? 'ZemdaPsico' :
     (isSpeechTherapist || isZemdaFono || (currentUser?.professionName || '').toLowerCase().includes('fono')) ? 'ZemdaFono' :
@@ -112,6 +116,7 @@ export function AppointmentConsultation({
   }
 
   const Workspace =
+    effectiveModuleType === 'ZemdaMed' ? ZemdaMedWorkspace :
     effectiveModuleType === 'ZemdaOdonto' ? DentistryWorkspace :
     effectiveModuleType === 'ZemdaNutri' ? NutritionWorkspace :
     effectiveModuleType === 'ZemdaTO' ? OccupationalTherapyWorkspace :
@@ -243,6 +248,7 @@ export function AppointmentConsultation({
       onOpenZemdaBody={isZemdaBody ? () => setActiveTab('zemda_body') : undefined}
       onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
       specializedModuleName={
+        effectiveModuleType === 'ZemdaMed' ? 'ZemdaMed' :
         effectiveModuleType === 'ZemdaPsico' ? 'ZemdaPsico' :
         effectiveModuleType === 'ZemdaPP' ? 'ZemdaPP' :
         effectiveModuleType === 'ZemdaFono' ? 'ZemdaFono' :
@@ -250,7 +256,7 @@ export function AppointmentConsultation({
         effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
         effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
         effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
-        (isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
+        (isDoctor || isZemdaMed ? 'ZemdaMed' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
       }
     />
   );

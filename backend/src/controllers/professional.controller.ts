@@ -8,6 +8,7 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { resolveProfessionModule, cleanPracticeAreasForNewProfession } from '../utils/profession-module';
+import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
 
 export class ProfessionalController {
   static list(req: Request, res: Response): void {
@@ -403,149 +404,20 @@ export class ProfessionalController {
       );
 
       // 3. Atualização automática do módulo profissional correspondente à nova profissão escolhida
-      if (isChangingProfession) {
-        const newProfRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(professionId) as any;
-        const newProfName = newProfRow?.name || '';
-        const newProfSlug = newProfRow?.slug || '';
-
-        // Resolução centralizada com exclusividade mútua (apenas 1 módulo ativo, 7 inativos)
-        const { module: targetModule, flags } = resolveProfessionModule({
-          id: professionId,
-          name: newProfName,
-          slug: newProfSlug,
-          registrationType: registrationType || currentProf.registration_type
+      if (isChangingProfession && tenantId) {
+        const taxonomyResult = ProfessionTaxonomyService.updateProfessionalTaxonomy({
+          tenantId,
+          professionalId: String(id),
+          newProfessionId: professionId,
+          newSpecialtyId: specialtyId,
+          newSpecialtyCustom: customSpec,
+          practiceAreas,
+          registrationType,
+          registrationNumber
         });
 
-        // Limpa especialidade incompatível com a nova profissão
-        let finalSpecialtyId: string | null = null;
-        let finalCustomSpec: string | null = null;
-        if (specialtyId) {
-          const validSpec = db.prepare('SELECT id FROM specialties WHERE id = ? AND (profession_id = ? OR professionId = ?)').get(specialtyId, professionId, professionId);
-          if (validSpec) {
-            finalSpecialtyId = specialtyId;
-            finalCustomSpec = customSpec;
-          }
-        }
-
-        // Limpa practice_areas para não reter palavras-chave da profissão anterior
-        const rawAreas = practiceAreas !== undefined ? practiceAreas : currentProf.practice_areas;
-        const finalPracticeAreas = cleanPracticeAreasForNewProfession(professionId, rawAreas);
-
-        // Atualiza sinalizadores de módulo e dados higienizados no registro do profissional
-        db.prepare(`
-          UPDATE professionals SET
-            profession_name = ?,
-            specialty_id = ?,
-            specialty_custom = ?,
-            practice_areas = ?,
-            zemda_fisio_enabled = ?,
-            zemda_odonto_enabled = ?,
-            zemda_nutri_enabled = ?,
-            zemda_to_enabled = ?,
-            zemda_fono_enabled = ?,
-            zemda_pp_enabled = ?,
-            zemda_psico_enabled = ?,
-            zemda_personal_enabled = ?
-          WHERE id = ? AND tenant_id = ?
-        `).run(
-          newProfName || null,
-          finalSpecialtyId,
-          finalCustomSpec,
-          finalPracticeAreas,
-          flags.zemda_fisio_enabled,
-          flags.zemda_odonto_enabled,
-          flags.zemda_nutri_enabled,
-          flags.zemda_to_enabled,
-          flags.zemda_fono_enabled,
-          flags.zemda_pp_enabled,
-          flags.zemda_psico_enabled,
-          flags.zemda_personal_enabled,
-          id,
-          tenantId
-        );
-
+        // Se for gestor, sincroniza tenant
         if (currentProf.user_id) {
-          // Atualiza usuário vinculado
-          db.prepare(`
-            UPDATE users SET
-              profession_id = ?,
-              profession_name = ?,
-              practice_areas = ?,
-              zemda_fisio_enabled = ?,
-              zemda_odonto_enabled = ?,
-              zemda_nutri_enabled = ?,
-              zemda_to_enabled = ?,
-              zemda_fono_enabled = ?,
-              zemda_pp_enabled = ?,
-              zemda_psico_enabled = ?,
-              zemda_personal_enabled = ?,
-              updated_at = datetime('now')
-            WHERE id = ?
-          `).run(
-            professionId,
-            newProfName || null,
-            finalPracticeAreas,
-            flags.zemda_fisio_enabled,
-            flags.zemda_odonto_enabled,
-            flags.zemda_nutri_enabled,
-            flags.zemda_to_enabled,
-            flags.zemda_fono_enabled,
-            flags.zemda_pp_enabled,
-            flags.zemda_psico_enabled,
-            flags.zemda_personal_enabled,
-            currentProf.user_id
-          );
-
-          // Gerencia permissions_json do clinic_users para access_zemda_personal
-          const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(currentProf.user_id, tenantId) as any;
-          let currentPerms: string[] = [];
-          if (cuRow?.permissions_json) {
-            try { currentPerms = JSON.parse(cuRow.permissions_json); } catch {}
-          }
-          if (targetModule === 'ZemdaPersonal') {
-            if (!currentPerms.includes('access_zemda_personal')) {
-              currentPerms.push('access_zemda_personal');
-            }
-          } else {
-            currentPerms = currentPerms.filter((p: string) => p !== 'access_zemda_personal');
-          }
-
-          // Atualiza clinic_users
-          db.prepare(`
-            UPDATE clinic_users SET
-              profession_id = ?,
-              profession_name = ?,
-              profession_custom = ?,
-              practice_areas = ?,
-              permissions_json = ?,
-              zemda_fisio_enabled = ?,
-              zemda_odonto_enabled = ?,
-              zemda_nutri_enabled = ?,
-              zemda_to_enabled = ?,
-              zemda_fono_enabled = ?,
-              zemda_pp_enabled = ?,
-              zemda_psico_enabled = ?,
-              zemda_personal_enabled = ?
-            WHERE user_id = ? AND tenant_id = ?
-          `).run(
-            professionId,
-            newProfName || null,
-            newProfName || null,
-            finalPracticeAreas,
-            JSON.stringify(currentPerms),
-            flags.zemda_fisio_enabled,
-            flags.zemda_odonto_enabled,
-            flags.zemda_nutri_enabled,
-            flags.zemda_to_enabled,
-            flags.zemda_fono_enabled,
-            flags.zemda_pp_enabled,
-            flags.zemda_psico_enabled,
-            flags.zemda_personal_enabled,
-            currentProf.user_id,
-            tenantId
-          );
-
-          // Se for gestor, sincroniza tenant
           const cu = db.prepare('SELECT is_manager FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(currentProf.user_id, tenantId) as any;
           if (cu?.is_manager) {
             db.prepare(`
@@ -553,15 +425,15 @@ export class ProfessionalController {
                 manager_profession = ?,
                 manager_practice_areas = ?
               WHERE id = ?
-            `).run(newProfName || null, finalPracticeAreas, tenantId);
+            `).run(taxonomyResult.canonicalProfessionName || null, taxonomyResult.finalPracticeAreas, tenantId);
           }
         }
 
-        logAudit(req, 'CHANGE_PROFESSION_ONCE', 'professionals', id, {
+        logAudit(req, 'CHANGE_PROFESSION_ONCE', 'professionals', String(id), {
           oldProfessionId: currentProf.profession_id,
           newProfessionId: professionId,
-          newProfessionName: newProfName,
-          targetModule
+          newProfessionName: taxonomyResult.canonicalProfessionName,
+          targetModule: taxonomyResult.commercialModule
         });
       }
 

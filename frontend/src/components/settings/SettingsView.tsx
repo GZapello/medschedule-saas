@@ -562,32 +562,6 @@ export const SettingsView: React.FC = () => {
       {activeTab === 'billing' && <BillingView />}
       {isClinicAdmin && activeTab === 'clinic' && (
         <form onSubmit={handleSaveClinic} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
-          {/* Seção Vocabulário */}
-          <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-2">
-            <div className="flex items-center gap-2 text-indigo-900 font-bold text-xs uppercase tracking-wider">
-              <Sparkles className="w-4 h-4 text-indigo-600" /> Terminologia Personalizada por Nicho
-            </div>
-            <p className="text-xs text-indigo-700">
-              Como você prefere chamar os usuários que recebem atendimento na sua plataforma?
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-              {['Paciente', 'Cliente', 'Aluno', 'Tutor / Pet'].map(term => (
-                <button
-                  type="button"
-                  key={term}
-                  onClick={() => setClientTermLabel(term)}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${
-                    clientTermLabel === term
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-indigo-50'
-                  }`}
-                >
-                  {term}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Seção Logotipo e Identidade da Clínica */}
           <div className="p-5 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-3 text-xs">
             <div className="flex items-center justify-between">

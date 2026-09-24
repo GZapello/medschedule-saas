@@ -424,7 +424,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return capabilities.includes(capId);
   };
 
-  const clientTermLabel = currentTenant?.client_term_label || 'Paciente';
+  const clientTermLabel = (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
+    ? 'Aluno'
+    : 'Paciente';
 
   return (
     <AuthContext.Provider

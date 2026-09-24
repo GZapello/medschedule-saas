@@ -725,23 +725,13 @@ export const SuperAdminView: React.FC = () => {
                           )}
 
                           {t.status === 'active' && (
-                            <>
-                              <button
-                                onClick={() => handleSwitch(t.id, t.name)}
-                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer"
-                                title="Acessar ambiente como Administrador"
-                              >
-                                <ArrowRight className="w-3.5 h-3.5" />
-                                Acessar
-                              </button>
-                              <button
-                                onClick={() => handleBlock(t.id, t.name)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
-                                title="Bloquear Clínica"
-                              >
-                                <Lock className="w-3.5 h-3.5" />
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleBlock(t.id, t.name)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
+                              title="Bloquear Clínica"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                            </button>
                           )}
 
                           {(t.status === 'blocked' || t.status === 'suspended') && (

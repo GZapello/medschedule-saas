@@ -104,11 +104,23 @@ export const WorkSchedulesView: React.FC = () => {
     try {
       setLoading(true);
       setConflicts([]);
-      setWarningMessage(null);
       const res = await ApiClient.get<{ professional: Professional; schedules: Shift[]; blockedTimes: BlockedTime[] }>(
         `/v1/professionals/${profId}`
       );
-      setShifts(res.schedules || []);
+      if (!res.schedules || res.schedules.length === 0) {
+        const defaultShifts: Shift[] = [
+          { day_of_week: 0, start_time: '08:00', end_time: '12:00', break_start: null, break_end: null, is_active: false },
+          { day_of_week: 1, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
+          { day_of_week: 2, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
+          { day_of_week: 3, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
+          { day_of_week: 4, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
+          { day_of_week: 5, start_time: '08:00', end_time: '18:00', break_start: '12:00', break_end: '13:30', is_active: true },
+          { day_of_week: 6, start_time: '08:00', end_time: '12:00', break_start: null, break_end: null, is_active: true },
+        ];
+        setShifts(defaultShifts);
+      } else {
+        setShifts(res.schedules);
+      }
       setBlockedTimes(res.blockedTimes || []);
     } catch (err: any) {
       showToast('Erro ao carregar escala do profissional', 'error');

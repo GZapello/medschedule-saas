@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { EmailService } from '../services/email.service';
+import { buildZemdaEmailLayout } from '../services/email-template.service';
 
 export class SupportController {
   // Listar chamados: SuperAdmin visualiza todos; usuário comum visualiza apenas os próprios chamados
@@ -196,6 +198,15 @@ export class SupportController {
         return;
       }
 
+      // Trava conversa após resolução / fechamento (Itens 18 e 19)
+      if (ticket.status === 'resolved' || ticket.status === 'closed') {
+        res.status(400).json({
+          success: false,
+          error: 'Este chamado está encerrado/resolvido e não aceita novas mensagens ou anexos. Para novo atendimento, abra um novo chamado.'
+        });
+        return;
+      }
+
       const isSuper = user.role === 'superadmin';
       if (!isSuper) {
         const userTenant = req.tenantId || user.tenantId;
@@ -217,6 +228,82 @@ export class SupportController {
 
       // Atualiza timestamp de última atualização do chamado
       db.prepare("UPDATE support_tickets SET updated_at = datetime('now') WHERE id = ?").run(id);
+
+      // Notificação por e-mail da nova mensagem (Item 16)
+      try {
+        const ticketFull = db.prepare(`
+          SELECT t.id, t.title, u.email as creator_email, u.name as creator_name
+          FROM support_tickets t
+          JOIN users u ON u.id = t.user_id
+          WHERE t.id = ?
+        `).get(id) as any;
+
+        const senderName = user.name || (isSuper ? 'Suporte Técnico Zemda' : 'Usuário');
+        const snippet = message.trim().length > 180 ? `${message.trim().slice(0, 180)}...` : message.trim();
+
+        if (isSuper && !shouldBeInternal) {
+          // Suporte/admin respondeu -> notifica o usuário criador
+          if (ticketFull?.creator_email) {
+            const bodyHtml = `
+              <p style="margin: 0 0 16px; font-size: 16px; line-height: 24px; color: #334155;">
+                Olá, <strong>${ticketFull.creator_name || 'Usuário'}</strong>.
+              </p>
+              <p style="margin: 0 0 20px; font-size: 14px; line-height: 22px; color: #475569;">
+                A equipe de suporte respondeu ao seu chamado <strong>#${id}</strong> ("${ticketFull.title}"):
+              </p>
+              <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
+                <em>"${snippet}"</em>
+              </div>
+              <p style="margin: 0 0 24px; font-size: 14px; line-height: 20px; color: #64748b;">
+                Acesse o painel do Zemda para visualizar a resposta completa ou enviar novas informações.
+              </p>
+            `;
+            EmailService.sendCustomEmail(
+              ticketFull.creator_email,
+              `Nova resposta no chamado #${id}: ${ticketFull.title}`,
+              buildZemdaEmailLayout({
+                title: 'Nova Resposta no Chamado',
+                headline: 'Nova resposta da equipe de suporte',
+                badge: 'Suporte Zemda',
+                contentHtml: bodyHtml,
+                ctaText: 'Ver Chamado no Painel',
+                ctaUrl: 'https://app.zemda.com.br'
+              })
+            ).catch(err => console.error('[SupportEmail] Erro ao notificar usuário:', err));
+          }
+        } else if (!isSuper) {
+          // Usuário enviou -> notifica superadmin / equipe
+          const superadmin = db.prepare("SELECT email FROM users WHERE role = 'superadmin' LIMIT 1").get() as any;
+          const adminEmail = superadmin?.email || process.env.SUPPORT_EMAIL || 'suporte@zemda.com.br';
+          if (adminEmail) {
+            const bodyHtml = `
+              <p style="margin: 0 0 16px; font-size: 16px; line-height: 24px; color: #334155;">
+                Nova mensagem recebida no chamado <strong>#${id}</strong> ("${ticketFull?.title || 'Chamado'}").
+              </p>
+              <p style="margin: 0 0 16px; font-size: 14px; line-height: 22px; color: #475569;">
+                Enviada por: <strong>${senderName}</strong> (${ticketFull?.creator_email || ''})
+              </p>
+              <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
+                <em>"${snippet}"</em>
+              </div>
+            `;
+            EmailService.sendCustomEmail(
+              adminEmail,
+              `[Suporte] Nova mensagem no chamado #${id}: ${ticketFull?.title || ''}`,
+              buildZemdaEmailLayout({
+                title: 'Nova Mensagem de Chamado',
+                headline: 'Nova mensagem recebida no suporte',
+                badge: 'Central de Chamados',
+                contentHtml: bodyHtml,
+                ctaText: 'Acessar Painel de Chamados',
+                ctaUrl: 'https://app.zemda.com.br'
+              })
+            ).catch(err => console.error('[SupportEmail] Erro ao notificar admin:', err));
+          }
+        }
+      } catch (e) {
+        console.error('[SupportEmail] Erro ao processar envio de email:', e);
+      }
 
       res.status(201).json({ success: true, id: messageId, message: 'Resposta registrada com sucesso' });
     } catch (err: any) {
@@ -246,6 +333,61 @@ export class SupportController {
       db.prepare(`
         UPDATE support_tickets SET status = ?, updated_at = datetime('now') WHERE id = ?
       `).run(status, id);
+
+      // Mensagem automática e notificação por e-mail ao finalizar chamado (Item 17)
+      if (status === 'resolved' || status === 'closed') {
+        const closeMsgId = 'msg-' + uuidv4().slice(0, 8);
+        const statusLabel = status === 'resolved' ? 'Resolvido' : 'Concluído/Fechado';
+        const nowFormatted = new Intl.DateTimeFormat('pt-BR', {
+          dateStyle: 'short',
+          timeStyle: 'medium',
+          timeZone: 'America/Sao_Paulo'
+        }).format(new Date());
+
+        const autoCloseText = `🔒 Chamado marcado como **${statusLabel}** por ${user.name || 'Suporte Técnico'} em ${nowFormatted}. O chat deste chamado foi encerrado e travado para novas mensagens. Caso necessite de novo suporte, por favor abra um novo chamado.`;
+
+        db.prepare(`
+          INSERT INTO support_ticket_messages (id, ticket_id, user_id, message, attachments_json, is_internal, created_at)
+          VALUES (?, ?, ?, ?, NULL, 0, datetime('now'))
+        `).run(closeMsgId, id, user.userId, autoCloseText);
+
+        try {
+          const ticketFull = db.prepare(`
+            SELECT t.id, t.title, u.email as creator_email, u.name as creator_name
+            FROM support_tickets t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.id = ?
+          `).get(id) as any;
+
+          if (ticketFull?.creator_email) {
+            const bodyHtml = `
+              <p style="margin: 0 0 16px; font-size: 16px; line-height: 24px; color: #334155;">
+                Olá, <strong>${ticketFull.creator_name || 'Usuário'}</strong>.
+              </p>
+              <p style="margin: 0 0 16px; font-size: 14px; line-height: 22px; color: #475569;">
+                O seu chamado <strong>#${id}</strong> ("${ticketFull.title}") foi marcado como <strong>${statusLabel}</strong> por ${user.name || 'Suporte Técnico'} em ${nowFormatted}.
+              </p>
+              <p style="margin: 0 0 24px; font-size: 14px; line-height: 20px; color: #64748b;">
+                A conversa foi finalizada com sucesso. Caso precise de novas orientações ou suporte para outro assunto, fique à vontade para abrir um novo chamado em nossa central.
+              </p>
+            `;
+            EmailService.sendCustomEmail(
+              ticketFull.creator_email,
+              `Chamado #${id} ${statusLabel}: ${ticketFull.title}`,
+              buildZemdaEmailLayout({
+                title: `Chamado ${statusLabel}`,
+                headline: `Chamado #${id} foi finalizado`,
+                badge: `Status: ${statusLabel}`,
+                contentHtml: bodyHtml,
+                ctaText: 'Ver Histórico do Chamado',
+                ctaUrl: 'https://app.zemda.com.br'
+              })
+            ).catch(err => console.error('[SupportEmail] Erro ao enviar email de encerramento:', err));
+          }
+        } catch (e) {
+          console.error('[SupportEmail] Erro ao enviar email de encerramento:', e);
+        }
+      }
 
       logAudit(req, 'UPDATE_TICKET_STATUS', 'support_tickets', id, { status });
       res.json({ success: true, message: 'Status do chamado atualizado com sucesso', status });
