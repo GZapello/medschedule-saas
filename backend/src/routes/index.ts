@@ -590,11 +590,14 @@ api.delete('/v1/aac/boards/:id', requireTenant, requireRole('clinic_admin', 'pro
 // Gestão de Páginas: requer AAC_BOARD_MANAGE
 api.post('/v1/aac/boards/:boardId/pages', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.createPage);
 api.put('/v1/aac/boards/:boardId/pages/:pageId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.updatePage);
+api.post('/v1/aac/boards/:boardId/pages/:pageId/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.duplicatePage);
+api.post('/v1/aac/boards/:boardId/reorder-pages', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.reorderPages);
 api.delete('/v1/aac/boards/:boardId/pages/:pageId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.deletePage);
 
 // Gestão de Cartões: requer AAC_BOARD_MANAGE
 api.post('/v1/aac/boards/:boardId/cards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.createCard);
 api.put('/v1/aac/boards/:boardId/cards/:cardId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.updateCard);
+api.post('/v1/aac/boards/:boardId/cards/:cardId/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.duplicateCard);
 api.delete('/v1/aac/boards/:boardId/cards/:cardId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.deleteCard);
 api.post('/v1/aac/boards/:boardId/reorder-cards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.reorderCards);
 

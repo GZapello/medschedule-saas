@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Plus,
@@ -11,8 +11,30 @@ import {
   Upload,
   Check,
   CornerDownRight,
-  Eye,
-  EyeOff
+  Copy,
+  Home,
+  AlertCircle,
+  Smile,
+  Sparkles,
+  Coffee,
+  Users,
+  MapPin,
+  Play,
+  Droplet,
+  Activity,
+  Heart,
+  BookOpen,
+  HelpCircle,
+  MessageSquare,
+  Clock,
+  Compass,
+  Sun,
+  Sliders,
+  Palette,
+  Hash,
+  Tv,
+  Moon,
+  MessageCircle
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -22,6 +44,7 @@ interface AACBoardEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   board: AACBoard;
+  initialTab?: 'cards' | 'pages' | 'settings';
   onBoardUpdated: () => void;
 }
 
@@ -38,17 +61,51 @@ const COMMON_EMOJIS = [
   '👍', '👎', '➕', '➖', '🆘', '❓', '❗', '🏁', '⭐', '❤️', '👋', '🙏'
 ];
 
+const AVAILABLE_PAGE_ICONS = [
+  { value: 'Layers', label: 'Camadas (Padrão)' },
+  { value: 'Home', label: 'Início / Casa' },
+  { value: 'AlertCircle', label: 'Necessidades & Alerta' },
+  { value: 'Smile', label: 'Sentimentos & Emoções' },
+  { value: 'Sparkles', label: 'Atividades & Lazer' },
+  { value: 'Coffee', label: 'Alimentos & Bebidas' },
+  { value: 'Users', label: 'Pessoas & Família' },
+  { value: 'MapPin', label: 'Lugares' },
+  { value: 'Play', label: 'Ações & Verbos' },
+  { value: 'Droplet', label: 'Higiene' },
+  { value: 'Activity', label: 'Corpo' },
+  { value: 'Heart', label: 'Saúde / Dor' },
+  { value: 'BookOpen', label: 'Escola' },
+  { value: 'HelpCircle', label: 'Perguntas' },
+  { value: 'MessageSquare', label: 'Social' },
+  { value: 'Clock', label: 'Rotina' },
+  { value: 'Compass', label: 'Transporte' },
+  { value: 'Sun', label: 'Tempo / Clima' },
+  { value: 'Sliders', label: 'Descritores / Conceitos' },
+  { value: 'Palette', label: 'Cores' },
+  { value: 'Hash', label: 'Números' },
+  { value: 'Tv', label: 'Tecnologia' },
+  { value: 'Moon', label: 'Sono / Descanso' },
+  { value: 'MessageCircle', label: 'Comunicação' }
+];
+
 export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
   isOpen,
   onClose,
   board,
+  initialTab = 'cards',
   onBoardUpdated
 }) => {
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'cards' | 'pages' | 'settings'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'pages' | 'settings'>(initialTab);
   const [selectedPageId, setSelectedPageId] = useState<string>(
     board.pages?.[0]?.id || ''
   );
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Estados de Configuração da Prancha
   const [boardName, setBoardName] = useState(board.name || '');
@@ -71,16 +128,76 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
   const [savingCard, setSavingCard] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // Estados de Edição de Página
+  // Estados de Criação / Edição de Página
   const [isCreatingPage, setIsCreatingPage] = useState(false);
   const [newPageName, setNewPageName] = useState('');
   const [newPageIcon, setNewPageIcon] = useState('Layers');
   const [savingPage, setSavingPage] = useState(false);
 
+  // Edição de Página Existente (Nome e Ícone)
+  const [editingPage, setEditingPage] = useState<AACPage | null>(null);
+  const [editPageName, setEditPageName] = useState('');
+  const [editPageIcon, setEditPageIcon] = useState('Layers');
+  const [savingEditPage, setSavingEditPage] = useState(false);
+
   if (!isOpen) return null;
 
   const currentPage = board.pages?.find(p => p.id === selectedPageId) || board.pages?.[0];
   const pageCards = currentPage?.cards || [];
+
+  const getCategoryIcon = (iconName?: string) => {
+    switch (iconName?.toLowerCase()) {
+      case 'home':
+        return <Home className="w-4 h-4" />;
+      case 'alertcircle':
+      case 'alert':
+        return <AlertCircle className="w-4 h-4" />;
+      case 'smile':
+        return <Smile className="w-4 h-4" />;
+      case 'sparkles':
+        return <Sparkles className="w-4 h-4" />;
+      case 'coffee':
+        return <Coffee className="w-4 h-4" />;
+      case 'users':
+        return <Users className="w-4 h-4" />;
+      case 'mappin':
+        return <MapPin className="w-4 h-4" />;
+      case 'play':
+        return <Play className="w-4 h-4" />;
+      case 'droplet':
+        return <Droplet className="w-4 h-4" />;
+      case 'activity':
+        return <Activity className="w-4 h-4" />;
+      case 'heart':
+        return <Heart className="w-4 h-4" />;
+      case 'bookopen':
+        return <BookOpen className="w-4 h-4" />;
+      case 'helpcircle':
+        return <HelpCircle className="w-4 h-4" />;
+      case 'messagesquare':
+        return <MessageSquare className="w-4 h-4" />;
+      case 'clock':
+        return <Clock className="w-4 h-4" />;
+      case 'compass':
+        return <Compass className="w-4 h-4" />;
+      case 'sun':
+        return <Sun className="w-4 h-4" />;
+      case 'sliders':
+        return <Sliders className="w-4 h-4" />;
+      case 'palette':
+        return <Palette className="w-4 h-4" />;
+      case 'hash':
+        return <Hash className="w-4 h-4" />;
+      case 'tv':
+        return <Tv className="w-4 h-4" />;
+      case 'moon':
+        return <Moon className="w-4 h-4" />;
+      case 'messagecircle':
+        return <MessageCircle className="w-4 h-4" />;
+      default:
+        return <Layers className="w-4 h-4" />;
+    }
+  };
 
   // Salvar Configurações Gerais da Prancha
   const handleSaveSettings = async () => {
@@ -211,6 +328,17 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
     }
   };
 
+  // Duplicar Cartão
+  const handleDuplicateCard = async (cardId: string) => {
+    try {
+      await ApiClient.post(`/v1/aac/boards/${board.id}/cards/${cardId}/duplicate`);
+      showToast('Cartão duplicado com sucesso!', 'success');
+      onBoardUpdated();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao duplicar cartão', 'error');
+    }
+  };
+
   // Excluir Cartão
   const handleDeleteCard = async (cardId: string) => {
     if (!window.confirm('Tem certeza que deseja excluir este cartão?')) return;
@@ -272,6 +400,72 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
       showToast(err.message || 'Erro ao criar página', 'error');
     } finally {
       setSavingPage(false);
+    }
+  };
+
+  // Iniciar Edição de Página (Nome e Ícone)
+  const handleStartEditPage = (page: AACPage) => {
+    setEditingPage(page);
+    setEditPageName(page.name);
+    setEditPageIcon(page.icon || 'Layers');
+    setIsCreatingPage(false);
+  };
+
+  // Salvar Edição de Página
+  const handleSaveEditPage = async () => {
+    if (!editingPage) return;
+    if (!editPageName.trim()) {
+      showToast('O nome da categoria é obrigatório', 'info');
+      return;
+    }
+    try {
+      setSavingEditPage(true);
+      await ApiClient.put(`/v1/aac/boards/${board.id}/pages/${editingPage.id}`, {
+        name: editPageName.trim(),
+        icon: editPageIcon
+      });
+      showToast('Categoria atualizada com sucesso!', 'success');
+      setEditingPage(null);
+      onBoardUpdated();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar categoria', 'error');
+    } finally {
+      setSavingEditPage(false);
+    }
+  };
+
+  // Duplicar Página
+  const handleDuplicatePage = async (pageId: string) => {
+    try {
+      await ApiClient.post(`/v1/aac/boards/${board.id}/pages/${pageId}/duplicate`);
+      showToast('Categoria duplicada com sucesso!', 'success');
+      onBoardUpdated();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao duplicar categoria', 'error');
+    }
+  };
+
+  // Reordenar Páginas (Mover para Cima / Baixo)
+  const handleMovePage = async (index: number, direction: 'up' | 'down') => {
+    const allPages = board.pages || [];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= allPages.length) return;
+
+    const reordered = [...allPages];
+    const temp = reordered[index];
+    reordered[index] = reordered[targetIndex];
+    reordered[targetIndex] = temp;
+
+    const pagesPayload = reordered.map((p, idx) => ({
+      id: p.id,
+      position: idx
+    }));
+
+    try {
+      await ApiClient.post(`/v1/aac/boards/${board.id}/reorder-pages`, { pages: pagesPayload });
+      onBoardUpdated();
+    } catch (err: any) {
+      showToast('Erro ao reordenar categorias', 'error');
     }
   };
 
@@ -340,7 +534,7 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('pages')}
+            onClick={() => { setActiveTab('pages'); setEditingPage(null); }}
             className={`px-4 py-2.5 font-bold text-xs rounded-t-xl transition-all border-b-2 cursor-pointer ${
               activeTab === 'pages'
                 ? 'border-purple-600 text-purple-700 bg-purple-50/50'
@@ -364,13 +558,15 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
 
         {/* Conteúdo das Abas */}
         <div className="flex-1 overflow-y-auto p-6">
+          {/* ========================================================================= */}
           {/* ABA 1: CARTÕES */}
+          {/* ========================================================================= */}
           {activeTab === 'cards' && (
             <div className="space-y-6">
               {/* Seletor de Página Atual */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-600">Página Atual:</span>
+                  <span className="text-xs font-bold text-slate-600">Categoria Atual:</span>
                   <select
                     value={selectedPageId}
                     onChange={e => {
@@ -394,7 +590,7 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 transition-colors shadow-xs cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Adicionar Cartão nesta Página</span>
+                    <span>Adicionar Cartão nesta Categoria</span>
                   </button>
                 )}
               </div>
@@ -595,7 +791,7 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
               <div className="space-y-2">
                 {pageCards.length === 0 ? (
                   <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 text-xs">
-                    Nenhum cartão nesta página ainda. Clique em "Adicionar Cartão nesta Página" acima.
+                    Nenhum cartão nesta categoria ainda. Clique em "Adicionar Cartão nesta Categoria" acima.
                   </div>
                 ) : (
                   pageCards.map((card, idx) => {
@@ -658,7 +854,7 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Ações de Reordenação e Edição */}
+                        {/* Ações de Reordenação, Duplicação e Edição */}
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                           <button
                             type="button"
@@ -678,6 +874,17 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                           >
                             <MoveDown className="w-4 h-4" />
                           </button>
+
+                          {/* Botão Duplicar Cartão */}
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateCard(card.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                            title="Duplicar cartão"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => handleStartEditCard(card)}
@@ -703,7 +910,9 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
             </div>
           )}
 
-          {/* ABA 2: PÁGINAS */}
+          {/* ========================================================================= */}
+          {/* ABA 2: PÁGINAS E CATEGORIAS */}
+          {/* ========================================================================= */}
           {activeTab === 'pages' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -712,18 +921,18 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                     Páginas e Categorias Temáticas
                   </h4>
                   <p className="text-xs text-slate-500">
-                    Organize as diferentes telas de comunicação da prancha.
+                    Crie, renomeie, mude ícones, reordene, duplique ou exclua categorias da prancha.
                   </p>
                 </div>
 
-                {!isCreatingPage && (
+                {!isCreatingPage && !editingPage && (
                   <button
                     type="button"
                     onClick={() => { setIsCreatingPage(true); setNewPageName(''); }}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 transition-colors shadow-xs cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Nova Página</span>
+                    <span>Nova Categoria</span>
                   </button>
                 )}
               </div>
@@ -731,11 +940,11 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
               {/* Formulário Nova Página */}
               {isCreatingPage && (
                 <div className="p-4 rounded-2xl bg-purple-50/50 border border-purple-200 space-y-3">
-                  <h5 className="text-xs font-bold text-purple-900">Adicionar Nova Página</h5>
+                  <h5 className="text-xs font-bold text-purple-900">Adicionar Nova Categoria</h5>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Nome da Página *
+                        Nome da Categoria *
                       </label>
                       <input
                         type="text"
@@ -754,13 +963,11 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                         onChange={e => setNewPageIcon(e.target.value)}
                         className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-hidden"
                       >
-                        <option value="Layers">Camadas (Padrão)</option>
-                        <option value="Home">Início / Casa</option>
-                        <option value="AlertCircle">Necessidades / Alerta</option>
-                        <option value="Smile">Sentimentos / Emoções</option>
-                        <option value="Sparkles">Atividades / Lazer</option>
-                        <option value="Coffee">Alimentos & Bebidas</option>
-                        <option value="Heart">Saúde & Cuidados</option>
+                        {AVAILABLE_PAGE_ICONS.map(ic => (
+                          <option key={ic.value} value={ic.value}>
+                            {ic.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -779,7 +986,61 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                       disabled={savingPage}
                       className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 transition-colors cursor-pointer shadow-xs"
                     >
-                      {savingPage ? 'Criando…' : 'Salvar Página'}
+                      {savingPage ? 'Criando…' : 'Salvar Categoria'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Formulário Editar Página Existente */}
+              {editingPage && (
+                <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 space-y-3">
+                  <h5 className="text-xs font-bold text-amber-900">Editar Categoria: {editingPage.name}</h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Nome da Categoria *
+                      </label>
+                      <input
+                        type="text"
+                        value={editPageName}
+                        onChange={e => setEditPageName(e.target.value)}
+                        className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-hidden"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Ícone Representativo
+                      </label>
+                      <select
+                        value={editPageIcon}
+                        onChange={e => setEditPageIcon(e.target.value)}
+                        className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-hidden"
+                      >
+                        {AVAILABLE_PAGE_ICONS.map(ic => (
+                          <option key={ic.value} value={ic.value}>
+                            {ic.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingPage(null)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEditPage}
+                      disabled={savingEditPage}
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 transition-colors cursor-pointer shadow-xs"
+                    >
+                      {savingEditPage ? 'Salvando…' : 'Salvar Alterações'}
                     </button>
                   </div>
                 </div>
@@ -790,11 +1051,11 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                 {(board.pages || []).map((page, pIdx) => (
                   <div
                     key={page.id}
-                    className="flex items-center justify-between p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs"
+                    className="flex items-center justify-between p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-purple-200 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">
-                        {pIdx + 1}
+                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        {getCategoryIcon(page.icon)}
                       </div>
                       <div>
                         <span className="text-xs font-bold text-slate-800 block">
@@ -807,6 +1068,47 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1">
+                      {/* Reordenar Categoria */}
+                      <button
+                        type="button"
+                        onClick={() => handleMovePage(pIdx, 'up')}
+                        disabled={pIdx === 0}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                        title="Mover para cima"
+                      >
+                        <MoveUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMovePage(pIdx, 'down')}
+                        disabled={pIdx === (board.pages?.length || 0) - 1}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                        title="Mover para baixo"
+                      >
+                        <MoveDown className="w-4 h-4" />
+                      </button>
+
+                      {/* Duplicar Categoria */}
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicatePage(page.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                        title="Duplicar categoria e seus cartões"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+
+                      {/* Editar Nome e Ícone */}
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditPage(page)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors cursor-pointer"
+                        title="Editar nome e ícone da categoria"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      {/* Excluir Categoria */}
                       <button
                         type="button"
                         onClick={() => handleDeletePage(page.id)}
@@ -823,7 +1125,9 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
             </div>
           )}
 
+          {/* ========================================================================= */}
           {/* ABA 3: CONFIGURAÇÕES DA PRANCHA */}
+          {/* ========================================================================= */}
           {activeTab === 'settings' && (
             <div className="max-w-xl space-y-4">
               <div>
@@ -863,7 +1167,7 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                       onClick={() => setBoardColumns(cols)}
                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         boardColumns === cols
-                          ? 'bg-purple-600 text-white shadow-xs'
+                          ? 'bg-purple-600 text-white shadow-sm'
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                     >
@@ -875,25 +1179,26 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Descrição / Observações Clínicas da Prancha
+                  Observações / Descrição Clínica
                 </label>
                 <textarea
                   value={boardDescription}
                   onChange={e => setBoardDescription(e.target.value)}
                   rows={3}
-                  placeholder="Objetivos clínicos, nível de comunicador e recomendações para parceiros comunicativos..."
-                  className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-hidden"
+                  placeholder="Objetivos terapêuticos, orientações para a família ou escola..."
+                  className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-300 bg-white focus:outline-hidden"
                 />
               </div>
 
-              <div className="pt-2">
+              <div className="pt-3">
                 <button
                   type="button"
                   onClick={handleSaveSettings}
                   disabled={savingSettings}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 transition-colors shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 transition-colors shadow-sm cursor-pointer"
                 >
-                  {savingSettings ? 'Salvando…' : 'Salvar Configurações'}
+                  <Check className="w-4 h-4" />
+                  <span>{savingSettings ? 'Salvando…' : 'Salvar Configurações da Prancha'}</span>
                 </button>
               </div>
             </div>
@@ -903,3 +1208,5 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
     </div>
   );
 };
+
+export default AACBoardEditorModal;
