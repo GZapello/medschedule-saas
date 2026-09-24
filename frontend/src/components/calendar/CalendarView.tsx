@@ -43,10 +43,33 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Filtros
-  const [selectedProf, setSelectedProf] = useState<string>('all');
+  // Identifica o ID do profissional vinculado ao usuário logado (se role="professional")
+  const userProfessionalId = useMemo(() => {
+    if (!auth.isProfessional) return null;
+    if (auth.currentUser?.professionalId) return auth.currentUser.professionalId;
+    if (auth.currentUser?.id && professionals.length > 0) {
+      const match = professionals.find(p => (p as any).user_id === auth.currentUser?.id);
+      if (match) return match.id;
+    }
+    return null;
+  }, [auth.isProfessional, auth.currentUser?.professionalId, auth.currentUser?.id, professionals]);
+
+  // Filtros: profissional logado assume automaticamente a própria agenda; clinic_admin inicia em 'all'
+  const [selectedProf, setSelectedProf] = useState<string>(() => {
+    if (auth.isProfessional && auth.currentUser?.professionalId) {
+      return auth.currentUser.professionalId;
+    }
+    return 'all';
+  });
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedProfSchedule, setSelectedProfSchedule] = useState<{ schedules: any[]; blockedTimes: any[] } | null>(null);
+
+  // Sincroniza selectedProf se o usuário for profissional e o ID for resolvido assincronamente
+  useEffect(() => {
+    if (auth.isProfessional && userProfessionalId) {
+      setSelectedProf(prev => (prev === 'all' ? userProfessionalId : prev));
+    }
+  }, [auth.isProfessional, userProfessionalId]);
 
   const fetchSelectedProfSchedule = useCallback((profId: string) => {
     if (profId && profId !== 'all') {
@@ -84,125 +107,213 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     const dateObj = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
     const dayOfWeek = dateObj.getUTCDay();
 
-    const slotMinutes = parseInt(timeSlot.slice(0, 2), 10) * 60 + parseInt(timeSlot.slice(3, 5), 10);
+    const parseMin = (t: string) => {
+      if (!t || t.length < 5) return 0;
+      return parseInt(t.slice(0, 2), 10) * 60 + parseInt(t.slice(3, 5), 10);
+    };
+
+    const slotMinutes = parseMin(timeSlot);
     const slotDuration = 30;
     const slotEndMinutes = slotMinutes + slotDuration;
+    const slotDateTimeStr = `${dateStr}T${timeSlot}:00`;
 
-    if (selectedProf && selectedProf !== 'all') {
-      if (!selectedProfSchedule) {
-        return { available: true };
-      }
-
-      // Utiliza estritamente a escala persistida no banco deste profissional
-      const activeSchedules = (selectedProfSchedule.schedules || []).filter(
+    // Função interna: avalia a disponibilidade de um profissional para este slot
+    const evalProf = (pScheds: any[], pBlocked: any[]) => {
+      const activeScheds = (pScheds || []).filter(
         (s: any) => Number(s.day_of_week) === Number(dayOfWeek) && Boolean(s.is_active)
       );
 
-      if (activeSchedules.length === 0) {
-        return { available: false, reason: 'Folga / Sem escala' };
-      }
-
-      let fitsInAnyShift = false;
-      let breakConflict = false;
-
-      for (const sched of activeSchedules) {
-        if (!sched.start_time || !sched.end_time) continue;
-        const startMin = parseInt(sched.start_time.slice(0, 2), 10) * 60 + parseInt(sched.start_time.slice(3, 5), 10);
-        const endMin = parseInt(sched.end_time.slice(0, 2), 10) * 60 + parseInt(sched.end_time.slice(3, 5), 10);
-
-        const insideShift = slotMinutes >= startMin && slotEndMinutes <= endMin;
-        let insideBreak = false;
-
-        if (insideShift && sched.break_start && sched.break_end) {
-          const bStart = parseInt(sched.break_start.slice(0, 2), 10) * 60 + parseInt(sched.break_start.slice(3, 5), 10);
-          const bEnd = parseInt(sched.break_end.slice(0, 2), 10) * 60 + parseInt(sched.break_end.slice(3, 5), 10);
-          if (slotMinutes < bEnd && slotEndMinutes > bStart) {
-            insideBreak = true;
-            breakConflict = true;
-          }
-        }
-
-        if (insideShift && !insideBreak) {
-          fitsInAnyShift = true;
-          break;
-        }
-      }
-
-      if (!fitsInAnyShift) {
+      // Dia sem expediente deste profissional
+      if (activeScheds.length === 0) {
         return {
-          available: false,
-          reason: breakConflict ? 'Intervalo' : 'Fora da escala',
-          isBreak: breakConflict
+          hasSchedule: false,
+          working: false,
+          inBreak: false,
+          isBlocked: false,
+          reason: 'Folga / Sem escala'
         };
       }
 
-      if (Array.isArray(selectedProfSchedule.blockedTimes)) {
-        const slotDateTimeStr = `${dateStr}T${timeSlot}:00`;
-        const isBlocked = selectedProfSchedule.blockedTimes.some((b: any) => {
+      let earliestStart = 24 * 60;
+      let latestEnd = 0;
+      for (const s of activeScheds) {
+        if (s.start_time) {
+          const sm = parseMin(s.start_time);
+          if (sm < earliestStart) earliestStart = sm;
+        }
+        if (s.end_time) {
+          const em = parseMin(s.end_time);
+          if (em > latestEnd) latestEnd = em;
+        }
+      }
+
+      // Horário antes de start_time ou depois de end_time
+      if (slotMinutes < earliestStart || slotMinutes >= latestEnd) {
+        return {
+          hasSchedule: true,
+          working: false,
+          inBreak: false,
+          isBlocked: false,
+          reason: 'Fora da escala'
+        };
+      }
+
+      // Bloqueios pontuais (férias, atestado, bloqueio de agenda)
+      let isBlocked = false;
+      if (Array.isArray(pBlocked)) {
+        isBlocked = pBlocked.some((b: any) => {
           const bStart = (b.start_datetime || '').slice(0, 19);
           const bEnd = (b.end_datetime || '').slice(0, 19);
           return slotDateTimeStr >= bStart && slotDateTimeStr < bEnd;
         });
-        if (isBlocked) {
-          return { available: false, reason: 'Bloqueado', isBlocked: true };
+      }
+
+      if (isBlocked) {
+        return {
+          hasSchedule: true,
+          working: false,
+          inBreak: false,
+          isBlocked: true,
+          reason: 'Bloqueado'
+        };
+      }
+
+      let inWorkingShift = false;
+      let inBreak = false;
+
+      for (const sched of activeScheds) {
+        if (!sched.start_time || !sched.end_time) continue;
+        const startMin = parseMin(sched.start_time);
+        const endMin = parseMin(sched.end_time);
+
+        if (slotMinutes >= startMin && slotEndMinutes <= endMin) {
+          if (sched.break_start && sched.break_end) {
+            const bStart = parseMin(sched.break_start);
+            const bEnd = parseMin(sched.break_end);
+            if (slotMinutes < bEnd && slotEndMinutes > bStart) {
+              inBreak = true;
+            } else {
+              inWorkingShift = true;
+            }
+          } else {
+            inWorkingShift = true;
+          }
         }
       }
 
-      return { available: true };
+      // Intervalo entre turnos no mesmo dia (ex: turno manhã até 12:00 e turno tarde a partir de 13:30)
+      if (!inWorkingShift && !inBreak && slotMinutes >= earliestStart && slotMinutes < latestEnd) {
+        inBreak = true;
+      }
+
+      if (inWorkingShift) {
+        return {
+          hasSchedule: true,
+          working: true,
+          inBreak: false,
+          isBlocked: false,
+          reason: 'Disponível'
+        };
+      }
+
+      if (inBreak) {
+        return {
+          hasSchedule: true,
+          working: false,
+          inBreak: true,
+          isBlocked: false,
+          reason: 'Intervalo'
+        };
+      }
+
+      return {
+        hasSchedule: true,
+        working: false,
+        inBreak: false,
+        isBlocked: false,
+        reason: 'Fora da escala'
+      };
+    };
+
+    // Caso 1: Profissional Específico
+    if (selectedProf && selectedProf !== 'all') {
+      const profFromList = professionals.find(p => p.id === selectedProf);
+      const schedules = (selectedProfSchedule?.schedules && selectedProfSchedule.schedules.length > 0)
+        ? selectedProfSchedule.schedules
+        : (profFromList as any)?.schedules || [];
+      const blockedTimes = (selectedProfSchedule?.blockedTimes && selectedProfSchedule.blockedTimes.length > 0)
+        ? selectedProfSchedule.blockedTimes
+        : (profFromList as any)?.blockedTimes || [];
+
+      if (schedules.length === 0 && !selectedProfSchedule) {
+        return { available: true };
+      }
+
+      const st = evalProf(schedules, blockedTimes);
+      if (st.working) {
+        return { available: true };
+      }
+
+      return {
+        available: false,
+        reason: st.reason,
+        isBreak: st.inBreak,
+        isBlocked: st.isBlocked
+      };
     }
 
-    // Modo "Todos os Profissionais": checa se pelo menos um profissional ativo está em atendimento no horário
+    // Caso 2: Modo "Todos os Profissionais"
     const activeProfs = professionals.filter(p => p.active === 1 || (p.active as any) === true);
     if (activeProfs.length === 0) return { available: true };
 
-    let anyProfWorking = false;
+    let anyWorking = false;
+    let anyInBreak = false;
+    let anyBlocked = false;
+    let anyHasScheduleOnDay = false;
+
     for (const p of activeProfs) {
       const pScheds = (p as any).schedules || [];
-      const activeScheds = pScheds.filter(
-        (s: any) => Number(s.day_of_week) === Number(dayOfWeek) && Boolean(s.is_active)
-      );
+      const pBlocked = (p as any).blockedTimes || [];
 
-      for (const s of activeScheds) {
-        if (!s.start_time || !s.end_time) continue;
-        const startMin = parseInt(s.start_time.slice(0, 2), 10) * 60 + parseInt(s.start_time.slice(3, 5), 10);
-        const endMin = parseInt(s.end_time.slice(0, 2), 10) * 60 + parseInt(s.end_time.slice(3, 5), 10);
-        if (slotMinutes >= startMin && slotEndMinutes <= endMin) {
-          let insideBreak = false;
-          if (s.break_start && s.break_end) {
-            const bStart = parseInt(s.break_start.slice(0, 2), 10) * 60 + parseInt(s.break_start.slice(3, 5), 10);
-            const bEnd = parseInt(s.break_end.slice(0, 2), 10) * 60 + parseInt(s.break_end.slice(3, 5), 10);
-            if (slotMinutes < bEnd && slotEndMinutes > bStart) {
-              insideBreak = true;
-            }
-          }
+      const st = evalProf(pScheds, pBlocked);
 
-          if (!insideBreak) {
-            // Checa se o profissional não possui bloqueio pontual (férias, atestado, etc.)
-            let isBlocked = false;
-            if (Array.isArray((p as any).blockedTimes)) {
-              const slotDateTimeStr = `${dateStr}T${timeSlot}:00`;
-              isBlocked = (p as any).blockedTimes.some((b: any) => {
-                const bStart = (b.start_datetime || '').slice(0, 19);
-                const bEnd = (b.end_datetime || '').slice(0, 19);
-                return slotDateTimeStr >= bStart && slotDateTimeStr < bEnd;
-              });
-            }
-
-            if (!isBlocked) {
-              anyProfWorking = true;
-              break;
-            }
-          }
-        }
+      if (st.hasSchedule) {
+        anyHasScheduleOnDay = true;
       }
-      if (anyProfWorking) break;
+      if (st.working) {
+        anyWorking = true;
+        break; // Pelo menos um profissional trabalhando -> horário disponível
+      }
+      if (st.inBreak) {
+        anyInBreak = true;
+      }
+      if (st.isBlocked) {
+        anyBlocked = true;
+      }
     }
 
-    if (!anyProfWorking) {
-      return { available: false, reason: 'Fora da escala' };
+    // - se pelo menos UM profissional estiver trabalhando -> disponível
+    if (anyWorking) {
+      return { available: true };
     }
 
-    return { available: true };
+    // - dia sem expediente -> "Folga / Sem escala"
+    if (!anyHasScheduleOnDay) {
+      return { available: false, reason: 'Folga / Sem escala' };
+    }
+
+    // - se nenhum estiver trabalhando, mas houver profissionais em intervalo -> "Intervalo"
+    if (anyInBreak) {
+      return { available: false, reason: 'Intervalo', isBreak: true };
+    }
+
+    // - blockedTimes -> "Bloqueado"
+    if (anyBlocked) {
+      return { available: false, reason: 'Bloqueado', isBlocked: true };
+    }
+
+    // - somente mostrar “Fora da escala” quando realmente estiver fora de todos os turnos
+    return { available: false, reason: 'Fora da escala' };
   }, [selectedProf, selectedProfSchedule, professionals]);
 
   // Modal de Detalhes
@@ -774,7 +885,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                                 </span>
                               ) : (
                                 <span className="text-[10px] font-medium text-slate-400">
-                                  Fora da escala
+                                  {availability.reason || 'Fora da escala'}
                                 </span>
                               )}
                             </div>
@@ -884,14 +995,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       <div className="text-xs font-medium py-1">
                         {availability.isBreak ? (
                           <span className="inline-flex items-center gap-1.5 font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-md">
-                            <Coffee className="w-3.5 h-3.5 text-amber-700" /> Intervalo / Almoço
+                            <Coffee className="w-3.5 h-3.5 text-amber-700" /> Intervalo
                           </span>
                         ) : availability.isBlocked ? (
                           <span className="inline-flex items-center gap-1.5 font-bold text-rose-800 bg-rose-100/80 border border-rose-300 px-2 py-0.5 rounded-md">
-                            <Ban className="w-3.5 h-3.5 text-rose-700" /> Horário Bloqueado
+                            <Ban className="w-3.5 h-3.5 text-rose-700" /> Bloqueado
                           </span>
                         ) : (
-                          <span className="text-slate-400 font-medium">Fora da escala do profissional</span>
+                          <span className="text-slate-400 font-medium">
+                            {availability.reason || 'Fora da escala'}
+                          </span>
                         )}
                       </div>
                     ) : (
