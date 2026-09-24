@@ -245,6 +245,8 @@ export function getModuleForProfession(auth: {
   isPsychologist?: boolean;
   isPsychopedagogue?: boolean;
   isPersonalTrainer?: boolean;
+  isDoctor?: boolean;
+  isZemdaMed?: boolean;
   isZemdaPsico?: boolean;
   isZemdaPP?: boolean;
   isZemdaPersonal?: boolean;
@@ -255,11 +257,18 @@ export function getModuleForProfession(auth: {
   isZemdaTO?: boolean;
   currentUser?: any;
   currentTenant?: any;
-}): 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general' {
+}): 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general' {
+  // 1. Prioridade absoluta: commercialModule do usuário vindo do backend/AuthContext
+  const commModule = auth.currentUser?.commercialModule;
+  if (commModule && commModule in ALL_CLINICAL_MODULES) {
+    return commModule as any;
+  }
+  // 2. Detecção por flags de perfil
+  if (auth.isDoctor || auth.isZemdaMed) return 'ZemdaMed';
+  if (auth.isPersonalTrainer || auth.isZemdaPersonal) return 'ZemdaPersonal';
   if (auth.isSpeechTherapist || auth.isZemdaFono) return 'ZemdaFono';
   if (auth.isPsychologist || auth.isZemdaPsico) return 'ZemdaPsico';
   if (auth.isPsychopedagogue || auth.isZemdaPP) return 'ZemdaPP';
-  if (auth.isPersonalTrainer || auth.isZemdaPersonal) return 'ZemdaPersonal';
   if (auth.isPhysiotherapist || auth.isZemdaFisio) return 'ZemdaFisio';
   if (auth.isOccupationalTherapist || auth.isZemdaTO) return 'ZemdaTO';
   if (auth.isNutritionist || auth.isZemdaNutri) return 'ZemdaNutri';

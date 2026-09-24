@@ -90,6 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     hasCapability,
     isZemdaBody,
     commercialModule,
+    clinicalWorkspace,
     clientTermLabel
   } = useAuth();
 
@@ -103,7 +104,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'patients', label: `${clientTermLabel}s`, icon: Users, visible: true },
         {
           id: 'clinical',
-          label: 'Prontuário & Evolução',
+          label: (commercialModule === null && (clinicalWorkspace === 'general' || isProfessional))
+            ? 'Atendimento Clínico'
+            : 'Prontuário & Evolução',
           icon: FileText,
           visible: isClinicAdmin || isProfessional
         },

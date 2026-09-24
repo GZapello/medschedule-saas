@@ -180,6 +180,7 @@ export class TaxonomyController {
           accessLabel,
           displayOption,
           administrative: isAdministrative,
+          clinicalWorkspace: resolution.clinicalWorkspace,
           taxonomyCategory: resolution.taxonomyCategory,
           isSpecificAlias: resolution.isSpecificAlias
         };

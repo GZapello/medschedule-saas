@@ -10,9 +10,11 @@ import { PsychologyWorkspace } from '../psychology/PsychologyWorkspace';
 import { PsychopedagogyWorkspace } from '../psychopedagogy/PsychopedagogyWorkspace';
 import { PhysiotherapyWorkspace } from '../physiotherapy/PhysiotherapyWorkspace';
 import { ZemdaMedWorkspace } from '../medical/ZemdaMedWorkspace';
+import { ZemdaPersonalView } from '../personal/ZemdaPersonalView';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
-import { Activity, FileText, Stethoscope, ChevronLeft } from 'lucide-react';
+import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
+import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell } from 'lucide-react';
 
 export function AppointmentConsultation({
   appointment,
@@ -124,6 +126,8 @@ export function AppointmentConsultation({
     effectiveModuleType === 'ZemdaPsico' ? PsychologyWorkspace :
     effectiveModuleType === 'ZemdaPP' ? PsychopedagogyWorkspace :
     effectiveModuleType === 'ZemdaFisio' ? PhysiotherapyWorkspace :
+    effectiveModuleType === 'ZemdaPersonal' ? ZemdaPersonalView :
+    effectiveModuleType === 'general' ? GeneralClinicalWorkspace :
     null;
 
   // Se o profissional estiver visualizando o ZemdaBody dentro do mesmo atendimento:
@@ -188,6 +192,55 @@ export function AppointmentConsultation({
 
   // Se o módulo especializado for o ativo:
   if (activeTab === 'specialized' && Workspace) {
+    if (effectiveModuleType === 'ZemdaPersonal') {
+      return (
+        <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
+          <div className="flex flex-wrap items-center justify-between px-5 py-3 bg-white border-b border-slate-200 sticky top-0 z-10">
+            <div className="flex items-center gap-2">
+              <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer">
+                Voltar à agenda
+              </button>
+              <span className="font-bold text-xs text-slate-800 border-l pl-3 border-slate-200">
+                {appointment.patient_name || 'Aluno'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setActiveTab('records')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5" /> Prontuário
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-orange-600 text-white shadow-xs cursor-default"
+              >
+                <Dumbbell className="w-3.5 h-3.5" /> ZemdaPersonal
+              </button>
+              {isZemdaBody && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('zemda_body')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer"
+                >
+                  <Activity className="w-3.5 h-3.5" /> ZemdaBody
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+            <ZemdaPersonalView
+              key={appointment.id}
+              initialStudentId={appointment.patient_id}
+              lockStudentContext={true}
+            />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
         <div className="flex flex-wrap items-center justify-between px-5 py-3 bg-white border-b border-slate-200 sticky top-0 z-10">
@@ -256,7 +309,9 @@ export function AppointmentConsultation({
         effectiveModuleType === 'ZemdaTO' ? 'ZemdaTO' :
         effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
         effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
-        (isDoctor || isZemdaMed ? 'ZemdaMed' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
+        effectiveModuleType === 'ZemdaPersonal' ? 'ZemdaPersonal' :
+        effectiveModuleType === 'general' ? `Atendimento Clínico • ${currentUser?.canonicalProfessionName || currentUser?.professionName || 'Geral'}` :
+        (isDoctor || isZemdaMed ? 'ZemdaMed' : isPersonalTrainer || isZemdaPersonal ? 'ZemdaPersonal' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
       }
     />
   );

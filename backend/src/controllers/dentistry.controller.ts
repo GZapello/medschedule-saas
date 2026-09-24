@@ -715,15 +715,28 @@ export class DentistryController {
         return;
       }
 
-      const {
-        patientId, labName, workType, toothNumber, shadeColor,
-        material, sentDate, expectedDate, receivedDate, costValue, status = 'requested', notes
-      } = req.body;
+      const patientId = req.body.patientId || req.body.patient_id;
+      const labName = req.body.labName || req.body.lab_name;
+      const workType = req.body.workType || req.body.work_type;
+      const toothNumber = req.body.toothNumber || req.body.tooth_number;
+      const shadeColor = req.body.shadeColor || req.body.shade_color || req.body.vita_shade;
+      const material = req.body.material;
+      const sentDate = req.body.sentDate || req.body.sent_date;
+      const expectedDate = req.body.expectedDate || req.body.expected_date || req.body.delivery_date;
+      const receivedDate = req.body.receivedDate || req.body.received_date;
+      const costValue = req.body.costValue ?? req.body.cost_value ?? req.body.cost;
+      const rawStatus = req.body.status;
+      const notes = req.body.notes;
 
       if (!patientId || !labName || !workType) {
         res.status(400).json({ error: 'patientId, labName e workType são obrigatórios' });
         return;
       }
+
+      const validStatuses = ['sent_to_lab', 'in_production', 'delivered_to_clinic', 'tested_adjusted', 'installed', 'canceled'];
+      const status = (!rawStatus || rawStatus === 'requested' || !validStatuses.includes(rawStatus))
+        ? 'sent_to_lab'
+        : rawStatus;
 
       let profId: string | null = null;
       if (req.user?.role === 'professional') {
@@ -745,7 +758,8 @@ export class DentistryController {
         expectedDate || null, receivedDate || null, Number(costValue || 0), status, notes || null
       );
 
-      res.status(201).json({ id, message: 'Trabalho de prótese registrado com sucesso' });
+      const created = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      res.status(201).json({ id, message: 'Trabalho de prótese registrado com sucesso', prosthetic: created });
     } catch (err: any) {
       console.error('[DentistryController.saveProsthetic] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar trabalho de laboratório' });
@@ -763,6 +777,12 @@ export class DentistryController {
       }
 
       const { status, receivedDate, notes } = req.body;
+      const validStatuses = ['sent_to_lab', 'in_production', 'delivered_to_clinic', 'tested_adjusted', 'installed', 'canceled'];
+
+      if (status !== undefined && status !== null && !validStatuses.includes(status)) {
+        res.status(400).json({ error: `Status inválido. Valores permitidos: ${validStatuses.join(', ')}` });
+        return;
+      }
 
       db.prepare(`
         UPDATE dental_prosthetics_lab SET
@@ -773,7 +793,8 @@ export class DentistryController {
         WHERE id = ? AND tenant_id = ?
       `).run(status || null, receivedDate || null, notes || null, id, tenantId);
 
-      res.json({ message: 'Trabalho de prótese atualizado com sucesso' });
+      const updated = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      res.json({ message: 'Trabalho de prótese atualizado com sucesso', prosthetic: updated });
     } catch (err: any) {
       console.error('[DentistryController.updateProsthetic] Erro:', err);
       res.status(500).json({ error: 'Erro ao atualizar prótese' });

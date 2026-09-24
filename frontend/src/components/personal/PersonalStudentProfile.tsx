@@ -40,7 +40,7 @@ import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 
 interface PersonalStudentProfileProps {
   studentId: string;
-  onBack: () => void;
+  onBack?: () => void;
   onOpenNewWorkout: () => void;
   onEditWorkout: (workout: Workout) => void;
   onOpenNewAssessment: () => void;
@@ -331,12 +331,14 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
         <AlertCircle className="w-10 h-10 text-amber-500" />
         <h3 className="font-bold text-slate-800 text-sm">Aluno não encontrado</h3>
         <p className="text-slate-500 text-xs">O aluno selecionado não foi localizado ou o identificador é inválido.</p>
-        <button
-          onClick={onBack}
-          className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
-        >
-          Voltar para Lista de Alunos
-        </button>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+          >
+            Voltar para Lista de Alunos
+          </button>
+        )}
       </div>
     );
   }
@@ -345,13 +347,22 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
     <div className="space-y-6">
       {/* Botão de Retorno e Ações Superiores */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <button
-          onClick={onBack}
-          className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-sm transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Voltar para Lista de Alunos
-        </button>
+        {onBack ? (
+          <button
+            onClick={onBack}
+            className="px-3.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Voltar para Lista de Alunos
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 bg-orange-100 text-orange-800 text-[11px] font-bold rounded-xl flex items-center gap-1.5">
+              <Dumbbell className="w-3.5 h-3.5" />
+              Atendimento em Andamento
+            </span>
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <button

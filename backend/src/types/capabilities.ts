@@ -50,6 +50,8 @@ export interface ProfessionCapabilitiesConfig {
 export interface ComputedUserCapabilities {
   professionId: string;
   commercialModule: string;
+  clinicalWorkspace?: string | null;
+  taxonomyCategory?: string;
   practiceAreaIds: string[];
   medicalSpecialtyIds?: string[];
   medicalPracticeAreaIds?: string[];

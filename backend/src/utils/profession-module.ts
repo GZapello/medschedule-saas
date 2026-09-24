@@ -50,6 +50,7 @@ export interface CanonicalProfessionResolution {
   canonicalId: string;
   canonicalName: string;
   commercialModule: ZemdaModule | null;
+  clinicalWorkspace?: string | null;
   flags: ModuleFlags;
   taxonomyCategory: ProfessionTaxonomyCategory;
   isSpecificAlias: boolean;
@@ -78,6 +79,50 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
   const combined = `${pId} ${pName} ${pSlug}`.toLowerCase();
 
   // =========================================================================
+  // 0. PROFISSÕES E DOMÍNIOS DEFINITIVAMENTE FORA DO ESCOPO DE SAÚDE HUMANA
+  // =========================================================================
+  if (
+    pId === 'prof-veterinario' ||
+    pId === 'prof-medicina-veterinaria' ||
+    pSlug === 'veterinario' ||
+    pSlug === 'medicina-veterinaria' ||
+    combined.includes('veterin') ||
+    regType === 'CRMV' ||
+    pId === 'prof-advogado' ||
+    pId === 'prof-contador' ||
+    pId === 'prof-consultor' ||
+    pId === 'prof-coach' ||
+    pId === 'prof-cabeleireiro' ||
+    pId === 'prof-lash-designer' ||
+    pId === 'prof-adestrador' ||
+    pId === 'prof-professor-particular' ||
+    pId === 'prof-tutor-escolar' ||
+    combined.includes('advogad') ||
+    combined.includes('contador') ||
+    (combined.includes('consultor') && !combined.includes('amamenta') && !combined.includes('lacta')) ||
+    combined.includes('coach') ||
+    combined.includes('cabeleireir') ||
+    combined.includes('barbeiro') ||
+    combined.includes('lash') ||
+    combined.includes('sobrancelha') ||
+    combined.includes('adestrador') ||
+    combined.includes('professor particular') ||
+    combined.includes('tutor escolar') ||
+    regType === 'OAB' ||
+    regType === 'CRC'
+  ) {
+    return {
+      canonicalId: '',
+      canonicalName: 'Profissão descontinuada / fora do escopo',
+      commercialModule: null,
+      clinicalWorkspace: null,
+      flags: makeFlags(null),
+      taxonomyCategory: 'NON_CLINICAL',
+      isSpecificAlias: false
+    };
+  }
+
+  // =========================================================================
   // 1. ÁREAS DE SAÚDE DE APOIO & OUTRAS (Verificadas antes para evitar falsos positivos)
   // =========================================================================
 
@@ -92,27 +137,8 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-biomedicina',
       canonicalName: 'Biomédico(a)',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'CRBM',
-      taxonomyCategory: 'HEALTH_SUPPORT',
-      isSpecificAlias: false,
-      flags: makeFlags(null)
-    };
-  }
-
-  // 1.2 Medicina Veterinária (DEVE ser verificada antes de Medicina para não colidir com 'médic')
-  if (
-    pId === 'prof-veterinario' ||
-    pId === 'prof-medicina-veterinaria' ||
-    pSlug === 'veterinario' ||
-    pSlug === 'medicina-veterinaria' ||
-    combined.includes('veterin') ||
-    regType === 'CRMV'
-  ) {
-    return {
-      canonicalId: 'prof-veterinario',
-      canonicalName: 'Médico(a) Veterinário(a)',
-      commercialModule: null,
-      boardLabel: 'CRMV',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
       flags: makeFlags(null)
@@ -132,6 +158,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-tec-enfermagem',
       canonicalName: 'Técnico(a) de Enfermagem',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'COREN',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -151,6 +178,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-enfermeiro',
       canonicalName: 'Enfermeiro(a)',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'COREN',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -169,6 +197,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-farmacia',
       canonicalName: 'Farmacêutico(a)',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'CRF',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -189,6 +218,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-servico-social',
       canonicalName: 'Assistente Social',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'CRESS',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -202,6 +232,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-musicoterapia',
       canonicalName: 'Musicoterapeuta',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'UBAM',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -214,6 +245,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-arteterapia',
       canonicalName: 'Arteterapeuta',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'UBAAT',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -226,6 +258,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-podologia',
       canonicalName: 'Podólogo(a)',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'Registro',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -238,6 +271,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-acupuntura',
       canonicalName: 'Acupunturista',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'Registro',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -250,6 +284,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-esteticista',
       canonicalName: 'Esteticista',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'Registro Técnico',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -262,6 +297,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-doula',
       canonicalName: 'Doula / Consultora de Amamentação',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'Certificação',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -274,6 +310,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-instrutor-pilates',
       canonicalName: 'Instrutor de Pilates',
       commercialModule: null,
+      clinicalWorkspace: 'general',
       boardLabel: 'Certificação',
       taxonomyCategory: 'HEALTH_SUPPORT',
       isSpecificAlias: false,
@@ -340,6 +377,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: pId || 'prof-administrador',
       canonicalName: name,
       commercialModule: null,
+      clinicalWorkspace: null,
       boardLabel: board,
       taxonomyCategory: 'ADMINISTRATIVE',
       isSpecificAlias: false,
@@ -351,37 +389,14 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
   // 3. ÁREAS NÃO CLÍNICAS (Outros domínios)
   // =========================================================================
   if (
-    pId === 'prof-advogado' ||
-    pId === 'prof-contador' ||
-    pId === 'prof-consultor' ||
-    pId === 'prof-coach' ||
-    pId === 'prof-cabeleireiro' ||
-    pId === 'prof-lash-designer' ||
-    pId === 'prof-adestrador' ||
-    pId === 'prof-professor-particular' ||
-    pId === 'prof-tutor-escolar' ||
-    pId === 'prof-outro' ||
-    combined.includes('advogad') ||
-    combined.includes('contador') ||
-    combined.includes('consultor') ||
-    combined.includes('coach') ||
-    combined.includes('cabeleireir') ||
-    combined.includes('barbeiro') ||
-    combined.includes('lash') ||
-    combined.includes('sobrancelha') ||
-    combined.includes('adestrador') ||
-    combined.includes('professor particular') ||
-    combined.includes('tutor')
+    pId === 'prof-outro'
   ) {
-    let board: string | undefined = undefined;
-    if (combined.includes('advogad') || regType === 'OAB') board = 'OAB';
-    else if (combined.includes('contador') || regType === 'CRC') board = 'CRC';
-
     return {
-      canonicalId: pId || 'prof-outro',
+      canonicalId: 'prof-outro',
       canonicalName: normInput.name || 'Outro Profissional',
       commercialModule: null,
-      boardLabel: board,
+      clinicalWorkspace: null,
+      boardLabel: undefined,
       taxonomyCategory: 'NON_CLINICAL',
       isSpecificAlias: false,
       flags: makeFlags(null)
@@ -404,6 +419,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-psicopedagogo',
       canonicalName: 'Psicopedagogo',
       commercialModule: 'ZemdaPP',
+      clinicalWorkspace: 'ZemdaPP',
       boardLabel: 'ABPp',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -436,6 +452,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-personal-trainer',
       canonicalName: 'Personal Trainer / Profissional de Educação Física',
       commercialModule: 'ZemdaPersonal',
+      clinicalWorkspace: 'ZemdaPersonal',
       boardLabel: 'CREF',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -534,6 +551,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-medico',
       canonicalName: 'Médico',
       commercialModule: 'ZemdaMed',
+      clinicalWorkspace: 'ZemdaMed',
       boardLabel: 'CRM',
       taxonomyCategory: 'SPECIALTY_ALIAS',
       isSpecificAlias: true,
@@ -562,6 +580,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-medico',
       canonicalName: 'Médico',
       commercialModule: 'ZemdaMed',
+      clinicalWorkspace: 'ZemdaMed',
       boardLabel: 'CRM',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -600,6 +619,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-psicologo',
       canonicalName: 'Psicólogo',
       commercialModule: 'ZemdaPsico',
+      clinicalWorkspace: 'ZemdaPsico',
       boardLabel: 'CRP',
       taxonomyCategory: category,
       isSpecificAlias: true,
@@ -626,6 +646,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-psicologo',
       canonicalName: 'Psicólogo',
       commercialModule: 'ZemdaPsico',
+      clinicalWorkspace: 'ZemdaPsico',
       boardLabel: 'CRP',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -649,6 +670,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-fonoaudiologo',
       canonicalName: 'Fonoaudiólogo',
       commercialModule: 'ZemdaFono',
+      clinicalWorkspace: 'ZemdaFono',
       boardLabel: 'CRFa',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -673,6 +695,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-terapeuta-ocupacional',
       canonicalName: 'Terapeuta Ocupacional',
       commercialModule: 'ZemdaTO',
+      clinicalWorkspace: 'ZemdaTO',
       boardLabel: 'CREFITO',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -696,6 +719,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-nutricionista',
       canonicalName: 'Nutricionista',
       commercialModule: 'ZemdaNutri',
+      clinicalWorkspace: 'ZemdaNutri',
       boardLabel: 'CRN',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -725,6 +749,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-fisioterapeuta',
       canonicalName: 'Fisioterapeuta',
       commercialModule: 'ZemdaFisio',
+      clinicalWorkspace: 'ZemdaFisio',
       boardLabel: board,
       taxonomyCategory: 'APPROACH_ALIAS',
       isSpecificAlias: true,
@@ -750,6 +775,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-fisioterapeuta',
       canonicalName: 'Fisioterapeuta',
       commercialModule: 'ZemdaFisio',
+      clinicalWorkspace: 'ZemdaFisio',
       boardLabel: 'CREFITO',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -768,6 +794,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-dentista',
       canonicalName: 'Cirurgião-Dentista',
       commercialModule: 'ZemdaOdonto',
+      clinicalWorkspace: 'ZemdaOdonto',
       boardLabel: 'CRO',
       taxonomyCategory: 'SPECIALTY_ALIAS',
       isSpecificAlias: true,
@@ -796,6 +823,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalId: 'prof-dentista',
       canonicalName: 'Cirurgião-Dentista',
       commercialModule: 'ZemdaOdonto',
+      clinicalWorkspace: 'ZemdaOdonto',
       boardLabel: 'CRO',
       taxonomyCategory: isGeneralAlias ? 'GENERAL_ALIAS' : 'CANONICAL',
       isSpecificAlias: false,
@@ -810,6 +838,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     canonicalId: pId || 'prof-outro-saude',
     canonicalName: normInput.name || 'Outro Profissional da Saúde',
     commercialModule: null,
+    clinicalWorkspace: 'general',
     boardLabel: regType || 'Conselho/Registro',
     taxonomyCategory: 'HEALTH_SUPPORT',
     isSpecificAlias: false,
@@ -855,9 +884,9 @@ export function cleanPracticeAreasForNewProfession(newProfessionId: string, curr
     ZemdaNutri: ['nutri', 'dieta', 'alimentar', 'emagrecimento', 'clínica e funcional'],
     ZemdaPsico: ['psicolog', 'psicólog', 'tcc', 'psicanálise', 'terapia', 'psicoterapia'],
     ZemdaPP: ['psicopedag', 'aprendizagem', 'dificuldades escolares'],
-    ZemdaFisio: ['fisio', 'reabilitação', 'ortopedia', 'traumatologia', 'pilates'],
+    ZemdaFisio: ['fisio', 'reabilita', 'ortoped', 'ortopéd', 'traumato', 'pilates', 'cinesio'],
     ZemdaOdonto: ['odonto', 'dentis', 'clareamento', 'ortodontia', 'endodontia', 'implante'],
-    ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'treinamento', 'condicionamento físico'],
+    ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'musculacao', 'treinamento', 'condicionamento físico'],
     ZemdaMed: ['médic', 'medic', 'clínica médica', 'prescrição', 'soap', 'cid', 'neurologia', 'psiquiatria', 'pediatria', 'cardiologia', 'dermatologia']
   };
 

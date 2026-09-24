@@ -1,8 +1,10 @@
-import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
+import { RegistrationProfessionSelect } from './RegistrationProfessionSelect';
+import { RegistrationProfessionOption, REGISTRATION_PROFESSIONS } from '../../types/professions';
 import {
   Building2,
   User,
@@ -14,7 +16,10 @@ import {
   CheckCircle2,
   ShieldCheck,
   XCircle,
-  ArrowRight
+  ArrowRight,
+  ArrowLeft,
+  Sparkles,
+  AlertCircle
 } from 'lucide-react';
 
 interface InviteRegisterViewProps {
@@ -35,104 +40,12 @@ interface ValidInviteData {
   expiresAt: string;
 }
 
-const PROFESSIONS_LIST = [
-  'Fisioterapeuta',
-  'Fisioterapeuta Pediátrico',
-  'Psicólogo',
-  'Psicólogo Infantil',
-  'Psiquiatra',
-  'Psiquiatra Infantil',
-  'Fonoaudiólogo',
-  'Fonoaudiólogo Infantil',
-  'Nutricionista',
-  'Terapeuta Ocupacional',
-  'Terapeuta Ocupacional Infantil',
-  'Personal Trainer',
-  'Cirurgião-Dentista / Odontologista',
-  'Médico Clínico Geral',
-  'Pediatra',
-  'Neuropsicólogo',
-  'Psicopedagogo',
-  'Psicanalista',
-  'Recepcionista / Atendimento',
-  'Secretária(o)',
-  'Financeiro / Administrativo',
-  'Outro profissional da saúde',
-  'Outro'
-];
-
-const PRACTICE_AREAS_SUGGESTIONS: Record<string, string[]> = {
-  Fisioterapia: [
-    'Traumato-Ortopédica',
-    'Neurológica / Neurofuncional',
-    'Respiratória / Cardiovascular',
-    'Pélvica / Saúde da Mulher',
-    'Fisioterapia Pediátrica',
-    'Fisioterapia Esportiva',
-    'Dermatofuncional',
-    'Gerontologia',
-    'Pilates Clínico',
-    'Reabilitação Vestibular'
-  ],
-  Psicologia: [
-    'Psicologia Clínica',
-    'Terapia Cognitivo-Comportamental (TCC)',
-    'Psicanálise',
-    'Psicologia Infantil / Escolar',
-    'Neuropsicologia / Avaliação',
-    'Terapia Familiar e de Casal',
-    'Transtornos de Ansiedade e Humor',
-    'TEA / TDAH'
-  ],
-  Medicina: [
-    'Clínica Geral',
-    'Pediatria',
-    'Psiquiatria',
-    'Ortopedia e Traumatologia',
-    'Neurologia',
-    'Cardiologia'
-  ],
-  Fonoaudiologia: [
-    'Linguagem e Fala',
-    'Voz Clínica e Profissional',
-    'Audiologia Clínica',
-    'Motricidade Orofacial',
-    'Disfagia',
-    'Fonoaudiologia Infantil'
-  ],
-  Nutrição: [
-    'Nutrição Clínica',
-    'Nutrição Esportiva',
-    'Nutrição Comportamental',
-    'Saúde Materno-Infantil',
-    'Emagrecimento Saudável'
-  ],
-  'Terapia Ocupacional': [
-    'Integração Sensorial',
-    'Desenvolvimento Infantil',
-    'Reabilitação Física e Neurológica',
-    'Saúde Mental'
-  ],
-  'Personal Trainer': [
-    'Musculação e Hipertrofia',
-    'Emagrecimento e Queima Calórica',
-    'Treinamento Funcional',
-    'Condicionamento Físico',
-    'Reabilitação e Prevenção de Lesões',
-    'Treinamento para Idosos',
-    'Preparação Esportiva'
-  ],
-  Odontologia: [
-    'Clínica Geral Odontológica',
-    'Ortodontia',
-    'Implantodontia',
-    'Endodontia (Canal)',
-    'Periodontia',
-    'Prótese Dentária',
-    'Harmonização Orofacial',
-    'Odontopediatria'
-  ]
-};
+interface PracticeArea {
+  id: string;
+  name: string;
+  slug?: string;
+  isInferredForAlias?: boolean;
+}
 
 export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   token,
@@ -145,6 +58,15 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   const [inviteError, setInviteError] = useState<{ message: string; code?: string } | null>(null);
   const [inviteData, setInviteData] = useState<ValidInviteData | null>(null);
 
+  // Catálogo de profissões dinâmico
+  const [professionOptions, setProfessionOptions] = useState<RegistrationProfessionOption[]>(REGISTRATION_PROFESSIONS || []);
+  const [loadingProfessions, setLoadingProfessions] = useState(false);
+
+  // Áreas de atuação dinâmicas da profissão selecionada
+  const [availablePracticeAreas, setAvailablePracticeAreas] = useState<PracticeArea[]>([]);
+  const [selectedPracticeAreaIds, setSelectedPracticeAreaIds] = useState<string[]>([]);
+  const [loadingPracticeAreas, setLoadingPracticeAreas] = useState(false);
+
   // Formulário de Cadastro
   const [prefix, setPrefix] = useState<'Dr.' | 'Dra.' | ''>('Dr.');
   const [name, setName] = useState('');
@@ -152,14 +74,37 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [selectedProfession, setSelectedProfession] = useState('Fisioterapeuta');
+  const [selectedProfessionId, setSelectedProfessionId] = useState<string>('prof-fisioterapeuta');
   const [customProfession, setCustomProfession] = useState('');
-  const [practiceAreas, setPracticeAreas] = useState('');
+  const [practiceAreasText, setPracticeAreasText] = useState('');
   const [registrationType, setRegistrationType] = useState('CREFITO');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  // Carrega catálogo de profissões dinâmico
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingProfessions(true);
+    ApiClient.get<RegistrationProfessionOption[]>('/v1/taxonomy/professions')
+      .then(data => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setProfessionOptions(data);
+        }
+      })
+      .catch(() => {
+        // Fallback para REGISTRATION_PROFESSIONS já carregado no estado inicial
+      })
+      .finally(() => {
+        if (isMounted) setLoadingProfessions(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Valida o link do convite
   useEffect(() => {
     validateToken();
   }, [token]);
@@ -172,7 +117,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
       if (res && res.valid) {
         setInviteData(res);
         if (res.role === 'receptionist' || res.role === 'secretary') {
-          setSelectedProfession('Recepcionista / Atendimento');
+          setSelectedProfessionId('prof-recepcionista');
           setPrefix('');
         }
       } else {
@@ -192,69 +137,108 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
     }
   };
 
-  const handleProfessionChange = (val: string) => {
-    setSelectedProfession(val);
-    const low = val.toLowerCase();
-    if (low.includes('fisio')) {
-      setRegistrationType('CREFITO');
-      if (!prefix) setPrefix('Dr.');
-    } else if (low.includes('psic') || low.includes('psicanal')) {
-      setRegistrationType('CRP');
-      if (!prefix) setPrefix('Dr.');
-    } else if (low.includes('médic') || low.includes('medic') || low.includes('psiquiat') || low.includes('pediat')) {
-      setRegistrationType('CRM');
-      if (!prefix) setPrefix('Dr.');
-    } else if (low.includes('fono')) {
-      setRegistrationType('CRFa');
-      if (!prefix) setPrefix('Dr.');
-    } else if (low.includes('nutri')) {
-      setRegistrationType('CRN');
-      if (!prefix) setPrefix('Dr.');
-    } else if (low.includes('terapeuta ocupacional')) {
-      setRegistrationType('CREFITO');
-      if (!prefix) setPrefix('Dr.');
-    } else if (low.includes('personal') || low.includes('educad')) {
-      setRegistrationType('CREF');
-      setPrefix('');
-    } else if (low.includes('odonto') || low.includes('dentis')) {
-      setRegistrationType('CRO');
-      if (!prefix) setPrefix('Dr.');
-    } else {
-      setRegistrationType('Registro');
-      setPrefix('');
-    }
-  };
-
-  const isAdministrative =
-    selectedProfession === 'Recepcionista / Atendimento' ||
-    selectedProfession === 'Secretária(o)' ||
-    selectedProfession === 'Financeiro / Administrativo';
-
-  const finalProfessionName =
-    selectedProfession === 'Outro' ? customProfession : selectedProfession;
-
-  const getSuggestions = (): string[] => {
-    const low = selectedProfession.toLowerCase();
-    if (low.includes('fisio')) return PRACTICE_AREAS_SUGGESTIONS['Fisioterapia'];
-    if (low.includes('psic') || low.includes('psicanalista')) return PRACTICE_AREAS_SUGGESTIONS['Psicologia'];
-    if (low.includes('médic') || low.includes('psiquiat') || low.includes('pediat')) return PRACTICE_AREAS_SUGGESTIONS['Medicina'];
-    if (low.includes('fono')) return PRACTICE_AREAS_SUGGESTIONS['Fonoaudiologia'];
-    if (low.includes('nutri')) return PRACTICE_AREAS_SUGGESTIONS['Nutrição'];
-    if (low.includes('terapeuta ocupacional')) return PRACTICE_AREAS_SUGGESTIONS['Terapia Ocupacional'];
-    if (low.includes('personal') || low.includes('educad')) return PRACTICE_AREAS_SUGGESTIONS['Personal Trainer'];
-    if (low.includes('odonto') || low.includes('dentis')) return PRACTICE_AREAS_SUGGESTIONS['Odontologia'];
-    return [];
-  };
-
-  const handleAddArea = (area: string) => {
-    if (!practiceAreas) {
-      setPracticeAreas(area);
+  // Carrega áreas de atuação quando a profissão selecionada muda
+  useEffect(() => {
+    if (!selectedProfessionId) {
+      setAvailablePracticeAreas([]);
+      setSelectedPracticeAreaIds([]);
       return;
     }
-    const current = practiceAreas.split(',').map(s => s.trim());
-    if (!current.includes(area)) {
-      setPracticeAreas([...current, area].join(', '));
+
+    let isMounted = true;
+    setLoadingPracticeAreas(true);
+
+    const loadAreas = async () => {
+      try {
+        let resData: any = null;
+        try {
+          resData = await ApiClient.get<any>(`/v1/taxonomy/practice-areas?professionId=${encodeURIComponent(selectedProfessionId)}`);
+        } catch {
+          resData = await ApiClient.get<any>(`/v1/capabilities/practice-areas?professionId=${encodeURIComponent(selectedProfessionId)}`);
+        }
+
+        const items: PracticeArea[] = Array.isArray(resData)
+          ? resData
+          : (resData?.data || resData?.items || []);
+
+        if (!isMounted) return;
+        setAvailablePracticeAreas(items);
+
+        // Se for alias com área única inferida, auto-seleciona
+        const inferred = items.find(a => a.isInferredForAlias);
+        if (inferred) {
+          setSelectedPracticeAreaIds([inferred.id]);
+        } else {
+          setSelectedPracticeAreaIds([]);
+        }
+      } catch {
+        if (isMounted) {
+          setAvailablePracticeAreas([]);
+          setSelectedPracticeAreaIds([]);
+        }
+      } finally {
+        if (isMounted) setLoadingPracticeAreas(false);
+      }
+    };
+
+    loadAreas();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedProfessionId]);
+
+  const handleProfessionChange = (profId: string) => {
+    setSelectedProfessionId(profId);
+    const opt = professionOptions.find(p => p.id === profId);
+    if (!opt) return;
+
+    if (opt.administrative) {
+      setPrefix('');
+      setRegistrationType('');
+      setRegistrationNumber('');
+      return;
     }
+
+    // Auto preenchimento de Conselho com base na taxonomia
+    if (opt.boardLabel) {
+      setRegistrationType(opt.boardLabel);
+    } else {
+      const low = opt.label.toLowerCase();
+      if (low.includes('fisio')) setRegistrationType('CREFITO');
+      else if (low.includes('psic') || low.includes('psicanal')) setRegistrationType('CRP');
+      else if (low.includes('médic') || low.includes('medic')) setRegistrationType('CRM');
+      else if (low.includes('fono')) setRegistrationType('CRFa');
+      else if (low.includes('nutri')) setRegistrationType('CRN');
+      else if (low.includes('terapeuta ocupacional')) setRegistrationType('CREFITO');
+      else if (low.includes('personal') || low.includes('educad')) setRegistrationType('CREF');
+      else if (low.includes('odonto') || low.includes('dentis')) setRegistrationType('CRO');
+      else setRegistrationType('Registro');
+    }
+
+    // Prefixo Dr. / Dra.
+    const low = opt.label.toLowerCase();
+    if (low.includes('personal') || low.includes('educa') || opt.administrative) {
+      setPrefix('');
+    } else if (!prefix) {
+      setPrefix('Dr.');
+    }
+  };
+
+  const selectedOption = professionOptions.find(p => p.id === selectedProfessionId);
+  const isAdministrative = selectedOption?.administrative ||
+    selectedProfessionId.includes('recepcionista') ||
+    selectedProfessionId.includes('secretaria') ||
+    selectedProfessionId.includes('administrativo');
+
+  const finalProfessionName = selectedProfessionId === 'prof-outro'
+    ? (customProfession.trim() || 'Outro')
+    : (selectedOption?.canonicalName || selectedOption?.label || selectedProfessionId);
+
+  const togglePracticeArea = (areaId: string) => {
+    setSelectedPracticeAreaIds(prev =>
+      prev.includes(areaId) ? prev.filter(id => id !== areaId) : [...prev, areaId]
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -276,10 +260,19 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
       showToast('As senhas digitadas não coincidem', 'error');
       return;
     }
-    if (selectedProfession === 'Outro' && !customProfession.trim()) {
+    if (selectedProfessionId === 'prof-outro' && !customProfession.trim()) {
       showToast('Informe o nome da sua profissão', 'error');
       return;
     }
+
+    // Consolida texto de áreas de atuação
+    const selectedNames = availablePracticeAreas
+      .filter(a => selectedPracticeAreaIds.includes(a.id))
+      .map(a => a.name);
+    const combinedAreasText = [
+      ...selectedNames,
+      ...(practiceAreasText ? practiceAreasText.split(',').map(s => s.trim()).filter(Boolean) : [])
+    ].filter((v, i, a) => a.indexOf(v) === i).join(', ');
 
     try {
       setSubmitting(true);
@@ -288,13 +281,15 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
         {
           token,
           name: name.trim(),
-          prefix: !isAdministrative ? prefix : undefined,
+          prefix: !isAdministrative && prefix ? prefix : undefined,
           email: email.trim().toLowerCase(),
           password,
           phone: phone.trim() || undefined,
+          professionId: selectedOption?.id || selectedProfessionId,
           professionName: finalProfessionName,
-          practiceAreas: practiceAreas.trim() || undefined,
-          registrationType: !isAdministrative ? registrationType : undefined,
+          practiceAreas: combinedAreasText || undefined,
+          practiceAreaIds: selectedPracticeAreaIds,
+          registrationType: !isAdministrative ? registrationType || selectedOption?.boardLabel || undefined : undefined,
           registrationNumber: !isAdministrative ? registrationNumber.trim() || undefined : undefined
         }
       );
@@ -318,13 +313,26 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
     }
   };
 
-  // 1. Estado de Carregamento
+  // 1. Estado de Carregamento (mesma identidade visual padrão AuthPage)
   if (loadingInvite) {
     return (
-      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-slate-600 text-sm font-semibold">Validando convite da clínica...</p>
+      <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center space-y-2 select-none">
+            <div className="flex items-center justify-center gap-3 mb-1">
+              <img src="/brand/zemda-icon.png" alt="Zemda" className="w-12 h-12 object-contain drop-shadow-sm" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-3xl font-black text-slate-950 tracking-tight">Zemda</span>
+                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+              </div>
+            </div>
+            <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">Saúde e Gestão em Harmonia</p>
+          </div>
+          <div className="bg-white rounded-3xl p-8 shadow-xl shadow-teal-900/5 border border-slate-200/80 text-center space-y-4">
+            <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-slate-600 text-xs font-semibold">Validando convite da clínica...</p>
+          </div>
         </div>
       </div>
     );
@@ -333,35 +341,50 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   // 2. Estado de Erro / Convite Inválido / Expirado
   if (inviteError || !inviteData) {
     return (
-      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-xl shadow-slate-900/5 space-y-5 border border-slate-100">
-          <div className="w-16 h-16 rounded-3xl bg-red-50 text-red-500 flex items-center justify-center mx-auto shadow-inner">
-            <XCircle className="w-9 h-9" />
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-xl font-bold text-slate-900">Link de Convite Indisponível</h2>
-            <p className="text-xs text-slate-600 leading-relaxed font-medium">
-              {inviteError?.message || 'Este convite não é válido ou não pôde ser encontrado.'}
-            </p>
-          </div>
-
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left text-xs text-slate-600 space-y-1.5">
-            <div className="font-bold text-slate-800 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-teal-600" />
-              Por que isso acontece?
+      <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center space-y-2 select-none">
+            <div className="flex items-center justify-center gap-3 mb-1">
+              <img src="/brand/zemda-icon.png" alt="Zemda" className="w-12 h-12 object-contain drop-shadow-sm" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-3xl font-black text-slate-950 tracking-tight">Zemda</span>
+                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+              </div>
             </div>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Os links de convite são exclusivos, criptografados e expiram por segurança ou após o uso único. Caso precise de acesso, solicite um novo link ao gestor da clínica.
-            </p>
+            <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">Saúde e Gestão em Harmonia</p>
           </div>
 
-          <button
-            onClick={onBackToLogin}
-            className="w-full py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer"
-          >
-            Ir para a Tela de Login
-          </button>
+          <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-200/80 text-center space-y-5">
+            <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto shadow-inner">
+              <XCircle className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h2 className="text-lg font-black text-slate-900">Link de Convite Indisponível</h2>
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                {inviteError?.message || 'Este convite não é válido ou já expirou.'}
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-left text-xs text-slate-600 space-y-1">
+              <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0" />
+                <span>Por que isso acontece?</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                Os links de convite do Zemda são criptografados e exclusivos. Caso precise de acesso, solicite um novo link ao gestor da clínica.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onBackToLogin}
+              className="w-full py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all cursor-pointer"
+            >
+              Ir para a Tela de Login
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -370,41 +393,292 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   // 3. Sucesso após cadastro
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl max-w-md w-full p-8 text-center shadow-xl shadow-teal-900/5 space-y-4 border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
-          <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
-            <CheckCircle2 className="w-9 h-9" />
+      <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center space-y-2 select-none">
+            <div className="flex items-center justify-center gap-3 mb-1">
+              <img src="/brand/zemda-icon.png" alt="Zemda" className="w-12 h-12 object-contain drop-shadow-sm" />
+              <div className="flex items-center gap-1.5">
+                <span className="text-3xl font-black text-slate-950 tracking-tight">Zemda</span>
+                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+              </div>
+            </div>
+            <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">Saúde e Gestão em Harmonia</p>
           </div>
-          <div className="space-y-1">
-            <h2 className="text-xl font-bold text-slate-900">Bem-vindo(a) à equipe!</h2>
-            <p className="text-xs text-slate-600 font-medium">
-              Seu cadastro foi vinculado com sucesso à <strong>{inviteData.tenant.name}</strong>.
-            </p>
+
+          <div className="bg-white rounded-3xl p-8 text-center shadow-xl shadow-teal-900/5 space-y-4 border border-slate-200/80 animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-lg font-black text-slate-900">Bem-vindo(a) à equipe!</h2>
+              <p className="text-xs text-slate-600 font-medium">
+                Seu cadastro foi vinculado com sucesso à <strong>{inviteData.tenant.name}</strong>.
+              </p>
+            </div>
+            <p className="text-xs text-teal-600 font-semibold">Entrando na plataforma automaticamente...</p>
           </div>
-          <p className="text-xs text-slate-400">Entrando no sistema automaticamente...</p>
         </div>
       </div>
     );
   }
 
-  // 4. Formulário de Cadastro por Convite
+  // 4. Formulário Oficial de Cadastro por Convite
   return (
-    <div className="min-h-screen bg-[#fafbfc] flex items-center justify-center p-4 py-8">
-      <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-100 space-y-6">
-        {/* Cabeçalho com identificação fixa e inalterável da Clínica */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-teal-50 border border-teal-200/70 rounded-full text-teal-700 text-xs font-bold">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Convite Oficial da Clínica</span>
+    <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+      {/* Glow sutil de fundo característico do Zemda */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+
+      <div className="w-full max-w-xl space-y-5">
+        {/* Botão de Retorno ao Login */}
+        <div className="flex justify-start">
+          <button
+            type="button"
+            onClick={onBackToLogin}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-600 hover:text-teal-700 text-xs font-semibold border border-slate-200/80 shadow-xs transition-all cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-teal-600" />
+            <span>Voltar ao login</span>
+          </button>
+        </div>
+
+        {/* Brand Header Institucional Zemda */}
+        <div className="text-center space-y-2 select-none">
+          <div className="flex items-center justify-center gap-3 mb-1">
+            <img
+              src="/brand/zemda-icon.png"
+              alt="Zemda"
+              className="w-12 h-12 object-contain drop-shadow-sm"
+            />
+            <div className="flex items-center gap-1.5">
+              <span className="text-3xl font-black text-slate-950 tracking-tight">Zemda</span>
+              <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+            </div>
+          </div>
+          <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">
+            Saúde e Gestão em Harmonia
+          </p>
+        </div>
+
+        {/* Card Principal de Cadastro */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-900/5 border border-slate-200/80 space-y-5 text-left">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 text-[10px] font-bold border border-teal-200/60">
+              <ShieldCheck className="w-3 h-3" />
+              <span>Convite Oficial da Clínica</span>
+            </div>
+            <h2 className="text-lg font-black text-slate-900">Cadastro de Colaborador</h2>
+            <p className="text-xs text-slate-500">
+              Preencha seus dados profissionais para ativar seu acesso à plataforma.
+            </p>
           </div>
 
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            Cadastro de Colaborador
-          </h1>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Nome Completo & Tratamento */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Nome Completo *</label>
+              <div className="flex gap-2">
+                {!isAdministrative && (
+                  <select
+                    value={prefix}
+                    onChange={e => setPrefix(e.target.value as any)}
+                    className="w-24 px-2 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="Dr.">Dr.</option>
+                    <option value="Dra.">Dra.</option>
+                    <option value="">Sem título</option>
+                  </select>
+                )}
+                <div className="relative flex-1">
+                  <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Seu nome completo"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+            </div>
 
-          {/* Banner de vínculo fixo inalterável */}
-          <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center gap-3 text-left">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-600 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
+            {/* E-mail e Telefone */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">E-mail de Acesso *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="seuemail@exemplo.com"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Telefone / WhatsApp</label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="tel"
+                    placeholder="(00) 00000-0000"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Senha e Confirmação */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Senha de Acesso *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="Mínimo 6 caracteres"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Confirmar Senha *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="Repita sua senha"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Seleção de Profissão (Dinâmica via Catálogo Canônico Único) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Profissão / Especialidade *</label>
+              <RegistrationProfessionSelect
+                value={selectedProfessionId}
+                onChange={handleProfessionChange}
+                options={professionOptions}
+                loading={loadingProfessions}
+              />
+              {selectedProfessionId === 'prof-outro' && (
+                <input
+                  type="text"
+                  required
+                  placeholder="Especifique sua profissão ou especialidade"
+                  value={customProfession}
+                  onChange={e => setCustomProfession(e.target.value)}
+                  className="w-full mt-2 px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              )}
+            </div>
+
+            {/* Registro Profissional (se não for administrativo) */}
+            {!isAdministrative && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Conselho / Sigla</label>
+                  <div className="relative">
+                    <Award className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="CREFITO, CRP, CRM, CREF..."
+                      value={registrationType}
+                      onChange={e => setRegistrationType(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Número de Registro</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 12345/SP"
+                    value={registrationNumber}
+                    onChange={e => setRegistrationNumber(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Áreas de Atuação Dinâmicas */}
+            {!isAdministrative && (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Áreas de Atuação / Especialidades
+                </label>
+                {loadingPracticeAreas ? (
+                  <p className="text-[11px] text-slate-400">Carregando áreas de atuação...</p>
+                ) : availablePracticeAreas.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      {availablePracticeAreas.map(area => {
+                        const isSelected = selectedPracticeAreaIds.includes(area.id);
+                        return (
+                          <button
+                            key={area.id}
+                            type="button"
+                            onClick={() => togglePracticeArea(area.id)}
+                            className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                                : 'bg-slate-50 hover:bg-teal-50 text-slate-600 border-slate-200 hover:border-teal-300'
+                            }`}
+                          >
+                            {isSelected ? '✓ ' : '+ '}
+                            {area.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                <input
+                  type="text"
+                  placeholder="Outras especialidades ou áreas de atuação (separadas por vírgula)"
+                  value={practiceAreasText}
+                  onChange={e => setPracticeAreasText(e.target.value)}
+                  className="w-full mt-2 px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50/70 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+            )}
+
+            {/* Botão de Conclusão */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-3 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {submitting ? 'Criando Conta...' : 'Concluir Cadastro'}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </form>
+
+          {/* Rodapé Discreto Obrigatório: Indicação da Clínica */}
+          <div className="pt-4 border-t border-slate-100 flex items-center gap-3 text-left">
+            <div className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 border border-teal-200/60 flex items-center justify-center font-bold text-sm shrink-0">
               {inviteData.tenant.logoUrl ? (
                 <img
                   src={inviteData.tenant.logoUrl}
@@ -412,242 +686,22 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                   className="w-full h-full object-cover rounded-xl"
                 />
               ) : (
-                <Building2 className="w-5 h-5" />
+                <Building2 className="w-4 h-4 text-teal-600" />
               )}
             </div>
             <div className="flex-1 min-w-0">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                Você está se cadastrando na clínica
+                Você está ingressando na clínica
               </span>
-              <p className="text-xs sm:text-sm font-extrabold text-slate-800 truncate">
+              <p className="text-xs font-extrabold text-slate-800 truncate">
                 {inviteData.tenant.name}
               </p>
             </div>
-            <span className="text-[10px] font-black px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">
+            <span className="text-[10px] font-black px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md shrink-0">
               Vínculo Fixo
             </span>
           </div>
         </div>
-
-        {/* Formulário */}
-        <form onSubmit={handleSubmit} className="space-y-4 text-left">
-          {/* Sexo / Tratamento & Nome */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Nome Completo *
-            </label>
-            <div className="flex gap-2">
-              {!isAdministrative && (
-                <select
-                  value={prefix}
-                  onChange={e => setPrefix(e.target.value as any)}
-                  className="w-24 px-2 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                >
-                  <option value="Dr.">Dr.</option>
-                  <option value="Dra.">Dra.</option>
-                  <option value="">Sem título</option>
-                </select>
-              )}
-              <div className="relative flex-1">
-                <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  placeholder="Seu nome completo"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* E-mail e Telefone */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                E-mail Profissional *
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  required
-                  placeholder="seuemail@exemplo.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Telefone / WhatsApp
-              </label>
-              <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="tel"
-                  placeholder="(00) 00000-0000"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Senha e Confirmação */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Senha de Acesso *
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="password"
-                  required
-                  placeholder="Mínimo 6 caracteres"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Confirmar Senha *
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="password"
-                  required
-                  placeholder="Repita sua senha"
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Profissão e Cargo */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Profissão / Função na Clínica *
-            </label>
-            <div className="relative">
-              <Briefcase className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <select
-                value={selectedProfession}
-                onChange={e => handleProfessionChange(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-              >
-                {PROFESSIONS_LIST.map(p => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {selectedProfession === 'Outro' && (
-              <input
-                type="text"
-                required
-                placeholder="Especifique sua profissão ou especialidade"
-                value={customProfession}
-                onChange={e => setCustomProfession(e.target.value)}
-                className="w-full mt-2 px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-              />
-            )}
-          </div>
-
-          {/* Registro Profissional (se não for administrativo) */}
-          {!isAdministrative && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Conselho / Sigla
-                </label>
-                <div className="relative">
-                  <Award className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="CREFITO, CRP, CRM, etc."
-                    value={registrationType}
-                    onChange={e => setRegistrationType(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Número de Registro
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: 12345/SP"
-                  value={registrationNumber}
-                  onChange={e => setRegistrationNumber(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Áreas de Atuação */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Áreas de Atuação / Especialidades
-            </label>
-            <input
-              type="text"
-              placeholder="Ex: Traumato-Ortopédica, Fisioterapia Esportiva..."
-              value={practiceAreas}
-              onChange={e => setPracticeAreas(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-            />
-            {getSuggestions().length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5 items-center">
-                <span className="text-[10px] text-slate-400 font-semibold">Sugestões:</span>
-                {getSuggestions().map(s => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => handleAddArea(s)}
-                    className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200/50 transition-colors cursor-pointer"
-                  >
-                    + {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onBackToLogin}
-              className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 transition-colors cursor-pointer"
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-700/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {submitting ? 'Criando Conta...' : 'Concluir Cadastro na Clínica'}
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

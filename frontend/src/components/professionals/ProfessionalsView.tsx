@@ -39,10 +39,7 @@ const getCouncilForProfession = (prof?: Profession | null, profNameOrId?: string
   if (target.includes('enferm')) return 'COREN';
   if (target.includes('farmac')) return 'CRF';
   if (target.includes('biomedic')) return 'CRBM';
-  if (target.includes('veterin')) return 'CRMV';
   if (target.includes('social')) return 'CRESS';
-  if (target.includes('advog')) return 'OAB';
-  if (target.includes('contad')) return 'CRC';
   if (target.includes('administra') || target.includes('gestor')) return 'CRA';
   return 'Conselho';
 };

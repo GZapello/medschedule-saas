@@ -11,19 +11,12 @@ export function runSeed(db: DatabaseSync): void {
     { id: 'cat-med', name: 'Medicina', slug: 'medicina', icon: 'Stethoscope', default_terminology: 'patient', is_clinical: 1, description: 'Clínica Geral, Pediatria, Cardiologia, Dermatologia e especialidades médicas' },
     { id: 'cat-odonto', name: 'Odontologia', slug: 'odontologia', icon: 'Smile', default_terminology: 'patient', is_clinical: 1, description: 'Clínica geral, ortodontia, odontopediatria e harmonização' },
     { id: 'cat-nutri', name: 'Nutrição e Alimentação', slug: 'nutricao', icon: 'Apple', default_terminology: 'patient', is_clinical: 1, description: 'Nutrição clínica, esportiva, infantil, materno-infantil e funcional' },
-    { id: 'cat-edu', name: 'Educação e Aprendizagem', slug: 'educacao', icon: 'GraduationCap', default_terminology: 'student', is_clinical: 0, description: 'Professores particulares, tutores escolares, mentores e reforço' },
-    { id: 'cat-dev-pessoal', name: 'Desenvolvimento Profissional e Pessoal', slug: 'desenvolvimento-pessoal', icon: 'Compass', default_terminology: 'client', is_clinical: 0, description: 'Coaching executivo, mentoria de carreira e consultoria de negócios' },
-    { id: 'cat-esporte', name: 'Esporte e Atividade Física', slug: 'esporte', icon: 'Dumbbell', default_terminology: 'student', is_clinical: 0, description: 'Personal trainers, instrutores de pilates, yoga e treinamento funcional' },
-    { id: 'cat-beleza', name: 'Estética e Beleza', slug: 'estetica-beleza', icon: 'Sparkles', default_terminology: 'client', is_clinical: 0, description: 'Esteticistas, lash designers, sobrancelhas, cabeleireiros e barbeiros' },
-    { id: 'cat-maternidade', name: 'Atendimento para Gestantes, Mães e Famílias', slug: 'gestantes-familias', icon: 'HeartHandshake', default_terminology: 'patient', is_clinical: 1, description: 'Doulas, consultoras de amamentação, educadores parentais e sono infantil' },
-    { id: 'cat-enfermagem', name: 'Enfermagem e Cuidados', slug: 'enfermagem', icon: 'ShieldCheck', default_terminology: 'patient', is_clinical: 1, description: 'Enfermeiros, técnicos, cuidadores de idosos e home care' },
-    { id: 'cat-integrativa', name: 'Saúde e Bem-Estar Complementar', slug: 'saude-complementar', icon: 'Sun', default_terminology: 'client', is_clinical: 0, description: 'Terapias holísticas, aromaterapia, meditação, acupuntura e naturopatia' },
-    { id: 'cat-juridico', name: 'Serviços Jurídicos e Profissionais', slug: 'juridico-contabil', icon: 'Briefcase', default_terminology: 'client', is_clinical: 0, description: 'Advogados, contadores, consultores tributários e corretores' },
-    { id: 'cat-tech', name: 'Tecnologia e Serviços Especializados', slug: 'tecnologia', icon: 'Code', default_terminology: 'client', is_clinical: 0, description: 'Desenvolvedores, designers, videomakers, fotógrafos e consultores TI' },
-    { id: 'cat-domestico', name: 'Serviços Domiciliares e Manutenção', slug: 'servicos-domiciliares', icon: 'Wrench', default_terminology: 'client', is_clinical: 0, description: 'Técnicos de manutenção, eletricistas, encanadores, pintores e organizadoras' },
-    { id: 'cat-pets', name: 'Pets e Animais', slug: 'pets-animais', icon: 'Dog', default_terminology: 'pet_owner', is_clinical: 1, description: 'Médicos veterinários, adestradores, banho e tosa, pet sitters' },
-    { id: 'cat-criativo', name: 'Profissionais Criativos', slug: 'profissionais-criativos', icon: 'Music', default_terminology: 'client', is_clinical: 0, description: 'Professores de música, canto, dança, DJs, ilustradores e produtores' },
-    { id: 'cat-outros', name: 'Outras Atividades e Consultorias', slug: 'outras-atividades', icon: 'Layers', default_terminology: 'client', is_clinical: 0, description: 'Serviços e atendimentos personalizados com horários agendados' }
+    { id: 'cat-esporte', name: 'Esporte e Atividade Física', slug: 'esporte', icon: 'Dumbbell', default_terminology: 'student', is_clinical: 0, description: 'Personal trainers, instrutores de pilates e treinamento físico' },
+    { id: 'cat-beleza', name: 'Estética e Saúde', slug: 'estetica-saude', icon: 'Sparkles', default_terminology: 'client', is_clinical: 0, description: 'Esteticistas e podólogos' },
+    { id: 'cat-maternidade', name: 'Atendimento para Gestantes, Mães e Famílias', slug: 'gestantes-familias', icon: 'HeartHandshake', default_terminology: 'patient', is_clinical: 1, description: 'Doulas, consultoras de amamentação e cuidados neonatais' },
+    { id: 'cat-enfermagem', name: 'Enfermagem e Cuidados', slug: 'enfermagem', icon: 'ShieldCheck', default_terminology: 'patient', is_clinical: 1, description: 'Enfermeiros, técnicos e cuidados em saúde' },
+    { id: 'cat-integrativa', name: 'Saúde e Bem-Estar Complementar', slug: 'saude-complementar', icon: 'Sun', default_terminology: 'client', is_clinical: 0, description: 'Terapias holísticas, acupuntura, arteterapia e musicoterapia' },
+    { id: 'cat-outros', name: 'Outras Atividades de Saúde', slug: 'outras-atividades', icon: 'Layers', default_terminology: 'client', is_clinical: 0, description: 'Serviços e atendimentos em saúde com horários agendados' }
   ];
 
   const insertCat = db.prepare(`
@@ -59,29 +52,15 @@ export function runSeed(db: DatabaseSync): void {
     { id: 'prof-dentista', cat_id: 'cat-odonto', name: 'Cirurgião-Dentista', slug: 'dentista', reg_label: 'CRO', reg_req: 1 },
     // Nutrição
     { id: 'prof-nutricionista', cat_id: 'cat-nutri', name: 'Nutricionista', slug: 'nutricionista', reg_label: 'CRN', reg_req: 1 },
-    // Educação
-    { id: 'prof-professor-particular', cat_id: 'cat-edu', name: 'Professor Particular', slug: 'professor-particular', reg_label: null, reg_req: 0 },
-    { id: 'prof-tutor-escolar', cat_id: 'cat-edu', name: 'Tutor / Mentor de Aprendizagem', slug: 'tutor-escolar', reg_label: null, reg_req: 0 },
-    // Desenvolvimento Pessoal
-    { id: 'prof-coach', cat_id: 'cat-dev-pessoal', name: 'Coach / Mentor de Carreira', slug: 'coach-mentor', reg_label: null, reg_req: 0 },
-    { id: 'prof-consultor', cat_id: 'cat-dev-pessoal', name: 'Consultor Empresarial', slug: 'consultor', reg_label: null, reg_req: 0 },
     // Esporte
     { id: 'prof-personal-trainer', cat_id: 'cat-esporte', name: 'Personal Trainer', slug: 'personal-trainer', reg_label: 'CREF', reg_req: 1 },
     { id: 'prof-instrutor-pilates', cat_id: 'cat-esporte', name: 'Instrutor de Pilates', slug: 'instrutor-pilates', reg_label: 'Certificação', reg_req: 0 },
     // Estética
     { id: 'prof-esteticista', cat_id: 'cat-beleza', name: 'Esteticista', slug: 'esteticista', reg_label: 'Registro Técnico', reg_req: 0 },
-    { id: 'prof-lash-designer', cat_id: 'cat-beleza', name: 'Lash Designer / Sobrancelhas', slug: 'lash-designer', reg_label: null, reg_req: 0 },
-    { id: 'prof-cabeleireiro', cat_id: 'cat-beleza', name: 'Cabeleireiro / Barbeiro', slug: 'cabeleireiro-barbeiro', reg_label: null, reg_req: 0 },
     // Maternidade
     { id: 'prof-doula', cat_id: 'cat-maternidade', name: 'Doula / Consultora de Amamentação', slug: 'doula', reg_label: 'Certificação', reg_req: 0 },
     // Enfermagem
-    { id: 'prof-enfermeiro', cat_id: 'cat-enfermagem', name: 'Enfermeiro', slug: 'enfermeiro', reg_label: 'COREN', reg_req: 1 },
-    // Jurídico
-    { id: 'prof-advogado', cat_id: 'cat-juridico', name: 'Advogado', slug: 'advogado', reg_label: 'OAB', reg_req: 1 },
-    { id: 'prof-contador', cat_id: 'cat-juridico', name: 'Contador', slug: 'contador', reg_label: 'CRC', reg_req: 1 },
-    // Pets
-    { id: 'prof-veterinario', cat_id: 'cat-pets', name: 'Médico Veterinário', slug: 'veterinario', reg_label: 'CRMV', reg_req: 1 },
-    { id: 'prof-adestrador', cat_id: 'cat-pets', name: 'Adestrador / Comportamentalista Animal', slug: 'adestrador', reg_label: null, reg_req: 0 }
+    { id: 'prof-enfermeiro', cat_id: 'cat-enfermagem', name: 'Enfermeiro', slug: 'enfermeiro', reg_label: 'COREN', reg_req: 1 }
   ];
 
   const insertProf = db.prepare(`
@@ -105,8 +84,7 @@ export function runSeed(db: DatabaseSync): void {
     { id: 'spec-fisio-neuro', prof_id: 'prof-fisioterapeuta', name: 'Fisioterapia Neurofuncional e Pediatria', slug: 'fisio-neuro', color: '#10b981' },
     { id: 'spec-nutri-clinica', prof_id: 'prof-nutricionista', name: 'Nutrição Clínica e Funcional', slug: 'nutricao-clinica', color: '#84cc16' },
     { id: 'spec-personal-cond', prof_id: 'prof-personal-trainer', name: 'Condicionamento Físico e Reabilitação', slug: 'personal-condicionamento', color: '#f97316' },
-    { id: 'spec-odonto-geral', prof_id: 'prof-dentista', name: 'Clínica Geral e Odontopediatria', slug: 'odontopediatria', color: '#3b82f6' },
-    { id: 'spec-adv-civil', prof_id: 'prof-advogado', name: 'Direito Civil e de Família', slug: 'direito-civil-familia', color: '#64748b' }
+    { id: 'spec-odonto-geral', prof_id: 'prof-dentista', name: 'Clínica Geral e Odontopediatria', slug: 'odontopediatria', color: '#3b82f6' }
   ];
 
   const insertSpec = db.prepare(`

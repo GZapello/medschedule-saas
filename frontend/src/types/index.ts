@@ -1,6 +1,6 @@
 export type Role = 'superadmin' | 'clinic_admin' | 'professional' | 'receptionist' | 'patient';
 
-export type Terminology = 'patient' | 'client' | 'student' | 'pet_owner';
+export type Terminology = 'patient' | 'client' | 'student';
 
 export interface User {
   id: string;
@@ -39,6 +39,8 @@ export interface User {
   zemdaMedEnabled?: boolean;
   zemdaBodyEnabled?: boolean;
   commercialModule?: string;
+  clinicalWorkspace?: string | null;
+  taxonomyCategory?: string;
   capabilities?: string[];
   practiceAreaIds?: string[];
   selectedOptionalCapabilities?: string[];

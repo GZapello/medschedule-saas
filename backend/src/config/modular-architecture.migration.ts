@@ -222,7 +222,13 @@ function seedCapabilities(rawDb: DatabaseSync): void {
     { id: 'MEDICAL_NEURO', category: 'MEDICAL', name: 'Exame Neurológico Estruturado', description: 'Pares cranianos, sensibilidade, reflexos, coordenação e equilíbrio' },
     { id: 'MEDICAL_SOAP', category: 'MEDICAL', name: 'Evolução Médica SOAP', description: 'Subjetivo, Objetivo, Avaliação e Plano' },
     { id: 'MEDICAL_CID', category: 'MEDICAL', name: 'Classificação CID', description: 'Diagnóstico com código nosológico CID-10 / CID-11' },
-    { id: 'CLINICAL_SCALES', category: 'MEDICAL', name: 'Escalas Clínicas Configuráveis', description: 'Escalas psiquiátricas, geriátricas e funcionais' }
+    { id: 'CLINICAL_SCALES', category: 'MEDICAL', name: 'Escalas Clínicas Configuráveis', description: 'Escalas psiquiátricas, geriátricas e funcionais' },
+
+    // RECURSOS TRANSVERSAIS / ATENDIMENTO CLÍNICO GERAL & SAÚDE INTEGRAL
+    { id: 'CLINICAL_EVOLUTION', category: 'CLINICAL', name: 'Evolução Clínica Geral', description: 'Registro longitudinal de consultas, condutas e orientações' },
+    { id: 'THERAPEUTIC_GOALS', category: 'CLINICAL', name: 'Metas Terapêuticas', description: 'Definição e acompanhamento de metas e objetivos terapêuticos' },
+    { id: 'GESTATIONAL_FOLLOWUP', category: 'MATERNAL', name: 'Acompanhamento Gestacional e Parto', description: 'Plano de parto, IG, DPP, amamentação e puerpério' },
+    { id: 'PHOTO_MONITORING', category: 'CLINICAL', name: 'Acompanhamento Fotográfico / Lesões', description: 'Registro fotográfico evolutivo de feridas, podologia ou estética' }
   ];
 
   const stmt = rawDb.prepare(`
@@ -236,6 +242,19 @@ function seedCapabilities(rawDb: DatabaseSync): void {
 }
 
 function ensureCanonicalProfessions(rawDb: DatabaseSync): void {
+  // Assegura existência prévia de categorias essenciais de saúde para integridade referencial
+  try {
+    const insCatStmt = rawDb.prepare(`
+      INSERT OR IGNORE INTO categories (id, name, slug, icon, default_terminology, is_clinical, active)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `);
+    insCatStmt.run('cat-enfermagem', 'Enfermagem e Cuidados', 'enfermagem', 'ShieldCheck', 'patient', 1);
+    insCatStmt.run('cat-beleza', 'Estética e Saúde', 'estetica-saude', 'Sparkles', 'client', 0);
+    insCatStmt.run('cat-maternidade', 'Atendimento para Gestantes, Mães e Famílias', 'gestantes-familias', 'HeartHandshake', 'patient', 1);
+    insCatStmt.run('cat-integrativa', 'Saúde e Bem-Estar Complementar', 'saude-complementar', 'Sun', 'client', 0);
+    insCatStmt.run('cat-outros', 'Outras Atividades de Saúde', 'outras-atividades', 'Layers', 'client', 0);
+  } catch (_) {}
+
   const baseProfs = [
     { id: 'prof-medico', cat_id: 'cat-med', name: 'Medicina', slug: 'medicina', reg_label: 'CRM', reg_req: 1 },
     { id: 'prof-fisioterapeuta', cat_id: 'cat-reab', name: 'Fisioterapia', slug: 'fisioterapia', reg_label: 'CREFITO', reg_req: 1 },
@@ -256,7 +275,22 @@ function ensureCanonicalProfessions(rawDb: DatabaseSync): void {
     { id: 'prof-reumatologista', cat_id: 'cat-med', name: 'Reumatologista', slug: 'reumatologista', reg_label: 'CRM', reg_req: 1 },
     { id: 'prof-clinico-geral', cat_id: 'cat-med', name: 'Clínico Geral', slug: 'clinico-geral', reg_label: 'CRM', reg_req: 1 },
     { id: 'prof-ginecologista', cat_id: 'cat-med', name: 'Ginecologista e Obstetra', slug: 'ginecologista', reg_label: 'CRM', reg_req: 1 },
-    { id: 'prof-ortodontista', cat_id: 'cat-odonto', name: 'Ortodontista', slug: 'ortodontista', reg_label: 'CRO', reg_req: 1 }
+    { id: 'prof-ortodontista', cat_id: 'cat-odonto', name: 'Ortodontista', slug: 'ortodontista', reg_label: 'CRO', reg_req: 1 },
+
+    // Profissões de Apoio à Saúde (HEALTH_SUPPORT)
+    { id: 'prof-enfermeiro', cat_id: 'cat-enfermagem', name: 'Enfermeiro(a)', slug: 'enfermeiro', reg_label: 'COREN', reg_req: 1 },
+    { id: 'prof-tec-enfermagem', cat_id: 'cat-enfermagem', name: 'Técnico(a) de Enfermagem', slug: 'tecnico-enfermagem', reg_label: 'COREN', reg_req: 1 },
+    { id: 'prof-biomedicina', cat_id: 'cat-outros', name: 'Biomédico(a)', slug: 'biomedicina', reg_label: 'CRBM', reg_req: 1 },
+    { id: 'prof-farmacia', cat_id: 'cat-outros', name: 'Farmacêutico(a)', slug: 'farmacia', reg_label: 'CRF', reg_req: 1 },
+    { id: 'prof-servico-social', cat_id: 'cat-outros', name: 'Assistente Social', slug: 'servico-social', reg_label: 'CRESS', reg_req: 1 },
+    { id: 'prof-musicoterapia', cat_id: 'cat-integrativa', name: 'Musicoterapeuta', slug: 'musicoterapia', reg_label: 'UBAM', reg_req: 0 },
+    { id: 'prof-arteterapia', cat_id: 'cat-integrativa', name: 'Arteterapeuta', slug: 'arteterapia', reg_label: 'UBAAT', reg_req: 0 },
+    { id: 'prof-podologia', cat_id: 'cat-beleza', name: 'Podólogo(a)', slug: 'podologia', reg_label: 'Registro Técnico', reg_req: 0 },
+    { id: 'prof-acupuntura', cat_id: 'cat-integrativa', name: 'Acupunturista', slug: 'acupuntura', reg_label: 'Registro', reg_req: 0 },
+    { id: 'prof-esteticista', cat_id: 'cat-beleza', name: 'Esteticista', slug: 'esteticista', reg_label: 'Registro Técnico', reg_req: 0 },
+    { id: 'prof-doula', cat_id: 'cat-maternidade', name: 'Doula / Consultora de Amamentação', slug: 'doula', reg_label: 'Certificação', reg_req: 0 },
+    { id: 'prof-instrutor-pilates', cat_id: 'cat-esporte', name: 'Instrutor de Pilates', slug: 'instrutor-pilates', reg_label: 'Certificação', reg_req: 0 },
+    { id: 'prof-outro-saude', cat_id: 'cat-outros', name: 'Outro Profissional da Saúde', slug: 'outro-profissional-saude', reg_label: 'Registro', reg_req: 0 }
   ];
 
   let deletedProfIds = new Set<string>();
@@ -388,7 +422,101 @@ function seedPracticeAreas(rawDb: DatabaseSync): void {
     { id: 'pa-med-dermato', professionId: 'prof-medico', name: 'Dermatologia', slug: 'dermatologia', type: 'SPECIALTY' },
     { id: 'pa-med-reumato', professionId: 'prof-medico', name: 'Reumatologia', slug: 'reumatologia', type: 'SPECIALTY' },
     { id: 'pa-med-gineco', professionId: 'prof-medico', name: 'Ginecologia e Obstetrícia', slug: 'ginecologia-obstetricia', type: 'SPECIALTY' },
-    { id: 'pa-med-outro', professionId: 'prof-medico', name: 'Outra especialidade Médica', slug: 'outra-area-med', type: 'SPECIALTY' }
+    { id: 'pa-med-outro', professionId: 'prof-medico', name: 'Outra especialidade Médica', slug: 'outra-area-med', type: 'SPECIALTY' },
+
+    // 10. Enfermagem (prof-enfermeiro)
+    { id: 'pa-enf-saude-familia', professionId: 'prof-enfermeiro', name: 'Saúde da Família e Atenção Básica', slug: 'saude-da-familia', type: 'SPECIALTY' },
+    { id: 'pa-enf-estomaterapia', professionId: 'prof-enfermeiro', name: 'Estomaterapia e Feridas', slug: 'estomaterapia-feridas', type: 'SPECIALTY' },
+    { id: 'pa-enf-materno-infantil', professionId: 'prof-enfermeiro', name: 'Enfermagem Obstétrica e Neonatal', slug: 'obstetrica-neonatal', type: 'SPECIALTY' },
+    { id: 'pa-enf-uti-urgencia', professionId: 'prof-enfermeiro', name: 'Cuidados Críticos e Urgência', slug: 'cuidados-criticos', type: 'SPECIALTY' },
+    { id: 'pa-enf-gerontologia', professionId: 'prof-enfermeiro', name: 'Gerontologia e Home Care', slug: 'gerontologia-homecare', type: 'SPECIALTY' },
+    { id: 'pa-enf-saude-mental', professionId: 'prof-enfermeiro', name: 'Saúde Mental e Psiquiatria', slug: 'saude-mental', type: 'SPECIALTY' },
+    { id: 'pa-enf-outro', professionId: 'prof-enfermeiro', name: 'Outra área de Enfermagem', slug: 'outra-area-enf', type: 'AREA' },
+
+    // 11. Técnico de Enfermagem (prof-tec-enfermagem)
+    { id: 'pa-tecenf-domiciliar', professionId: 'prof-tec-enfermagem', name: 'Home Care e Cuidados Domiciliares', slug: 'home-care', type: 'AREA' },
+    { id: 'pa-tecenf-curativos', professionId: 'prof-tec-enfermagem', name: 'Curativos e Cuidados de Feridas', slug: 'curativos-feridas', type: 'AREA' },
+    { id: 'pa-tecenf-sinais-vitais', professionId: 'prof-tec-enfermagem', name: 'Triagem e Sinais Vitais', slug: 'triagem-sinais-vitais', type: 'AREA' },
+    { id: 'pa-tecenf-materno', professionId: 'prof-tec-enfermagem', name: 'Cuidados Neonatais e Maternos', slug: 'cuidados-neonatais', type: 'AREA' },
+    { id: 'pa-tecenf-outro', professionId: 'prof-tec-enfermagem', name: 'Outra área de Atuação Técnica', slug: 'outra-area-tecenf', type: 'AREA' },
+
+    // 12. Biomedicina (prof-biomedicina)
+    { id: 'pa-biomed-estetica', professionId: 'prof-biomedicina', name: 'Biomedicina Estética', slug: 'biomedicina-estetica', type: 'SPECIALTY' },
+    { id: 'pa-biomed-analises', professionId: 'prof-biomedicina', name: 'Patologia e Análises Clínicas', slug: 'analises-clinicas', type: 'SPECIALTY' },
+    { id: 'pa-biomed-acupuntura', professionId: 'prof-biomedicina', name: 'Práticas Integrativas e Acupuntura', slug: 'acupuntura-biomedica', type: 'SPECIALTY' },
+    { id: 'pa-biomed-reproducao', professionId: 'prof-biomedicina', name: 'Reprodução Humana e Genética', slug: 'reproducao-humana', type: 'SPECIALTY' },
+    { id: 'pa-biomed-outro', professionId: 'prof-biomedicina', name: 'Outra área de Biomedicina', slug: 'outra-area-biomed', type: 'AREA' },
+
+    // 13. Farmácia (prof-farmacia)
+    { id: 'pa-farm-clinica', professionId: 'prof-farmacia', name: 'Farmácia Clínica e Prescrição', slug: 'farmacia-clinica', type: 'SPECIALTY' },
+    { id: 'pa-farm-estetica', professionId: 'prof-farmacia', name: 'Farmácia Estética', slug: 'farmacia-estetica', type: 'SPECIALTY' },
+    { id: 'pa-farm-hospitalar', professionId: 'prof-farmacia', name: 'Farmácia Hospitalar e Cuidados Paliativos', slug: 'farmacia-hospitalar', type: 'SPECIALTY' },
+    { id: 'pa-farm-homeopatia', professionId: 'prof-farmacia', name: 'Homeopatia e Fitoterapia', slug: 'homeopatia-fitoterapia', type: 'SPECIALTY' },
+    { id: 'pa-farm-outro', professionId: 'prof-farmacia', name: 'Outra área de Farmácia', slug: 'outra-area-farm', type: 'AREA' },
+
+    // 14. Serviço Social (prof-servico-social)
+    { id: 'pa-ss-saude-coletiva', professionId: 'prof-servico-social', name: 'Saúde Coletiva e Políticas Públicas', slug: 'saude-coletiva', type: 'AREA' },
+    { id: 'pa-ss-hospitalar', professionId: 'prof-servico-social', name: 'Serviço Social Hospitalar', slug: 'servico-social-hospitalar', type: 'AREA' },
+    { id: 'pa-ss-saude-mental', professionId: 'prof-servico-social', name: 'Reabilitação e Saúde Mental', slug: 'saude-mental-social', type: 'AREA' },
+    { id: 'pa-ss-sociojuridico', professionId: 'prof-servico-social', name: 'Proteção Social e Rede de Apoio', slug: 'protecao-social', type: 'AREA' },
+    { id: 'pa-ss-outro', professionId: 'prof-servico-social', name: 'Outra área de Serviço Social', slug: 'outra-area-ss', type: 'AREA' },
+
+    // 15. Musicoterapia (prof-musicoterapia)
+    { id: 'pa-musico-neuro', professionId: 'prof-musicoterapia', name: 'Neuromusicoterapia e Cognição', slug: 'neuromusicoterapia', type: 'APPROACH' },
+    { id: 'pa-musico-infantil', professionId: 'prof-musicoterapia', name: 'Desenvolvimento Infantil e TEA', slug: 'musicoterapia-tea', type: 'APPROACH' },
+    { id: 'pa-musico-saude-mental', professionId: 'prof-musicoterapia', name: 'Saúde Mental e Psicoterapia Sonora', slug: 'saude-mental-musico', type: 'APPROACH' },
+    { id: 'pa-musico-geronto', professionId: 'prof-musicoterapia', name: 'Gerontologia e Demências', slug: 'gerontologia-musico', type: 'APPROACH' },
+    { id: 'pa-musico-outro', professionId: 'prof-musicoterapia', name: 'Outra abordagem em Musicoterapia', slug: 'outra-area-musico', type: 'AREA' },
+
+    // 16. Arteterapia (prof-arteterapia)
+    { id: 'pa-arte-infantojuvenil', professionId: 'prof-arteterapia', name: 'Infanto-Juvenil e Expressão Criativa', slug: 'arte-infantojuvenil', type: 'APPROACH' },
+    { id: 'pa-arte-saude-mental', professionId: 'prof-arteterapia', name: 'Saúde Mental e Suporte Emocional', slug: 'arte-saude-mental', type: 'APPROACH' },
+    { id: 'pa-arte-hospitalar', professionId: 'prof-arteterapia', name: 'Arteterapia Hospitalar e Cuidados Paliativos', slug: 'arte-hospitalar', type: 'APPROACH' },
+    { id: 'pa-arte-terceira-idade', professionId: 'prof-arteterapia', name: 'Envelhecimento Ativo e Cognição', slug: 'arte-idosos', type: 'APPROACH' },
+    { id: 'pa-arte-outro', professionId: 'prof-arteterapia', name: 'Outra abordagem em Arteterapia', slug: 'outra-area-arte', type: 'AREA' },
+
+    // 17. Podologia (prof-podologia)
+    { id: 'pa-podo-diabetico', professionId: 'prof-podologia', name: 'Pé Diabético e Prevenção', slug: 'pe-diabetico', type: 'SPECIALTY' },
+    { id: 'pa-podo-geral', professionId: 'prof-podologia', name: 'Podologia Clínica Geral', slug: 'podologia-geral', type: 'AREA' },
+    { id: 'pa-podo-esportiva', professionId: 'prof-podologia', name: 'Podologia Esportiva', slug: 'podologia-esportiva', type: 'SPECIALTY' },
+    { id: 'pa-podo-infantil', professionId: 'prof-podologia', name: 'Podopediatria', slug: 'podopediatria', type: 'AREA' },
+    { id: 'pa-podo-geronto', professionId: 'prof-podologia', name: 'Podogeriatria', slug: 'podogeriatria', type: 'AREA' },
+    { id: 'pa-podo-outro', professionId: 'prof-podologia', name: 'Outra área de Podologia', slug: 'outra-area-podo', type: 'AREA' },
+
+    // 18. Acupuntura (prof-acupuntura)
+    { id: 'pa-acup-dor', professionId: 'prof-acupuntura', name: 'Manejo da Dor e Ortopedia', slug: 'acupuntura-dor', type: 'APPROACH' },
+    { id: 'pa-acup-emocional', professionId: 'prof-acupuntura', name: 'Saúde Emocional, Ansiedade e Sono', slug: 'acupuntura-emocional', type: 'APPROACH' },
+    { id: 'pa-acup-saude-mulher', professionId: 'prof-acupuntura', name: 'Saúde da Mulher e Fertilidade', slug: 'acupuntura-mulher', type: 'APPROACH' },
+    { id: 'pa-acup-auricular', professionId: 'prof-acupuntura', name: 'Auriculoterapia e Microssistemas', slug: 'auriculoterapia', type: 'METHOD' },
+    { id: 'pa-acup-outro', professionId: 'prof-acupuntura', name: 'Outra especialidade em Acupuntura', slug: 'outra-area-acup', type: 'AREA' },
+
+    // 19. Estética (prof-esteticista)
+    { id: 'pa-estet-facial', professionId: 'prof-esteticista', name: 'Estética Facial e Rejuvenescimento', slug: 'estetica-facial', type: 'AREA' },
+    { id: 'pa-estet-corporal', professionId: 'prof-esteticista', name: 'Estética Corporal e Drenagem', slug: 'estetica-corporal', type: 'AREA' },
+    { id: 'pa-estet-pos-operatorio', professionId: 'prof-esteticista', name: 'Pós-Operatório Cirúrgico', slug: 'pos-operatorio', type: 'AREA' },
+    { id: 'pa-estet-terapias', professionId: 'prof-esteticista', name: 'Terapias Manuais e Spaterapia', slug: 'spaterapia', type: 'APPROACH' },
+    { id: 'pa-estet-outro', professionId: 'prof-esteticista', name: 'Outra área de Estética', slug: 'outra-area-estet', type: 'AREA' },
+
+    // 20. Doula / Consultoria de Amamentação (prof-doula)
+    { id: 'pa-doula-parto', professionId: 'prof-doula', name: 'Acompanhamento do Parto e Pré-Parto', slug: 'doula-parto', type: 'AREA' },
+    { id: 'pa-doula-amamentacao', professionId: 'prof-doula', name: 'Consultoria de Amamentação', slug: 'consultoria-amamentacao', type: 'AREA' },
+    { id: 'pa-doula-puerperio', professionId: 'prof-doula', name: 'Cuidados no Puerpério e Pós-Parto', slug: 'doula-puerperio', type: 'AREA' },
+    { id: 'pa-doula-educacao', professionId: 'prof-doula', name: 'Educação Perinatal e Apoio Familiar', slug: 'educacao-perinatal', type: 'AREA' },
+    { id: 'pa-doula-outro', professionId: 'prof-doula', name: 'Outra área em Cuidados Perinatais', slug: 'outra-area-doula', type: 'AREA' },
+
+    // 21. Instrutor de Pilates (prof-instrutor-pilates)
+    { id: 'pa-pilates-solo', professionId: 'prof-instrutor-pilates', name: 'Pilates Solo (Mat Pilates)', slug: 'pilates-solo', type: 'METHOD' },
+    { id: 'pa-pilates-aparelhos', professionId: 'prof-instrutor-pilates', name: 'Pilates em Aparelhos', slug: 'pilates-aparelhos', type: 'METHOD' },
+    { id: 'pa-pilates-reab', professionId: 'prof-instrutor-pilates', name: 'Pilates Clínico e Reabilitação Postural', slug: 'pilates-reabilitacao', type: 'APPROACH' },
+    { id: 'pa-pilates-gestantes', professionId: 'prof-instrutor-pilates', name: 'Pilates para Gestantes e Pós-Parto', slug: 'pilates-gestantes', type: 'AREA' },
+    { id: 'pa-pilates-idosos', professionId: 'prof-instrutor-pilates', name: 'Pilates para Terceira Idade', slug: 'pilates-idosos', type: 'AREA' },
+    { id: 'pa-pilates-outro', professionId: 'prof-instrutor-pilates', name: 'Outra abordagem de Pilates', slug: 'outra-area-pilates', type: 'AREA' },
+
+    // 22. Outro Profissional da Saúde (prof-outro-saude)
+    { id: 'pa-outro-atendimento-geral', professionId: 'prof-outro-saude', name: 'Atendimento Clínico Multiprofissional', slug: 'atendimento-geral', type: 'AREA' },
+    { id: 'pa-outro-terapias-apoio', professionId: 'prof-outro-saude', name: 'Terapias Complementares e de Apoio', slug: 'terapias-apoio', type: 'APPROACH' },
+    { id: 'pa-outro-prevencao', professionId: 'prof-outro-saude', name: 'Promoção da Saúde e Prevenção', slug: 'prevencao-saude', type: 'AREA' },
+    { id: 'pa-outro-especializado', professionId: 'prof-outro-saude', name: 'Atendimento Especializado', slug: 'atendimento-especializado', type: 'AREA' }
   ];
 
   const stmt = rawDb.prepare(`
@@ -524,6 +652,110 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   adminDefaults.forEach(c => insertProfCap.run('prof-administrador', c, 'DEFAULT'));
   adminOptionals.forEach(c => insertProfCap.run('prof-administrador', c, 'OPTIONAL'));
   adminHiddens.forEach(c => insertProfCap.run('prof-administrador', c, 'HIDDEN'));
+
+  // 11. Enfermagem
+  const enfDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'CLINICAL_EVOLUTION', 'MEDICAL_VITAL_SIGNS', 'BODY_MAP', 'PHOTO_MONITORING'];
+  const enfOptionals = ['THERAPEUTIC_GOALS', 'PAIN_ASSESSMENT', 'CORE_PRESCRIPTIONS', 'CORE_EXAM_REQUEST', 'CORE_EXAMS_RECEIVED', 'CORE_REFERRALS', 'ADL_ASSESSMENT', 'ANTHROPOMETRY', 'GESTATIONAL_FOLLOWUP'];
+  const enfHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_NEURO'];
+  enfDefaults.forEach(c => insertProfCap.run('prof-enfermeiro', c, 'DEFAULT'));
+  enfOptionals.forEach(c => insertProfCap.run('prof-enfermeiro', c, 'OPTIONAL'));
+  enfHiddens.forEach(c => insertProfCap.run('prof-enfermeiro', c, 'HIDDEN'));
+
+  // 12. Técnico de Enfermagem
+  const tecEnfDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CLINICAL_EVOLUTION', 'MEDICAL_VITAL_SIGNS', 'PHOTO_MONITORING'];
+  const tecEnfOptionals = ['BODY_MAP', 'PAIN_ASSESSMENT', 'CORE_AI', 'ADL_ASSESSMENT'];
+  const tecEnfHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'CORE_PRESCRIPTIONS', 'MEDICAL_BASE', 'MEDICAL_NEURO'];
+  tecEnfDefaults.forEach(c => insertProfCap.run('prof-tec-enfermagem', c, 'DEFAULT'));
+  tecEnfOptionals.forEach(c => insertProfCap.run('prof-tec-enfermagem', c, 'OPTIONAL'));
+  tecEnfHiddens.forEach(c => insertProfCap.run('prof-tec-enfermagem', c, 'HIDDEN'));
+
+  // 13. Biomedicina
+  const biomedDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'PHOTO_MONITORING'];
+  const biomedOptionals = ['BODY_MAP', 'ANTHROPOMETRY', 'CORE_EXAM_REQUEST', 'CORE_EXAMS_RECEIVED', 'THERAPEUTIC_GOALS', 'MEDICAL_VITAL_SIGNS'];
+  const biomedHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_NEURO'];
+  biomedDefaults.forEach(c => insertProfCap.run('prof-biomedicina', c, 'DEFAULT'));
+  biomedOptionals.forEach(c => insertProfCap.run('prof-biomedicina', c, 'OPTIONAL'));
+  biomedHiddens.forEach(c => insertProfCap.run('prof-biomedicina', c, 'HIDDEN'));
+
+  // 14. Farmácia
+  const farmDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'CORE_PRESCRIPTIONS'];
+  const farmOptionals = ['MEDICAL_VITAL_SIGNS', 'ANTHROPOMETRY', 'THERAPEUTIC_GOALS', 'CORE_EXAMS_RECEIVED', 'CORE_REFERRALS', 'PHOTO_MONITORING'];
+  const farmHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_NEURO'];
+  farmDefaults.forEach(c => insertProfCap.run('prof-farmacia', c, 'DEFAULT'));
+  farmOptionals.forEach(c => insertProfCap.run('prof-farmacia', c, 'OPTIONAL'));
+  farmHiddens.forEach(c => insertProfCap.run('prof-farmacia', c, 'HIDDEN'));
+
+  // 15. Serviço Social
+  const ssDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'THERAPEUTIC_GOALS', 'CORE_REFERRALS'];
+  const ssOptionals = ['ADL_ASSESSMENT', 'OCCUPATIONAL_PART', 'BEHAVIOR_ASSESSMENT'];
+  const ssHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'BODY_MAP', 'MEDICAL_BASE', 'MEDICAL_NEURO', 'MEDICAL_VITAL_SIGNS'];
+  ssDefaults.forEach(c => insertProfCap.run('prof-servico-social', c, 'DEFAULT'));
+  ssOptionals.forEach(c => insertProfCap.run('prof-servico-social', c, 'OPTIONAL'));
+  ssHiddens.forEach(c => insertProfCap.run('prof-servico-social', c, 'HIDDEN'));
+
+  // 16. Musicoterapia
+  const musicoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'THERAPEUTIC_GOALS', 'BEHAVIOR_ASSESSMENT'];
+  const musicoOptionals = ['COMMUNICATION_ASSESSMENT', 'SENSORY_ASSESSMENT', 'LEARNING_ASSESSMENT', 'FUNCTIONAL_ASSESSMENT'];
+  const musicoHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE', 'MEDICAL_NEURO', 'BODY_COMPOSITION'];
+  musicoDefaults.forEach(c => insertProfCap.run('prof-musicoterapia', c, 'DEFAULT'));
+  musicoOptionals.forEach(c => insertProfCap.run('prof-musicoterapia', c, 'OPTIONAL'));
+  musicoHiddens.forEach(c => insertProfCap.run('prof-musicoterapia', c, 'HIDDEN'));
+
+  // 17. Arteterapia
+  const arteDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'THERAPEUTIC_GOALS', 'BEHAVIOR_ASSESSMENT'];
+  const arteOptionals = ['PHOTO_MONITORING', 'SENSORY_ASSESSMENT', 'COMMUNICATION_ASSESSMENT', 'LEARNING_ASSESSMENT'];
+  const arteHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE', 'MEDICAL_NEURO', 'BODY_COMPOSITION'];
+  arteDefaults.forEach(c => insertProfCap.run('prof-arteterapia', c, 'DEFAULT'));
+  arteOptionals.forEach(c => insertProfCap.run('prof-arteterapia', c, 'OPTIONAL'));
+  arteHiddens.forEach(c => insertProfCap.run('prof-arteterapia', c, 'HIDDEN'));
+
+  // 18. Podologia
+  const podoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'BODY_MAP', 'PHOTO_MONITORING', 'PAIN_ASSESSMENT'];
+  const podoOptionals = ['THERAPEUTIC_GOALS', 'POSTURE_GAIT', 'MOBILITY_ASSESSMENT', 'MEDICAL_VITAL_SIGNS'];
+  const podoHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE', 'MEDICAL_NEURO', 'LEARNING_ASSESSMENT'];
+  podoDefaults.forEach(c => insertProfCap.run('prof-podologia', c, 'DEFAULT'));
+  podoOptionals.forEach(c => insertProfCap.run('prof-podologia', c, 'OPTIONAL'));
+  podoHiddens.forEach(c => insertProfCap.run('prof-podologia', c, 'HIDDEN'));
+
+  // 19. Acupuntura
+  const acupDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'BODY_MAP', 'PAIN_ASSESSMENT'];
+  const acupOptionals = ['THERAPEUTIC_GOALS', 'FUNCTIONAL_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'BEHAVIOR_ASSESSMENT', 'POSTURE_GAIT'];
+  const acupHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE', 'MEDICAL_NEURO'];
+  acupDefaults.forEach(c => insertProfCap.run('prof-acupuntura', c, 'DEFAULT'));
+  acupOptionals.forEach(c => insertProfCap.run('prof-acupuntura', c, 'OPTIONAL'));
+  acupHiddens.forEach(c => insertProfCap.run('prof-acupuntura', c, 'HIDDEN'));
+
+  // 20. Estética
+  const estetDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'PHOTO_MONITORING', 'BODY_MAP'];
+  const estetOptionals = ['ANTHROPOMETRY', 'BODY_COMPOSITION', 'THERAPEUTIC_GOALS'];
+  const estetHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE', 'MEDICAL_NEURO'];
+  estetDefaults.forEach(c => insertProfCap.run('prof-esteticista', c, 'DEFAULT'));
+  estetOptionals.forEach(c => insertProfCap.run('prof-esteticista', c, 'OPTIONAL'));
+  estetHiddens.forEach(c => insertProfCap.run('prof-esteticista', c, 'HIDDEN'));
+
+  // 21. Doula / Consultora de Amamentação
+  const doulaDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'GESTATIONAL_FOLLOWUP', 'THERAPEUTIC_GOALS'];
+  const doulaOptionals = ['PAIN_ASSESSMENT', 'BODY_MAP', 'PHOTO_MONITORING', 'BEHAVIOR_ASSESSMENT'];
+  const doulaHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE', 'MEDICAL_NEURO'];
+  doulaDefaults.forEach(c => insertProfCap.run('prof-doula', c, 'DEFAULT'));
+  doulaOptionals.forEach(c => insertProfCap.run('prof-doula', c, 'OPTIONAL'));
+  doulaHiddens.forEach(c => insertProfCap.run('prof-doula', c, 'HIDDEN'));
+
+  // 22. Instrutor de Pilates
+  const pilatesDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'POSTURE_GAIT', 'MOBILITY_ASSESSMENT', 'FUNCTIONAL_ASSESSMENT'];
+  const pilatesOptionals = ['PAIN_ASSESSMENT', 'MUSCLE_STRENGTH', 'BODY_MAP', 'ANTHROPOMETRY', 'TRAINING_PRESCRIBE', 'THERAPEUTIC_GOALS'];
+  const pilatesHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE', 'MEDICAL_NEURO'];
+  pilatesDefaults.forEach(c => insertProfCap.run('prof-instrutor-pilates', c, 'DEFAULT'));
+  pilatesOptionals.forEach(c => insertProfCap.run('prof-instrutor-pilates', c, 'OPTIONAL'));
+  pilatesHiddens.forEach(c => insertProfCap.run('prof-instrutor-pilates', c, 'HIDDEN'));
+
+  // 23. Outro Profissional da Saúde
+  const outroDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'THERAPEUTIC_GOALS'];
+  const outroOptionals = ['BODY_MAP', 'PAIN_ASSESSMENT', 'FUNCTIONAL_ASSESSMENT', 'PHOTO_MONITORING', 'BEHAVIOR_ASSESSMENT', 'POSTURE_GAIT', 'ANTHROPOMETRY'];
+  const outroHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'MEDICAL_BASE', 'MEDICAL_NEURO'];
+  outroDefaults.forEach(c => insertProfCap.run('prof-outro-saude', c, 'DEFAULT'));
+  outroOptionals.forEach(c => insertProfCap.run('prof-outro-saude', c, 'OPTIONAL'));
+  outroHiddens.forEach(c => insertProfCap.run('prof-outro-saude', c, 'HIDDEN'));
 
   // Regras por área de atuação / especialidade (Presets por Practice Area):
   const insertAreaCapRaw = rawDb.prepare(`
@@ -712,6 +944,44 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   });
   ['CORE_DOCUMENTS', 'CORE_PRESCRIPTIONS', 'CORE_EXAM_REQUEST', 'CORE_EXAMS_RECEIVED', 'MEDICAL_BASE', 'MEDICAL_VITAL_SIGNS', 'MEDICAL_PHYSICAL_EXAM', 'ANTHROPOMETRY'].forEach(c => {
     insertAreaCap.run('pa-med-gineco', c, 'DEFAULT');
+  });
+
+  // Presets - HEALTH_SUPPORT
+  ['PHOTO_MONITORING', 'BODY_MAP', 'PAIN_ASSESSMENT'].forEach(c => {
+    insertAreaCap.run('pa-enf-estomaterapia', c, 'DEFAULT');
+    insertAreaCap.run('pa-tecenf-curativos', c, 'DEFAULT');
+    insertAreaCap.run('pa-podo-diabetico', c, 'DEFAULT');
+  });
+  ['GESTATIONAL_FOLLOWUP', 'MEDICAL_VITAL_SIGNS'].forEach(c => {
+    insertAreaCap.run('pa-enf-materno-infantil', c, 'DEFAULT');
+  });
+  ['GESTATIONAL_FOLLOWUP'].forEach(c => {
+    insertAreaCap.run('pa-doula-parto', c, 'DEFAULT');
+    insertAreaCap.run('pa-doula-amamentacao', c, 'DEFAULT');
+    insertAreaCap.run('pa-doula-puerperio', c, 'DEFAULT');
+    insertAreaCap.run('pa-doula-educacao', c, 'DEFAULT');
+    insertAreaCap.run('pa-pilates-gestantes', c, 'DEFAULT');
+  });
+  ['PHOTO_MONITORING', 'BODY_MAP'].forEach(c => {
+    insertAreaCap.run('pa-biomed-estetica', c, 'DEFAULT');
+    insertAreaCap.run('pa-farm-estetica', c, 'DEFAULT');
+    insertAreaCap.run('pa-estet-facial', c, 'DEFAULT');
+    insertAreaCap.run('pa-estet-corporal', c, 'DEFAULT');
+    insertAreaCap.run('pa-estet-pos-operatorio', c, 'DEFAULT');
+  });
+  ['BODY_MAP', 'PAIN_ASSESSMENT'].forEach(c => {
+    insertAreaCap.run('pa-acup-dor', c, 'DEFAULT');
+    insertAreaCap.run('pa-biomed-acupuntura', c, 'DEFAULT');
+  });
+  ['POSTURE_GAIT', 'MOBILITY_ASSESSMENT', 'PAIN_ASSESSMENT'].forEach(c => {
+    insertAreaCap.run('pa-pilates-reab', c, 'DEFAULT');
+    insertAreaCap.run('pa-podo-esportiva', c, 'DEFAULT');
+  });
+  ['BEHAVIOR_ASSESSMENT', 'THERAPEUTIC_GOALS'].forEach(c => {
+    insertAreaCap.run('pa-musico-saude-mental', c, 'DEFAULT');
+    insertAreaCap.run('pa-arte-saude-mental', c, 'DEFAULT');
+    insertAreaCap.run('pa-ss-saude-mental', c, 'DEFAULT');
+    insertAreaCap.run('pa-enf-saude-mental', c, 'DEFAULT');
   });
 
   // Regras de Planos Comerciais (plan_capabilities)

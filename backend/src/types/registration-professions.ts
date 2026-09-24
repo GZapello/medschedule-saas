@@ -11,6 +11,7 @@ export interface RegistrationProfessionOption {
   boardLabel?: string;
   module?: string;
   modules: string[];
+  clinicalWorkspace?: string | null;
   slug?: string;
   administrative?: boolean;
   taxonomyCategory?: ProfessionTaxonomyCategory;
@@ -44,8 +45,6 @@ export const REGISTRATION_PROFESSION_ALIASES: Record<string, string> = {
   "prof-endocrinologista": "prof-medico",
   "prof-reumatologista": "prof-medico",
   "prof-clinico-geral": "prof-medico",
-  // Veterinária
-  "prof-medicina-veterinaria": "prof-veterinario",
   // Nutrição
   "prof-nutricao": "prof-nutricionista",
   // Psicologia
@@ -68,7 +67,7 @@ export const REGISTRATION_PROFESSION_ALIASES: Record<string, string> = {
   "prof-gestor": "prof-administrador"
 };
 
-const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'accessLabel' | 'displayOption'>[] = [
+const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'accessLabel' | 'displayOption' | 'clinicalWorkspace'>[] = [
   {
     "id": "prof-fonoaudiologo",
     "label": "Fonoaudiólogo(a)",
@@ -196,46 +195,34 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "boardLabel": "Registro"
   },
   {
-    "id": "prof-veterinario",
-    "label": "Médico(a) Veterinário(a)",
-    "canonicalName": "Médico Veterinário",
-    "slug": "veterinario",
-    "boardLabel": "CRMV"
+    "id": "prof-doula",
+    "label": "Doula / Consultora de Amamentação",
+    "canonicalName": "Doula / Consultora de Amamentação",
+    "slug": "doula",
+    "boardLabel": "Certificação"
   },
   {
-    "id": "prof-administrador",
-    "label": "Administrador da Clínica",
-    "canonicalName": "Administrador",
-    "slug": "administrador",
-    "boardLabel": "CRA",
-    "administrative": true
+    "id": "prof-esteticista",
+    "label": "Esteticista",
+    "canonicalName": "Esteticista",
+    "slug": "esteticista",
+    "boardLabel": "Registro Técnico"
   },
   {
-    "id": "prof-adestrador",
-    "label": "Adestrador / Comportamentalista Animal",
-    "canonicalName": "Adestrador / Comportamentalista Animal",
-    "slug": "adestrador"
+    "id": "prof-instrutor-pilates",
+    "label": "Instrutor de Pilates",
+    "canonicalName": "Instrutor de Pilates",
+    "slug": "instrutor-pilates",
+    "boardLabel": "Certificação"
   },
   {
-    "id": "prof-advogado",
-    "label": "Advogado",
-    "canonicalName": "Advogado",
-    "slug": "advogado",
-    "boardLabel": "OAB"
+    "id": "prof-outro-saude",
+    "label": "Outro profissional da saúde",
+    "canonicalName": "Outro profissional da saúde",
+    "boardLabel": "Conselho/Registro",
+    "slug": "outro-profissional-da-saude"
   },
-  {
-    "id": "prof-auxiliar-adm",
-    "label": "Auxiliar Administrativo",
-    "canonicalName": "Auxiliar Administrativo",
-    "slug": "auxiliar-administrativo",
-    "administrative": true
-  },
-  {
-    "id": "prof-cabeleireiro",
-    "label": "Cabeleireiro / Barbeiro",
-    "canonicalName": "Cabeleireiro / Barbeiro",
-    "slug": "cabeleireiro-barbeiro"
-  },
+  // Especialidades e Abordagens Específicas
   {
     "id": "prof-cardiologista",
     "label": "Cardiologista",
@@ -249,32 +236,6 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "canonicalName": "Clínico Geral",
     "slug": "clinico-geral",
     "boardLabel": "CRM"
-  },
-  {
-    "id": "prof-coach",
-    "label": "Coach / Mentor de Carreira",
-    "canonicalName": "Coach / Mentor de Carreira",
-    "slug": "coach-mentor"
-  },
-  {
-    "id": "prof-consultor",
-    "label": "Consultor Empresarial",
-    "canonicalName": "Consultor Empresarial",
-    "slug": "consultor"
-  },
-  {
-    "id": "prof-contador",
-    "label": "Contador",
-    "canonicalName": "Contador",
-    "slug": "contador",
-    "boardLabel": "CRC"
-  },
-  {
-    "id": "prof-coord-clinica",
-    "label": "Coordenação Clínica",
-    "canonicalName": "Coordenação Clínica",
-    "slug": "coordenacao-clinica",
-    "administrative": true
   },
   {
     "id": "prof-dermatologista",
@@ -296,47 +257,6 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "canonicalName": "Geriatra",
     "slug": "geriatra",
     "boardLabel": "CRM"
-  },
-  {
-    "id": "prof-direcao-tecnica",
-    "label": "Direção Técnica",
-    "canonicalName": "Direção Técnica",
-    "slug": "direcao-tecnica",
-    "administrative": true
-  },
-  {
-    "id": "prof-doula",
-    "label": "Doula / Consultora de Amamentação",
-    "canonicalName": "Doula / Consultora de Amamentação",
-    "slug": "doula",
-    "boardLabel": "Certificação"
-  },
-  {
-    "id": "prof-esteticista",
-    "label": "Esteticista",
-    "canonicalName": "Esteticista",
-    "slug": "esteticista",
-    "boardLabel": "Registro Técnico"
-  },
-  {
-    "id": "prof-financeiro",
-    "label": "Financeiro",
-    "canonicalName": "Financeiro",
-    "slug": "financeiro",
-    "administrative": true
-  },
-  {
-    "id": "prof-instrutor-pilates",
-    "label": "Instrutor de Pilates",
-    "canonicalName": "Instrutor de Pilates",
-    "slug": "instrutor-pilates",
-    "boardLabel": "Certificação"
-  },
-  {
-    "id": "prof-lash-designer",
-    "label": "Lash Designer / Sobrancelhas",
-    "canonicalName": "Lash Designer / Sobrancelhas",
-    "slug": "lash-designer"
   },
   {
     "id": "prof-neuropsicologo",
@@ -374,23 +294,11 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "boardLabel": "Registro"
   },
   {
-    "id": "prof-outro",
-    "label": "Outro",
-    "canonicalName": "Outro",
-    "slug": "outro"
-  },
-  {
     "id": "prof-pediatra",
     "label": "Pediatra",
     "canonicalName": "Pediatra",
     "slug": "pediatra",
     "boardLabel": "CRM"
-  },
-  {
-    "id": "prof-professor-particular",
-    "label": "Professor Particular",
-    "canonicalName": "Professor Particular",
-    "slug": "professor-particular"
   },
   {
     "id": "prof-psicanalista",
@@ -421,17 +329,26 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "boardLabel": "ABQ"
   },
   {
+    "id": "prof-terapeuta-familiar",
+    "label": "Terapeuta Familiar e de Casal",
+    "canonicalName": "Terapeuta Familiar e de Casal",
+    "slug": "terapeuta-familiar",
+    "boardLabel": "Registro"
+  },
+  // Funções Administrativas
+  {
+    "id": "prof-administrador",
+    "label": "Administrador da Clínica",
+    "canonicalName": "Administrador",
+    "slug": "administrador",
+    "boardLabel": "CRA",
+    "administrative": true
+  },
+  {
     "id": "prof-recepcionista",
     "label": "Recepcionista",
     "canonicalName": "Recepcionista",
     "slug": "recepcionista",
-    "administrative": true
-  },
-  {
-    "id": "prof-rh",
-    "label": "Recursos Humanos",
-    "canonicalName": "Recursos Humanos",
-    "slug": "recursos-humanos",
     "administrative": true
   },
   {
@@ -442,24 +359,39 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "administrative": true
   },
   {
-    "id": "prof-terapeuta-familiar",
-    "label": "Terapeuta Familiar e de Casal",
-    "canonicalName": "Terapeuta Familiar e de Casal",
-    "slug": "terapeuta-familiar",
-    "boardLabel": "Registro"
+    "id": "prof-auxiliar-adm",
+    "label": "Auxiliar Administrativo",
+    "canonicalName": "Auxiliar Administrativo",
+    "slug": "auxiliar-administrativo",
+    "administrative": true
   },
   {
-    "id": "prof-tutor-escolar",
-    "label": "Tutor / Mentor de Aprendizagem",
-    "canonicalName": "Tutor / Mentor de Aprendizagem",
-    "slug": "tutor-escolar"
+    "id": "prof-coord-clinica",
+    "label": "Coordenação Clínica",
+    "canonicalName": "Coordenação Clínica",
+    "slug": "coordenacao-clinica",
+    "administrative": true
   },
   {
-    "id": "prof-outro-saude",
-    "label": "Outro profissional da saúde",
-    "canonicalName": "Outro profissional da saúde",
-    "boardLabel": "Conselho/Registro",
-    "slug": "outro-profissional-da-saude"
+    "id": "prof-direcao-tecnica",
+    "label": "Direção Técnica",
+    "canonicalName": "Direção Técnica",
+    "slug": "direcao-tecnica",
+    "administrative": true
+  },
+  {
+    "id": "prof-financeiro",
+    "label": "Financeiro",
+    "canonicalName": "Financeiro",
+    "slug": "financeiro",
+    "administrative": true
+  },
+  {
+    "id": "prof-rh",
+    "label": "Recursos Humanos",
+    "canonicalName": "Recursos Humanos",
+    "slug": "recursos-humanos",
+    "administrative": true
   }
 ];
 
@@ -471,7 +403,10 @@ export const REGISTRATION_PROFESSIONS: RegistrationProfessionOption[] = OPTIONS.
     registrationType: option.boardLabel
   });
   const module = resolution.commercialModule;
-  const modules = [module || 'Recursos gerais do Zemda', 'ZemdaBody'];
+  const isHealthSupport = resolution.taxonomyCategory === 'HEALTH_SUPPORT';
+  const modules = module 
+    ? [module, 'ZemdaBody'] 
+    : (isHealthSupport ? ['Atendimento Geral', 'ZemdaBody'] : ['Gestão Operacional']);
   const accessLabel = modules.join(' + ');
   return {
     ...option,
@@ -481,6 +416,7 @@ export const REGISTRATION_PROFESSIONS: RegistrationProfessionOption[] = OPTIONS.
     modules,
     accessLabel,
     displayOption: option.label + ' — ' + accessLabel,
+    clinicalWorkspace: resolution.clinicalWorkspace,
     taxonomyCategory: resolution.taxonomyCategory,
     isSpecificAlias: resolution.isSpecificAlias
   };

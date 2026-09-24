@@ -7,6 +7,7 @@ import { migrateConsultations } from './consultation-migration';
 import { migrateLongitudinalClinical } from './longitudinal-clinical.migration';
 import { seedExerciseLibrary } from './exercise-library.seed';
 import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
+import { migrateRemoveOutOfScopeProfessions } from './remove-out-of-scope-professions.migration';
 import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
 
@@ -962,7 +963,6 @@ export function initializeDatabase(): void {
       { id: 'prof-arteterapia', cat_id: 'cat-integrativa', name: 'Arteterapia', slug: 'arteterapia', reg_label: 'UBAAT', reg_req: 0 },
       { id: 'prof-podologia', cat_id: 'cat-beleza', name: 'Podologia', slug: 'podologia', reg_label: 'Registro', reg_req: 0 },
       { id: 'prof-acupuntura', cat_id: 'cat-integrativa', name: 'Acupuntura', slug: 'acupuntura', reg_label: 'Registro', reg_req: 0 },
-      { id: 'prof-medicina-veterinaria', cat_id: 'cat-pets', name: 'Medicina Veterinária', slug: 'medicina-veterinaria', reg_label: 'CRMV', reg_req: 1 },
       { id: 'prof-outro-saude', cat_id: 'cat-outros', name: 'Outro profissional da saúde', slug: 'outro-saude', reg_label: 'Registro', reg_req: 0 },
       // Gestão e Administração
       { id: 'prof-gestor', cat_id: 'cat-outros', name: 'Gestor da Clínica', slug: 'gestor-clinica', reg_label: null, reg_req: 0 },
@@ -1562,7 +1562,7 @@ export function initializeDatabase(): void {
         expected_date TEXT,
         received_date TEXT,
         cost_value REAL DEFAULT 0,
-        status TEXT NOT NULL DEFAULT 'requested',
+        status TEXT NOT NULL DEFAULT 'sent_to_lab',
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -3475,6 +3475,12 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   `);
 
   try {
+    migrateRemoveOutOfScopeProfessions(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateRemoveOutOfScopeProfessions:', err);
+  }
+
+  try {
     migrateModularArchitecture(rawDb);
   } catch (err) {
     console.error('[Database] Erro ao executar migrateModularArchitecture:', err);
@@ -3484,5 +3490,15 @@ function repairLegacyPhotoUrls(rawDb: any): void {
     migrateMedicalTree(rawDb);
   } catch (err) {
     console.error('[Database] Erro ao executar migrateMedicalTree:', err);
+  }
+
+  try {
+    rawDb.exec(`
+      UPDATE dental_prosthetics_lab
+      SET status = 'sent_to_lab'
+      WHERE status = 'requested' OR status IS NULL;
+    `);
+  } catch (err) {
+    console.error('[Database] Erro ao migrar status de próteses:', err);
   }
 }

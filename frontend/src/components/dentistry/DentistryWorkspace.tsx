@@ -342,6 +342,20 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (!selectedPatientId) return;
+    const reloadProsthetics = async () => {
+      try {
+        const prosthRes = await ApiClient.get<any[]>(`/v1/dentistry/prosthetics/${selectedPatientId}`);
+        setProsthetics(prosthRes || []);
+      } catch {}
+    };
+    window.addEventListener('zemda-prosthetics-updated', reloadProsthetics);
+    return () => {
+      window.removeEventListener('zemda-prosthetics-updated', reloadProsthetics);
+    };
+  }, [selectedPatientId]);
+
   // Salvar Odontograma
   const handleSaveOdontogram = async () => {
     if (!selectedPatientId) return;
@@ -415,6 +429,18 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       setSuccessMsg('Trabalho protético enviado ao laboratório cadastrado!');
       const res = await ApiClient.get<any[]>(`/v1/dentistry/prosthetics/${selectedPatientId}`);
       setProsthetics(res || []);
+      setProstheticForm({
+        labName: '',
+        workType: '',
+        toothNumber: '',
+        shadeColor: '',
+        material: '',
+        sentDate: '',
+        expectedDate: '',
+        costValue: 0,
+        notes: ''
+      });
+      window.dispatchEvent(new CustomEvent('zemda-prosthetics-updated'));
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao salvar prótese');

@@ -106,8 +106,8 @@ export class CapabilityService {
       return [];
     }
 
-    // Se a profissão não tem módulo clínico, não possui áreas
-    if (!resolution.commercialModule) {
+    // Se a profissão não tem módulo comercial e não tem workspace clínico, não possui áreas
+    if (!resolution.commercialModule && !resolution.clinicalWorkspace) {
       return [];
     }
 
@@ -358,6 +358,8 @@ export class CapabilityService {
     return this.calculateCapabilities({
       professionId: canonicalProfId,
       commercialModule,
+      clinicalWorkspace: resolution.clinicalWorkspace,
+      taxonomyCategory: resolution.taxonomyCategory,
       practiceAreaIds: userAreaIds,
       medicalSpecialtyIds: medSpecIds,
       medicalPracticeAreaIds: medPaIds,
@@ -372,6 +374,8 @@ export class CapabilityService {
   public static calculateCapabilities(params: {
     professionId: string;
     commercialModule: string;
+    clinicalWorkspace?: string | null;
+    taxonomyCategory?: string;
     practiceAreaIds: string[];
     medicalSpecialtyIds?: string[];
     medicalPracticeAreaIds?: string[];
@@ -382,6 +386,8 @@ export class CapabilityService {
     const {
       professionId,
       commercialModule,
+      clinicalWorkspace = null,
+      taxonomyCategory,
       practiceAreaIds,
       medicalSpecialtyIds = [],
       medicalPracticeAreaIds = [],
@@ -487,6 +493,8 @@ export class CapabilityService {
     return {
       professionId,
       commercialModule,
+      clinicalWorkspace,
+      taxonomyCategory,
       practiceAreaIds,
       medicalSpecialtyIds,
       medicalPracticeAreaIds,

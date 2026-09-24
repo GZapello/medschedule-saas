@@ -9,12 +9,17 @@ export interface ProstheticWork {
   lab_name: string;
   work_type: string;
   tooth_number?: string;
+  shade_color?: string;
   vita_shade?: string;
+  material?: string;
   sent_date?: string;
+  expected_date?: string;
   delivery_date?: string;
+  received_date?: string;
   trial_date?: string;
+  cost_value?: number;
   cost?: number;
-  status: 'sent_to_lab' | 'in_production' | 'delivered_to_clinic' | 'tested_adjusted' | 'installed';
+  status: 'sent_to_lab' | 'in_production' | 'delivered_to_clinic' | 'tested_adjusted' | 'installed' | 'canceled' | 'requested';
   notes?: string;
 }
 
@@ -57,16 +62,26 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
 
   useEffect(() => {
     loadData();
+
+    const handleCustomUpdate = () => {
+      loadData();
+    };
+    window.addEventListener('zemda-prosthetics-updated', handleCustomUpdate);
+    return () => {
+      window.removeEventListener('zemda-prosthetics-updated', handleCustomUpdate);
+    };
   }, [patientId]);
 
   const handleAdvance = async (work: ProstheticWork) => {
-    const currentIdx = COLUMNS.findIndex(c => c.id === work.status);
+    const currentStatus = work.status === 'requested' ? 'sent_to_lab' : work.status;
+    const currentIdx = COLUMNS.findIndex(c => c.id === currentStatus);
     if (currentIdx < COLUMNS.length - 1) {
       const nextStatus = COLUMNS[currentIdx + 1].id;
       try {
         await ApiClient.put(`/v1/dentistry/prosthetics/${work.id}`, { status: nextStatus });
-        setItems(items.map(i => i.id === work.id ? { ...i, status: nextStatus as any } : i));
+        setItems(prev => prev.map(i => i.id === work.id ? { ...i, status: nextStatus as any } : i));
         if (onUpdateStatus) onUpdateStatus(work.id, nextStatus);
+        window.dispatchEvent(new CustomEvent('zemda-prosthetics-updated', { detail: { id: work.id, status: nextStatus } }));
       } catch (err) {
         console.error('[DentalProstheticsKanban] Erro ao avançar status:', err);
       }
@@ -89,7 +104,10 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3 overflow-x-auto min-h-[300px]">
         {COLUMNS.map(col => {
-          const colItems = items.filter(i => (i.status || 'sent_to_lab') === col.id);
+          const colItems = items.filter(i => {
+            const st = i.status === 'requested' ? 'sent_to_lab' : (i.status || 'sent_to_lab');
+            return st === col.id;
+          });
           return (
             <div
               key={col.id}
@@ -103,45 +121,55 @@ export const DentalProstheticsKanban: React.FC<DentalProstheticsKanbanProps> = (
               </div>
 
               <div className="flex-1 space-y-2.5 overflow-y-auto">
-                {colItems.map(item => (
-                  <div
-                    key={item.id}
-                    className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2 shadow-sm hover:border-indigo-400 transition"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-900 dark:text-white truncate">
-                        {item.work_type}
-                      </span>
-                      {item.tooth_number && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700">
-                          D: {item.tooth_number}
+                {colItems.map(item => {
+                  const shade = item.shade_color || item.vita_shade;
+                  const datePrev = item.expected_date || item.delivery_date;
+                  const cost = item.cost_value !== undefined && item.cost_value !== null ? item.cost_value : item.cost;
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2 shadow-sm hover:border-indigo-400 transition"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-900 dark:text-white truncate">
+                          {item.work_type}
                         </span>
+                        {item.tooth_number && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700">
+                            D: {item.tooth_number}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-slate-500 space-y-0.5">
+                        <div>Lab: <strong>{item.lab_name}</strong></div>
+                        {shade && <div>Cor: <strong>{shade}</strong></div>}
+                        {datePrev && (
+                          <div className="flex items-center gap-1 text-indigo-600 font-semibold">
+                            <Calendar className="w-3 h-3" />
+                            Previsão: {new Date(datePrev).toLocaleDateString('pt-BR')}
+                          </div>
+                        )}
+                        {cost !== undefined && cost !== null && Number(cost) > 0 && (
+                          <div className="text-slate-600 dark:text-slate-400 font-medium">
+                            Custo: R$ {Number(cost).toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+
+                      {col.id !== 'installed' && (
+                        <button
+                          type="button"
+                          onClick={() => handleAdvance(item)}
+                          className="w-full mt-1 px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                        >
+                          Avançar etapa
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
                       )}
                     </div>
-
-                    <div className="text-[11px] text-slate-500 space-y-0.5">
-                      <div>Lab: <strong>{item.lab_name}</strong></div>
-                      {item.vita_shade && <div>Cor: {item.vita_shade}</div>}
-                      {item.delivery_date && (
-                        <div className="flex items-center gap-1 text-indigo-600 font-semibold">
-                          <Calendar className="w-3 h-3" />
-                          Previsão: {new Date(item.delivery_date).toLocaleDateString('pt-BR')}
-                        </div>
-                      )}
-                    </div>
-
-                    {col.id !== 'installed' && (
-                      <button
-                        type="button"
-                        onClick={() => handleAdvance(item)}
-                        className="w-full mt-1 px-2 py-1 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition"
-                      >
-                        Avançar etapa
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

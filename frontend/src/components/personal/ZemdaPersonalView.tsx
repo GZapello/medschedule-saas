@@ -29,11 +29,13 @@ import { PersonalAIAssistantModal } from './PersonalAIAssistantModal';
 interface ZemdaPersonalViewProps {
   initialStudentId?: string | null;
   onSelectStudent?: (studentId: string | null) => void;
+  lockStudentContext?: boolean;
 }
 
 export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   initialStudentId,
-  onSelectStudent
+  onSelectStudent,
+  lockStudentContext = false
 }) => {
   const { showToast } = useToast();
 
@@ -50,6 +52,10 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   }, [initialStudentId]);
 
   const handleSelectStudent = (id: string | null) => {
+    if (lockStudentContext && id !== initialStudentId) {
+      showToast('O contexto está fixado no aluno deste atendimento.', 'info');
+      return;
+    }
     setSelectedStudentId(id);
     if (onSelectStudent) {
       onSelectStudent(id);
@@ -351,7 +357,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
       {selectedStudentId ? (
         <PersonalStudentProfile
           studentId={selectedStudentId}
-          onBack={() => {
+          onBack={lockStudentContext ? undefined : () => {
             handleSelectStudent(null);
             loadDashboard();
             loadStudents();

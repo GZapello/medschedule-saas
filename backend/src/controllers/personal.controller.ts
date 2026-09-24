@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { resolveCanonicalProfession } from '../utils/profession-module';
 
 /**
  * Validação estrita de profissão:
@@ -14,7 +15,7 @@ import { logAudit } from '../middlewares/audit.middleware';
 export function isUserPersonalTrainer(userId: string, tenantId: string): boolean {
   // 1. Busca no registro do profissional
   const prof = db.prepare(`
-    SELECT p.id, p.profession_id, p.practice_areas, p.registration_type,
+    SELECT p.id, p.profession_id, p.profession_name, p.practice_areas, p.registration_type,
            prof.name as prof_name, prof.slug as prof_slug
     FROM professionals p
     LEFT JOIN professions prof ON prof.id = p.profession_id
@@ -24,8 +25,23 @@ export function isUserPersonalTrainer(userId: string, tenantId: string): boolean
   `).get(userId, tenantId) as any;
 
   if (prof) {
+    const canonical = resolveCanonicalProfession({
+      id: prof.profession_id,
+      name: prof.prof_name || prof.profession_name,
+      slug: prof.prof_slug,
+      registrationType: prof.registration_type
+    });
+
+    if (canonical.commercialModule === 'ZemdaPersonal') {
+      return true;
+    }
+
+    if (canonical.commercialModule) {
+      return false;
+    }
+
     const pId = prof.profession_id || '';
-    const pName = (prof.prof_name || '').toLowerCase();
+    const pName = (prof.prof_name || prof.profession_name || '').toLowerCase();
     const pSlug = (prof.prof_slug || '').toLowerCase();
     const pAreas = (prof.practice_areas || '').toLowerCase();
     const rType = (prof.registration_type || '').toUpperCase();
@@ -36,8 +52,7 @@ export function isUserPersonalTrainer(userId: string, tenantId: string): boolean
       'prof-nutricionista', 'prof-nutricao', 'prof-terapeuta-ocupacional', 'prof-terapia-ocupacional',
       'prof-fonoaudiologo', 'prof-fonoaudiologia', 'prof-medico', 'prof-medicina',
       'prof-pediatra', 'prof-cardiologista', 'prof-dermatologista', 'prof-psicologo',
-      'prof-psicologia', 'prof-psiquiatra', 'prof-enfermeiro', 'prof-enfermagem',
-      'prof-advogado', 'prof-contador', 'prof-veterinario'
+      'prof-psicologia', 'prof-psiquiatra', 'prof-enfermeiro', 'prof-enfermagem'
     ];
     if (conflictingProfessions.includes(pId)) {
       return false;
@@ -61,25 +76,41 @@ export function isUserPersonalTrainer(userId: string, tenantId: string): boolean
       return true;
     }
 
-    // Se possui profissão preenchida diferente de Personal Trainer
     if (pId && !pId.includes('personal') && !pId.includes('educa')) {
       return false;
     }
   }
 
-  // 2. Busca em clinic_users e dados de gestão da clínica
-  const cu = db.prepare(`
-    SELECT cu.profession_custom, cu.practice_areas, u.registration_type,
+  // 2. Busca em clinic_users e users
+  const user = db.prepare(`
+    SELECT u.id, u.profession_id, u.profession_name, u.registration_type,
+           cu.profession_custom, cu.practice_areas, cu.zemda_personal_enabled,
            t.manager_profession, t.manager_practice_areas
-    FROM clinic_users cu
-    LEFT JOIN users u ON u.id = cu.user_id
+    FROM users u
+    LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
     LEFT JOIN tenants t ON t.id = cu.tenant_id
-    WHERE cu.user_id = ? AND cu.tenant_id = ?
-  `).get(userId, tenantId) as any;
+    WHERE u.id = ?
+  `).get(tenantId, userId) as any;
 
-  if (cu) {
-    const text = [cu.profession_custom, cu.practice_areas, cu.manager_profession, cu.manager_practice_areas].filter(Boolean).join(' ').toLowerCase();
-    const rType = (cu.registration_type || '').toUpperCase();
+  if (user) {
+    if (user.zemda_personal_enabled === 1) return true;
+
+    const userCanonical = resolveCanonicalProfession({
+      id: user.profession_id,
+      name: user.profession_name || user.profession_custom,
+      registrationType: user.registration_type
+    });
+
+    if (userCanonical.commercialModule === 'ZemdaPersonal') {
+      return true;
+    }
+
+    if (userCanonical.commercialModule) {
+      return false;
+    }
+
+    const text = [user.profession_custom, user.practice_areas, user.manager_profession, user.manager_practice_areas].filter(Boolean).join(' ').toLowerCase();
+    const rType = (user.registration_type || '').toUpperCase();
     if (rType === 'CREF') return true;
 
     // Conflitos no texto livre
@@ -147,25 +178,56 @@ export function hasPersonalAccess(req: Request): boolean {
 }
 
 /**
- * Obtém o professional_id associado ao usuário atual, ou cria/associa fallback
+ * Obtém o professional_id associado estritamente ao usuário atual, com auto-reparo seguro.
+ * NUNCA retorna o ID de outro profissional da clínica!
  */
-function getProfessionalId(req: Request): string {
+export function getProfessionalId(req: Request): string {
   const tenantId = req.tenantId!;
   const userId = req.user!.userId;
   const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(userId, tenantId) as any;
   if (prof) return prof.id;
 
-  // Fallback: primeiro profissional ativo da clínica ou cria um temporário
-  const anyProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
-  if (anyProf) return anyProf.id;
+  // Auto-reparo exclusivo para o usuário atual caso o registro em professionals esteja ausente
+  const user = db.prepare('SELECT id, name, role, registration_type, registration_number, profession_id, profession_name, practice_areas FROM users WHERE id = ?').get(userId) as any;
+  if (user) {
+    const profId = 'pro-' + uuidv4().slice(0, 8);
+    const baseSlug = (user.name || 'personal')
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    const finalSlug = `${baseSlug}-${profId.slice(-4)}`;
 
-  const newId = 'prof-' + uuidv4().slice(0, 8);
-  const userName = (db.prepare('SELECT name FROM users WHERE id = ?').get(userId) as any)?.name || 'Profissional';
-  db.prepare(`
-    INSERT INTO professionals (id, tenant_id, user_id, name, registration_number, active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 'CREF-TEMP', 1, datetime('now'), datetime('now'))
-  `).run(newId, tenantId, userId, userName);
-  return newId;
+    const resolution = resolveCanonicalProfession({
+      id: user.profession_id,
+      name: user.profession_name || 'Personal Trainer',
+      registrationType: user.registration_type
+    });
+
+    db.prepare(`
+      INSERT INTO professionals (
+        id, tenant_id, user_id, name, registration_type, registration_number,
+        practice_areas, bio, slug, active, profession_id, profession_name,
+        zemda_personal_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(
+      profId,
+      tenantId,
+      userId,
+      user.name || 'Personal Trainer',
+      user.registration_type || (resolution.commercialModule === 'ZemdaPersonal' ? 'CREF' : 'Registro'),
+      user.registration_number || null,
+      user.practice_areas || null,
+      user.practice_areas || null,
+      finalSlug,
+      resolution.canonicalId,
+      resolution.canonicalName,
+      resolution.flags.zemda_personal_enabled
+    );
+    return profId;
+  }
+
+  throw new Error('Profissional não identificado para este usuário');
 }
 
 function sanitizePhotoUrl(url: any): string | null {
@@ -404,15 +466,30 @@ export class PersonalController {
         LIMIT 5
       `).all(tenantId) as any[];
 
-      // Atendimentos / Aulas de hoje vinculadas a agendamentos
-      const todayAppointments = db.prepare(`
-        SELECT a.id, substr(a.start_time, 1, 10) as date, a.start_time, a.end_time, a.status,
+      // Atendimentos / Aulas de hoje vinculadas a agendamentos (estritamente do profissional logado, salvo clinic_admin)
+      const isClinicAdmin = req.user?.role === 'clinic_admin';
+      let profId: string | null = null;
+      if (!isClinicAdmin) {
+        try {
+          profId = getProfessionalId(req);
+        } catch {}
+      }
+
+      let aptSql = `
+        SELECT a.id, a.professional_id, substr(a.start_time, 1, 10) as date, a.start_time, a.end_time, a.status,
                p.id as patient_id, COALESCE(p.full_name, p.social_name) as patient_name, p.phone as patient_phone, p.photo_url as avatar_url
         FROM appointments a
         JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
         WHERE a.tenant_id = ? AND (date(a.start_time) = date('now') OR substr(a.start_time, 1, 10) = date('now'))
-        ORDER BY a.start_time ASC
-      `).all(tenantId) as any[];
+      `;
+      const aptParams: any[] = [tenantId];
+      if (!isClinicAdmin && profId) {
+        aptSql += ` AND a.professional_id = ?`;
+        aptParams.push(profId);
+      }
+      aptSql += ` ORDER BY a.start_time ASC`;
+
+      const todayAppointments = db.prepare(aptSql).all(...aptParams) as any[];
 
       // Treinos recentes concluídos
       const recentLogs = db.prepare(`

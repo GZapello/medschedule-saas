@@ -38,6 +38,8 @@ interface AuthContextType {
   isZemdaMed: boolean;
   isZemdaBody: boolean;
   commercialModule: string | null;
+  clinicalWorkspace: string | null;
+  taxonomyCategory?: string;
   canonicalProfessionId?: string | null;
   canonicalProfessionName?: string | null;
   capabilities: string[];
@@ -468,6 +470,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaMed,
         isZemdaBody,
         commercialModule,
+        clinicalWorkspace: currentUser?.clinicalWorkspace ?? null,
+        taxonomyCategory: currentUser?.taxonomyCategory,
         canonicalProfessionId: currentUser?.canonicalProfessionId || currentUser?.professionId || null,
         canonicalProfessionName: currentUser?.canonicalProfessionName || currentUser?.professionName || null,
         capabilities,

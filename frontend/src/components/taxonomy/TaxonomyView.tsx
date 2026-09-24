@@ -521,7 +521,6 @@ export const TaxonomyView: React.FC = () => {
                   <option value="client">Cliente</option>
                   <option value="patient">Paciente</option>
                   <option value="student">Aluno / Aluna</option>
-                  <option value="pet_owner">Tutor / Pet</option>
                 </select>
               </div>
 

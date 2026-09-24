@@ -293,6 +293,8 @@ export class AuthController {
           zemdaMedEnabled: !!zemdaMedEnabled,
           zemdaBodyEnabled,
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
+          clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,
+          taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
           selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []
@@ -490,6 +492,8 @@ export class AuthController {
           zemdaMedEnabled: !!zemdaMedEnabled,
           zemdaBodyEnabled,
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
+          clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,
+          taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
           selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []
@@ -966,8 +970,10 @@ export class AuthController {
         password,
         phone,
         prefix,
+        professionId,
         professionName,
         practiceAreas,
+        practiceAreaIds,
         registrationType,
         registrationNumber
       } = req.body;
@@ -1111,43 +1117,113 @@ export class AuthController {
         else if (prefix === 'Dr.') finalName = `Dr. ${finalName}`;
       }
 
+      // Resolução Canônica de Profissão e Módulo
+      const professionResolution = resolveCanonicalProfession({
+        id: professionId,
+        name: professionName,
+        registrationType: registrationType
+      });
+      const canonicalProfessionId = professionResolution.canonicalId;
+      const canonicalProfessionName = professionResolution.canonicalName;
+      const modFlags = professionResolution.flags;
+
+      // Monta string de áreas para campos legados de texto e lista de IDs para user_practice_areas
+      let areasStr: string | null = null;
+      let targetAreaIds: string[] = [];
+      if (Array.isArray(practiceAreaIds) && practiceAreaIds.length > 0) {
+        targetAreaIds = practiceAreaIds.map(String).map(s => s.trim()).filter(Boolean);
+      }
+      if (typeof practiceAreas === 'string' && practiceAreas.trim()) {
+        areasStr = practiceAreas.trim();
+        if (targetAreaIds.length === 0) {
+          const names = areasStr.split(',').map(s => s.trim()).filter(Boolean);
+          for (const nm of names) {
+            const row = db.prepare('SELECT id FROM practice_areas WHERE name = ? OR slug = ? COLLATE NOCASE').get(nm, nm) as any;
+            if (row?.id && !targetAreaIds.includes(row.id)) targetAreaIds.push(row.id);
+          }
+        }
+      } else if (targetAreaIds.length > 0) {
+        const ph = targetAreaIds.map(() => '?').join(',');
+        const rows = db.prepare(`SELECT name FROM practice_areas WHERE id IN (${ph})`).all(...targetAreaIds) as any[];
+        areasStr = rows.map(r => r.name).join(', ');
+      }
+
+      if (professionResolution.inferredAreaId && !targetAreaIds.includes(professionResolution.inferredAreaId)) {
+        targetAreaIds.push(professionResolution.inferredAreaId);
+      }
+      if (professionResolution.automaticPracticeAreaId && !targetAreaIds.includes(professionResolution.automaticPracticeAreaId)) {
+        targetAreaIds.push(professionResolution.automaticPracticeAreaId);
+      }
+
+      let createdProfessionalId: string | null = null;
+
       // Executa inserções e consome o convite em transação
       const completeRegister = db.transaction(() => {
         requireOpenRegistration(tenantId); requireCapacity(tenantId);
         const currentInvite = db.prepare('SELECT status, used_count, max_uses, expires_at FROM clinic_invites WHERE token = ?').get(token);
         if (!currentInvite || currentInvite.status !== 'pending' || currentInvite.used_count >= currentInvite.max_uses || new Date(currentInvite.expires_at) < new Date()) throw new Error('Convite indisponível.');
+
         // 1. users (ativo, já aprovado via convite oficial da clínica)
         db.prepare(`
           INSERT INTO users (
             id, tenant_id, name, email, password_hash, role, phone, status,
-            profession_name, practice_areas, registration_type, registration_number
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+            profession_id, profession_name, practice_areas, registration_type, registration_number,
+            zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
+            zemda_med_enabled
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           userId, tenantId, finalName, cleanEmail, hashedPassword, userRole, phone || null,
-          professionName || null, practiceAreas || null, registrationType || null, registrationNumber || null
+          canonicalProfessionId, canonicalProfessionName, areasStr || null,
+          registrationType || professionResolution.boardLabel || null,
+          registrationNumber || null,
+          modFlags.zemda_fisio_enabled,
+          modFlags.zemda_odonto_enabled,
+          modFlags.zemda_nutri_enabled,
+          modFlags.zemda_to_enabled,
+          modFlags.zemda_fono_enabled,
+          modFlags.zemda_pp_enabled,
+          modFlags.zemda_psico_enabled,
+          modFlags.zemda_personal_enabled,
+          modFlags.zemda_med_enabled || 0
         );
 
         // 2. clinic_users
         db.prepare(`
           INSERT INTO clinic_users (
             id, tenant_id, user_id, role, status, is_manager, permissions_json,
-            profession_custom, practice_areas, approved_at, approved_by, created_at
-          ) VALUES (?, ?, ?, ?, 'active', 0, ?, ?, ?, datetime('now'), ?, datetime('now'))
+            profession_id, profession_name, profession_custom, practice_areas,
+            zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
+            zemda_med_enabled,
+            approved_at, approved_by, created_at
+          ) VALUES (?, ?, ?, ?, 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, datetime('now'))
         `).run(
           'cu-' + uuidv4().slice(0, 8),
           tenantId,
           userId,
           userRole,
           defaultPerms,
-          professionName || null,
-          practiceAreas || null,
+          canonicalProfessionId,
+          canonicalProfessionName,
+          canonicalProfessionName,
+          areasStr || null,
+          modFlags.zemda_fisio_enabled,
+          modFlags.zemda_odonto_enabled,
+          modFlags.zemda_nutri_enabled,
+          modFlags.zemda_to_enabled,
+          modFlags.zemda_fono_enabled,
+          modFlags.zemda_pp_enabled,
+          modFlags.zemda_psico_enabled,
+          modFlags.zemda_personal_enabled,
+          modFlags.zemda_med_enabled || 0,
           inviteData.created_by || 'invite'
         );
 
-        // 3. professionals (se for professional ou tiver área de saúde)
-        if (userRole === 'professional' || professionName) {
+        // 3. professionals (se for professional ou tiver área de saúde ou profissão selecionada)
+        if (userRole === 'professional' || professionName || professionId) {
           const profId = 'pro-' + uuidv4().slice(0, 8);
-          // Gera slug
+          createdProfessionalId = profId;
           const baseSlug = finalName
             .toLowerCase()
             .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1158,24 +1234,44 @@ export class AuthController {
           db.prepare(`
             INSERT INTO professionals (
               id, tenant_id, user_id, name, registration_type, registration_number,
-              practice_areas, bio, slug, active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+              practice_areas, bio, slug, active,
+              profession_id, profession_name,
+              zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
+              zemda_med_enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             profId,
             tenantId,
             userId,
             finalName,
-            registrationType || 'Registro',
+            registrationType || professionResolution.boardLabel || 'Registro',
             registrationNumber || null,
-            practiceAreas || null,
-            practiceAreas || null,
-            finalSlug
+            areasStr || null,
+            areasStr || null,
+            finalSlug,
+            canonicalProfessionId,
+            canonicalProfessionName,
+            modFlags.zemda_fisio_enabled,
+            modFlags.zemda_odonto_enabled,
+            modFlags.zemda_nutri_enabled,
+            modFlags.zemda_to_enabled,
+            modFlags.zemda_fono_enabled,
+            modFlags.zemda_pp_enabled,
+            modFlags.zemda_psico_enabled,
+            modFlags.zemda_personal_enabled,
+            modFlags.zemda_med_enabled || 0
           );
 
           createDefaultSchedules(db, tenantId, profId);
         }
 
-        // 4. Marca o convite como utilizado (uso único por padrão)
+        // 4. Inserir áreas em user_practice_areas
+        if (targetAreaIds.length > 0) {
+          CapabilityService.setUserPracticeAreas(userId, tenantId, targetAreaIds);
+        }
+
+        // 5. Marca o convite como utilizado (uso único por padrão)
         const nextUsedCount = inviteData.used_count + 1;
         const newStatus = nextUsedCount >= inviteData.max_uses ? 'used' : 'pending';
         db.prepare(`
@@ -1190,6 +1286,9 @@ export class AuthController {
       });
 
       completeRegister();
+
+      // Computa capabilities completas imediatamente no primeiro login
+      const computedCaps = CapabilityService.computeUserCapabilities(userId, tenantId);
 
       // Gera token de autenticação
       const jwtToken = generateToken({
@@ -1217,7 +1316,27 @@ export class AuthController {
           email: cleanEmail,
           role: userRole,
           status: 'active',
-          tenantId
+          tenantId,
+          professionalId: createdProfessionalId,
+          professionId: canonicalProfessionId,
+          canonicalProfessionId,
+          professionName: canonicalProfessionName,
+          registrationType: registrationType || professionResolution.boardLabel || null,
+          registrationNumber: registrationNumber || null,
+          commercialModule: professionResolution.commercialModule,
+          capabilities: computedCaps?.activeCapabilities || [],
+          practiceAreaIds: computedCaps?.practiceAreaIds || [],
+          selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || [],
+          zemdaPersonalEnabled: modFlags.zemda_personal_enabled === 1,
+          isPersonalTrainer: modFlags.zemda_personal_enabled === 1,
+          zemdaFisioEnabled: modFlags.zemda_fisio_enabled === 1,
+          zemdaOdontoEnabled: modFlags.zemda_odonto_enabled === 1,
+          zemdaNutriEnabled: modFlags.zemda_nutri_enabled === 1,
+          zemdaToEnabled: modFlags.zemda_to_enabled === 1,
+          zemdaFonoEnabled: modFlags.zemda_fono_enabled === 1,
+          zemdaPsicoEnabled: modFlags.zemda_psico_enabled === 1,
+          zemdaPPEnabled: modFlags.zemda_pp_enabled === 1,
+          zemdaMedEnabled: (modFlags.zemda_med_enabled || 0) === 1
         },
         clinic: {
           id: tenantId,
