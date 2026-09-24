@@ -93,10 +93,22 @@ Se você contratar um servidor Linux dedicado (VPS com Ubuntu):
 
 ---
 
-## 💡 Informações de Segurança e Credenciais Padrão:
+## 🔐 Variáveis de ambiente obrigatórias
 
-As contas padrão do sistema continuam ativas para o primeiro acesso administrativo:
-* **SuperAdmin da Plataforma:** `admin@saas.com` | Senha: `123456`
-* **Gestor da Clínica Exemplo:** `diretoria@viverbem.com` | Senha: `123456`
+O servidor **não inicia** sem as seguintes variáveis configuradas (no Railway: aba *Variables* do serviço; numa VPS: arquivo `.env` na raiz do projeto, usado pelo `docker-compose.yml`):
 
-*(Lembre-se de alterar as senhas dessas contas logo após o primeiro acesso através do botão "Minha Conta / Segurança").*
+* `JWT_SECRET` — segredo usado para assinar as sessões dos usuários.
+* `ZEMDA_FILES_SIGNING_SECRET` — segredo usado para assinar URLs de arquivos.
+
+Gere valores aleatórios únicos para cada ambiente (nunca reaproveite o mesmo valor entre produção, homologação e sua máquina local), por exemplo:
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+Consulte `backend/.env.example` para a lista completa de variáveis (e-mail, Asaas, WhatsApp, Gemini, R2, etc).
+
+## 💡 Contas de demonstração (apenas ambiente local/testes)
+
+Por padrão, uma instalação nova **não** cria nenhuma conta de acesso — o cadastro é feito pelo fluxo público normal (`/cadastro`). Se quiser testar o sistema localmente com uma clínica e usuários fictícios já povoados, defina `SEED_DEMO_DATA=true` antes de subir o backend pela primeira vez; isso cria uma clínica de exemplo com contas de senha `123456`.
+
+⚠️ **Nunca defina `SEED_DEMO_DATA=true` em produção** — isso criaria contas de administrador com senha conhecida publicamente (inclusive neste histórico do repositório) em um ambiente com dados reais de clientes.

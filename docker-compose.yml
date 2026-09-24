@@ -11,7 +11,8 @@ services:
       - PORT=4000
       - NODE_ENV=production
       - DATABASE_PATH=/data/saas_schedule.db
-      - JWT_SECRET=medschedule-production-secret-key-2026
+      - JWT_SECRET=${JWT_SECRET:?defina JWT_SECRET em um arquivo .env local (nunca versione este valor)}
+      - ZEMDA_FILES_SIGNING_SECRET=${ZEMDA_FILES_SIGNING_SECRET:?defina ZEMDA_FILES_SIGNING_SECRET em um arquivo .env local}
     volumes:
       - medschedule-data:/data
 

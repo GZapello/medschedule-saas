@@ -1,6 +1,8 @@
 import { registerPublicSite } from './seo/publicSite';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { BillingWebhookService } from './services/billing-webhook.service';
 import { initializeDatabase } from './config/database';
@@ -23,12 +25,46 @@ const PORT = process.env.PORT || 4000;
 // Permite que req.ip obtenha o IP real do cliente sem confiar em cabeçalhos forjados diretamente
 app.set('trust proxy', 1);
 
+// Cabeçalhos de segurança HTTP padrão (CSP desabilitado: a API serve JSON e o SPA já define o seu próprio)
+app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
+
+// Lista de origens de navegador autorizadas a chamar a API (apps nativos/Electron não enviam Origin e não são afetados)
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://zemda.com.br,https://www.zemda.com.br,http://localhost:5173,http://localhost:4000')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 // Configurações de Middleware
 app.use(cors({
-  origin: '*',
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origem não autorizada pela política de CORS: ${origin}`));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Requested-With', 'Accept']
 }));
+
+// Limite geral de requisições por IP, protegendo a API contra abuso e força bruta
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 600,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use(['/api', '/v1'], apiLimiter);
+
+// Limite mais rígido para rotas sensíveis de autenticação
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Muitas tentativas. Tente novamente em alguns minutos.', code: 'RATE_LIMITED' }
+});
+app.use(['/api/v1/auth/login', '/v1/auth/login', '/api/v1/auth/register', '/v1/auth/register', '/api/v1/auth/reset-password', '/v1/auth/reset-password', '/api/v1/public/auth/reset-password'], authLimiter);
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));

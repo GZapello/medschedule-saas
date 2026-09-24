@@ -2,8 +2,6 @@ import { DatabaseSync } from 'node:sqlite';
 import bcrypt from 'bcryptjs';
 
 export function runSeed(db: DatabaseSync): void {
-  const passwordHash = bcrypt.hashSync('123456', 10);
-
   // 1. Categorias Macro (20 categorias solicitadas)
   const categoriesData = [
     { id: 'cat-mental', name: 'Saúde Mental e Comportamento', slug: 'saude-mental', icon: 'Brain', default_terminology: 'patient', is_clinical: 1, description: 'Psicologia, Psiquiatria, Terapias Comportamentais e Desenvolvimento Humano' },
@@ -160,6 +158,16 @@ export function runSeed(db: DatabaseSync): void {
     JSON.stringify({ calendar: true, publicBooking: true, reminders: 'all', reports: true, finance: true, clinicalRecords: true, multiUser: true, rooms: true, aiAssistant: true }),
     'active'
   );
+
+  // Dados de demonstração (clínica fictícia, usuários e agenda de exemplo) só são
+  // criados quando SEED_DEMO_DATA=true é definido explicitamente. Isso evita que
+  // toda instalação em produção nasça com contas padrão de senha conhecida.
+  if (process.env.SEED_DEMO_DATA !== 'true') {
+    return;
+  }
+
+  console.warn('[Seed] SEED_DEMO_DATA=true: criando clínica e contas de demonstração com senha padrão "123456". NUNCA habilite isso em produção com dados reais de clientes.');
+  const passwordHash = bcrypt.hashSync('123456', 10);
 
   // 5. Tenants (Clínica Modelo e Consultório Modelo)
   const insertTenant = db.prepare(`

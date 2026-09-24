@@ -37,10 +37,7 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 export function getSigningSecret(): string {
   const secret = process.env.ZEMDA_FILES_SIGNING_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
-      console.warn('[getSigningSecret] AVISO: ZEMDA_FILES_SIGNING_SECRET não definido explicitamente em produção, usando fallback');
-    }
-    return 'zemda-files-signing-secret';
+    throw new Error('ZEMDA_FILES_SIGNING_SECRET não configurado no ambiente. Defina a variável de ambiente antes de assinar/verificar tokens de arquivo.');
   }
   return secret;
 }

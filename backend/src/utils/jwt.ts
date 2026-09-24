@@ -1,7 +1,15 @@
 import jwt from 'jsonwebtoken';
 import { db } from '../config/database';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secure-secret-key-saas-platform-2026-x99';
+function requireJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET não configurado no ambiente. Defina a variável de ambiente JWT_SECRET antes de iniciar o servidor.');
+  }
+  return secret;
+}
+
+const JWT_SECRET: string = requireJwtSecret();
 const JWT_EXPIRES_IN = '7d';
 
 export interface TokenPayload {
