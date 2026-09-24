@@ -72,29 +72,52 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     }
 
     const [year, month, day] = dateStr.split('-').map(Number);
-    const dateObj = new Date(year, month - 1, day, 12, 0, 0);
-    const dayOfWeek = dateObj.getDay();
+    const dateObj = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    const dayOfWeek = dateObj.getUTCDay();
 
-    const daySchedule = selectedProfSchedule.schedules?.find((s: any) => s.day_of_week === dayOfWeek);
+    const activeSchedules = (selectedProfSchedule.schedules || []).filter(
+      (s: any) => s.day_of_week === dayOfWeek && (s.is_active === 1 || s.is_active === true)
+    );
 
-    if (!daySchedule || !daySchedule.is_active) {
-      return { available: false, reason: 'Fora da escala' };
+    if (activeSchedules.length === 0) {
+      return { available: false, reason: 'Folga / Sem escala' };
     }
 
     const slotMinutes = parseInt(timeSlot.slice(0, 2), 10) * 60 + parseInt(timeSlot.slice(3, 5), 10);
-    const startMinutes = parseInt(daySchedule.start_time.slice(0, 2), 10) * 60 + parseInt(daySchedule.start_time.slice(3, 5), 10);
-    const endMinutes = parseInt(daySchedule.end_time.slice(0, 2), 10) * 60 + parseInt(daySchedule.end_time.slice(3, 5), 10);
+    const slotDuration = 30;
+    const slotEndMinutes = slotMinutes + slotDuration;
 
-    if (slotMinutes < startMinutes || slotMinutes >= endMinutes) {
-      return { available: false, reason: 'Fora da escala' };
+    let fitsInAnyShift = false;
+    let breakConflict = false;
+
+    for (const sched of activeSchedules) {
+      const startMin = parseInt(sched.start_time.slice(0, 2), 10) * 60 + parseInt(sched.start_time.slice(3, 5), 10);
+      const endMin = parseInt(sched.end_time.slice(0, 2), 10) * 60 + parseInt(sched.end_time.slice(3, 5), 10);
+
+      const insideShift = slotMinutes >= startMin && slotEndMinutes <= endMin;
+      let insideBreak = false;
+
+      if (sched.break_start && sched.break_end) {
+        const bStart = parseInt(sched.break_start.slice(0, 2), 10) * 60 + parseInt(sched.break_start.slice(3, 5), 10);
+        const bEnd = parseInt(sched.break_end.slice(0, 2), 10) * 60 + parseInt(sched.break_end.slice(3, 5), 10);
+        if (slotMinutes < bEnd && slotEndMinutes > bStart) {
+          insideBreak = true;
+          breakConflict = true;
+        }
+      }
+
+      if (insideShift && !insideBreak) {
+        fitsInAnyShift = true;
+        break;
+      }
     }
 
-    if (daySchedule.break_start && daySchedule.break_end) {
-      const breakStart = parseInt(daySchedule.break_start.slice(0, 2), 10) * 60 + parseInt(daySchedule.break_start.slice(3, 5), 10);
-      const breakEnd = parseInt(daySchedule.break_end.slice(0, 2), 10) * 60 + parseInt(daySchedule.break_end.slice(3, 5), 10);
-      if (slotMinutes >= breakStart && slotMinutes < breakEnd) {
-        return { available: false, reason: 'Intervalo', isBreak: true };
-      }
+    if (!fitsInAnyShift) {
+      return {
+        available: false,
+        reason: breakConflict ? 'Intervalo' : 'Fora da escala',
+        isBreak: breakConflict
+      };
     }
 
     if (Array.isArray(selectedProfSchedule.blockedTimes)) {
@@ -117,6 +140,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [isRescheduling, setIsRescheduling] = useState<boolean>(false);
   const [rescheduleDate, setRescheduleDate] = useState<string>('');
   const [rescheduleTime, setRescheduleTime] = useState<string>('');
+  const [rescheduleSlots, setRescheduleSlots] = useState<any[]>([]);
+  const [loadingRescheduleSlots, setLoadingRescheduleSlots] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isRescheduling && selectedAppt && rescheduleDate) {
+      setLoadingRescheduleSlots(true);
+      ApiClient.get<any>(`/v1/slots/available?professionalId=${selectedAppt.professional_id}&serviceId=${selectedAppt.service_id}&date=${rescheduleDate}`)
+        .then(data => {
+          setRescheduleSlots(data.slots || []);
+        })
+        .catch(() => {
+          setRescheduleSlots([]);
+        })
+        .finally(() => setLoadingRescheduleSlots(false));
+    } else {
+      setRescheduleSlots([]);
+    }
+  }, [isRescheduling, selectedAppt, rescheduleDate]);
 
   // Modais de Atendimento Rápido, Finalização e Cancelamento Estruturado
   const [activeConsultationAppt, setActiveConsultationAppt] = useState<any | null>(null);
@@ -234,6 +275,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         reason: reason || null,
         cancellationReasonCategory: category || null
       });
+      setAppointments(prev => prev.map(a => a.id === apptId ? { ...a, status: status as any } : a));
       showToast(`Status atualizado para ${status}`, 'success');
       setSelectedAppt(null);
       setCancellingAppt(null);
@@ -251,6 +293,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         payload.clinicalModule = selectedModule;
       }
       await ApiClient.put(`/v1/appointments/${appointment.id}/status`, payload);
+      setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any } : a));
       const chosenModule = selectedModule || (appointment as any).clinical_module;
       setActiveConsultationModule(chosenModule);
       setActiveConsultationAppt({
@@ -305,6 +348,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         reason: 'Remarcado pelo painel da agenda'
       });
 
+      setAppointments(prev => prev.map(a => a.id === selectedAppt.id ? { ...a, start_time: startTime, end_time: endTime, status: 'rescheduled' } : a));
       showToast('Atendimento remarcado com sucesso!', 'success');
       setIsRescheduling(false);
       setSelectedAppt(null);
@@ -933,19 +977,58 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     <input
                       type="date"
                       value={rescheduleDate}
-                      onChange={e => setRescheduleDate(e.target.value)}
+                      onChange={e => {
+                        setRescheduleDate(e.target.value);
+                        setRescheduleTime('');
+                      }}
                       className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Novo Horário</label>
-                    <input
-                      type="time"
-                      value={rescheduleTime}
-                      onChange={e => setRescheduleTime(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                    />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Horários de Trabalho Disponíveis</label>
+                    {loadingRescheduleSlots ? (
+                      <div className="text-xs text-slate-400 py-2">Carregando horários do profissional...</div>
+                    ) : rescheduleSlots.length > 0 ? (
+                      <div className="grid grid-cols-4 gap-1.5 max-h-36 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200">
+                        {rescheduleSlots.map((slot: any) => {
+                          const timeStr = (slot.start || slot.time || '').slice(11, 16) || slot.time;
+                          const isSelected = rescheduleTime === timeStr;
+                          return (
+                            <button
+                              key={timeStr}
+                              type="button"
+                              onClick={() => setRescheduleTime(timeStr)}
+                              className={`py-1.5 px-2 text-xs rounded-lg font-semibold transition-all ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white shadow-xs'
+                                  : 'bg-white hover:bg-indigo-50 text-slate-700 border border-slate-200'
+                              }`}
+                            >
+                              {timeStr}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : rescheduleDate ? (
+                      <p className="text-xs text-amber-600 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                        Nenhum horário disponível para esta data (fora do expediente, folga ou agenda cheia).
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">Selecione uma data para ver os horários de trabalho.</p>
+                    )}
                   </div>
+                  {rescheduleTime && (
+                    <div className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 flex items-center justify-between">
+                      <span><span className="font-semibold">Horário selecionado:</span> {rescheduleTime}</span>
+                      <button
+                        type="button"
+                        onClick={() => setRescheduleTime('')}
+                        className="text-emerald-700 hover:text-emerald-900 font-bold ml-2"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

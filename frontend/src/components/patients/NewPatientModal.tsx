@@ -111,6 +111,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
       });
 
       showToast(`${clientTermLabel} cadastrado com sucesso!`, 'success');
+      window.dispatchEvent(new CustomEvent('zemda-patient-updated'));
       onSuccess();
       onClose();
     } catch (err: any) {

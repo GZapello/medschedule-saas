@@ -17,8 +17,12 @@ export function validateClinicBusinessHours(tenantId: string, startTime: string,
     const bhList = JSON.parse(tenantRow.business_hours_json);
     if (!Array.isArray(bhList) || bhList.length === 0) return { valid: true };
 
-    const apptDate = new Date(startTime);
-    const dayOfWeek = apptDate.getDay();
+    const normalizedStart = startTime.includes('T') ? startTime : startTime.replace(' ', 'T');
+    const datePart = normalizedStart.slice(0, 10);
+    const [y, m, d] = datePart.split('-').map(Number);
+    const dayOfWeek = (!isNaN(y) && !isNaN(m) && !isNaN(d))
+      ? new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay()
+      : new Date(normalizedStart).getDay();
     const dayConfig = bhList.find((bh: any) => Number(bh.dayOfWeek) === dayOfWeek);
 
     if (!dayConfig) return { valid: true };
@@ -59,9 +63,12 @@ export function validateProfessionalSchedule(tenantId: string, professionalId: s
   try {
     const normalizedStart = startTime.includes('T') ? startTime : startTime.replace(' ', 'T');
     const normalizedEnd = endTime.includes('T') ? endTime : endTime.replace(' ', 'T');
-    const apptDate = new Date(normalizedStart);
-    const dayOfWeek = isNaN(apptDate.getDay()) ? -1 : apptDate.getDay();
-    if (dayOfWeek === -1) return { valid: false, error: 'Data de agendamento inválida.' };
+    const datePart = normalizedStart.slice(0, 10);
+    const [y, m, d] = datePart.split('-').map(Number);
+    const dayOfWeek = (!isNaN(y) && !isNaN(m) && !isNaN(d))
+      ? new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay()
+      : new Date(normalizedStart).getDay();
+    if (dayOfWeek === -1 || isNaN(dayOfWeek)) return { valid: false, error: 'Data de agendamento inválida.' };
 
     const timeOnly = (dStr: string) => {
       const parts = dStr.split('T');
@@ -667,6 +674,13 @@ export class AppointmentController {
         return;
       }
 
+      // 0b. Validação da escala de trabalho ativa do profissional
+      const scheduleCheck = validateProfessionalSchedule(tenantId, appt.professional_id, normalizedStartTime, normalizedEndTime);
+      if (!scheduleCheck.valid) {
+        res.status(400).json({ error: scheduleCheck.error });
+        return;
+      }
+
       // 1. Conflito de profissional (Item 7)
       const conflict = db.prepare(`
         SELECT id FROM appointments
@@ -764,6 +778,10 @@ export class AppointmentController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(401).json({ error: 'Tenant ID required' });
+        return;
+      }
       const { serviceId, professionalId, roomId, startTime, endTime, notes, modality } = req.body;
 
       const appt = db.prepare('SELECT * FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
@@ -780,6 +798,38 @@ export class AppointmentController {
       }
       if (endTime) {
         newEnd = String(endTime).trim().replace(' ', 'T');
+      }
+
+      const safeProfId = String(professionalId || appt.professional_id || '');
+      const safeStart = String(newStart || '');
+      const safeEnd = String(newEnd || '');
+
+      if (startTime || endTime || professionalId) {
+        const hoursCheck = validateClinicBusinessHours(tenantId, safeStart, safeEnd);
+        if (!hoursCheck.valid) {
+          res.status(400).json({ error: hoursCheck.error });
+          return;
+        }
+
+        const scheduleCheck = validateProfessionalSchedule(tenantId, safeProfId, safeStart, safeEnd);
+        if (!scheduleCheck.valid) {
+          res.status(400).json({ error: scheduleCheck.error });
+          return;
+        }
+
+        const conflict = db.prepare(`
+          SELECT id FROM appointments
+          WHERE tenant_id = ?
+            AND professional_id = ?
+            AND id != ?
+            AND status NOT IN ('cancelled')
+            AND REPLACE(start_time, ' ', 'T') < ? AND REPLACE(end_time, ' ', 'T') > ?
+        `).get(tenantId, safeProfId, id, safeEnd, safeStart);
+
+        if (conflict) {
+          res.status(409).json({ error: 'Este horário não está mais disponível. Escolha outro horário.' });
+          return;
+        }
       }
 
       db.prepare(`

@@ -109,6 +109,15 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   useEffect(() => {
     loadDashboard();
     loadStudents();
+
+    const handlePhotoUpdated = (e: any) => {
+      const { studentId, avatarUrl } = e.detail || {};
+      if (studentId) {
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, avatar_url: avatarUrl } : s));
+      }
+    };
+    window.addEventListener('zemda-student-photo-updated', handlePhotoUpdated);
+    return () => window.removeEventListener('zemda-student-photo-updated', handlePhotoUpdated);
   }, []);
 
   useEffect(() => {
@@ -620,6 +629,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         onSaved={() => {
           loadDashboard();
           loadStudents();
+          window.dispatchEvent(new CustomEvent('zemda-personal-refresh', { detail: { studentId: selectedStudentId } }));
         }}
         studentsList={students}
         student={students.find((s) => s.id === selectedStudentId) || null}
@@ -633,6 +643,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         onSaved={() => {
           loadDashboard();
           loadStudents();
+          window.dispatchEvent(new CustomEvent('zemda-personal-refresh', { detail: { studentId: selectedStudentId } }));
         }}
         studentsList={students}
         student={students.find((s) => s.id === selectedStudentId) || null}

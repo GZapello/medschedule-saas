@@ -150,6 +150,8 @@ export class ProfessionTaxonomyService {
           profession_id = ?,
           profession_name = ?,
           practice_areas = ?,
+          registration_type = ?,
+          registration_number = COALESCE(?, registration_number),
           zemda_fisio_enabled = ?,
           zemda_odonto_enabled = ?,
           zemda_nutri_enabled = ?,
@@ -165,6 +167,8 @@ export class ProfessionTaxonomyService {
         resolution.canonicalId,
         resolution.canonicalName,
         finalPracticeAreas,
+        boardLabel,
+        registrationNumber || null,
         flags.zemda_fisio_enabled,
         flags.zemda_odonto_enabled,
         flags.zemda_nutri_enabled,
@@ -242,6 +246,17 @@ export class ProfessionTaxonomyService {
       // Limpeza de capacidades residuais incompatíveis
       try {
         db.prepare('DELETE FROM user_optional_capabilities WHERE user_id = ? AND tenant_id = ?').run(userId, tenantId);
+      } catch {}
+
+      // Limpeza de áreas de atuação do catálogo que não pertencem à nova profissão
+      try {
+        db.prepare(`
+          DELETE FROM user_practice_areas
+          WHERE user_id = ? AND tenant_id = ?
+            AND practice_area_id IN (
+              SELECT id FROM practice_areas WHERE profession_id != ? AND profession_id != ?
+            )
+        `).run(userId, tenantId, resolution.canonicalId, targetProfId);
       } catch {}
 
       // Se não for mais médico, limpa vínculo com árvore médica

@@ -138,6 +138,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
               await ApiClient.put(`/v1/personal/students/${studentId}`, {
                 avatar_url: base64
               });
+              setStudent(prev => prev ? { ...prev, avatar_url: base64 } : prev);
+              window.dispatchEvent(new CustomEvent('zemda-student-photo-updated', { detail: { studentId, avatarUrl: base64 } }));
               showToast('Foto do aluno atualizada com sucesso!', 'success');
               loadAllStudentData();
             } catch (err: any) {
@@ -158,8 +160,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
     }
   };
 
-  const handleRemovePhoto = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRemovePhoto = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (!window.confirm('Deseja realmente remover a foto do aluno?')) return;
     try {
       setUploadingPhoto(true);
@@ -167,6 +169,9 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
         avatar_url: null,
         photo_url: null
       });
+      setStudent(prev => prev ? { ...prev, avatar_url: null } : prev);
+      setShowPhotoLightbox(false);
+      window.dispatchEvent(new CustomEvent('zemda-student-photo-updated', { detail: { studentId, avatarUrl: null } }));
       showToast('Foto do aluno removida com sucesso!', 'success');
       loadAllStudentData();
     } catch (err: any) {
@@ -226,6 +231,13 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
 
   useEffect(() => {
     loadAllStudentData();
+    const handlePersonalRefresh = (e: any) => {
+      if (!e.detail?.studentId || e.detail.studentId === studentId) {
+        loadAllStudentData();
+      }
+    };
+    window.addEventListener('zemda-personal-refresh', handlePersonalRefresh);
+    return () => window.removeEventListener('zemda-personal-refresh', handlePersonalRefresh);
   }, [studentId]);
 
   const loadAllStudentData = async () => {
@@ -268,11 +280,13 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   const handleDeleteWorkout = async (workoutId: string) => {
     if (!window.confirm('Tem certeza que deseja excluir esta divisão de treino?')) return;
     try {
+      setWorkouts(prev => prev.filter(w => w.id !== workoutId));
       await ApiClient.delete(`/v1/personal/workouts/${workoutId}`);
       showToast('Treino excluído com sucesso!', 'success');
       loadAllStudentData();
     } catch (err) {
       showToast('Erro ao excluir treino', 'error');
+      loadAllStudentData();
     }
   };
 
@@ -292,11 +306,13 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   const handleDeleteAssessment = async (assessmentId: string) => {
     if (!window.confirm('Excluir esta avaliação física e suas fotos?')) return;
     try {
+      setAssessments(prev => prev.filter(a => a.id !== assessmentId));
       await ApiClient.delete(`/v1/personal/assessments/${assessmentId}`);
       showToast('Avaliação física removida com sucesso!', 'success');
       loadAllStudentData();
     } catch (err) {
       showToast('Erro ao remover avaliação física', 'error');
+      loadAllStudentData();
     }
   };
 
@@ -452,6 +468,43 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                 <Edit2 className="w-3 h-3" />
                 <span>Editar Aluno</span>
               </button>
+            </div>
+
+            {/* Ações de Foto do Aluno */}
+            <div className="flex items-center gap-2 mt-2">
+              {student.avatar_url ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowPhotoLightbox(true)}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Camera className="w-3 h-3 text-indigo-600" /> Visualizar foto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    Trocar foto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePhoto()}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3 text-rose-500" /> Remover foto
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-200 flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Camera className="w-3 h-3 text-indigo-600" /> Adicionar foto do aluno
+                </button>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-slate-500">
@@ -1224,10 +1277,20 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setShowPhotoLightbox(false)}
-                className="w-8 h-8 rounded-full bg-black/60 hover:bg-black/90 text-white flex items-center justify-center transition-colors cursor-pointer"
+                onClick={() => handleRemovePhoto()}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <Trash2 className="w-3.5 h-3.5" />
+                Remover Foto
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPhotoLightbox(false)}
+                className="px-3 py-1.5 rounded-xl bg-black/70 hover:bg-black/90 text-white text-xs font-bold flex items-center gap-1 shadow-lg transition-colors cursor-pointer"
+                title="Fechar visualizador"
+              >
+                <X className="w-4 h-4" />
+                <span>Fechar</span>
               </button>
             </div>
             <img

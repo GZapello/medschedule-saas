@@ -246,11 +246,7 @@ export class AuthController {
         ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
         : null;
 
-      const zemdaMedEnabled = isEligibleUser && (
-        modFlags.zemda_med_enabled === 1 ||
-        computedCaps?.commercialModule === 'ZemdaMed' ||
-        (computedCaps?.activeCapabilities && computedCaps.activeCapabilities.includes('medical_consultations'))
-      );
+      const zemdaMedEnabled = isEligibleUser && modFlags.zemda_med_enabled === 1;
 
       const needsLegalAcceptance = user.role !== 'superadmin' && (
         user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
@@ -296,7 +292,7 @@ export class AuthController {
           zemdaPersonalEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
           zemdaBodyEnabled,
-          commercialModule: computedCaps?.commercialModule || null,
+          commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
           selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []
@@ -448,11 +444,7 @@ export class AuthController {
         ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
         : null;
 
-      const zemdaMedEnabled = isEligibleUser && (
-        modFlags.zemda_med_enabled === 1 ||
-        computedCaps?.commercialModule === 'ZemdaMed' ||
-        (computedCaps?.activeCapabilities && computedCaps.activeCapabilities.includes('medical_consultations'))
-      );
+      const zemdaMedEnabled = isEligibleUser && modFlags.zemda_med_enabled === 1;
 
       const needsLegalAcceptance = user.role !== 'superadmin' && (
         user.terms_version_accepted !== CURRENT_TERMS_VERSION ||
@@ -497,7 +489,7 @@ export class AuthController {
           zemdaPersonalEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
           zemdaBodyEnabled,
-          commercialModule: computedCaps?.commercialModule || professionResolution.commercialModule || null,
+          commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
           selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || []

@@ -79,6 +79,16 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
     fetchPatients();
   }, [searchTerm]);
 
+  useEffect(() => {
+    const handlePatientUpdate = () => {
+      fetchPatients();
+    };
+    window.addEventListener('zemda-patient-updated', handlePatientUpdate);
+    return () => {
+      window.removeEventListener('zemda-patient-updated', handlePatientUpdate);
+    };
+  }, []);
+
   const handleOpenDetail = (patientId: string) => {
     handleSelectPatient(patientId);
   };

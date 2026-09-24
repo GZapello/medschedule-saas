@@ -174,9 +174,9 @@ export class ProfessionalController {
           registration_type, registration_number, bio, practice_areas, buffer_minutes, gender,
           remuneration_type, commission_percentage, fixed_salary, payment_day, active,
           zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled
+          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertProf.run(
@@ -208,7 +208,8 @@ export class ProfessionalController {
         flags.zemda_fono_enabled,
         flags.zemda_pp_enabled,
         flags.zemda_psico_enabled,
-        flags.zemda_personal_enabled
+        flags.zemda_personal_enabled,
+        flags.zemda_med_enabled
       );
 
       // Atualiza usuário vinculado com profissão e flags
@@ -226,7 +227,8 @@ export class ProfessionalController {
           zemda_fono_enabled = ?,
           zemda_pp_enabled = ?,
           zemda_psico_enabled = ?,
-          zemda_personal_enabled = ?
+          zemda_personal_enabled = ?,
+          zemda_med_enabled = ?
         WHERE id = ?
       `).run(
         professionId || null,
@@ -242,6 +244,7 @@ export class ProfessionalController {
         flags.zemda_pp_enabled,
         flags.zemda_psico_enabled,
         flags.zemda_personal_enabled,
+        flags.zemda_med_enabled,
         userId
       );
 
@@ -251,6 +254,8 @@ export class ProfessionalController {
       let permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'access_zemda_body'];
       if (targetModule === 'ZemdaPersonal') {
         permissions.push('access_zemda_personal');
+      } else if (targetModule === 'ZemdaMed') {
+        permissions.push('access_zemda_med');
       }
 
       // Garante vínculo ativo na clínica com permissões e flags
@@ -259,9 +264,9 @@ export class ProfessionalController {
           id, tenant_id, user_id, role, status, is_manager, permissions_json, practice_areas,
           profession_id, profession_name, profession_custom,
           zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled
+          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled
         )
-        VALUES (?, ?, ?, 'professional', 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, 'professional', 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(tenant_id, user_id) DO UPDATE SET
           role = 'professional',
           status = 'active',
@@ -277,7 +282,8 @@ export class ProfessionalController {
           zemda_fono_enabled = excluded.zemda_fono_enabled,
           zemda_pp_enabled = excluded.zemda_pp_enabled,
           zemda_psico_enabled = excluded.zemda_psico_enabled,
-          zemda_personal_enabled = excluded.zemda_personal_enabled
+          zemda_personal_enabled = excluded.zemda_personal_enabled,
+          zemda_med_enabled = excluded.zemda_med_enabled
       `).run(
         'cu-' + uuidv4().slice(0, 8),
         tenantId,

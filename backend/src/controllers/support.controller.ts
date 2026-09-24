@@ -274,16 +274,30 @@ export class SupportController {
       // Atualiza timestamp de última atualização do chamado
       db.prepare("UPDATE support_tickets SET updated_at = datetime('now') WHERE id = ?").run(id);
 
-      // Notificação por e-mail da nova mensagem (Item 16)
+      // Notificação por e-mail da nova mensagem (Item 16 e Item 4)
       try {
         const ticketFull = db.prepare(`
-          SELECT t.id, t.title, u.email as creator_email, u.name as creator_name
+          SELECT t.id, t.title, t.tenant_id, u.email as creator_email, u.name as creator_name,
+                 u.role as creator_role, ten.name as clinic_name
           FROM support_tickets t
           LEFT JOIN users u ON u.id = t.user_id
+          LEFT JOIN tenants ten ON ten.id = t.tenant_id
           WHERE t.id = ?
         `).get(id) as any;
 
+        const roleLabels: Record<string, string> = {
+          superadmin: 'SuperAdmin',
+          clinic_admin: 'Administrador da Clínica',
+          professional: 'Profissional de Saúde',
+          receptionist: 'Recepcionista',
+          patient: 'Paciente / Aluno'
+        };
+        const senderRoleLabel = roleLabels[user.role] || user.role || 'Usuário';
         const senderName = user.name || (isSuper ? 'Suporte Técnico Zemda' : 'Usuário');
+        const clinicName = ticketFull?.clinic_name || 'Clínica Geral';
+        const formattedDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+        const appBaseUrl = process.env.FRONTEND_URL || 'https://app.zemda.com.br';
+        const ticketDirectUrl = `${appBaseUrl}/?view=support&ticketId=${id}`;
         const snippet = message.trim().length > 180 ? `${message.trim().slice(0, 180)}...` : message.trim();
 
         if (isSuper && !shouldBeInternal) {
@@ -312,23 +326,27 @@ export class SupportController {
                 badge: 'Suporte Zemda',
                 contentHtml: bodyHtml,
                 ctaText: 'Ver Chamado no Painel',
-                ctaUrl: 'https://app.zemda.com.br'
+                ctaUrl: ticketDirectUrl
               })
             ).catch(err => console.error('[SupportEmail] Erro ao notificar usuário:', err));
           }
         } else if (!isSuper) {
-          // Usuário enviou -> notifica superadmin / equipe
+          // Usuário enviou -> notifica superadmin / equipe com todos os metadados requeridos
           const superadmin = db.prepare("SELECT email FROM users WHERE role = 'superadmin' LIMIT 1").get() as any;
           const adminEmail = superadmin?.email || process.env.SUPPORT_EMAIL || 'suporte@zemda.com.br';
           if (adminEmail) {
             const bodyHtml = `
-              <p style="margin: 0 0 16px; font-size: 16px; line-height: 24px; color: #334155;">
-                Nova mensagem recebida no chamado <strong>#${id}</strong> ("${ticketFull?.title || 'Chamado'}").
+              <p style="margin: 0 0 16px; font-size: 15px; line-height: 22px; color: #334155;">
+                Nova mensagem recebida no chamado de suporte <strong>#${id}</strong>:
               </p>
-              <p style="margin: 0 0 16px; font-size: 14px; line-height: 22px; color: #475569;">
-                Enviada por: <strong>${senderName}</strong> (${ticketFull?.creator_email || ''})
-              </p>
-              <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 0 0 20px;">
+                <p style="margin: 0 0 8px; font-size: 13px; color: #475569;"><strong>ID do Chamado:</strong> #${id}</p>
+                <p style="margin: 0 0 8px; font-size: 13px; color: #475569;"><strong>Assunto:</strong> ${ticketFull?.title || 'Chamado de Suporte'}</p>
+                <p style="margin: 0 0 8px; font-size: 13px; color: #475569;"><strong>Quem enviou:</strong> ${senderName} (${senderRoleLabel})</p>
+                <p style="margin: 0 0 8px; font-size: 13px; color: #475569;"><strong>Clínica / Empresa:</strong> ${clinicName}</p>
+                <p style="margin: 0; font-size: 13px; color: #475569;"><strong>Data e Hora:</strong> ${formattedDate}</p>
+              </div>
+              <div style="background-color: #f1f5f9; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
                 <em>"${snippet}"</em>
               </div>
             `;
@@ -336,12 +354,12 @@ export class SupportController {
               adminEmail,
               `[Suporte] Nova mensagem no chamado #${id}: ${ticketFull?.title || ''}`,
               buildZemdaEmailLayout({
-                title: 'Nova Mensagem de Chamado',
-                headline: 'Nova mensagem recebida no suporte',
+                title: 'Nova Mensagem no Suporte',
+                headline: 'Nova mensagem recebida no chamado',
                 badge: 'Central de Chamados',
                 contentHtml: bodyHtml,
-                ctaText: 'Acessar Painel de Chamados',
-                ctaUrl: 'https://app.zemda.com.br'
+                ctaText: 'Acessar Chamado no Painel',
+                ctaUrl: ticketDirectUrl
               })
             ).catch(err => console.error('[SupportEmail] Erro ao notificar admin:', err));
           }

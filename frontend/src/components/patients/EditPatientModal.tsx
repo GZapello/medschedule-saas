@@ -191,6 +191,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
       });
 
       showToast(`Cadastro do ${clientTermLabel.toLowerCase()} atualizado com sucesso!`, 'success');
+      window.dispatchEvent(new CustomEvent('zemda-patient-updated'));
       onSuccess();
       onClose();
     } catch (err: any) {

@@ -201,7 +201,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const refreshSession = () => { if (localStorage.getItem('auth_token')) void reloadSession(); };
     window.addEventListener('focus', refreshSession);
-    return () => window.removeEventListener('focus', refreshSession);
+    window.addEventListener('zemda-profession-changed', refreshSession);
+    return () => {
+      window.removeEventListener('focus', refreshSession);
+      window.removeEventListener('zemda-profession-changed', refreshSession);
+    };
   }, []);
 
   const isSuperAdmin = currentUser?.role === 'superadmin';
@@ -361,42 +365,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const userPermissions = (currentUser as any)?.permissions || [];
 
-  // Módulos com exclusividade mútua (apenas o módulo correspondente à profissão atual fica ativo)
-  const isPhysiotherapist = isEligibleStaff && (activeModule === 'ZemdaFisio' || (activeModule === null && Boolean(currentUser?.zemdaFisioEnabled)));
+  // Módulos com estrita exclusividade mútua (apenas o módulo correspondente à profissão atual fica ativo)
+  const isPhysiotherapist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaFisio' : Boolean(currentUser?.zemdaFisioEnabled));
   const isZemdaFisio = isPhysiotherapist;
 
-  const isDentist = isEligibleStaff && (activeModule === 'ZemdaOdonto' || (activeModule === null && Boolean(currentUser?.zemdaOdontoEnabled)));
+  const isDentist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaOdonto' : Boolean(currentUser?.zemdaOdontoEnabled));
   const isZemdaOdonto = isDentist;
 
-  const isNutritionist = isEligibleStaff && (activeModule === 'ZemdaNutri' || (activeModule === null && Boolean(currentUser?.zemdaNutriEnabled)));
+  const isNutritionist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaNutri' : Boolean(currentUser?.zemdaNutriEnabled));
   const isZemdaNutri = isNutritionist;
 
-  const isOccupationalTherapist = isEligibleStaff && (activeModule === 'ZemdaTO' || (activeModule === null && Boolean(currentUser?.zemdaToEnabled)));
+  const isOccupationalTherapist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaTO' : Boolean(currentUser?.zemdaToEnabled));
   const isZemdaTO = isOccupationalTherapist;
 
-  const isSpeechTherapist = isEligibleStaff && (activeModule === 'ZemdaFono' || (activeModule === null && Boolean(currentUser?.zemdaFonoEnabled)));
+  const isSpeechTherapist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaFono' : Boolean(currentUser?.zemdaFonoEnabled));
   const isZemdaFono = isSpeechTherapist;
 
-  const isPsychologist = isEligibleStaff && (activeModule === 'ZemdaPsico' || (activeModule === null && Boolean((currentUser as any)?.zemdaPsicoEnabled)));
+  const isPsychologist = isEligibleStaff && (activeModule ? activeModule === 'ZemdaPsico' : Boolean((currentUser as any)?.zemdaPsicoEnabled));
   const isZemdaPsico = isPsychologist;
 
-  const isPsychopedagogue = isEligibleStaff && (activeModule === 'ZemdaPP' || (activeModule === null && Boolean(currentUser?.zemdaPPEnabled)));
+  const isPsychopedagogue = isEligibleStaff && (activeModule ? activeModule === 'ZemdaPP' : Boolean(currentUser?.zemdaPPEnabled));
   const isZemdaPP = isPsychopedagogue;
 
-  const isPersonalTrainer = isEligibleStaff && (
-    activeModule === 'ZemdaPersonal' ||
+  const isPersonalTrainer = isEligibleStaff && (activeModule ? activeModule === 'ZemdaPersonal' : (
     currentUser?.commercialModule === 'ZemdaPersonal' ||
     Boolean((currentUser as any)?.zemdaPersonalEnabled) ||
     Boolean((currentUser as any)?.zemda_personal_enabled)
-  );
+  ));
   const isZemdaPersonal = isPersonalTrainer;
 
   // ZemdaMed: Vertical médica integral
-  const isDoctor = isEligibleStaff && (
-    activeModule === 'ZemdaMed' ||
+  const isDoctor = isEligibleStaff && (activeModule ? activeModule === 'ZemdaMed' : (
     currentUser?.commercialModule === 'ZemdaMed' ||
     Boolean(currentUser?.zemdaMedEnabled)
-  );
+  ));
   const isZemdaMed = isDoctor;
 
   // ZemdaBody: Módulo complementar universal para TODOS os profissionais clínicos e gestores
@@ -411,7 +413,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const capabilities = currentUser?.capabilities || [];
   const practiceAreaIds = currentUser?.practiceAreaIds || [];
   const selectedOptionalCapabilities = currentUser?.selectedOptionalCapabilities || [];
-  const commercialModule = currentUser?.commercialModule || activeModule || null;
+  const commercialModule = activeModule || currentUser?.commercialModule || null;
 
   const isSandboxSession = Boolean(
     currentUser?.tenantId?.startsWith('sbx-tenant-') ||

@@ -8,6 +8,12 @@ import { v4 as uuidv4 } from 'uuid';
  * - Domingo (dia 0): INATIVO (08:00 às 12:00, sem intervalo)
  */
 export function createDefaultSchedules(db: any, tenantId: string, professionalId: string): void {
+  // Não sobrescreve horários já existentes de profissionais já cadastrados
+  const existingCount = db.prepare('SELECT COUNT(*) as c FROM schedules WHERE tenant_id = ? AND professional_id = ?').get(tenantId, professionalId) as { c: number } | undefined;
+  if (existingCount && existingCount.c > 0) {
+    return;
+  }
+
   const insertSched = db.prepare(`
     INSERT INTO schedules (id, tenant_id, professional_id, day_of_week, start_time, end_time, break_start, break_end, is_active)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

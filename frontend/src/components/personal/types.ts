@@ -20,7 +20,7 @@ export interface Student {
   birth_date?: string;
   gender?: string;
   status: string;
-  avatar_url?: string;
+  avatar_url?: string | null;
   created_at: string;
   goal?: string;
   experience_level?: string;

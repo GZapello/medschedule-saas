@@ -232,6 +232,7 @@ export const StaffManagementView: React.FC = () => {
     try {
       await ApiClient.put(`/v1/staff/${userId}/approve`, {});
       showToast(`Acesso de ${name} aprovado com sucesso!`, 'success');
+      setStaffList(prev => prev.map(m => m.id === userId ? { ...m, status: 'active' } : m));
       loadStaff();
     } catch (err: any) {
       showToast(err.message || 'Erro ao aprovar funcionário', 'error');
@@ -243,6 +244,7 @@ export const StaffManagementView: React.FC = () => {
     try {
       await ApiClient.put(`/v1/staff/${userId}/reject`, {});
       showToast(`Solicitação de ${name} recusada.`, 'success');
+      setStaffList(prev => prev.filter(m => m.id !== userId));
       loadStaff();
     } catch (err: any) {
       showToast(err.message || 'Erro ao recusar solicitação', 'error');
@@ -257,6 +259,7 @@ export const StaffManagementView: React.FC = () => {
     try {
       const res = await ApiClient.put<{ message: string }>(`/v1/staff/${userId}/status`, { action });
       showToast(res.message || 'Status alterado com sucesso', 'success');
+      setStaffList(prev => prev.map(m => m.id === userId ? { ...m, status: action === 'block' ? 'blocked' : 'active' } : m));
       loadStaff();
     } catch (err: any) {
       showToast(err.message || 'Erro ao alterar status', 'error');
@@ -283,8 +286,15 @@ export const StaffManagementView: React.FC = () => {
         practiceAreas: editRoleForm.practiceAreas
       });
       showToast('Cargo, profissão e áreas de atuação atualizados!', 'success');
+      setStaffList(prev => prev.map(m => m.id === editingRoleUser.id ? {
+        ...m,
+        role: editRoleForm.role,
+        profession_name: editRoleForm.professionName,
+        practice_areas: editRoleForm.practiceAreas
+      } : m));
       setEditingRoleUser(null);
       loadStaff();
+      window.dispatchEvent(new CustomEvent('zemda-profession-changed'));
       if (reloadSession) {
         await reloadSession();
       }
