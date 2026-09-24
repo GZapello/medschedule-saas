@@ -839,9 +839,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             });
                           }
                         }}
-                        className={`border-r border-slate-100 last:border-r-0 p-1 relative transition-colors min-h-[75px] ${
+                        className={`border-r border-slate-100 last:border-r-0 p-1 relative transition-colors min-h-[75px] bg-white ${
                           !isAvailable && slotAppts.length === 0
-                            ? 'select-none cursor-default'
+                            ? 'cursor-default select-none'
                             : 'hover:bg-indigo-50/40 group/slot cursor-pointer'
                         }`}
                         title={
@@ -945,7 +945,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       });
                     }
                   }}
-                  className={`py-2.5 px-3 flex items-start gap-4 rounded-xl transition-colors ${
+                  className={`py-2.5 px-3 flex items-start gap-4 rounded-xl transition-colors bg-white min-h-[52px] ${
                     !isAvailable && slotAppts.length === 0
                       ? 'cursor-default select-none'
                       : 'hover:bg-indigo-50/30 cursor-pointer group'
@@ -997,13 +997,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             <Ban className="w-3.5 h-3.5 text-rose-700" /> Bloqueado
                           </span>
                         </div>
-                      ) : (
-                        <div className="py-2 min-h-[36px]" />
-                      )
+                      ) : null
                     ) : (
-                      <div data-empty-slot="true" className="py-2 text-xs text-slate-400 group-hover:text-indigo-600 flex items-center gap-1.5">
-                        <Plus className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100" />
-                        <span>Horário livre — clique para agendar às {timeSlot}</span>
+                      <div
+                        data-empty-slot="true"
+                        className="py-1 text-xs text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5"
+                      >
+                        <span data-empty-slot="true" className="font-semibold bg-white border border-indigo-200 px-2.5 py-1 rounded-md shadow-xs flex items-center gap-1">
+                          <Plus className="w-3.5 h-3.5" /> {timeSlot}
+                        </span>
                       </div>
                     )}
                   </div>
