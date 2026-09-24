@@ -8,7 +8,7 @@ import {
   Plus,
   Settings,
   MoreHorizontal,
-  RotateCcw,
+  Undo2,
   Trash2,
   Volume2,
   VolumeX,
@@ -246,7 +246,6 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
   // Função ERREI: remove APENAS a última palavra, atualiza imediatamente e NÃO reproduz a frase
   const handleErrei = () => {
     setPhrase(prev => prev.slice(0, -1));
-    setIsOptionsMenuOpen(false);
   };
 
   // Limpar Frase Inteira
@@ -377,12 +376,29 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
               )}
             </div>
 
+            {/* [ ↩ ERREI ] Visível diretamente na barra da frase */}
+            <button
+              type="button"
+              onClick={handleErrei}
+              disabled={phrase.length === 0}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm border-2 transition-all shrink-0 select-none ${
+                phrase.length === 0
+                  ? 'opacity-40 bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                  : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900 shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer'
+              }`}
+              title="Apagar a última palavra (Errei)"
+              aria-label="Errei, apagar última palavra"
+            >
+              <Undo2 className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-700 shrink-0" />
+              <span>Errei</span>
+            </button>
+
             {/* [ 🔊 FALAR ] */}
             <button
               type="button"
               onClick={handleSpeakPhrase}
               disabled={phrase.length === 0 || isSpeaking}
-              className={`inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-5 py-2.5 rounded-xl font-black text-xs sm:text-sm shadow-sm transition-all cursor-pointer shrink-0 ${
+              className={`inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm shadow-sm transition-all cursor-pointer shrink-0 select-none ${
                 phrase.length === 0
                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                   : isSpeaking
@@ -391,7 +407,7 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
               }`}
               title="Reproduzir frase inteira por síntese de voz (Web Speech)"
             >
-              <Volume2 className={`w-4 h-4 ${isSpeaking ? 'animate-bounce' : ''}`} />
+              <Volume2 className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isSpeaking ? 'animate-bounce' : ''}`} />
               <span>{isSpeaking ? 'Falando…' : 'Falar'}</span>
             </button>
 
@@ -400,7 +416,7 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)}
-                className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-bold text-xs sm:text-sm border transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm border transition-all cursor-pointer ${
                   isOptionsMenuOpen
                     ? 'bg-purple-100 border-purple-300 text-purple-800'
                     : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
@@ -412,22 +428,9 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
                 <span className="hidden sm:inline">Mais opções</span>
               </button>
 
-              {/* PAINEL PARA BAIXO com todos os controles */}
+              {/* PAINEL PARA BAIXO com funções secundárias / profissionais */}
               {isOptionsMenuOpen && (
                 <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2 z-50 flex flex-col space-y-1 animate-in fade-in zoom-in-95 duration-150">
-                  {/* Função ERREI */}
-                  <button
-                    type="button"
-                    onClick={handleErrei}
-                    disabled={phrase.length === 0}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-purple-50 hover:text-purple-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-left"
-                  >
-                    <RotateCcw className="w-4 h-4 text-amber-500 shrink-0" />
-                    <div>
-                      <span className="block font-black">Errei</span>
-                      <span className="text-[10px] text-slate-400 font-normal">Apaga apenas a última palavra</span>
-                    </div>
-                  </button>
 
                   {/* Limpar frase */}
                   <button
