@@ -416,11 +416,13 @@ export class FreeTrialController {
       }
 
       const cleanEmail = managerEmail.trim().toLowerCase();
+      const cleanToken = token.trim();
 
-      // Transação atômica
-      const executeActivation = db.transaction(async () => {
-        // 1. Revalidar token sob lock de transação
-        const trial = db.prepare('SELECT * FROM free_trials WHERE token = ?').get(token.trim()) as any;
+      // Validação do link + e-mail. Lança { status, code, message } (tratado no catch abaixo).
+      // É chamada duas vezes: antes do hash (falha rápida, sem custo de bcrypt) e de novo
+      // DENTRO da transação síncrona, para que checagem e escrita sejam atômicas.
+      const loadActivatableTrial = (now: Date): any => {
+        const trial = db.prepare('SELECT * FROM free_trials WHERE token = ?').get(cleanToken) as any;
 
         if (!trial) {
           throw { status: 404, code: 'LINK_NOT_FOUND', message: 'Link de teste grátis não encontrado.' };
@@ -434,13 +436,12 @@ export class FreeTrialController {
           throw { status: 409, code: 'LINK_ALREADY_USED', message: 'Este link de teste grátis já foi utilizado e não permite novo cadastro.' };
         }
 
-        const now = new Date();
         const expiresAt = parseIsoDate(trial.link_expires_at) || new Date(trial.link_expires_at);
         if (now.getTime() > expiresAt.getTime()) {
           throw { status: 410, code: 'LINK_EXPIRED', message: 'Este link de teste grátis expirou. O prazo de ativação de 24 horas encerrou.' };
         }
 
-        // 2. Verificar se o e-mail do usuário já existe
+        // Verificar se o e-mail do usuário já existe
         const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
         if (existingUser) {
           throw {
@@ -449,6 +450,22 @@ export class FreeTrialController {
             message: 'O e-mail informado já está cadastrado no sistema. Por favor, use outro e-mail para seu cadastro.'
           };
         }
+
+        return trial;
+      };
+
+      // Pré-validação fora da transação (evita calcular hash para links inválidos)
+      loadActivatableTrial(new Date());
+
+      // Todo trabalho assíncrono acontece ANTES da transação: db.transaction é síncrono
+      // (BEGIN → fn() → COMMIT) e não pode conter await, senão as escritas escapam do COMMIT/ROLLBACK.
+      const passwordHash = await hashPassword(managerPassword);
+
+      // Transação atômica (callback 100% síncrono)
+      const executeActivation = db.transaction(() => {
+        // 1 e 2. Revalidar token e e-mail sob lock de transação (BEGIN IMMEDIATE)
+        const now = new Date();
+        const trial = loadActivatableTrial(now);
 
         // 3. Gerar slug exclusivo para a clínica
         let baseSlug = clinicName
@@ -473,8 +490,6 @@ export class FreeTrialController {
         // O período de teste começa exatamente AGORA (momento da ativação)
         const trialEnd = new Date(now.getTime() + trial.duration_days * 24 * 60 * 60 * 1000);
         const trialEndIso = trialEnd.toISOString();
-
-        const passwordHash = await hashPassword(managerPassword);
 
         // 3.1 Resolver a profissão informada
         const profRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ? OR slug = ? OR name = ?').get(
@@ -668,7 +683,7 @@ export class FreeTrialController {
         };
       });
 
-      const result = await executeActivation();
+      const result = executeActivation();
 
       logAudit(req, 'ACTIVATE_FREE_TRIAL', 'free_trials', token, {
         tenantId: result.tenant.id,

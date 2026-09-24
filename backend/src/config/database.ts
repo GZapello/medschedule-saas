@@ -55,11 +55,25 @@ class SafeDatabase {
     };
   }
 
+  /**
+   * Transação SÍNCRONA: BEGIN IMMEDIATE → fn() → COMMIT (ou ROLLBACK se fn lançar).
+   * O callback NÃO pode ser async nem retornar Promise: tudo que roda depois do
+   * primeiro await ficaria fora da transação (sem rollback). Faça o trabalho
+   * assíncrono (ex.: hash de senha) antes de chamar a transação.
+   */
   transaction<T extends (...args: any[]) => any>(fn: T): T {
     return ((...args: any[]) => {
       rawDb.exec('BEGIN IMMEDIATE;');
       try {
         const result = fn(...args);
+        if (result && typeof (result as any).then === 'function') {
+          // Evita unhandled rejection da Promise descartada; o erro real é o abaixo.
+          Promise.resolve(result).catch(() => {});
+          throw new Error(
+            'db.transaction recebeu um callback assíncrono (retornou Promise). ' +
+            'O callback deve ser síncrono; faça os awaits antes de abrir a transação.'
+          );
+        }
         rawDb.exec('COMMIT;');
         return result;
       } catch (error) {
