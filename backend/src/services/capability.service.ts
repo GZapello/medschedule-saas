@@ -306,23 +306,104 @@ export class CapabilityService {
    * Cálculo determinístico e união inteligente (UNION) de capabilities para o usuário
    */
   public static computeUserCapabilities(userId: string, tenantId: string): ComputedUserCapabilities {
-    // 1. Busca dados do usuário e profissional
+    // 1. Busca dados do usuário, profissional, vínculo de clínica e tenant
     const userRow = db.prepare(`
-      SELECT u.id, u.role, u.profession_id as u_prof_id, u.profession_name as u_prof_name,
-             cu.profession_custom, p.profession_id as p_prof_id, prof.name as prof_name,
-             u.zemda_med_enabled as u_med, p.zemda_med_enabled as p_med
+      SELECT u.id, u.name as u_name, u.email as u_email, u.role,
+             u.profession_id as u_prof_id, u.profession_name as u_prof_name,
+             u.zemda_fono_enabled as u_fono, u.zemda_med_enabled as u_med,
+             u.zemda_fisio_enabled as u_fisio, u.zemda_odonto_enabled as u_odonto,
+             u.zemda_nutri_enabled as u_nutri, u.zemda_to_enabled as u_to,
+             u.zemda_pp_enabled as u_pp, u.zemda_psico_enabled as u_psico,
+             u.zemda_personal_enabled as u_personal,
+             cu.profession_custom as cu_prof_custom, cu.profession_id as cu_prof_id,
+             cu.profession_name as cu_prof_name,
+             cu.zemda_fono_enabled as cu_fono, cu.zemda_med_enabled as cu_med,
+             cu.zemda_fisio_enabled as cu_fisio, cu.zemda_odonto_enabled as cu_odonto,
+             cu.zemda_nutri_enabled as cu_nutri, cu.zemda_to_enabled as cu_to,
+             cu.zemda_pp_enabled as cu_pp, cu.zemda_psico_enabled as cu_psico,
+             cu.zemda_personal_enabled as cu_personal,
+             p.profession_id as p_prof_id, p.profession_name as p_prof_name,
+             p.name as p_name, p.specialty_custom as p_spec_custom,
+             p.zemda_fono_enabled as p_fono, p.zemda_med_enabled as p_med,
+             p.zemda_fisio_enabled as p_fisio, p.zemda_odonto_enabled as p_odonto,
+             p.zemda_nutri_enabled as p_nutri, p.zemda_to_enabled as p_to,
+             p.zemda_pp_enabled as p_pp, p.zemda_psico_enabled as p_psico,
+             p.zemda_personal_enabled as p_personal,
+             prof.name as prof_name, prof.slug as prof_slug,
+             t.manager_profession as t_manager_prof, t.name as t_name,
+             t.trade_name as t_trade_name, t.description as t_description
       FROM users u
       LEFT JOIN clinic_users cu ON cu.user_id = u.id AND cu.tenant_id = ?
       LEFT JOIN professionals p ON p.user_id = u.id AND p.tenant_id = ?
       LEFT JOIN professions prof ON prof.id = p.profession_id
+      LEFT JOIN tenants t ON t.id = ?
       WHERE u.id = ?
-    `).get(tenantId, tenantId, userId) as any;
+    `).get(tenantId, tenantId, tenantId, userId) as any;
 
-    const rawProfId = userRow?.p_prof_id || userRow?.u_prof_id || userRow?.profession_custom || 'prof-outro-saude';
-    const profName = userRow?.prof_name || userRow?.u_prof_name || '';
+    // 1.1 Detecção de Fonoaudiologia (REGRA OBRIGATÓRIA):
+    // Todo perfil com zemda_fono_enabled, fonoaudiólogo(a), clinic_admin em clínica fonoaudiológica,
+    // ou com menção a fonoaudiologia no nome, cargo, perfil ou tenant:
+    const isFonoSignal =
+      userRow?.u_fono === 1 ||
+      userRow?.p_fono === 1 ||
+      userRow?.cu_fono === 1 ||
+      (userRow?.p_prof_id || '').toLowerCase().includes('fono') ||
+      (userRow?.u_prof_id || '').toLowerCase().includes('fono') ||
+      (userRow?.cu_prof_id || '').toLowerCase().includes('fono') ||
+      (userRow?.p_prof_name || '').toLowerCase().includes('fono') ||
+      (userRow?.u_prof_name || '').toLowerCase().includes('fono') ||
+      (userRow?.cu_prof_name || '').toLowerCase().includes('fono') ||
+      (userRow?.cu_prof_custom || '').toLowerCase().includes('fono') ||
+      (userRow?.p_spec_custom || '').toLowerCase().includes('fono') ||
+      (userRow?.prof_name || '').toLowerCase().includes('fono') ||
+      (userRow?.u_name || '').toLowerCase().includes('fono') ||
+      (userRow?.p_name || '').toLowerCase().includes('fono') ||
+      (userRow?.u_name || '').startsWith('Fga.') ||
+      (userRow?.u_name || '').startsWith('Fgo.') ||
+      (userRow?.p_name || '').startsWith('Fga.') ||
+      (userRow?.p_name || '').startsWith('Fgo.') ||
+      (userRow?.u_email || '').toLowerCase().includes('fono') ||
+      ((userRow?.role === 'clinic_admin' || !userRow?.p_prof_id || userRow?.p_prof_id === 'prof-outro-saude') && (
+        (userRow?.t_manager_prof || '').toLowerCase().includes('fono') ||
+        (userRow?.t_description || '').toLowerCase().includes('fono') ||
+        (userRow?.t_name || '').toLowerCase().includes('fono') ||
+        (userRow?.t_trade_name || '').toLowerCase().includes('fono')
+      ));
+
+    let rawProfId = isFonoSignal
+      ? 'prof-fonoaudiologo'
+      : ((userRow?.p_prof_id && userRow?.p_prof_id !== 'prof-outro-saude')
+          ? userRow.p_prof_id
+          : (userRow?.u_prof_id && userRow?.u_prof_id !== 'prof-outro-saude')
+          ? userRow.u_prof_id
+          : userRow?.cu_prof_id ||
+            userRow?.cu_prof_custom ||
+            userRow?.p_profession_name ||
+            userRow?.u_prof_name ||
+            userRow?.t_manager_prof ||
+            userRow?.p_prof_id ||
+            userRow?.u_prof_id ||
+            'prof-outro-saude');
+
+    let profName = isFonoSignal
+      ? 'Fonoaudiólogo'
+      : (userRow?.prof_name ||
+         userRow?.p_prof_name ||
+         userRow?.cu_prof_name ||
+         userRow?.cu_prof_custom ||
+         userRow?.u_prof_name ||
+         userRow?.t_manager_prof ||
+         '');
+
     const resolution = resolveCanonicalProfession({ id: rawProfId, name: profName });
-    const canonicalProfId = resolution.canonicalId;
-    const commercialModule = resolution.commercialModule || 'ZemdaGestao';
+    let canonicalProfId = resolution.canonicalId;
+    let commercialModule = resolution.commercialModule || 'ZemdaGestao';
+
+    // REGRA OBRIGATÓRIA: Qualquer usuário reconhecido como ZemdaFono converge na matriz para prof-fonoaudiologo
+    if (commercialModule === 'ZemdaFono' || canonicalProfId === 'prof-fonoaudiologo' || isFonoSignal) {
+      canonicalProfId = 'prof-fonoaudiologo';
+      commercialModule = 'ZemdaFono';
+    }
 
     // 2. Busca áreas selecionadas pelo usuário
     let userAreaIds = this.getUserPracticeAreas(userId, tenantId);
@@ -358,7 +439,7 @@ export class CapabilityService {
     return this.calculateCapabilities({
       professionId: canonicalProfId,
       commercialModule,
-      clinicalWorkspace: resolution.clinicalWorkspace,
+      clinicalWorkspace: resolution.clinicalWorkspace || (canonicalProfId === 'prof-fonoaudiologo' ? 'ZemdaFono' : null),
       taxonomyCategory: resolution.taxonomyCategory,
       practiceAreaIds: userAreaIds,
       medicalSpecialtyIds: medSpecIds,
@@ -408,6 +489,17 @@ export class CapabilityService {
       if (r.rule === 'DEFAULT') defaultCapsSet.add(r.capability_id);
       else if (r.rule === 'OPTIONAL') optionalCapsSet.add(r.capability_id);
       else if (r.rule === 'HIDDEN') hiddenCapsSet.add(r.capability_id);
+    }
+
+    // REGRA OBRIGATÓRIA: Todo usuário cuja profissão canônica seja prof-fonoaudiologo ou cujo commercialModule seja ZemdaFono
+    // DEVE receber automaticamente como DEFAULT: AAC_BOARD_USE e AAC_BOARD_MANAGE sem ativação manual e sem permissão do gerente.
+    if (professionId === 'prof-fonoaudiologo' || commercialModule === 'ZemdaFono') {
+      defaultCapsSet.add('AAC_BOARD_USE');
+      defaultCapsSet.add('AAC_BOARD_MANAGE');
+      hiddenCapsSet.delete('AAC_BOARD_USE');
+      hiddenCapsSet.delete('AAC_BOARD_MANAGE');
+      optionalCapsSet.delete('AAC_BOARD_USE');
+      optionalCapsSet.delete('AAC_BOARD_MANAGE');
     }
 
     // Regras das Áreas de Atuação Selecionadas (Catálogo Geral)
@@ -472,6 +564,12 @@ export class CapabilityService {
     // União inteligente: Defaults + Opcionais Ativados
     const activeCapsSet = new Set<string>([...defaultCapsSet, ...activeOptionals]);
 
+    // Garantia estrita pós-união para Fonoaudiologia
+    if (professionId === 'prof-fonoaudiologo' || commercialModule === 'ZemdaFono') {
+      activeCapsSet.add('AAC_BOARD_USE');
+      activeCapsSet.add('AAC_BOARD_MANAGE');
+    }
+
     // Respeito ao Plano Comercial
     const planRestrictedList: { capabilityId: string; requiredPlan: string }[] = [];
     if (params.planCode && params.planCode !== 'ALL') {
@@ -484,10 +582,23 @@ export class CapabilityService {
       const allowedPlanCaps = new Set(planCaps.map(p => p.capability_id));
       for (const cap of Array.from(activeCapsSet)) {
         if (allowedPlanCaps.size > 0 && !allowedPlanCaps.has(cap)) {
+          // AAC_BOARD_USE e AAC_BOARD_MANAGE não podem ser restritas para Fonoaudiologia
+          if ((cap === 'AAC_BOARD_USE' || cap === 'AAC_BOARD_MANAGE') &&
+              (professionId === 'prof-fonoaudiologo' || commercialModule === 'ZemdaFono')) {
+            continue;
+          }
           activeCapsSet.delete(cap);
           planRestrictedList.push({ capabilityId: cap, requiredPlan: 'CLINIC' });
         }
       }
+    }
+
+    // Reafirmação final das capabilities de CAA para Fonoaudiologia
+    if (professionId === 'prof-fonoaudiologo' || commercialModule === 'ZemdaFono') {
+      activeCapsSet.add('AAC_BOARD_USE');
+      activeCapsSet.add('AAC_BOARD_MANAGE');
+      defaultCapsSet.add('AAC_BOARD_USE');
+      defaultCapsSet.add('AAC_BOARD_MANAGE');
     }
 
     return {
@@ -508,10 +619,18 @@ export class CapabilityService {
   }
 
   /**
-   * Checagem booleana de capability com suporte a superadmin e compatibilidade
+   * Checagem booleana de capability com suporte a superadmin e salvaguarda direta
    */
   public static hasCapability(userId: string, tenantId: string, capabilityId: string): boolean {
     const computed = this.computeUserCapabilities(userId, tenantId);
-    return computed.activeCapabilities.includes(capabilityId);
+    if (computed.activeCapabilities.includes(capabilityId)) {
+      return true;
+    }
+    // Salvaguarda final: Se a capability for AAC_BOARD_USE ou AAC_BOARD_MANAGE e o perfil for ZemdaFono ou prof-fonoaudiologo
+    if ((capabilityId === 'AAC_BOARD_USE' || capabilityId === 'AAC_BOARD_MANAGE') &&
+        (computed.commercialModule === 'ZemdaFono' || computed.professionId === 'prof-fonoaudiologo')) {
+      return true;
+    }
+    return false;
   }
 }

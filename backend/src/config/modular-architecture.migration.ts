@@ -587,9 +587,18 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   const fonoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'COMMUNICATION_ASSESSMENT', 'FONO_SPECIFIC', 'AUDIOLOGY', 'AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE'];
   const fonoOptionals = ['LEARNING_ASSESSMENT', 'BODY_MAP', 'BEHAVIOR_ASSESSMENT', 'ADL_ASSESSMENT'];
   const fonoHiddens = ['ODONTO_SPECIFIC', 'TRAINING_PRESCRIBE', 'BODY_COMPOSITION', 'MEDICAL_BASE'];
-  fonoDefaults.forEach(c => insertProfCap.run('prof-fonoaudiologo', c, 'DEFAULT'));
-  fonoOptionals.forEach(c => insertProfCap.run('prof-fonoaudiologo', c, 'OPTIONAL'));
-  fonoHiddens.forEach(c => insertProfCap.run('prof-fonoaudiologo', c, 'HIDDEN'));
+  fonoDefaults.forEach(c => {
+    insertProfCap.run('prof-fonoaudiologo', c, 'DEFAULT');
+    insertProfCap.run('prof-fonoaudiologia', c, 'DEFAULT');
+  });
+  fonoOptionals.forEach(c => {
+    insertProfCap.run('prof-fonoaudiologo', c, 'OPTIONAL');
+    insertProfCap.run('prof-fonoaudiologia', c, 'OPTIONAL');
+  });
+  fonoHiddens.forEach(c => {
+    insertProfCap.run('prof-fonoaudiologo', c, 'HIDDEN');
+    insertProfCap.run('prof-fonoaudiologia', c, 'HIDDEN');
+  });
 
   // 3. Terapia Ocupacional
   const toDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'ADL_ASSESSMENT', 'OCCUPATIONAL_PART', 'FUNCTIONAL_ASSESSMENT', 'SENSORY_ASSESSMENT'];

@@ -95,9 +95,30 @@ export function migrateAACBoard(rawDb: DatabaseSync): void {
     }
   };
 
-  // Fonoaudiologia: total acesso padrão
+  // Fonoaudiologia: total acesso padrão incondicional (reconciliação direta em banco existente)
+  try {
+    rawDb.prepare(`
+      INSERT OR REPLACE INTO profession_capabilities (profession_id, capability_id, rule)
+      VALUES ('prof-fonoaudiologo', 'AAC_BOARD_USE', 'DEFAULT')
+    `).run();
+    rawDb.prepare(`
+      INSERT OR REPLACE INTO profession_capabilities (profession_id, capability_id, rule)
+      VALUES ('prof-fonoaudiologo', 'AAC_BOARD_MANAGE', 'DEFAULT')
+    `).run();
+    rawDb.prepare(`
+      INSERT OR REPLACE INTO profession_capabilities (profession_id, capability_id, rule)
+      VALUES ('prof-fonoaudiologia', 'AAC_BOARD_USE', 'DEFAULT')
+    `).run();
+    rawDb.prepare(`
+      INSERT OR REPLACE INTO profession_capabilities (profession_id, capability_id, rule)
+      VALUES ('prof-fonoaudiologia', 'AAC_BOARD_MANAGE', 'DEFAULT')
+    `).run();
+  } catch (_) {}
+
   safeProfCap('prof-fonoaudiologo', 'AAC_BOARD_USE', 'DEFAULT');
   safeProfCap('prof-fonoaudiologo', 'AAC_BOARD_MANAGE', 'DEFAULT');
+  safeProfCap('prof-fonoaudiologia', 'AAC_BOARD_USE', 'DEFAULT');
+  safeProfCap('prof-fonoaudiologia', 'AAC_BOARD_MANAGE', 'DEFAULT');
 
   // Terapia Ocupacional: ativável / opcional na profissão, default nas áreas compatíveis
   safeProfCap('prof-terapeuta-ocupacional', 'AAC_BOARD_USE', 'OPTIONAL');
