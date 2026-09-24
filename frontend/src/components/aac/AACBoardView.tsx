@@ -29,7 +29,8 @@ import {
   MessageCircle,
   Search,
   ChevronDown,
-  X
+  X,
+  Undo2
 } from 'lucide-react';
 import { AACCard, AACPage, FITZGERALD_COLORS } from './types';
 
@@ -38,6 +39,8 @@ interface AACBoardViewProps {
   activePageId: string;
   onSelectPage: (pageId: string) => void;
   onCardClick: (card: AACCard) => void;
+  onErrei?: () => void;
+  phraseLength?: number;
   columns?: number;
   canManage?: boolean;
   onOpenEditor?: () => void;
@@ -48,6 +51,8 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
   activePageId,
   onSelectPage,
   onCardClick,
+  onErrei,
+  phraseLength = 0,
   columns = 4,
   canManage = false,
   onOpenEditor
@@ -77,16 +82,20 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
   }, [isMoreOpen]);
 
   // Calcula dinamicamente colunas e linhas para que todos os cartões caibam sem rolagem vertical
-  const cardCount = cards.length;
+  // Inclui o cartão de ação rápida "Errei" como parte da grade quando fornecido
+  const hasErreiCard = typeof onErrei === 'function';
+  const totalItems = cards.length + (hasErreiCard ? 1 : 0);
+
   const effectiveCols = React.useMemo(() => {
     if (columns && columns >= 5) return columns;
-    if (cardCount > 16) return 6;
-    if (cardCount > 10) return 5;
-    if (cardCount > 6) return 4;
+    if (totalItems > 18) return 7;
+    if (totalItems > 12) return 6;
+    if (totalItems > 8) return 5;
+    if (totalItems > 4) return 4;
     return columns || 4;
-  }, [columns, cardCount]);
+  }, [columns, totalItems]);
 
-  const rowCount = Math.max(1, Math.ceil(cardCount / effectiveCols));
+  const rowCount = Math.max(1, Math.ceil(totalItems / effectiveCols));
 
   // Ícones clínicos para cada categoria
   const getPageIcon = (iconName?: string) => {
@@ -333,9 +342,9 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
         )}
       </div>
 
-      {/* Grade de Cartões SEM ROLAGEM VERTICAL (Zero scroll interno) */}
-      <div className="flex-1 min-h-0 p-1.5 sm:p-2.5 overflow-hidden flex flex-col justify-center items-center">
-        {cards.length === 0 ? (
+      {/* Grade de Cartões SEM ROLAGEM VERTICAL (Zero scroll interno, preenchendo toda a largura) */}
+      <div className="flex-1 min-h-0 p-1.5 sm:p-2.5 overflow-hidden flex flex-col">
+        {cards.length === 0 && !hasErreiCard ? (
           <div className="h-full w-full flex flex-col items-center justify-center text-center p-6 bg-white rounded-2xl border-2 border-dashed border-slate-300">
             <MessageSquare className="w-10 h-10 text-slate-300 mb-2" />
             <h4 className="text-sm font-bold text-slate-700">Esta categoria está vazia</h4>
@@ -355,12 +364,61 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
           </div>
         ) : (
           <div
-            className="h-full w-full grid gap-1.5 sm:gap-2 max-w-7xl mx-auto"
+            className="h-full w-full grid gap-1.5 sm:gap-2.5"
             style={{
               gridTemplateColumns: `repeat(${effectiveCols}, minmax(0, 1fr))`,
               gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))`
             }}
           >
+            {/* CARTÃO DE AÇÃO RÁPIDA DENTRO DA GRADE: ERREI (Visível para a criança/paciente) */}
+            {hasErreiCard && (
+              <button
+                type="button"
+                onClick={onErrei}
+                disabled={phraseLength === 0}
+                style={{
+                  backgroundColor: phraseLength === 0 ? '#f8fafc' : '#fef3c7',
+                  borderColor: phraseLength === 0 ? '#e2e8f0' : '#f59e0b',
+                  color: phraseLength === 0 ? '#94a3b8' : '#78350f'
+                }}
+                className={`group relative flex flex-col items-center justify-between p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border-2 sm:border-3 transition-all h-full w-full min-h-0 min-w-0 overflow-hidden select-none ${
+                  phraseLength === 0
+                    ? 'opacity-40 cursor-not-allowed shadow-none'
+                    : 'shadow-2xs hover:shadow-md active:scale-95 cursor-pointer ring-1 ring-amber-300 hover:bg-amber-200'
+                }`}
+                title="Apagar a última palavra (Errei)"
+                aria-label="Errei, apagar última palavra da frase"
+              >
+                {/* Ícone Desfazer / Voltar grande */}
+                <div className="flex-1 min-h-0 flex items-center justify-center w-full my-0.5 overflow-hidden">
+                  <Undo2
+                    className={`w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 transition-transform ${
+                      phraseLength === 0 ? 'text-slate-300' : 'text-amber-600 group-hover:-rotate-12'
+                    }`}
+                  />
+                </div>
+
+                {/* Rótulo ERREI bem visível e claro para o paciente */}
+                <div className="w-full text-center shrink-0 px-1 py-0.5 min-h-[2.4em] max-h-[3.6em] flex flex-col items-center justify-center">
+                  <span
+                    className={`block tracking-tight leading-tight text-center font-black uppercase text-xs sm:text-sm md:text-base ${
+                      phraseLength === 0 ? 'text-slate-400' : 'text-amber-900'
+                    }`}
+                  >
+                    ERREI
+                  </span>
+                  <span
+                    className={`text-[9px] sm:text-[10px] font-semibold leading-tight ${
+                      phraseLength === 0 ? 'text-slate-400' : 'text-amber-700/80'
+                    }`}
+                  >
+                    Desfazer
+                  </span>
+                </div>
+              </button>
+            )}
+
+            {/* Cartões da Categoria Atual */}
             {cards.map(card => {
               const meta = FITZGERALD_COLORS[card.category] || FITZGERALD_COLORS.descriptor;
               const hasTarget = Boolean(card.target_page_id);

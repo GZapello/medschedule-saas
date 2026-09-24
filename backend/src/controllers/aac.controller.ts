@@ -931,6 +931,9 @@ export class AACController {
   /**
    * Helper privado: Popula o vocabulário clínico nuclear inicial com Chave Fitzgerald e 27 categorias
    */
+  /**
+   * Helper privado: Popula o vocabulário clínico nuclear inicial com Chave Fitzgerald e 28 categorias completas
+   */
   private static seedStarterPagesAndCards(boardId: string): void {
     const now = new Date().toISOString();
 
@@ -963,15 +966,41 @@ export class AACController {
           { label: 'Sim', spoken: 'Sim', cat: 'descriptor', col: '#dcfce7', sym: '👍' },
           { label: 'Não', spoken: 'Não', cat: 'descriptor', col: '#fee2e2', sym: '👎' },
           { label: 'Mais', spoken: 'Mais', cat: 'descriptor', col: '#f1f5f9', sym: '➕' },
-          { label: 'Chega / Acabou', spoken: 'Acabou', cat: 'descriptor', col: '#f1f5f9', sym: '🛑' },
+          { label: 'Acabou', spoken: 'Acabou', cat: 'descriptor', col: '#f1f5f9', sym: '🛑' },
           { label: 'Ajuda', spoken: 'Ajuda', cat: 'action', col: '#fef3c7', sym: '🆘' },
           { label: 'Banheiro', spoken: 'Banheiro', cat: 'noun', col: '#fed7aa', sym: '🚽' },
           { label: 'Água', spoken: 'Água', cat: 'noun', col: '#fed7aa', sym: '💧' },
-          { label: 'Comer', spoken: 'Comer', cat: 'noun', col: '#fed7aa', sym: '🍽️' },
+          { label: 'Comida', spoken: 'Comida', cat: 'noun', col: '#fed7aa', sym: '🍽️' },
+          { label: 'Brincar', spoken: 'Brincar', cat: 'action', col: '#bbf7d0', sym: '🎨' },
+          { label: 'Sentar', spoken: 'Sentar', cat: 'action', col: '#bbf7d0', sym: '🪑' },
+          { label: 'Levantar', spoken: 'Levantar', cat: 'action', col: '#bbf7d0', sym: '🚶' },
+          { label: 'Esperar', spoken: 'Esperar', cat: 'action', col: '#fef3c7', sym: '✋' },
           { label: 'Por favor', spoken: 'Por favor', cat: 'social', col: '#fbcfe8', sym: '🤝' },
           { label: 'Obrigado', spoken: 'Obrigado', cat: 'social', col: '#fbcfe8', sym: '🙏' },
-          { label: 'Oi / Olá', spoken: 'Oi', cat: 'social', col: '#fbcfe8', sym: '👋' },
-          { label: 'Tchau', spoken: 'Tchau', cat: 'social', col: '#fbcfe8', sym: '👋' }
+          { label: 'Gostei', spoken: 'Gostei', cat: 'descriptor', col: '#dcfce7', sym: '😊' },
+          { label: 'Não gostei', spoken: 'Não gostei', cat: 'descriptor', col: '#fee2e2', sym: '😖' }
+        ]
+      },
+      {
+        name: 'Respostas Rápidas',
+        icon: 'Sparkles',
+        cards: [
+          { label: 'Sim', spoken: 'Sim', cat: 'descriptor', col: '#dcfce7', sym: '👍' },
+          { label: 'Não', spoken: 'Não', cat: 'descriptor', col: '#fee2e2', sym: '👎' },
+          { label: 'Quero', spoken: 'Quero', cat: 'action', col: '#bbf7d0', sym: '🤲' },
+          { label: 'Não quero', spoken: 'Não quero', cat: 'action', col: '#fee2e2', sym: '🚫' },
+          { label: 'Gostei', spoken: 'Gostei', cat: 'descriptor', col: '#dcfce7', sym: '😊' },
+          { label: 'Não gostei', spoken: 'Não gostei', cat: 'descriptor', col: '#fee2e2', sym: '😖' },
+          { label: 'Está bom', spoken: 'Está bom', cat: 'descriptor', col: '#dcfce7', sym: '✨' },
+          { label: 'Não está bom', spoken: 'Não está bom', cat: 'descriptor', col: '#fee2e2', sym: '❌' },
+          { label: 'Esse', spoken: 'Esse', cat: 'descriptor', col: '#f1f5f9', sym: '👉' },
+          { label: 'Aquele', spoken: 'Aquele', cat: 'descriptor', col: '#f1f5f9', sym: '👈' },
+          { label: 'De novo', spoken: 'De novo', cat: 'descriptor', col: '#dcfce7', sym: '🔁' },
+          { label: 'Agora', spoken: 'Agora', cat: 'descriptor', col: '#f1f5f9', sym: '⏱️' },
+          { label: 'Depois', spoken: 'Depois', cat: 'descriptor', col: '#f1f5f9', sym: '⌛' },
+          { label: 'Hoje', spoken: 'Hoje', cat: 'descriptor', col: '#f1f5f9', sym: '📅' },
+          { label: 'Aqui', spoken: 'Aqui', cat: 'descriptor', col: '#f1f5f9', sym: '📍' },
+          { label: 'Ali', spoken: 'Ali', cat: 'descriptor', col: '#f1f5f9', sym: '🔭' }
         ]
       },
       {
@@ -982,14 +1011,36 @@ export class AACController {
           { label: 'Água', spoken: 'Água', cat: 'noun', col: '#fed7aa', sym: '💧' },
           { label: 'Fome', spoken: 'Fome', cat: 'noun', col: '#fed7aa', sym: '🥪' },
           { label: 'Sede', spoken: 'Sede', cat: 'noun', col: '#fed7aa', sym: '🥤' },
+          { label: 'Frio', spoken: 'Frio', cat: 'feeling', col: '#bfdbfe', sym: '🥶' },
+          { label: 'Calor', spoken: 'Calor', cat: 'feeling', col: '#fed7aa', sym: '🥵' },
+          { label: 'Sono', spoken: 'Sono', cat: 'feeling', col: '#bfdbfe', sym: '😴' },
+          { label: 'Cansado', spoken: 'Cansado', cat: 'feeling', col: '#bfdbfe', sym: '🥱' },
           { label: 'Dor de Cabeça', spoken: 'Dor de cabeça', cat: 'feeling', col: '#fee2e2', sym: '🤕' },
           { label: 'Dor na Barriga', spoken: 'Dor na barriga', cat: 'feeling', col: '#fee2e2', sym: '🤢' },
           { label: 'Dói Aqui', spoken: 'Dói aqui', cat: 'feeling', col: '#fee2e2', sym: '🩹' },
+          { label: 'Doeu', spoken: 'Doeu', cat: 'feeling', col: '#fee2e2', sym: '⚡' },
+          { label: 'Machucou', spoken: 'Machucou', cat: 'feeling', col: '#fee2e2', sym: '💥' },
           { label: 'Remédio', spoken: 'Remédio', cat: 'noun', col: '#fed7aa', sym: '💊' },
-          { label: 'Frio', spoken: 'Frio', cat: 'feeling', col: '#bfdbfe', sym: '🥶' },
-          { label: 'Calor', spoken: 'Calor', cat: 'feeling', col: '#fed7aa', sym: '🥵' },
-          { label: 'Cansado', spoken: 'Cansado', cat: 'feeling', col: '#bfdbfe', sym: '🥱' },
-          { label: 'Vontade de Dormir', spoken: 'Sono', cat: 'feeling', col: '#bfdbfe', sym: '😴' }
+          { label: 'Descansar', spoken: 'Descansar', cat: 'feeling', col: '#bfdbfe', sym: '🧘' },
+          { label: 'Parar', spoken: 'Parar', cat: 'action', col: '#fee2e2', sym: '🛑' }
+        ]
+      },
+      {
+        name: 'Emergência',
+        icon: 'AlertCircle',
+        cards: [
+          { label: 'Ajuda!', spoken: 'Preciso de ajuda urgente', cat: 'action', col: '#fee2e2', sym: '🆘' },
+          { label: 'Socorro!', spoken: 'Socorro', cat: 'action', col: '#fee2e2', sym: '🚨' },
+          { label: 'Dor Forte!', spoken: 'Estou com muita dor', cat: 'feeling', col: '#fee2e2', sym: '💥' },
+          { label: 'Doeu Muito', spoken: 'Doeu muito', cat: 'feeling', col: '#fee2e2', sym: '🩹' },
+          { label: 'Machucou', spoken: 'Eu me machuquei', cat: 'feeling', col: '#fee2e2', sym: '🤕' },
+          { label: 'Falta de Ar', spoken: 'Estou com falta de ar', cat: 'feeling', col: '#fee2e2', sym: '🫁' },
+          { label: 'Não Consigo Respirar', spoken: 'Não consigo respirar direito', cat: 'feeling', col: '#fee2e2', sym: '😮‍💨' },
+          { label: 'Chamar Mamãe', spoken: 'Chamar a mamãe', cat: 'pronoun', col: '#fef08a', sym: '👩' },
+          { label: 'Chamar Papai', spoken: 'Chamar o papai', cat: 'pronoun', col: '#fef08a', sym: '👨' },
+          { label: 'Emergência', spoken: 'É uma emergência', cat: 'noun', col: '#fee2e2', sym: '🚑' },
+          { label: 'Preciso de Calma', spoken: 'Preciso de calma e silêncio', cat: 'feeling', col: '#bfdbfe', sym: '🕊️' },
+          { label: 'Hospital', spoken: 'Preciso ir ao hospital', cat: 'noun', col: '#fed7aa', sym: '🏥' }
         ]
       },
       {
@@ -998,16 +1049,18 @@ export class AACController {
         cards: [
           { label: 'Feliz', spoken: 'Feliz', cat: 'feeling', col: '#bfdbfe', sym: '😃' },
           { label: 'Triste', spoken: 'Triste', cat: 'feeling', col: '#bfdbfe', sym: '😢' },
-          { label: 'Bravo / Irritado', spoken: 'Bravo', cat: 'feeling', col: '#fee2e2', sym: '😡' },
+          { label: 'Bravo', spoken: 'Bravo', cat: 'feeling', col: '#fee2e2', sym: '😡' },
           { label: 'Medo', spoken: 'Medo', cat: 'feeling', col: '#fee2e2', sym: '😨' },
           { label: 'Calmo', spoken: 'Calmo', cat: 'feeling', col: '#bfdbfe', sym: '😌' },
+          { label: 'Cansado', spoken: 'Cansado', cat: 'feeling', col: '#bfdbfe', sym: '🥱' },
           { label: 'Ansioso', spoken: 'Ansioso', cat: 'feeling', col: '#fee2e2', sym: '😰' },
           { label: 'Animado', spoken: 'Animado', cat: 'feeling', col: '#bfdbfe', sym: '🤩' },
           { label: 'Frustrado', spoken: 'Frustrado', cat: 'feeling', col: '#fee2e2', sym: '😤' },
           { label: 'Confortável', spoken: 'Confortável', cat: 'feeling', col: '#dcfce7', sym: '🛋️' },
           { label: 'Desconfortável', spoken: 'Desconfortável', cat: 'feeling', col: '#fee2e2', sym: '😣' },
           { label: 'Com Saudades', spoken: 'Com saudades', cat: 'feeling', col: '#bfdbfe', sym: '🥺' },
-          { label: 'Com Vergonha', spoken: 'Com vergonha', cat: 'feeling', col: '#fed7aa', sym: '😳' }
+          { label: 'Com Vergonha', spoken: 'Com vergonha', cat: 'feeling', col: '#fed7aa', sym: '😳' },
+          { label: 'Amor', spoken: 'Amor', cat: 'feeling', col: '#fbcfe8', sym: '❤️' }
         ]
       },
       {
@@ -1022,10 +1075,31 @@ export class AACController {
           { label: 'Jogo', spoken: 'Jogo', cat: 'noun', col: '#fed7aa', sym: '🎲' },
           { label: 'Dançar', spoken: 'Dançar', cat: 'action', col: '#bbf7d0', sym: '💃' },
           { label: 'Livro / História', spoken: 'História', cat: 'noun', col: '#fed7aa', sym: '📖' },
+          { label: 'Assistir Vídeo', spoken: 'Assistir vídeo', cat: 'action', col: '#fed7aa', sym: '📺' },
+          { label: 'Passear', spoken: 'Passear', cat: 'action', col: '#bbf7d0', sym: '🚶' },
           { label: 'Espere', spoken: 'Espere', cat: 'action', col: '#fef3c7', sym: '✋' },
           { label: 'Pausa / Descanso', spoken: 'Pausa', cat: 'action', col: '#bfdbfe', sym: '⏸️' },
-          { label: 'Assistir Vídeo', spoken: 'Assistir vídeo', cat: 'action', col: '#fed7aa', sym: '📺' },
           { label: 'Terminou a Sessão', spoken: 'Terminou', cat: 'social', col: '#fbcfe8', sym: '🏁' }
+        ]
+      },
+      {
+        name: 'Brincadeiras',
+        icon: 'Smile',
+        cards: [
+          { label: 'Brincar', spoken: 'Quero brincar', cat: 'action', col: '#bbf7d0', sym: '🎪' },
+          { label: 'Jogar', spoken: 'Quero jogar', cat: 'action', col: '#bbf7d0', sym: '🎮' },
+          { label: 'Bola', spoken: 'Bola', cat: 'noun', col: '#fed7aa', sym: '⚽' },
+          { label: 'Boneca', spoken: 'Boneca', cat: 'noun', col: '#fed7aa', sym: '🪆' },
+          { label: 'Carrinho', spoken: 'Carrinho', cat: 'noun', col: '#fed7aa', sym: '🚗' },
+          { label: 'Lego / Blocos', spoken: 'Blocos de montar', cat: 'noun', col: '#fed7aa', sym: '🧱' },
+          { label: 'Massinha', spoken: 'Massinha', cat: 'noun', col: '#fed7aa', sym: '🧁' },
+          { label: 'Esconde-Esconde', spoken: 'Esconde-esconde', cat: 'action', col: '#bbf7d0', sym: '🙈' },
+          { label: 'Pega-Pega', spoken: 'Pega-pega', cat: 'action', col: '#bbf7d0', sym: '🏃' },
+          { label: 'Quebra-Cabeça', spoken: 'Quebra-cabeça', cat: 'noun', col: '#fed7aa', sym: '🧩' },
+          { label: 'Bolha de Sabão', spoken: 'Bolha de sabão', cat: 'noun', col: '#fed7aa', sym: '🫧' },
+          { label: 'Balanço', spoken: 'Balanço', cat: 'noun', col: '#fed7aa', sym: '🛝' },
+          { label: 'Escorregador', spoken: 'Escorregador', cat: 'noun', col: '#fed7aa', sym: '🎢' },
+          { label: 'Desenho Animado', spoken: 'Desenho animado', cat: 'noun', col: '#fed7aa', sym: '🎬' }
         ]
       },
       {
@@ -1033,8 +1107,11 @@ export class AACController {
         icon: 'Coffee',
         cards: [
           { label: 'Água', spoken: 'Água', cat: 'noun', col: '#fed7aa', sym: '💧' },
+          { label: 'Quero Água', spoken: 'Quero água', cat: 'action', col: '#bbf7d0', sym: '🥤' },
           { label: 'Suco', spoken: 'Suco', cat: 'noun', col: '#fed7aa', sym: '🧃' },
           { label: 'Leite', spoken: 'Leite', cat: 'noun', col: '#fed7aa', sym: '🥛' },
+          { label: 'Comida', spoken: 'Comida', cat: 'noun', col: '#fed7aa', sym: '🍲' },
+          { label: 'Quero Comer', spoken: 'Quero comer', cat: 'action', col: '#bbf7d0', sym: '🍽️' },
           { label: 'Fruta', spoken: 'Fruta', cat: 'noun', col: '#fed7aa', sym: '🍎' },
           { label: 'Banana', spoken: 'Banana', cat: 'noun', col: '#fed7aa', sym: '🍌' },
           { label: 'Maçã', spoken: 'Maçã', cat: 'noun', col: '#fed7aa', sym: '🍏' },
@@ -1043,7 +1120,8 @@ export class AACController {
           { label: 'Arroz e Feijão', spoken: 'Arroz e feijão', cat: 'noun', col: '#fed7aa', sym: '🍚' },
           { label: 'Macarrão', spoken: 'Macarrão', cat: 'noun', col: '#fed7aa', sym: '🍝' },
           { label: 'Carne', spoken: 'Carne', cat: 'noun', col: '#fed7aa', sym: '🥩' },
-          { label: 'Gostoso', spoken: 'Gostoso', cat: 'descriptor', col: '#dcfce7', sym: '😋' }
+          { label: 'Gostoso', spoken: 'Gostoso', cat: 'descriptor', col: '#dcfce7', sym: '😋' },
+          { label: 'Não Gostei', spoken: 'Não gostei', cat: 'descriptor', col: '#fee2e2', sym: '😖' }
         ]
       },
       {
@@ -1052,15 +1130,16 @@ export class AACController {
         cards: [
           { label: 'Mamãe', spoken: 'Mamãe', cat: 'pronoun', col: '#fef08a', sym: '👩' },
           { label: 'Papai', spoken: 'Papai', cat: 'pronoun', col: '#fef08a', sym: '👨' },
-          { label: 'Irmão / Irmã', spoken: 'Irmão', cat: 'pronoun', col: '#fef08a', sym: '👧' },
+          { label: 'Irmão', spoken: 'Irmão', cat: 'pronoun', col: '#fef08a', sym: '👦' },
+          { label: 'Irmã', spoken: 'Irmã', cat: 'pronoun', col: '#fef08a', sym: '👧' },
           { label: 'Vovó', spoken: 'Vovó', cat: 'pronoun', col: '#fef08a', sym: '👵' },
           { label: 'Vovô', spoken: 'Vovô', cat: 'pronoun', col: '#fef08a', sym: '👴' },
           { label: 'Terapeuta', spoken: 'Terapeuta', cat: 'pronoun', col: '#fef08a', sym: '🧑‍⚕️' },
           { label: 'Fonoaudióloga', spoken: 'Fonoaudióloga', cat: 'pronoun', col: '#fef08a', sym: '👩‍⚕️' },
           { label: 'Terapeuta Ocupacional', spoken: 'Terapeuta ocupacional', cat: 'pronoun', col: '#fef08a', sym: '🧑‍⚕️' },
-          { label: 'Professor(a)', spoken: 'Professora', cat: 'pronoun', col: '#fef08a', sym: '🧑‍🏫' },
-          { label: 'Médico(a)', spoken: 'Médico', cat: 'pronoun', col: '#fef08a', sym: '👨‍⚕️' },
-          { label: 'Amigo(a)', spoken: 'Amigo', cat: 'pronoun', col: '#fef08a', sym: '🧒' },
+          { label: 'Psicóloga', spoken: 'Psicóloga', cat: 'pronoun', col: '#fef08a', sym: '🧠' },
+          { label: 'Professora', spoken: 'Professora', cat: 'pronoun', col: '#fef08a', sym: '👩‍🏫' },
+          { label: 'Amigo', spoken: 'Amigo', cat: 'pronoun', col: '#fef08a', sym: '🧒' },
           { label: 'Família', spoken: 'Família', cat: 'pronoun', col: '#fef08a', sym: '👨‍👩‍👧' }
         ]
       },
@@ -1068,10 +1147,12 @@ export class AACController {
         name: 'Lugares',
         icon: 'MapPin',
         cards: [
+          { label: 'Aqui', spoken: 'Aqui', cat: 'descriptor', col: '#f1f5f9', sym: '📍' },
+          { label: 'Ali', spoken: 'Ali', cat: 'descriptor', col: '#f1f5f9', sym: '🔭' },
           { label: 'Casa', spoken: 'Casa', cat: 'noun', col: '#fed7aa', sym: '🏠' },
           { label: 'Escola', spoken: 'Escola', cat: 'noun', col: '#fed7aa', sym: '🏫' },
-          { label: 'Consultório', spoken: 'Consultório', cat: 'noun', col: '#fed7aa', sym: '🏥' },
           { label: 'Clínica', spoken: 'Clínica', cat: 'noun', col: '#fed7aa', sym: '🏢' },
+          { label: 'Consultório', spoken: 'Consultório', cat: 'noun', col: '#fed7aa', sym: '🏥' },
           { label: 'Parque', spoken: 'Parque', cat: 'noun', col: '#fed7aa', sym: '🌳' },
           { label: 'Quarto', spoken: 'Quarto', cat: 'noun', col: '#fed7aa', sym: '🛏️' },
           { label: 'Banheiro', spoken: 'Banheiro', cat: 'noun', col: '#fed7aa', sym: '🚽' },
@@ -1080,28 +1161,6 @@ export class AACController {
           { label: 'Hospital', spoken: 'Hospital', cat: 'noun', col: '#fed7aa', sym: '🏥' },
           { label: 'Rua', spoken: 'Rua', cat: 'noun', col: '#fed7aa', sym: '🛣️' },
           { label: 'Supermercado', spoken: 'Supermercado', cat: 'noun', col: '#fed7aa', sym: '🛒' }
-        ]
-      },
-      {
-        name: 'Ações',
-        icon: 'Play',
-        cards: [
-          { label: 'Quero', spoken: 'Quero', cat: 'action', col: '#bbf7d0', sym: '🤲' },
-          { label: 'Não quero', spoken: 'Não quero', cat: 'action', col: '#fee2e2', sym: '🚫' },
-          { label: 'Ajudar', spoken: 'Ajudar', cat: 'action', col: '#bbf7d0', sym: '🤝' },
-          { label: 'Comer', spoken: 'Comer', cat: 'action', col: '#bbf7d0', sym: '🍽️' },
-          { label: 'Beber', spoken: 'Beber', cat: 'action', col: '#bbf7d0', sym: '🥤' },
-          { label: 'Ir', spoken: 'Ir', cat: 'action', col: '#bbf7d0', sym: '🚶' },
-          { label: 'Vir', spoken: 'Vir', cat: 'action', col: '#bbf7d0', sym: '🏃' },
-          { label: 'Parar', spoken: 'Parar', cat: 'action', col: '#fee2e2', sym: '🛑' },
-          { label: 'Continuar', spoken: 'Continuar', cat: 'action', col: '#bbf7d0', sym: '▶️' },
-          { label: 'Olhar', spoken: 'Olhar', cat: 'action', col: '#bbf7d0', sym: '👀' },
-          { label: 'Escutar', spoken: 'Escutar', cat: 'action', col: '#bbf7d0', sym: '👂' },
-          { label: 'Pegar', spoken: 'Pegar', cat: 'action', col: '#bbf7d0', sym: '✊' },
-          { label: 'Guardar', spoken: 'Guardar', cat: 'action', col: '#bbf7d0', sym: '📦' },
-          { label: 'Abrir', spoken: 'Abrir', cat: 'action', col: '#bbf7d0', sym: '🔓' },
-          { label: 'Fechar', spoken: 'Fechar', cat: 'action', col: '#bbf7d0', sym: '🔒' },
-          { label: 'Sentar', spoken: 'Sentar', cat: 'action', col: '#bbf7d0', sym: '🪑' }
         ]
       },
       {
@@ -1123,6 +1182,28 @@ export class AACController {
         ]
       },
       {
+        name: 'Escola / Terapia',
+        icon: 'BookOpen',
+        cards: [
+          { label: 'Caderno', spoken: 'Caderno', cat: 'noun', col: '#fed7aa', sym: '📓' },
+          { label: 'Lápis', spoken: 'Lápis', cat: 'noun', col: '#fed7aa', sym: '✏️' },
+          { label: 'Caneta', spoken: 'Caneta', cat: 'noun', col: '#fed7aa', sym: '🖊️' },
+          { label: 'Borracha', spoken: 'Borracha', cat: 'noun', col: '#fed7aa', sym: '🧼' },
+          { label: 'Mochila', spoken: 'Mochila', cat: 'noun', col: '#fed7aa', sym: '🎒' },
+          { label: 'Tesoura', spoken: 'Tesoura', cat: 'noun', col: '#fed7aa', sym: '✂️' },
+          { label: 'Cola', spoken: 'Cola', cat: 'noun', col: '#fed7aa', sym: '🧴' },
+          { label: 'Livro', spoken: 'Livro', cat: 'noun', col: '#fed7aa', sym: '📚' },
+          { label: 'Lição', spoken: 'Lição', cat: 'noun', col: '#fed7aa', sym: '📝' },
+          { label: 'Recreio', spoken: 'Recreio', cat: 'action', col: '#bbf7d0', sym: '🔔' },
+          { label: 'Professora', spoken: 'Professora', cat: 'pronoun', col: '#fef08a', sym: '👩‍🏫' },
+          { label: 'Terapeuta', spoken: 'Terapeuta', cat: 'pronoun', col: '#fef08a', sym: '🧑‍⚕️' },
+          { label: 'Sentar', spoken: 'Sentar', cat: 'action', col: '#bbf7d0', sym: '🪑' },
+          { label: 'Levantar', spoken: 'Levantar', cat: 'action', col: '#bbf7d0', sym: '🚶' },
+          { label: 'Esperar Minha Vez', spoken: 'Esperar minha vez', cat: 'action', col: '#fef3c7', sym: '✋' },
+          { label: 'Terminei', spoken: 'Terminei a atividade', cat: 'social', col: '#fbcfe8', sym: '🏁' }
+        ]
+      },
+      {
         name: 'Corpo',
         icon: 'Activity',
         cards: [
@@ -1137,16 +1218,20 @@ export class AACController {
           { label: 'Perna', spoken: 'Perna', cat: 'noun', col: '#fed7aa', sym: '🦵' },
           { label: 'Barriga', spoken: 'Barriga', cat: 'noun', col: '#fed7aa', sym: '🫃' },
           { label: 'Costas', spoken: 'Costas', cat: 'noun', col: '#fed7aa', sym: '🧍' },
-          { label: 'Dente', spoken: 'Dente', cat: 'noun', col: '#fed7aa', sym: '🦷' }
+          { label: 'Dente', spoken: 'Dente', cat: 'noun', col: '#fed7aa', sym: '🦷' },
+          { label: 'Joelho', spoken: 'Joelho', cat: 'noun', col: '#fed7aa', sym: '🦵' },
+          { label: 'Coração', spoken: 'Coração', cat: 'noun', col: '#fee2e2', sym: '❤️' }
         ]
       },
       {
-        name: 'Saúde / Dor',
+        name: 'Saúde',
         icon: 'Heart',
         cards: [
           { label: 'Dói Aqui', spoken: 'Dói aqui', cat: 'feeling', col: '#fee2e2', sym: '🩹' },
+          { label: 'Doeu', spoken: 'Doeu', cat: 'feeling', col: '#fee2e2', sym: '⚡' },
           { label: 'Dor Forte', spoken: 'Dor forte', cat: 'feeling', col: '#fee2e2', sym: '💥' },
-          { label: 'Dor Fraca', spoken: 'Dor fraca', cat: 'feeling', col: '#fee2e2', sym: '⚡' },
+          { label: 'Dor Fraca', spoken: 'Dor fraca', cat: 'feeling', col: '#fee2e2', sym: '🩹' },
+          { label: 'Machucou', spoken: 'Machucou', cat: 'feeling', col: '#fee2e2', sym: '🤕' },
           { label: 'Remédio', spoken: 'Remédio', cat: 'noun', col: '#fed7aa', sym: '💊' },
           { label: 'Febre', spoken: 'Febre', cat: 'feeling', col: '#fee2e2', sym: '🌡️' },
           { label: 'Enjoado', spoken: 'Enjoado', cat: 'feeling', col: '#fee2e2', sym: '🤢' },
@@ -1156,96 +1241,6 @@ export class AACController {
           { label: 'Médico', spoken: 'Médico', cat: 'pronoun', col: '#fef08a', sym: '👨‍⚕️' },
           { label: 'Dentista', spoken: 'Dentista', cat: 'pronoun', col: '#fef08a', sym: '🦷' },
           { label: 'Hospital', spoken: 'Hospital', cat: 'noun', col: '#fed7aa', sym: '🏥' }
-        ]
-      },
-      {
-        name: 'Escola',
-        icon: 'BookOpen',
-        cards: [
-          { label: 'Caderno', spoken: 'Caderno', cat: 'noun', col: '#fed7aa', sym: '📓' },
-          { label: 'Lápis', spoken: 'Lápis', cat: 'noun', col: '#fed7aa', sym: '✏️' },
-          { label: 'Caneta', spoken: 'Caneta', cat: 'noun', col: '#fed7aa', sym: '🖊️' },
-          { label: 'Borracha', spoken: 'Borracha', cat: 'noun', col: '#fed7aa', sym: '🧼' },
-          { label: 'Mochila', spoken: 'Mochila', cat: 'noun', col: '#fed7aa', sym: '🎒' },
-          { label: 'Tesoura', spoken: 'Tesoura', cat: 'noun', col: '#fed7aa', sym: '✂️' },
-          { label: 'Cola', spoken: 'Cola', cat: 'noun', col: '#fed7aa', sym: '🧴' },
-          { label: 'Livro', spoken: 'Livro', cat: 'noun', col: '#fed7aa', sym: '📚' },
-          { label: 'Lição', spoken: 'Lição', cat: 'noun', col: '#fed7aa', sym: '📝' },
-          { label: 'Recreio', spoken: 'Recreio', cat: 'action', col: '#bbf7d0', sym: '🔔' },
-          { label: 'Professora', spoken: 'Professora', cat: 'pronoun', col: '#fef08a', sym: '👩‍🏫' },
-          { label: 'Amigos', spoken: 'Amigos', cat: 'pronoun', col: '#fef08a', sym: '🧑‍🤝‍🧑' }
-        ]
-      },
-      {
-        name: 'Casa',
-        icon: 'Home',
-        cards: [
-          { label: 'Cama', spoken: 'Cama', cat: 'noun', col: '#fed7aa', sym: '🛏️' },
-          { label: 'Mesa', spoken: 'Mesa', cat: 'noun', col: '#fed7aa', sym: '🪑' },
-          { label: 'Cadeira', spoken: 'Cadeira', cat: 'noun', col: '#fed7aa', sym: '🪑' },
-          { label: 'Sofá', spoken: 'Sofá', cat: 'noun', col: '#fed7aa', sym: '🛋️' },
-          { label: 'Geladeira', spoken: 'Geladeira', cat: 'noun', col: '#fed7aa', sym: '🧊' },
-          { label: 'Televisão', spoken: 'Televisão', cat: 'noun', col: '#fed7aa', sym: '📺' },
-          { label: 'Porta', spoken: 'Porta', cat: 'noun', col: '#fed7aa', sym: '🚪' },
-          { label: 'Janela', spoken: 'Janela', cat: 'noun', col: '#fed7aa', sym: '🪟' },
-          { label: 'Chave', spoken: 'Chave', cat: 'noun', col: '#fed7aa', sym: '🔑' },
-          { label: 'Copo', spoken: 'Copo', cat: 'noun', col: '#fed7aa', sym: '🥛' },
-          { label: 'Prato', spoken: 'Prato', cat: 'noun', col: '#fed7aa', sym: '🍽️' },
-          { label: 'Talher', spoken: 'Talher', cat: 'noun', col: '#fed7aa', sym: '🍴' }
-        ]
-      },
-      {
-        name: 'Brinquedos / Lazer',
-        icon: 'Smile',
-        cards: [
-          { label: 'Bola', spoken: 'Bola', cat: 'noun', col: '#fed7aa', sym: '⚽' },
-          { label: 'Boneca', spoken: 'Boneca', cat: 'noun', col: '#fed7aa', sym: '🪆' },
-          { label: 'Carrinho', spoken: 'Carrinho', cat: 'noun', col: '#fed7aa', sym: '🚗' },
-          { label: 'Blocos / Lego', spoken: 'Blocos de montar', cat: 'noun', col: '#fed7aa', sym: '🧱' },
-          { label: 'Massinha', spoken: 'Massinha', cat: 'noun', col: '#fed7aa', sym: '🧁' },
-          { label: 'Quebra-Cabeça', spoken: 'Quebra-cabeça', cat: 'noun', col: '#fed7aa', sym: '🧩' },
-          { label: 'Jogo', spoken: 'Jogo', cat: 'noun', col: '#fed7aa', sym: '🎮' },
-          { label: 'Bolha de Sabão', spoken: 'Bolha de sabão', cat: 'noun', col: '#fed7aa', sym: '🫧' },
-          { label: 'Balanço', spoken: 'Balanço', cat: 'noun', col: '#fed7aa', sym: '🎪' },
-          { label: 'Escorregador', spoken: 'Escorregador', cat: 'noun', col: '#fed7aa', sym: '🛝' },
-          { label: 'Tablet', spoken: 'Tablet', cat: 'noun', col: '#fed7aa', sym: '📱' },
-          { label: 'Desenho Animado', spoken: 'Desenho animado', cat: 'noun', col: '#fed7aa', sym: '🎬' }
-        ]
-      },
-      {
-        name: 'Perguntas',
-        icon: 'HelpCircle',
-        cards: [
-          { label: 'O que?', spoken: 'O que?', cat: 'descriptor', col: '#f1f5f9', sym: '❓' },
-          { label: 'Quem?', spoken: 'Quem?', cat: 'descriptor', col: '#f1f5f9', sym: '👤' },
-          { label: 'Onde?', spoken: 'Onde?', cat: 'descriptor', col: '#f1f5f9', sym: '📍' },
-          { label: 'Quando?', spoken: 'Quando?', cat: 'descriptor', col: '#f1f5f9', sym: '⏰' },
-          { label: 'Por quê?', spoken: 'Por quê?', cat: 'descriptor', col: '#f1f5f9', sym: '🤷' },
-          { label: 'Como?', spoken: 'Como?', cat: 'descriptor', col: '#f1f5f9', sym: '💡' },
-          { label: 'Quanto Custa?', spoken: 'Quanto custa?', cat: 'descriptor', col: '#f1f5f9', sym: '💰' },
-          { label: 'Qual?', spoken: 'Qual?', cat: 'descriptor', col: '#f1f5f9', sym: '🔀' },
-          { label: 'Posso?', spoken: 'Posso?', cat: 'descriptor', col: '#f1f5f9', sym: '🙋' },
-          { label: 'Cadê?', spoken: 'Cadê?', cat: 'descriptor', col: '#f1f5f9', sym: '🔍' },
-          { label: 'Que Horas?', spoken: 'Que horas são?', cat: 'descriptor', col: '#f1f5f9', sym: '🕒' },
-          { label: 'Tem Mais?', spoken: 'Tem mais?', cat: 'descriptor', col: '#f1f5f9', sym: '➕' }
-        ]
-      },
-      {
-        name: 'Social',
-        icon: 'MessageSquare',
-        cards: [
-          { label: 'Oi / Olá', spoken: 'Oi', cat: 'social', col: '#fbcfe8', sym: '👋' },
-          { label: 'Tchau', spoken: 'Tchau', cat: 'social', col: '#fbcfe8', sym: '👋' },
-          { label: 'Bom Dia', spoken: 'Bom dia', cat: 'social', col: '#fbcfe8', sym: '☀️' },
-          { label: 'Boa Tarde', spoken: 'Boa tarde', cat: 'social', col: '#fbcfe8', sym: '🌤️' },
-          { label: 'Boa Noite', spoken: 'Boa noite', cat: 'social', col: '#fbcfe8', sym: '🌙' },
-          { label: 'Por Favor', spoken: 'Por favor', cat: 'social', col: '#fbcfe8', sym: '🤝' },
-          { label: 'Obrigado(a)', spoken: 'Obrigado', cat: 'social', col: '#fbcfe8', sym: '🙏' },
-          { label: 'Desculpe', spoken: 'Desculpe', cat: 'social', col: '#fbcfe8', sym: '🙇' },
-          { label: 'De Nada', spoken: 'De nada', cat: 'social', col: '#fbcfe8', sym: '😊' },
-          { label: 'Parabéns', spoken: 'Parabéns', cat: 'social', col: '#fbcfe8', sym: '🎂' },
-          { label: 'Tudo Bem?', spoken: 'Tudo bem?', cat: 'social', col: '#fbcfe8', sym: '💬' },
-          { label: 'Com Licença', spoken: 'Com licença', cat: 'social', col: '#fbcfe8', sym: '🚪' }
         ]
       },
       {
@@ -1267,39 +1262,79 @@ export class AACController {
         ]
       },
       {
-        name: 'Animais',
-        icon: 'Sparkles',
+        name: 'Perguntas',
+        icon: 'HelpCircle',
         cards: [
-          { label: 'Cachorro', spoken: 'Cachorro', cat: 'noun', col: '#fed7aa', sym: '🐶' },
-          { label: 'Gato', spoken: 'Gato', cat: 'noun', col: '#fed7aa', sym: '🐱' },
-          { label: 'Pássaro', spoken: 'Pássaro', cat: 'noun', col: '#fed7aa', sym: '🐦' },
-          { label: 'Peixe', spoken: 'Peixe', cat: 'noun', col: '#fed7aa', sym: '🐟' },
-          { label: 'Cavalo', spoken: 'Cavalo', cat: 'noun', col: '#fed7aa', sym: '🐴' },
-          { label: 'Vaca', spoken: 'Vaca', cat: 'noun', col: '#fed7aa', sym: '🐮' },
-          { label: 'Tartaruga', spoken: 'Tartaruga', cat: 'noun', col: '#fed7aa', sym: '🐢' },
-          { label: 'Coelho', spoken: 'Coelho', cat: 'noun', col: '#fed7aa', sym: '🐰' },
-          { label: 'Leão', spoken: 'Leão', cat: 'noun', col: '#fed7aa', sym: '🦁' },
-          { label: 'Elefante', spoken: 'Elefante', cat: 'noun', col: '#fed7aa', sym: '🐘' },
-          { label: 'Macaco', spoken: 'Macaco', cat: 'noun', col: '#fed7aa', sym: '🐵' },
-          { label: 'Borboleta', spoken: 'Borboleta', cat: 'noun', col: '#fed7aa', sym: '🦋' }
+          { label: 'O que?', spoken: 'O que?', cat: 'descriptor', col: '#f1f5f9', sym: '❓' },
+          { label: 'Quem?', spoken: 'Quem?', cat: 'descriptor', col: '#f1f5f9', sym: '👤' },
+          { label: 'Onde?', spoken: 'Onde?', cat: 'descriptor', col: '#f1f5f9', sym: '📍' },
+          { label: 'Quando?', spoken: 'Quando?', cat: 'descriptor', col: '#f1f5f9', sym: '⏰' },
+          { label: 'Por quê?', spoken: 'Por quê?', cat: 'descriptor', col: '#f1f5f9', sym: '🤷' },
+          { label: 'Como?', spoken: 'Como?', cat: 'descriptor', col: '#f1f5f9', sym: '💡' },
+          { label: 'Quanto Custa?', spoken: 'Quanto custa?', cat: 'descriptor', col: '#f1f5f9', sym: '💰' },
+          { label: 'Qual?', spoken: 'Qual?', cat: 'descriptor', col: '#f1f5f9', sym: '🔀' },
+          { label: 'Posso?', spoken: 'Posso?', cat: 'descriptor', col: '#f1f5f9', sym: '🙋' },
+          { label: 'Cadê?', spoken: 'Cadê?', cat: 'descriptor', col: '#f1f5f9', sym: '🔍' },
+          { label: 'Que Horas?', spoken: 'Que horas são?', cat: 'descriptor', col: '#f1f5f9', sym: '🕒' },
+          { label: 'Tem Mais?', spoken: 'Tem mais?', cat: 'descriptor', col: '#f1f5f9', sym: '➕' }
         ]
       },
       {
-        name: 'Roupas',
+        name: 'Preferências',
+        icon: 'Sliders',
+        cards: [
+          { label: 'Gostei', spoken: 'Gostei', cat: 'descriptor', col: '#dcfce7', sym: '👍' },
+          { label: 'Não Gostei', spoken: 'Não gostei', cat: 'descriptor', col: '#fee2e2', sym: '👎' },
+          { label: 'Meu Favorito', spoken: 'É o meu favorito', cat: 'descriptor', col: '#fef08a', sym: '⭐' },
+          { label: 'Não Gosto Disso', spoken: 'Não gosto disso', cat: 'descriptor', col: '#fee2e2', sym: '🙅' },
+          { label: 'Quero Outro', spoken: 'Quero outro', cat: 'action', col: '#bbf7d0', sym: '🔄' },
+          { label: 'Mais um Pouco', spoken: 'Mais um pouco', cat: 'descriptor', col: '#f1f5f9', sym: '➕' },
+          { label: 'Chega', spoken: 'Chega, não quero mais', cat: 'descriptor', col: '#f1f5f9', sym: '🛑' },
+          { label: 'Muito Bom', spoken: 'Muito bom', cat: 'descriptor', col: '#dcfce7', sym: '🌟' },
+          { label: 'Legal', spoken: 'Legal', cat: 'descriptor', col: '#dcfce7', sym: '🎉' },
+          { label: 'Chato', spoken: 'Chato', cat: 'descriptor', col: '#fee2e2', sym: '😒' },
+          { label: 'Prefiro Esse', spoken: 'Prefiro esse aqui', cat: 'action', col: '#bbf7d0', sym: '👉' },
+          { label: 'Deixa Eu Escolher', spoken: 'Deixa eu escolher', cat: 'action', col: '#bbf7d0', sym: '🙋' }
+        ]
+      },
+      {
+        name: 'Objetos',
         icon: 'Layers',
         cards: [
-          { label: 'Camiseta', spoken: 'Camiseta', cat: 'noun', col: '#fed7aa', sym: '👕' },
-          { label: 'Calça', spoken: 'Calça', cat: 'noun', col: '#fed7aa', sym: '👖' },
-          { label: 'Bermuda / Shorts', spoken: 'Bermuda', cat: 'noun', col: '#fed7aa', sym: '🩳' },
-          { label: 'Vestido', spoken: 'Vestido', cat: 'noun', col: '#fed7aa', sym: '👗' },
-          { label: 'Casaco / Blusa', spoken: 'Casaco', cat: 'noun', col: '#fed7aa', sym: '🧥' },
-          { label: 'Meia', spoken: 'Meia', cat: 'noun', col: '#fed7aa', sym: '🧦' },
-          { label: 'Tênis', spoken: 'Tênis', cat: 'noun', col: '#fed7aa', sym: '👟' },
-          { label: 'Chinelo', spoken: 'Chinelo', cat: 'noun', col: '#fed7aa', sym: '🩴' },
-          { label: 'Pijama', spoken: 'Pijama', cat: 'noun', col: '#fed7aa', sym: '🥱' },
-          { label: 'Boné', spoken: 'Boné', cat: 'noun', col: '#fed7aa', sym: '🧢' },
-          { label: 'Roupa Íntima', spoken: 'Roupa íntima', cat: 'noun', col: '#fed7aa', sym: '👙' },
-          { label: 'Cueca / Calcinha', spoken: 'Cueca', cat: 'noun', col: '#fed7aa', sym: '🩲' }
+          { label: 'Copo', spoken: 'Copo', cat: 'noun', col: '#fed7aa', sym: '🥛' },
+          { label: 'Prato', spoken: 'Prato', cat: 'noun', col: '#fed7aa', sym: '🍽️' },
+          { label: 'Colher', spoken: 'Colher', cat: 'noun', col: '#fed7aa', sym: '🥄' },
+          { label: 'Garfo', spoken: 'Garfo', cat: 'noun', col: '#fed7aa', sym: '🍴' },
+          { label: 'Mochila', spoken: 'Mochila', cat: 'noun', col: '#fed7aa', sym: '🎒' },
+          { label: 'Chave', spoken: 'Chave', cat: 'noun', col: '#fed7aa', sym: '🔑' },
+          { label: 'Porta', spoken: 'Porta', cat: 'noun', col: '#fed7aa', sym: '🚪' },
+          { label: 'Janela', spoken: 'Janela', cat: 'noun', col: '#fed7aa', sym: '🪟' },
+          { label: 'Mesa', spoken: 'Mesa', cat: 'noun', col: '#fed7aa', sym: '🪑' },
+          { label: 'Cadeira', spoken: 'Cadeira', cat: 'noun', col: '#fed7aa', sym: '🪑' },
+          { label: 'Cama', spoken: 'Cama', cat: 'noun', col: '#fed7aa', sym: '🛏️' },
+          { label: 'Televisão', spoken: 'Televisão', cat: 'noun', col: '#fed7aa', sym: '📺' },
+          { label: 'Celular', spoken: 'Celular', cat: 'noun', col: '#fed7aa', sym: '📱' },
+          { label: 'Tablet', spoken: 'Tablet', cat: 'noun', col: '#fed7aa', sym: '📲' },
+          { label: 'Cobertor', spoken: 'Cobertor', cat: 'noun', col: '#fed7aa', sym: '🧶' },
+          { label: 'Travesseiro', spoken: 'Travesseiro', cat: 'noun', col: '#fed7aa', sym: '🛏️' }
+        ]
+      },
+      {
+        name: 'Social',
+        icon: 'MessageSquare',
+        cards: [
+          { label: 'Oi / Olá', spoken: 'Oi', cat: 'social', col: '#fbcfe8', sym: '👋' },
+          { label: 'Tchau', spoken: 'Tchau', cat: 'social', col: '#fbcfe8', sym: '👋' },
+          { label: 'Bom Dia', spoken: 'Bom dia', cat: 'social', col: '#fbcfe8', sym: '☀️' },
+          { label: 'Boa Tarde', spoken: 'Boa tarde', cat: 'social', col: '#fbcfe8', sym: '🌤️' },
+          { label: 'Boa Noite', spoken: 'Boa noite', cat: 'social', col: '#fbcfe8', sym: '🌙' },
+          { label: 'Por Favor', spoken: 'Por favor', cat: 'social', col: '#fbcfe8', sym: '🤝' },
+          { label: 'Obrigado(a)', spoken: 'Obrigado', cat: 'social', col: '#fbcfe8', sym: '🙏' },
+          { label: 'Desculpe', spoken: 'Desculpe', cat: 'social', col: '#fbcfe8', sym: '🙇' },
+          { label: 'De Nada', spoken: 'De nada', cat: 'social', col: '#fbcfe8', sym: '😊' },
+          { label: 'Parabéns', spoken: 'Parabéns', cat: 'social', col: '#fbcfe8', sym: '🎂' },
+          { label: 'Tudo Bem?', spoken: 'Tudo bem?', cat: 'social', col: '#fbcfe8', sym: '💬' },
+          { label: 'Com Licença', spoken: 'Com licença', cat: 'social', col: '#fbcfe8', sym: '🚪' }
         ]
       },
       {
@@ -1321,6 +1356,28 @@ export class AACController {
         ]
       },
       {
+        name: 'Ações',
+        icon: 'Play',
+        cards: [
+          { label: 'Quero', spoken: 'Quero', cat: 'action', col: '#bbf7d0', sym: '🤲' },
+          { label: 'Não quero', spoken: 'Não quero', cat: 'action', col: '#fee2e2', sym: '🚫' },
+          { label: 'Quero Ir', spoken: 'Quero ir', cat: 'action', col: '#bbf7d0', sym: '🚶' },
+          { label: 'Quero Brincar', spoken: 'Quero brincar', cat: 'action', col: '#bbf7d0', sym: '🎪' },
+          { label: 'Quero Comer', spoken: 'Quero comer', cat: 'action', col: '#bbf7d0', sym: '🍽️' },
+          { label: 'Quero Água', spoken: 'Quero água', cat: 'action', col: '#bbf7d0', sym: '💧' },
+          { label: 'Ajudar', spoken: 'Ajudar', cat: 'action', col: '#bbf7d0', sym: '🤝' },
+          { label: 'Sentar', spoken: 'Sentar', cat: 'action', col: '#bbf7d0', sym: '🪑' },
+          { label: 'Levantar', spoken: 'Levantar', cat: 'action', col: '#bbf7d0', sym: '🚶' },
+          { label: 'Esperar', spoken: 'Esperar', cat: 'action', col: '#fef3c7', sym: '✋' },
+          { label: 'Parar', spoken: 'Parar', cat: 'action', col: '#fee2e2', sym: '🛑' },
+          { label: 'Continuar', spoken: 'Continuar', cat: 'action', col: '#bbf7d0', sym: '▶️' },
+          { label: 'Olhar', spoken: 'Olhar', cat: 'action', col: '#bbf7d0', sym: '👀' },
+          { label: 'Escutar', spoken: 'Escutar', cat: 'action', col: '#bbf7d0', sym: '👂' },
+          { label: 'Abrir', spoken: 'Abrir', cat: 'action', col: '#bbf7d0', sym: '🔓' },
+          { label: 'Fechar', spoken: 'Fechar', cat: 'action', col: '#bbf7d0', sym: '🔒' }
+        ]
+      },
+      {
         name: 'Tempo / Clima',
         icon: 'Sun',
         cards: [
@@ -1329,6 +1386,7 @@ export class AACController {
           { label: 'Ontem', spoken: 'Ontem', cat: 'descriptor', col: '#f1f5f9', sym: '⏪' },
           { label: 'Agora', spoken: 'Agora', cat: 'descriptor', col: '#f1f5f9', sym: '⏱️' },
           { label: 'Depois', spoken: 'Depois', cat: 'descriptor', col: '#f1f5f9', sym: '⌛' },
+          { label: 'De Novo', spoken: 'De novo', cat: 'descriptor', col: '#dcfce7', sym: '🔁' },
           { label: 'Sol / Ensolarado', spoken: 'Sol', cat: 'noun', col: '#fed7aa', sym: '☀️' },
           { label: 'Chuva', spoken: 'Chuva', cat: 'feeling', col: '#bfdbfe', sym: '🌧️' },
           { label: 'Nublado', spoken: 'Nublado', cat: 'descriptor', col: '#f1f5f9', sym: '☁️' },
@@ -1339,9 +1397,11 @@ export class AACController {
         ]
       },
       {
-        name: 'Descritores / Conceitos',
+        name: 'Descritores',
         icon: 'Sliders',
         cards: [
+          { label: 'Esse', spoken: 'Esse', cat: 'descriptor', col: '#f1f5f9', sym: '👉' },
+          { label: 'Aquele', spoken: 'Aquele', cat: 'descriptor', col: '#f1f5f9', sym: '👈' },
           { label: 'Grande', spoken: 'Grande', cat: 'descriptor', col: '#f1f5f9', sym: '🐘' },
           { label: 'Pequeno', spoken: 'Pequeno', cat: 'descriptor', col: '#f1f5f9', sym: '🐜' },
           { label: 'Alto', spoken: 'Alto', cat: 'descriptor', col: '#f1f5f9', sym: '🦒' },
@@ -1420,14 +1480,14 @@ export class AACController {
           { label: 'Quero Dormir', spoken: 'Quero dormir', cat: 'feeling', col: '#bfdbfe', sym: '😴' },
           { label: 'Cansado', spoken: 'Cansado', cat: 'feeling', col: '#bfdbfe', sym: '😫' },
           { label: 'Deitar', spoken: 'Deitar', cat: 'action', col: '#bbf7d0', sym: '🛌' },
+          { label: 'Descansar', spoken: 'Descansar', cat: 'feeling', col: '#bfdbfe', sym: '🧘' },
           { label: 'Travesseiro', spoken: 'Travesseiro', cat: 'noun', col: '#fed7aa', sym: '🛏️' },
           { label: 'Cobertor', spoken: 'Cobertor', cat: 'noun', col: '#fed7aa', sym: '🧶' },
           { label: 'Luz Apagada', spoken: 'Luz apagada', cat: 'descriptor', col: '#f1f5f9', sym: '🌑' },
           { label: 'Luz Acesa', spoken: 'Luz acesa', cat: 'pronoun', col: '#fef08a', sym: '💡' },
           { label: 'Silêncio', spoken: 'Silêncio por favor', cat: 'feeling', col: '#bfdbfe', sym: '🤫' },
           { label: 'Dormir na Cama', spoken: 'Dormir na cama', cat: 'noun', col: '#fed7aa', sym: '🛏️' },
-          { label: 'Acordar', spoken: 'Acordar', cat: 'action', col: '#bbf7d0', sym: '🌅' },
-          { label: 'Descansar', spoken: 'Descansar', cat: 'feeling', col: '#bfdbfe', sym: '🧘' }
+          { label: 'Acordar', spoken: 'Acordar', cat: 'action', col: '#bbf7d0', sym: '🌅' }
         ]
       },
       {

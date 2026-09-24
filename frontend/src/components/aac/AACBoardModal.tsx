@@ -8,7 +8,6 @@ import {
   Plus,
   Settings,
   MoreHorizontal,
-  Undo2,
   Trash2,
   Volume2,
   VolumeX,
@@ -315,7 +314,7 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
     <div
       ref={containerRef}
       className={`fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex flex-col justify-center items-center ${
-        isFullscreen ? 'p-0 bg-slate-950' : 'p-2 sm:p-5'
+        isFullscreen ? 'p-0 bg-slate-950' : 'p-1.5 sm:p-3'
       }`}
       role="dialog"
       aria-modal="true"
@@ -323,11 +322,11 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
     >
       <div
         className={`bg-white w-full h-full flex flex-col overflow-hidden shadow-2xl transition-all ${
-          isFullscreen ? 'rounded-none' : 'rounded-2xl sm:rounded-3xl max-w-7xl max-h-[96vh] sm:h-[94vh] border border-slate-200'
+          isFullscreen ? 'rounded-none' : 'rounded-2xl sm:rounded-3xl max-w-[98vw] max-h-[97vh] h-[96vh] border border-slate-200'
         }`}
       >
         {/* ========================================================================= */}
-        {/* 1. TOPO MAIS LIMPO: [ FRASE / PALAVRAS ]   [ 🔊 FALAR ]   [ ••• MAIS OPÇÕES ] */}
+        {/* 1. TOPO LIMPO: [ FRASE / PALAVRAS ]   [ 🔊 FALAR ]   [ ••• MAIS OPÇÕES ]   [ ✕ ] */}
         {/* ========================================================================= */}
         {selectedBoard ? (
           <div className="bg-white px-3 sm:px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0 z-30 shadow-2xs">
@@ -375,23 +374,6 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
                 })
               )}
             </div>
-
-            {/* [ ↩ ERREI ] Visível diretamente na barra da frase */}
-            <button
-              type="button"
-              onClick={handleErrei}
-              disabled={phrase.length === 0}
-              className={`inline-flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm border-2 transition-all shrink-0 select-none ${
-                phrase.length === 0
-                  ? 'opacity-40 bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                  : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900 shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer'
-              }`}
-              title="Apagar a última palavra (Errei)"
-              aria-label="Errei, apagar última palavra"
-            >
-              <Undo2 className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-700 shrink-0" />
-              <span>Errei</span>
-            </button>
 
             {/* [ 🔊 FALAR ] */}
             <button
@@ -639,7 +621,7 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
               </h3>
               <p className="text-xs sm:text-sm text-slate-500 mt-2 mb-6">
                 {canManage
-                  ? `O paciente ${patientName || ''} ainda não possui pranchas cadastradas. Você pode iniciar com a prancha completa contendo 27 categorias clínicas e vocabulário amplo pré-configurado.`
+                  ? `O paciente ${patientName || ''} ainda não possui pranchas cadastradas. Você pode iniciar com a prancha completa contendo 28 categorias clínicas e vocabulário amplo pré-configurado.`
                   : `O paciente ${patientName || ''} ainda não possui uma prancha de comunicação cadastrada no prontuário. Solicite a um profissional com permissão de gestão (Fonoaudiologia ou Terapia Ocupacional) a criação do recurso.`}
               </p>
 
@@ -652,7 +634,7 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                   >
                     <Sparkles className="w-4 h-4" />
-                    <span>{creatingTemplate ? 'Carregando 27 Categorias…' : 'Criar Prancha com Modelo Pronto (Recomendado)'}</span>
+                    <span>{creatingTemplate ? 'Carregando 28 Categorias…' : 'Criar Prancha com Modelo Pronto (Recomendado)'}</span>
                   </button>
 
                   <button
@@ -679,6 +661,8 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
               activePageId={activePageId}
               onSelectPage={setActivePageId}
               onCardClick={handleCardClick}
+              onErrei={handleErrei}
+              phraseLength={phrase.length}
               columns={selectedBoard.columns || 4}
               canManage={canManage}
               onOpenEditor={() => {
