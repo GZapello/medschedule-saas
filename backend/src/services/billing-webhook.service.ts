@@ -4,6 +4,7 @@ import { AsaasError, AsaasService } from './asaas.service';
 import { activeUsers, addDays, addMonth, billingAudit, BillingService, today } from './billing.service';
 import { RegistrationCleanupService } from './registration-cleanup.service';
 import { TrialNotificationService } from './trial-notification.service';
+import { ErrorMonitor } from './error-monitor.service';
 
 const events=new Set(['PAYMENT_CREATED','PAYMENT_CONFIRMED','PAYMENT_RECEIVED','PAYMENT_OVERDUE','PAYMENT_CREDIT_CARD_CAPTURE_REFUSED','PAYMENT_REFUNDED','PAYMENT_DELETED',
   'SUBSCRIPTION_CREATED','SUBSCRIPTION_UPDATED','SUBSCRIPTION_INACTIVATED','SUBSCRIPTION_DELETED','CHECKOUT_CREATED','CHECKOUT_PAID','CHECKOUT_CANCELED','CHECKOUT_EXPIRED']);
@@ -46,9 +47,9 @@ export class BillingWebhookService {
       }
       BillingService.expireGrace();
       BillingService.expireTrials();
-      void TrialNotificationService.processDueNotifications().catch(()=>{});
+      void TrialNotificationService.processDueNotifications().catch((err)=>ErrorMonitor.captureException(err,{source:'trial-notifications'}));
       // Reuse the existing scheduler; expiry has its own hourly throttle.
-      void RegistrationCleanupService.runDue().catch(()=>console.error('[RegistrationCleanup] RETRY'));
+      void RegistrationCleanupService.runDue().catch((err)=>{console.error('[RegistrationCleanup] RETRY');ErrorMonitor.captureException(err,{source:'registration-cleanup'});});
     } finally {this.running=false;}
   }
   private static async process(row:any) {
@@ -212,7 +213,7 @@ export class BillingWebhookService {
   }
   static start() {
     if(this.timer) return;
-    this.timer=setInterval(()=>this.processPending().catch(()=>console.error('[Billing] Reconciliação pendente.')),30000);this.timer.unref();
+    this.timer=setInterval(()=>this.processPending().catch((err)=>{console.error('[Billing] Reconciliação pendente.');ErrorMonitor.captureException(err,{source:'billing-reconciliation'});}),30000);this.timer.unref();
     void this.processPending();
   }
   static stop() {if(this.timer) clearInterval(this.timer);this.timer=null;}

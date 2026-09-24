@@ -1,17 +1,19 @@
+// Precisa ser o primeiro import: vários módulos leem variáveis de ambiente ao serem carregados (ex.: JWT_SECRET).
+import 'dotenv/config';
 import { registerPublicSite } from './seo/publicSite';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import { BillingWebhookService } from './services/billing-webhook.service';
 import { initializeDatabase } from './config/database';
+import { ErrorMonitor } from './services/error-monitor.service';
 import apiRoutes from './routes';
 
 import path from 'path';
 import fs from 'fs';
 
-dotenv.config();
+ErrorMonitor.installProcessHandlers();
 
 if (process.env.NODE_ENV === 'production' && !process.env.ZEMDA_FILES_SIGNING_SECRET) {
   console.error('[FATAL] ZEMDA_FILES_SIGNING_SECRET é obrigatório em ambiente de produção para assinar tokens do Cloudflare Worker!');
@@ -24,6 +26,9 @@ const PORT = process.env.PORT || 4000;
 // Configuração segura de proxy reverso (Railway / Edge)
 // Permite que req.ip obtenha o IP real do cliente sem confiar em cabeçalhos forjados diretamente
 app.set('trust proxy', 1);
+
+// Registra respostas 5xx e alerta os colaboradores por e-mail (ver docs/MONITORAMENTO.md)
+app.use(ErrorMonitor.requestMiddleware);
 
 // Cabeçalhos de segurança HTTP padrão (CSP desabilitado: a API serve JSON e o SPA já define o seu próprio)
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
@@ -77,10 +82,12 @@ app.use((req, res, next) => {
       const duration = Date.now() - startTime;
       const tenant = req.headers['x-tenant-id'] || '-';
       const status = res.statusCode;
+      // Sem query string: ela pode conter o JWT (?token=) e outros dados que não devem ir para o log.
+      const logPath = (req.originalUrl || req.url).split('?')[0];
       if (status >= 400) {
-        console.warn(`[API ${req.method}] ${req.originalUrl || req.url} -> Status ${status} (${duration}ms) | Tenant: ${tenant}`);
+        console.warn(`[API ${req.method}] ${logPath} -> Status ${status} (${duration}ms) | Tenant: ${tenant}`);
       } else if (req.method !== 'GET') {
-        console.log(`[API ${req.method}] ${req.originalUrl || req.url} -> Status ${status} (${duration}ms) | Tenant: ${tenant}`);
+        console.log(`[API ${req.method}] ${logPath} -> Status ${status} (${duration}ms) | Tenant: ${tenant}`);
       }
     });
   }
@@ -97,7 +104,7 @@ NotificationService.startBackgroundWorker(30000);
 
 // Backups periódicos do banco (ativos por padrão em produção; ver docs/BACKUP.md)
 import { startBackupScheduler } from './services/backup.service';
-startBackupScheduler();
+startBackupScheduler((err) => ErrorMonitor.captureException(err, { source: 'backup' }));
 
 // Redirecionamento canônico de www.zemda.com.br para https://zemda.com.br
 app.use((req, res, next) => {
@@ -176,8 +183,10 @@ registerPublicSite(app, possibleFrontendDistPaths[0]);
 // Middleware de tratamento centralizado de erros
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('[Unhandled Error]', err);
+  const status = err.status || 500;
+  if (status >= 500) ErrorMonitor.captureRequestError(err, req, res);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.status(err.status || 500).json({
+  res.status(status).json({
     success: false,
     error: err.message || 'Ocorreu um erro interno no servidor',
     code: err.code || 'INTERNAL_SERVER_ERROR'

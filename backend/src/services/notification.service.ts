@@ -1,6 +1,7 @@
 import { canOperate } from './billing.service';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { ErrorMonitor } from './error-monitor.service';
 
 export interface NotificationPayload {
   tenantId: string;
@@ -243,6 +244,7 @@ export class NotificationService {
       return pendingList.length;
     } catch (err: any) {
       console.error('[NotificationService.processPendingQueue] Erro no worker:', err);
+      ErrorMonitor.captureException(err, { source: 'notification-worker' });
       return 0;
     }
   }

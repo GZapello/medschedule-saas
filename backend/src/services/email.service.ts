@@ -529,7 +529,7 @@ export class EmailService {
   /**
    * Envia e-mail customizado utilizando o layout oficial do Zemda.
    */
-  static async sendCustomEmail(to: string, subject: string, html: string): Promise<boolean> {
+  static async sendCustomEmail(to: string | string[], subject: string, html: string): Promise<boolean> {
     const resend = this.getResendClient();
     if (!resend) {
       console.warn('[EmailService.sendCustomEmail] Resend API key ausente, envio simulado.');
