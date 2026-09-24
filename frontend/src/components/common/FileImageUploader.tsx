@@ -40,6 +40,7 @@ export interface FileImageUploaderProps {
   autoUpload?: boolean;
   isDiagnostic?: boolean;
   className?: string;
+  layoutMode?: 'default' | 'stacked';
   onUploaded?: (fileInfo: FileUploadedInfo) => void;
   onRemoved?: () => void;
   onError?: (errorMessage: string) => void;
@@ -78,6 +79,7 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
   autoUpload = true,
   isDiagnostic = false,
   className = '',
+  layoutMode,
   onUploaded,
   onRemoved,
   onError,
@@ -85,6 +87,8 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
   disabled = false
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isStacked = layoutMode === 'stacked' || category?.startsWith('personal_assessment');
 
   // States
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -525,144 +529,261 @@ export const FileImageUploader: React.FC<FileImageUploaderProps> = ({
 
       {/* STATE 1: Selected file pending upload (quando autoUpload for falso) */}
       {!isUploading && selectedFile && selectedPreview && (
-        <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-          <div className="flex items-center gap-3">
-            <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0 border border-slate-300">
+        isStacked ? (
+          <div className="flex flex-col items-center w-full space-y-3">
+            <div className="w-full h-56 sm:h-64 rounded-xl overflow-hidden bg-slate-900/5 border border-slate-200 flex items-center justify-center shadow-inner">
               <img
                 src={selectedPreview}
                 alt="Prévia"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain rounded-xl"
               />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-800 truncate" title={selectedFile.name}>
-                {selectedFile.name}
-              </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {formatSizeInMB(selectedFile.size)}
-              </p>
+            <div className="flex items-center justify-between w-full text-xs text-slate-500 px-1">
+              <span className="truncate max-w-[180px] font-semibold text-slate-700">{selectedFile.name}</span>
+              <span>{formatSizeInMB(selectedFile.size)}</span>
+            </div>
+            <div className="flex items-center justify-center gap-2 w-full pt-1">
+              <button
+                type="button"
+                onClick={handleCancelSelection}
+                disabled={isUploading}
+                className="flex-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleStartUpload}
+                disabled={isUploading}
+                className="flex-1 px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Enviar</span>
+              </button>
             </div>
           </div>
+        ) : (
+          <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0 border border-slate-300">
+                <img
+                  src={selectedPreview}
+                  alt="Prévia"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-800 truncate" title={selectedFile.name}>
+                  {selectedFile.name}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {formatSizeInMB(selectedFile.size)}
+                </p>
+              </div>
+            </div>
 
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleCancelSelection}
-              disabled={isUploading}
-              className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition disabled:opacity-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={handleStartUpload}
-              disabled={isUploading}
-              className="px-4 py-1.5 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>Enviar</span>
-            </button>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCancelSelection}
+                disabled={isUploading}
+                className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleStartUpload}
+                disabled={isUploading}
+                className="px-4 py-1.5 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Enviar</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {/* STATE 2: Existing or uploaded file view */}
       {!isUploading && !selectedFile && hasExistingFile && (
-        <div className="flex items-center justify-between p-3 bg-slate-50/80 rounded-xl border border-slate-200 gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-14 h-14 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0 border border-slate-300">
+        isStacked ? (
+          <div className="flex flex-col items-center w-full space-y-3">
+            {/* [ FOTO DO ALUNO ] */}
+            <div
+              onClick={handleOpenViewer}
+              className="w-full h-56 sm:h-64 rounded-xl overflow-hidden bg-slate-900/5 border border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-400 transition-all group relative shadow-inner"
+              title="Clique para ampliar a foto"
+            >
               <SecureFileImage
                 fileId={currentFileId}
                 fallbackUrl={currentUrl}
-                alt={currentFilename || 'Anexo'}
-                className="w-full h-full object-cover"
-                placeholderText="Anexo"
+                alt={currentFilename || label}
+                className="w-full h-full object-contain rounded-xl"
+                placeholderText={label}
               />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-slate-800 truncate" title={currentFilename || 'Imagem anexada'}>
-                {currentFilename || 'Imagem anexada'}
-              </p>
-              {currentFileSize ? (
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {formatSizeInMB(currentFileSize)}
-                </p>
-              ) : (
-                <p className="text-[11px] text-slate-400 mt-0.5">Anexo registrado</p>
-              )}
+
+            {/* [ Alterar foto / Trocar Foto ] [ Remover foto ] */}
+            <div className="flex flex-wrap items-center justify-center gap-2 w-full pt-1">
+              <button
+                type="button"
+                onClick={handleOpenViewer}
+                className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Ampliar foto"
+              >
+                <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Ampliar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenFileDialog}
+                disabled={disabled || isUploading}
+                className="flex-1 min-w-[110px] px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-indigo-600 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                title="Alterar ou trocar a foto do aluno"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                <span>Alterar foto</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRemoveFile}
+                disabled={disabled || isUploading}
+                className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-200 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                title="Remover foto da avaliação"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remover foto</span>
+              </button>
             </div>
           </div>
+        ) : (
+          <div className="flex items-center justify-between p-3 bg-slate-50/80 rounded-xl border border-slate-200 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-14 h-14 rounded-lg overflow-hidden bg-slate-200 flex-shrink-0 border border-slate-300">
+                <SecureFileImage
+                  fileId={currentFileId}
+                  fallbackUrl={currentUrl}
+                  alt={currentFilename || 'Anexo'}
+                  className="w-full h-full object-cover"
+                  placeholderText="Anexo"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-slate-800 truncate" title={currentFilename || 'Imagem anexada'}>
+                  {currentFilename || 'Imagem anexada'}
+                </p>
+                {currentFileSize ? (
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {formatSizeInMB(currentFileSize)}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-400 mt-0.5">Anexo registrado</p>
+                )}
+              </div>
+            </div>
 
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button
-              type="button"
-              onClick={handleOpenViewer}
-              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
-              title="Visualizar imagem"
-            >
-              <Eye className="w-3.5 h-3.5 text-teal-600" />
-              <span>Visualizar</span>
-            </button>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleOpenViewer}
+                className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs"
+                title="Visualizar imagem"
+              >
+                <Eye className="w-3.5 h-3.5 text-teal-600" />
+                <span>Visualizar</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={handleOpenFileDialog}
-              disabled={disabled || isUploading}
-              className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs disabled:opacity-50"
-              title="Trocar imagem"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Trocar Foto</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleOpenFileDialog}
+                disabled={disabled || isUploading}
+                className="px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg transition flex items-center gap-1 shadow-2xs disabled:opacity-50"
+                title="Trocar imagem"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                <span>Trocar Foto</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={handleRemoveFile}
-              disabled={disabled || isUploading}
-              className="px-2.5 py-1.5 text-xs font-medium text-rose-600 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs disabled:opacity-50"
-              title="Remover anexo"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Remover Foto</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleRemoveFile}
+                disabled={disabled || isUploading}
+                className="px-2.5 py-1.5 text-xs font-medium text-rose-600 bg-white hover:bg-rose-50 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-2xs disabled:opacity-50"
+                title="Remover anexo"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remover Foto</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {/* STATE 3: Empty state with button to add image */}
       {!isUploading && !selectedFile && !hasExistingFile && (
-        <div className="text-center py-4 px-2">
-          {category?.startsWith('personal_assessment') && !patientId ? (
-            <div className="space-y-2">
-              <button
-                type="button"
-                disabled
-                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded-xl cursor-not-allowed opacity-60"
-              >
-                <Upload className="w-4 h-4 text-slate-400" />
-                <span>{buttonText}</span>
-              </button>
-              <p className="text-[11px] text-amber-600 font-medium">
-                Selecione um aluno para adicionar fotos.
-              </p>
-            </div>
-          ) : (
-            <>
+        isStacked ? (
+          <div className="w-full">
+            {category?.startsWith('personal_assessment') && !patientId ? (
+              <div className="w-full h-56 sm:h-64 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/60 flex flex-col items-center justify-center p-4 text-center">
+                <AlertCircle className="w-8 h-8 text-amber-500 mb-2" />
+                <span className="text-xs font-semibold text-slate-500">Selecione um aluno para adicionar fotos</span>
+              </div>
+            ) : (
               <button
                 type="button"
                 onClick={handleOpenFileDialog}
                 disabled={disabled}
-                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition shadow-2xs disabled:opacity-50"
+                className="w-full h-56 sm:h-64 rounded-xl border-2 border-dashed border-slate-200 hover:border-indigo-400 bg-slate-50/60 hover:bg-indigo-50/30 transition-all flex flex-col items-center justify-center p-4 text-center cursor-pointer group disabled:opacity-50"
               >
-                <Upload className="w-4 h-4 text-teal-600" />
-                <span>{buttonText}</span>
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform shadow-2xs">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <span className="text-xs font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">
+                  {buttonText}
+                </span>
+                <span className="text-[11px] text-slate-400 mt-1">
+                  JPG, PNG ou WebP até 10 MB
+                </span>
               </button>
-              <p className="text-[11px] text-slate-400 mt-2">
-                Aceita JPG, PNG e WebP até 10 MB (Câmera, Galeria ou Arquivos)
-              </p>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4 px-2">
+            {category?.startsWith('personal_assessment') && !patientId ? (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded-xl cursor-not-allowed opacity-60"
+                >
+                  <Upload className="w-4 h-4 text-slate-400" />
+                  <span>{buttonText}</span>
+                </button>
+                <p className="text-[11px] text-amber-600 font-medium">
+                  Selecione um aluno para adicionar fotos.
+                </p>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleOpenFileDialog}
+                  disabled={disabled}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition shadow-2xs disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4 text-teal-600" />
+                  <span>{buttonText}</span>
+                </button>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Aceita JPG, PNG e WebP até 10 MB (Câmera, Galeria ou Arquivos)
+                </p>
+              </>
+            )}
+          </div>
+        )
       )}
 
       {/* MODAL VIEWER */}

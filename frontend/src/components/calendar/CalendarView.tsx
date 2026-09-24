@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -67,73 +67,113 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   }, [selectedProf]);
 
   const getSlotAvailability = useCallback((dateStr: string, timeSlot: string) => {
-    if (!selectedProf || selectedProf === 'all' || !selectedProfSchedule) {
-      return { available: true };
-    }
-
     const [year, month, day] = dateStr.split('-').map(Number);
     const dateObj = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
     const dayOfWeek = dateObj.getUTCDay();
-
-    const activeSchedules = (selectedProfSchedule.schedules || []).filter(
-      (s: any) => s.day_of_week === dayOfWeek && (s.is_active === 1 || s.is_active === true)
-    );
-
-    if (activeSchedules.length === 0) {
-      return { available: false, reason: 'Folga / Sem escala' };
-    }
 
     const slotMinutes = parseInt(timeSlot.slice(0, 2), 10) * 60 + parseInt(timeSlot.slice(3, 5), 10);
     const slotDuration = 30;
     const slotEndMinutes = slotMinutes + slotDuration;
 
-    let fitsInAnyShift = false;
-    let breakConflict = false;
+    if (selectedProf && selectedProf !== 'all') {
+      if (!selectedProfSchedule) {
+        return { available: true };
+      }
 
-    for (const sched of activeSchedules) {
-      const startMin = parseInt(sched.start_time.slice(0, 2), 10) * 60 + parseInt(sched.start_time.slice(3, 5), 10);
-      const endMin = parseInt(sched.end_time.slice(0, 2), 10) * 60 + parseInt(sched.end_time.slice(3, 5), 10);
+      const activeSchedules = (selectedProfSchedule.schedules || []).filter(
+        (s: any) => s.day_of_week === dayOfWeek && (s.is_active === 1 || s.is_active === true)
+      );
 
-      const insideShift = slotMinutes >= startMin && slotEndMinutes <= endMin;
-      let insideBreak = false;
+      if (activeSchedules.length === 0) {
+        return { available: false, reason: 'Folga / Sem escala' };
+      }
 
-      if (sched.break_start && sched.break_end) {
-        const bStart = parseInt(sched.break_start.slice(0, 2), 10) * 60 + parseInt(sched.break_start.slice(3, 5), 10);
-        const bEnd = parseInt(sched.break_end.slice(0, 2), 10) * 60 + parseInt(sched.break_end.slice(3, 5), 10);
-        if (slotMinutes < bEnd && slotEndMinutes > bStart) {
-          insideBreak = true;
-          breakConflict = true;
+      let fitsInAnyShift = false;
+      let breakConflict = false;
+
+      for (const sched of activeSchedules) {
+        const startMin = parseInt(sched.start_time.slice(0, 2), 10) * 60 + parseInt(sched.start_time.slice(3, 5), 10);
+        const endMin = parseInt(sched.end_time.slice(0, 2), 10) * 60 + parseInt(sched.end_time.slice(3, 5), 10);
+
+        const insideShift = slotMinutes >= startMin && slotEndMinutes <= endMin;
+        let insideBreak = false;
+
+        if (sched.break_start && sched.break_end) {
+          const bStart = parseInt(sched.break_start.slice(0, 2), 10) * 60 + parseInt(sched.break_start.slice(3, 5), 10);
+          const bEnd = parseInt(sched.break_end.slice(0, 2), 10) * 60 + parseInt(sched.break_end.slice(3, 5), 10);
+          if (slotMinutes < bEnd && slotEndMinutes > bStart) {
+            insideBreak = true;
+            breakConflict = true;
+          }
+        }
+
+        if (insideShift && !insideBreak) {
+          fitsInAnyShift = true;
+          break;
         }
       }
 
-      if (insideShift && !insideBreak) {
-        fitsInAnyShift = true;
-        break;
+      if (!fitsInAnyShift) {
+        return {
+          available: false,
+          reason: breakConflict ? 'Intervalo' : 'Fora da escala',
+          isBreak: breakConflict
+        };
       }
+
+      if (Array.isArray(selectedProfSchedule.blockedTimes)) {
+        const slotDateTimeStr = `${dateStr}T${timeSlot}:00`;
+        const isBlocked = selectedProfSchedule.blockedTimes.some((b: any) => {
+          const bStart = (b.start_datetime || '').slice(0, 19);
+          const bEnd = (b.end_datetime || '').slice(0, 19);
+          return slotDateTimeStr >= bStart && slotDateTimeStr < bEnd;
+        });
+        if (isBlocked) {
+          return { available: false, reason: 'Bloqueado', isBlocked: true };
+        }
+      }
+
+      return { available: true };
     }
 
-    if (!fitsInAnyShift) {
-      return {
-        available: false,
-        reason: breakConflict ? 'Intervalo' : 'Fora da escala',
-        isBreak: breakConflict
-      };
+    // Modo "Todos os Profissionais": checa se pelo menos um profissional ativo está em atendimento no horário
+    const activeProfs = professionals.filter(p => p.active === 1 || (p.active as any) === true);
+    if (activeProfs.length === 0) return { available: true };
+
+    let anyProfWorking = false;
+    for (const p of activeProfs) {
+      const pScheds = (p as any).schedules || [];
+      const activeScheds = pScheds.filter(
+        (s: any) => Number(s.day_of_week) === dayOfWeek && (s.is_active === 1 || s.is_active === true)
+      );
+
+      for (const s of activeScheds) {
+        const startMin = parseInt(s.start_time.slice(0, 2), 10) * 60 + parseInt(s.start_time.slice(3, 5), 10);
+        const endMin = parseInt(s.end_time.slice(0, 2), 10) * 60 + parseInt(s.end_time.slice(3, 5), 10);
+        if (slotMinutes >= startMin && slotEndMinutes <= endMin) {
+          let insideBreak = false;
+          if (s.break_start && s.break_end) {
+            const bStart = parseInt(s.break_start.slice(0, 2), 10) * 60 + parseInt(s.break_start.slice(3, 5), 10);
+            const bEnd = parseInt(s.break_end.slice(0, 2), 10) * 60 + parseInt(s.break_end.slice(3, 5), 10);
+            if (slotMinutes < bEnd && slotEndMinutes > bStart) {
+              insideBreak = true;
+            }
+          }
+          if (!insideBreak) {
+            anyProfWorking = true;
+            break;
+          }
+        }
+      }
+      if (anyProfWorking) break;
     }
 
-    if (Array.isArray(selectedProfSchedule.blockedTimes)) {
-      const slotDateTimeStr = `${dateStr}T${timeSlot}:00`;
-      const isBlocked = selectedProfSchedule.blockedTimes.some((b: any) => {
-        const bStart = (b.start_datetime || '').slice(0, 19);
-        const bEnd = (b.end_datetime || '').slice(0, 19);
-        return slotDateTimeStr >= bStart && slotDateTimeStr < bEnd;
-      });
-      if (isBlocked) {
-        return { available: false, reason: 'Bloqueado', isBlocked: true };
-      }
+    if (!anyProfWorking) {
+      return { available: false, reason: 'Fora da escala' };
     }
 
     return { available: true };
-  }, [selectedProf, selectedProfSchedule]);
+  }, [selectedProf, selectedProfSchedule, professionals]);
 
   // Modal de Detalhes
   const [selectedAppt, setSelectedAppt] = useState<Appointment | null>(null);
@@ -404,7 +444,97 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   };
 
   const weekDays = getWeekDays(currentDate);
-  const timeSlots = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'];
+
+  // Horário dinâmico da agenda: calcula início e fim com base na escala real dos profissionais naquele dia,
+  // exceções cadastradas (bloqueios) e agendamentos existentes, sem limite fixo de 18:00.
+  const timeSlots = useMemo(() => {
+    const daysInView = viewMode === 'day' ? [currentDate] : weekDays;
+
+    const targetProfs = (selectedProf && selectedProf !== 'all')
+      ? professionals.filter(p => p.id === selectedProf)
+      : professionals.filter(p => p.active === 1 || (p.active as any) === true);
+
+    let minHour = 8;
+    let maxHour = 18;
+
+    for (const d of daysInView) {
+      const dayOfWeek = d.getDay();
+      const dayStr = formatDateLocal(d);
+
+      for (const prof of targetProfs) {
+        const profSchedules = (prof.id === selectedProf && selectedProfSchedule?.schedules)
+          ? selectedProfSchedule.schedules
+          : (prof as any).schedules || [];
+
+        const activeScheds = profSchedules.filter((s: any) =>
+          Number(s.day_of_week) === dayOfWeek && (s.is_active === 1 || s.is_active === true)
+        );
+
+        for (const s of activeScheds) {
+          if (s.start_time) {
+            const h = parseInt(s.start_time.slice(0, 2), 10);
+            if (!isNaN(h) && h < minHour) minHour = Math.max(0, h);
+          }
+          if (s.end_time) {
+            const h = parseInt(s.end_time.slice(0, 2), 10);
+            const m = parseInt(s.end_time.slice(3, 5), 10) || 0;
+            // profissional trabalha até 18:00 -> agenda até 18:00;
+            // trabalha até 19:00 -> agenda até 19:00;
+            // trabalha até 20:30 -> agenda até pelo menos 20:30 (exibe até 21:00);
+            const effectiveEnd = m > 0 ? h + 1 : h;
+            if (!isNaN(effectiveEnd) && effectiveEnd > maxHour) {
+              maxHour = Math.min(23, effectiveEnd);
+            }
+          }
+        }
+
+        const profBlocked = (prof.id === selectedProf && selectedProfSchedule?.blockedTimes)
+          ? selectedProfSchedule.blockedTimes
+          : (prof as any).blockedTimes || [];
+
+        for (const b of profBlocked) {
+          const bStart = b.start_datetime || '';
+          const bEnd = b.end_datetime || '';
+          if (bStart.startsWith(dayStr) || bEnd.startsWith(dayStr)) {
+            if (bStart.startsWith(dayStr) && bStart.length >= 13) {
+              const h = parseInt(bStart.slice(11, 13), 10);
+              if (!isNaN(h) && h < minHour) minHour = Math.max(0, h);
+            }
+            if (bEnd.startsWith(dayStr) && bEnd.length >= 13) {
+              const h = parseInt(bEnd.slice(11, 13), 10);
+              const m = parseInt(bEnd.slice(14, 16), 10) || 0;
+              const effectiveEnd = m > 0 ? h + 1 : h;
+              if (!isNaN(effectiveEnd) && effectiveEnd > maxHour) {
+                maxHour = Math.min(23, effectiveEnd);
+              }
+            }
+          }
+        }
+      }
+
+      const dayAppts = filteredAppointments.filter(a => a.start_time.startsWith(dayStr));
+      for (const appt of dayAppts) {
+        if (appt.start_time && appt.start_time.length >= 13) {
+          const h = parseInt(appt.start_time.slice(11, 13), 10);
+          if (!isNaN(h) && h < minHour) minHour = Math.max(0, h);
+        }
+        if (appt.end_time && appt.end_time.length >= 13) {
+          const h = parseInt(appt.end_time.slice(11, 13), 10);
+          const m = parseInt(appt.end_time.slice(14, 16), 10) || 0;
+          const effectiveEnd = m > 0 ? h + 1 : h;
+          if (!isNaN(effectiveEnd) && effectiveEnd > maxHour) {
+            maxHour = Math.min(23, effectiveEnd);
+          }
+        }
+      }
+    }
+
+    const slots: string[] = [];
+    for (let hour = minHour; hour <= maxHour; hour++) {
+      slots.push(`${String(hour).padStart(2, '0')}:00`);
+    }
+    return slots;
+  }, [viewMode, currentDate, weekDays, selectedProf, professionals, selectedProfSchedule, filteredAppointments]);
 
   return (
     <div className="space-y-4">

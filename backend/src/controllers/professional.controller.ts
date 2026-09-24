@@ -36,8 +36,47 @@ export class ProfessionalController {
         WHERE p.tenant_id = ?
         ORDER BY p.name ASC
       `);
-      const professionals = stmt.all(tenantId);
-      res.json(professionals);
+      const professionals = stmt.all(tenantId) as any[];
+
+      // Anexa grades de horário e bloqueios de todos os profissionais do tenant
+      const schedStmt = db.prepare(`
+        SELECT id, professional_id, day_of_week, start_time, end_time, break_start, break_end, is_active
+        FROM schedules
+        WHERE tenant_id = ?
+        ORDER BY day_of_week ASC
+      `);
+      const allSchedules = schedStmt.all(tenantId).map((s: any) => ({
+        ...s,
+        is_active: Boolean(s.is_active)
+      }));
+
+      const blockStmt = db.prepare(`
+        SELECT id, professional_id, title, start_datetime, end_datetime, reason, type
+        FROM blocked_times
+        WHERE tenant_id = ? AND end_datetime >= datetime('now', '-30 days')
+        ORDER BY start_datetime ASC
+      `);
+      const allBlocked = blockStmt.all(tenantId);
+
+      const schedMap = new Map<string, any[]>();
+      for (const s of allSchedules) {
+        if (!schedMap.has(s.professional_id)) schedMap.set(s.professional_id, []);
+        schedMap.get(s.professional_id)!.push(s);
+      }
+
+      const blockMap = new Map<string, any[]>();
+      for (const b of allBlocked) {
+        if (!blockMap.has(b.professional_id)) blockMap.set(b.professional_id, []);
+        blockMap.get(b.professional_id)!.push(b);
+      }
+
+      const result = professionals.map((p: any) => ({
+        ...p,
+        schedules: schedMap.get(p.id) || [],
+        blockedTimes: blockMap.get(p.id) || []
+      }));
+
+      res.json(result);
     } catch (err: any) {
       if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.list] Erro:', err);

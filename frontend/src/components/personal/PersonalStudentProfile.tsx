@@ -1273,43 +1273,50 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn"
           onClick={() => setShowPhotoLightbox(false)}
         >
-          <div className="relative max-w-2xl max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-            <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+          <div className="relative max-w-2xl max-h-[90vh] flex flex-col items-center bg-slate-900/95 p-4 rounded-3xl border border-slate-700 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full flex items-center justify-between pb-3 mb-2 border-b border-slate-800">
+              <span className="text-white text-sm font-bold truncate">{student.name}</span>
+              <button
+                type="button"
+                onClick={() => setShowPhotoLightbox(false)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* FOTO DO ALUNO */}
+            <div className="flex items-center justify-center max-h-[65vh] overflow-hidden my-2">
+              <img
+                src={student.avatar_url}
+                alt={student.name}
+                className="max-h-[65vh] w-auto max-w-full rounded-2xl shadow-lg object-contain"
+              />
+            </div>
+
+            {/* BOTÕES ABAIXO DA IMAGEM */}
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-3 mt-2 border-t border-slate-800 w-full">
               <button
                 type="button"
                 onClick={() => {
                   setShowPhotoLightbox(false);
                   photoInputRef.current?.click();
                 }}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg cursor-pointer"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
               >
-                <Camera className="w-3.5 h-3.5" />
-                Trocar Foto
+                <Camera className="w-4 h-4" />
+                <span>Trocar Foto</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleRemovePhoto()}
-                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg cursor-pointer"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                Remover Foto
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowPhotoLightbox(false)}
-                className="px-3 py-1.5 rounded-xl bg-black/70 hover:bg-black/90 text-white text-xs font-bold flex items-center gap-1 shadow-lg transition-colors cursor-pointer"
-                title="Fechar visualizador"
-              >
-                <X className="w-4 h-4" />
-                <span>Fechar</span>
+                <Trash2 className="w-4 h-4" />
+                <span>Remover Foto</span>
               </button>
             </div>
-            <img
-              src={student.avatar_url}
-              alt={student.name}
-              className="max-h-[85vh] w-auto max-w-full rounded-2xl shadow-2xl object-contain border border-white/20"
-            />
-            <p className="mt-2 text-white/80 text-xs font-semibold">{student.name}</p>
           </div>
         </div>
       )}

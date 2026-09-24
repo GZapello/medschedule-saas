@@ -1792,93 +1792,89 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
-                    <FileImageUploader
-                      label="Foto Frontal"
-                      buttonText="+ Adicionar foto"
-                      patientId={selectedStudentId || undefined}
-                      assessmentId={assessmentToEdit?.id || undefined}
-                      position="front"
-                      category="personal_assessment_front"
-                      initialUrl={photoFront}
-                      initialFileId={photoFrontFileId}
-                      disabled={!selectedStudentId}
-                      onUploaded={(info) => {
-                        setPhotoFrontFileId(info.id);
-                        setPhotoFront('');
-                      }}
-                      onRemoved={() => {
-                        setPhotoFrontFileId('');
-                        setPhotoFront('');
-                      }}
-                    />
-                  </div>
+                  <FileImageUploader
+                    label="Foto Frontal"
+                    buttonText="+ Adicionar foto"
+                    patientId={selectedStudentId || undefined}
+                    assessmentId={assessmentToEdit?.id || undefined}
+                    position="front"
+                    category="personal_assessment_front"
+                    layoutMode="stacked"
+                    initialUrl={photoFront}
+                    initialFileId={photoFrontFileId}
+                    disabled={!selectedStudentId}
+                    onUploaded={(info) => {
+                      setPhotoFrontFileId(info.id);
+                      setPhotoFront('');
+                    }}
+                    onRemoved={() => {
+                      setPhotoFrontFileId('');
+                      setPhotoFront('');
+                    }}
+                  />
 
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
-                    <FileImageUploader
-                      label="Foto Posterior"
-                      buttonText="+ Adicionar foto"
-                      patientId={selectedStudentId || undefined}
-                      assessmentId={assessmentToEdit?.id || undefined}
-                      position="back"
-                      category="personal_assessment_back"
-                      initialUrl={photoBack}
-                      initialFileId={photoBackFileId}
-                      disabled={!selectedStudentId}
-                      onUploaded={(info) => {
-                        setPhotoBackFileId(info.id);
-                        setPhotoBack('');
-                      }}
-                      onRemoved={() => {
-                        setPhotoBackFileId('');
-                        setPhotoBack('');
-                      }}
-                    />
-                  </div>
+                  <FileImageUploader
+                    label="Foto Posterior"
+                    buttonText="+ Adicionar foto"
+                    patientId={selectedStudentId || undefined}
+                    assessmentId={assessmentToEdit?.id || undefined}
+                    position="back"
+                    category="personal_assessment_back"
+                    layoutMode="stacked"
+                    initialUrl={photoBack}
+                    initialFileId={photoBackFileId}
+                    disabled={!selectedStudentId}
+                    onUploaded={(info) => {
+                      setPhotoBackFileId(info.id);
+                      setPhotoBack('');
+                    }}
+                    onRemoved={() => {
+                      setPhotoBackFileId('');
+                      setPhotoBack('');
+                    }}
+                  />
 
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
-                    <FileImageUploader
-                      label="Lateral Direita"
-                      buttonText="+ Adicionar foto"
-                      patientId={selectedStudentId || undefined}
-                      assessmentId={assessmentToEdit?.id || undefined}
-                      position="right"
-                      category="personal_assessment_right"
-                      initialUrl={photoRight}
-                      initialFileId={photoRightFileId}
-                      disabled={!selectedStudentId}
-                      onUploaded={(info) => {
-                        setPhotoRightFileId(info.id);
-                        setPhotoRight('');
-                      }}
-                      onRemoved={() => {
-                        setPhotoRightFileId('');
-                        setPhotoRight('');
-                      }}
-                    />
-                  </div>
+                  <FileImageUploader
+                    label="Lateral Direita"
+                    buttonText="+ Adicionar foto"
+                    patientId={selectedStudentId || undefined}
+                    assessmentId={assessmentToEdit?.id || undefined}
+                    position="right"
+                    category="personal_assessment_right"
+                    layoutMode="stacked"
+                    initialUrl={photoRight}
+                    initialFileId={photoRightFileId}
+                    disabled={!selectedStudentId}
+                    onUploaded={(info) => {
+                      setPhotoRightFileId(info.id);
+                      setPhotoRight('');
+                    }}
+                    onRemoved={() => {
+                      setPhotoRightFileId('');
+                      setPhotoRight('');
+                    }}
+                  />
 
-                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex flex-col justify-between">
-                    <FileImageUploader
-                      label="Lateral Esquerda"
-                      buttonText="+ Adicionar foto"
-                      patientId={selectedStudentId || undefined}
-                      assessmentId={assessmentToEdit?.id || undefined}
-                      position="left"
-                      category="personal_assessment_left"
-                      initialUrl={photoLeft}
-                      initialFileId={photoLeftFileId}
-                      disabled={!selectedStudentId}
-                      onUploaded={(info) => {
-                        setPhotoLeftFileId(info.id);
-                        setPhotoLeft('');
-                      }}
-                      onRemoved={() => {
-                        setPhotoLeftFileId('');
-                        setPhotoLeft('');
-                      }}
-                    />
-                  </div>
+                  <FileImageUploader
+                    label="Lateral Esquerda"
+                    buttonText="+ Adicionar foto"
+                    patientId={selectedStudentId || undefined}
+                    assessmentId={assessmentToEdit?.id || undefined}
+                    position="left"
+                    category="personal_assessment_left"
+                    layoutMode="stacked"
+                    initialUrl={photoLeft}
+                    initialFileId={photoLeftFileId}
+                    disabled={!selectedStudentId}
+                    onUploaded={(info) => {
+                      setPhotoLeftFileId(info.id);
+                      setPhotoLeft('');
+                    }}
+                    onRemoved={() => {
+                      setPhotoLeftFileId('');
+                      setPhotoLeft('');
+                    }}
+                  />
                 </div>
               </div>
 

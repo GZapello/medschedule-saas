@@ -139,6 +139,8 @@ export interface Professional {
   profession_changed_at?: string | null;
   email?: string;
   phone?: string;
+  schedules?: any[];
+  blockedTimes?: any[];
 }
 
 export interface StaffMember {

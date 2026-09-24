@@ -5,6 +5,77 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { EmailService } from '../services/email.service';
 import { buildZemdaEmailLayout } from '../services/email-template.service';
 
+function buildTicketMessageEmail({
+  ticketId,
+  clinicName,
+  senderName,
+  senderRoleLabel,
+  title,
+  snippet,
+  formattedDate,
+  ticketDirectUrl,
+  recipientName,
+  isReplyFromSupport
+}: {
+  ticketId: string;
+  clinicName: string;
+  senderName: string;
+  senderRoleLabel: string;
+  title: string;
+  snippet: string;
+  formattedDate: string;
+  ticketDirectUrl: string;
+  recipientName?: string;
+  isReplyFromSupport: boolean;
+}) {
+  const introGreeting = recipientName ? `Olá, <strong>${recipientName}</strong>.` : 'Olá.';
+  const introHeadline = isReplyFromSupport
+    ? 'A equipe de suporte respondeu ao chamado de atendimento.'
+    : 'Uma nova mensagem foi enviada no chamado de suporte.';
+
+  const bodyHtml = `
+    <p style="margin: 0 0 14px; font-size: 15px; line-height: 22px; color: #334155;">
+      ${introGreeting} ${introHeadline}
+    </p>
+
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 0 0 20px;">
+      <p style="margin: 0 0 8px; font-size: 13px; color: #475569;">
+        <strong>Identificação do Chamado:</strong> #${ticketId}
+      </p>
+      <p style="margin: 0 0 8px; font-size: 13px; color: #475569;">
+        <strong>Nome da Clínica:</strong> ${clinicName}
+      </p>
+      <p style="margin: 0 0 8px; font-size: 13px; color: #475569;">
+        <strong>Remetente da Mensagem:</strong> ${senderName} (${senderRoleLabel})
+      </p>
+      <p style="margin: 0 0 8px; font-size: 13px; color: #475569;">
+        <strong>Assunto do Chamado:</strong> ${title}
+      </p>
+      <p style="margin: 0; font-size: 13px; color: #475569;">
+        <strong>Data e Hora:</strong> ${formattedDate}
+      </p>
+    </div>
+
+    <div style="background-color: #f1f5f9; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
+      <p style="margin: 0 0 6px; font-size: 12px; font-weight: bold; text-transform: uppercase; color: #64748b;">Trecho da Mensagem:</p>
+      <em>"${snippet}"</em>
+    </div>
+
+    <p style="margin: 0 0 20px; font-size: 13px; color: #64748b; line-height: 18px;">
+      Clique no botão abaixo para acessar o chamado diretamente na plataforma.
+    </p>
+  `;
+
+  return buildZemdaEmailLayout({
+    title: isReplyFromSupport ? 'Nova Resposta no Chamado' : 'Nova Mensagem no Chamado',
+    headline: isReplyFromSupport ? 'Nova resposta da equipe de suporte' : 'Nova mensagem recebida no chamado',
+    badge: `Chamado #${ticketId}`,
+    contentHtml: bodyHtml,
+    ctaText: 'Acessar Chamado',
+    ctaUrl: ticketDirectUrl
+  });
+}
+
 export class SupportController {
   // Listar chamados: SuperAdmin visualiza todos; usuário comum visualiza apenas os próprios chamados
   static list(req: Request, res: Response): void {
@@ -170,27 +241,38 @@ export class SupportController {
         const superadmin = db.prepare("SELECT email FROM users WHERE role = 'superadmin' LIMIT 1").get() as any;
         const adminEmail = superadmin?.email || process.env.SUPPORT_EMAIL || 'suporte@zemda.com.br';
         if (adminEmail) {
+          const tenant = tenantId ? db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId) as any : null;
+          const clinicName = tenant?.name || 'Clínica Geral';
+          const roleLabels: Record<string, string> = {
+            superadmin: 'SuperAdmin',
+            clinic_admin: 'Administrador da Clínica',
+            professional: 'Profissional de Saúde',
+            receptionist: 'Recepcionista',
+            patient: 'Paciente / Aluno'
+          };
+          const senderRoleLabel = roleLabels[user.role] || user.role || 'Usuário';
+          const formattedDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+          const appBaseUrl = process.env.FRONTEND_URL || 'https://app.zemda.com.br';
+          const ticketDirectUrl = `${appBaseUrl}/?view=support&ticketId=${ticketId}`;
+          const snippet = description.trim().length > 180 ? `${description.trim().slice(0, 180)}...` : description.trim();
+
+          const emailHtml = buildTicketMessageEmail({
+            ticketId,
+            clinicName,
+            senderName: user.name || 'Usuário',
+            senderRoleLabel,
+            title: title.trim(),
+            snippet,
+            formattedDate,
+            ticketDirectUrl,
+            recipientName: 'Equipe de Suporte',
+            isReplyFromSupport: false
+          });
+
           EmailService.sendCustomEmail(
             adminEmail,
             `[Suporte] Novo chamado #${ticketId}: ${title.trim()}`,
-            buildZemdaEmailLayout({
-              title: 'Novo Chamado Aberto',
-              headline: 'Novo chamado aberto no suporte',
-              badge: 'Central de Chamados',
-              contentHtml: `
-                <p style="margin: 0 0 16px; font-size: 16px; line-height: 24px; color: #334155;">
-                  Um novo chamado foi aberto por <strong>${user.name || 'Usuário'}</strong> (${user.email || ''}).
-                </p>
-                <p style="margin: 0 0 8px; font-size: 14px; font-weight: bold; color: #1e293b;">
-                  Título: ${title.trim()}
-                </p>
-                <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
-                  <em>"${description.trim()}"</em>
-                </div>
-              `,
-              ctaText: 'Acessar Central de Suporte',
-              ctaUrl: 'https://app.zemda.com.br'
-            })
+            emailHtml
           ).catch(e => console.error('[SupportEmail] Erro ao notificar novo chamado:', e));
         }
       } catch (e) {
@@ -300,67 +382,55 @@ export class SupportController {
         const ticketDirectUrl = `${appBaseUrl}/?view=support&ticketId=${id}`;
         const snippet = message.trim().length > 180 ? `${message.trim().slice(0, 180)}...` : message.trim();
 
+        const ticketTitle = ticketFull?.title || 'Chamado de Suporte';
+        const ticketIdStr = String(id);
+
         if (isSuper && !shouldBeInternal) {
-          // Suporte/admin respondeu -> notifica o usuário criador
-          if (ticketFull?.creator_email) {
-            const bodyHtml = `
-              <p style="margin: 0 0 16px; font-size: 16px; line-height: 24px; color: #334155;">
-                Olá, <strong>${ticketFull.creator_name || 'Usuário'}</strong>.
-              </p>
-              <p style="margin: 0 0 20px; font-size: 14px; line-height: 22px; color: #475569;">
-                A equipe de suporte respondeu ao seu chamado <strong>#${id}</strong> ("${ticketFull.title}"):
-              </p>
-              <div style="background-color: #f8fafc; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
-                <em>"${snippet}"</em>
-              </div>
-              <p style="margin: 0 0 24px; font-size: 14px; line-height: 20px; color: #64748b;">
-                Acesse o painel do Zemda para visualizar a resposta completa ou enviar novas informações.
-              </p>
-            `;
+          // Suporte/admin respondeu -> notifica o usuário criador com todos os metadados requeridos
+          if (ticketFull?.creator_email && ticketFull.creator_email !== user.email) {
+            const emailHtml = buildTicketMessageEmail({
+              ticketId: ticketIdStr,
+              clinicName,
+              senderName,
+              senderRoleLabel,
+              title: ticketTitle,
+              snippet,
+              formattedDate,
+              ticketDirectUrl,
+              recipientName: ticketFull.creator_name || 'Usuário',
+              isReplyFromSupport: true
+            });
+
             EmailService.sendCustomEmail(
               ticketFull.creator_email,
-              `Nova resposta no chamado #${id}: ${ticketFull.title}`,
-              buildZemdaEmailLayout({
-                title: 'Nova Resposta no Chamado',
-                headline: 'Nova resposta da equipe de suporte',
-                badge: 'Suporte Zemda',
-                contentHtml: bodyHtml,
-                ctaText: 'Ver Chamado no Painel',
-                ctaUrl: ticketDirectUrl
-              })
+              `[Suporte] Nova resposta no chamado #${id}: ${ticketTitle}`,
+              emailHtml
             ).catch(err => console.error('[SupportEmail] Erro ao notificar usuário:', err));
           }
         } else if (!isSuper) {
-          // Usuário enviou -> notifica superadmin / equipe com todos os metadados requeridos
+          const ticketIdStr = String(id);
+
+          // Usuário enviou -> notifica superadmin / equipe de suporte com todos os metadados requeridos
           const superadmin = db.prepare("SELECT email FROM users WHERE role = 'superadmin' LIMIT 1").get() as any;
           const adminEmail = superadmin?.email || process.env.SUPPORT_EMAIL || 'suporte@zemda.com.br';
-          if (adminEmail) {
-            const bodyHtml = `
-              <p style="margin: 0 0 16px; font-size: 15px; line-height: 22px; color: #334155;">
-                Nova mensagem recebida no chamado de suporte <strong>#${id}</strong>:
-              </p>
-              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 0 0 20px;">
-                <p style="margin: 0 0 8px; font-size: 13px; color: #475569;"><strong>ID do Chamado:</strong> #${id}</p>
-                <p style="margin: 0 0 8px; font-size: 13px; color: #475569;"><strong>Assunto:</strong> ${ticketFull?.title || 'Chamado de Suporte'}</p>
-                <p style="margin: 0 0 8px; font-size: 13px; color: #475569;"><strong>Quem enviou:</strong> ${senderName} (${senderRoleLabel})</p>
-                <p style="margin: 0 0 8px; font-size: 13px; color: #475569;"><strong>Clínica / Empresa:</strong> ${clinicName}</p>
-                <p style="margin: 0; font-size: 13px; color: #475569;"><strong>Data e Hora:</strong> ${formattedDate}</p>
-              </div>
-              <div style="background-color: #f1f5f9; border-left: 4px solid #4f46e5; padding: 14px 18px; margin: 0 0 24px; border-radius: 6px; font-size: 14px; color: #1e293b; line-height: 22px;">
-                <em>"${snippet}"</em>
-              </div>
-            `;
+          if (adminEmail && adminEmail !== user.email) {
+            const emailHtml = buildTicketMessageEmail({
+              ticketId: ticketIdStr,
+              clinicName,
+              senderName,
+              senderRoleLabel,
+              title: ticketTitle,
+              snippet,
+              formattedDate,
+              ticketDirectUrl,
+              recipientName: 'Equipe de Suporte',
+              isReplyFromSupport: false
+            });
+
             EmailService.sendCustomEmail(
               adminEmail,
-              `[Suporte] Nova mensagem no chamado #${id}: ${ticketFull?.title || ''}`,
-              buildZemdaEmailLayout({
-                title: 'Nova Mensagem no Suporte',
-                headline: 'Nova mensagem recebida no chamado',
-                badge: 'Central de Chamados',
-                contentHtml: bodyHtml,
-                ctaText: 'Acessar Chamado no Painel',
-                ctaUrl: ticketDirectUrl
-              })
+              `[Suporte] Nova mensagem no chamado #${id}: ${ticketTitle}`,
+              emailHtml
             ).catch(err => console.error('[SupportEmail] Erro ao notificar admin:', err));
           }
         }
