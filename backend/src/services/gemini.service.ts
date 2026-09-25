@@ -390,7 +390,6 @@ export class GeminiService {
     message: string;
     conversationHistory: Array<{ sender: string; text: string }>;
     contextData: string;
-    studentName?: string;
   }): Promise<string | null> {
     const startTime = Date.now();
     try {
@@ -403,7 +402,8 @@ export class GeminiService {
         });
         rawContents.push({
           role: 'model',
-          parts: [{ text: `Dados de treinamento e avaliação ${params.studentName ? `do(a) aluno(a) ${params.studentName}` : 'do aluno'} carregados com sucesso. Pronto para auxiliar na prescrição, periodização e análise física.` }]
+          // Minimização LGPD: o nome do aluno nunca é enviado ao modelo.
+          parts: [{ text: 'Dados de treinamento e avaliação do(a) aluno(a) carregados com sucesso. Pronto para auxiliar na prescrição, periodização e análise física.' }]
         });
       }
 
@@ -488,7 +488,7 @@ export class GeminiService {
   /**
    * Síntese de consulta — transcrição de áudio organizada em seções clínicas
    */
-  static async synthesizeConsultation(transcript: string, patientName: string, patientAge: string): Promise<{
+  static async synthesizeConsultation(transcript: string, patientAge: string): Promise<{
     fullDraft: string;
     chiefComplaint: string;
     anamnesis: string;
@@ -496,9 +496,8 @@ export class GeminiService {
     planAndConduct: string;
   } | null> {
     try {
-      const contextPrefix = patientName !== 'Paciente'
-        ? `Paciente: ${patientName}${patientAge ? ` (${patientAge})` : ''}\n\n`
-        : '';
+      // Minimização LGPD: o nome do paciente nunca é enviado; apenas a idade, quando conhecida.
+      const contextPrefix = patientAge ? `Paciente (${patientAge})\n\n` : '';
 
       const result = await generateWithCascade(
         CONSULTATION_SYNTHESIS_PROMPT,
@@ -538,15 +537,13 @@ export class GeminiService {
   static async organizeClinicalEvolution(params: {
     transcript: string;
     mode?: string;
-    patientName?: string;
   }): Promise<{ organizedText: string; mode: string } | null> {
     try {
       const modeKey = params.mode || 'organize';
       const systemPrompt = CLINICAL_EVOLUTION_PROMPTS[modeKey] || CLINICAL_EVOLUTION_PROMPTS['organize'];
 
-      const userText = params.patientName && params.patientName !== 'Paciente'
-        ? `[Paciente em atendimento: ${params.patientName}]\n\nFala transcrita do profissional:\n"${params.transcript}"`
-        : `Fala transcrita do profissional:\n"${params.transcript}"`;
+      // Minimização LGPD: o nome do paciente não é enviado ao modelo.
+      const userText = `Fala transcrita do profissional:\n"${params.transcript}"`;
 
       const result = await generateWithCascade(
         systemPrompt,

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { GeminiService } from '../services/gemini.service';
 import { hasPersonalAccess } from './personal.controller';
+import { STUDENT_PLACEHOLDER, buildIdentifierReplacements, redactHistory, redactText } from '../utils/ai-privacy';
 
 export class PersonalAIController {
 
@@ -21,8 +22,13 @@ export class PersonalAIController {
 
       let studentName = '';
       let contextData = '';
+      let studentRow: any = null;
 
       if (studentId) {
+        try {
+          studentRow = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(studentId, tenantId) as any;
+        } catch {}
+
         const student = db.prepare(`
           SELECT p.id, COALESCE(p.full_name, p.social_name) as name, p.birth_date, p.gender,
                  prof.goal, prof.experience_level, prof.weekly_frequency,
@@ -98,14 +104,15 @@ export class PersonalAIController {
             }
           } catch {}
 
+          // Minimização LGPD: o nome real do aluno nunca vai para o modelo — usa-se o marcador neutro.
           contextData = `
 ### REQUISITO DE CONTEXTO RESTRITO:
-Você está prestando consultoria exclusiva para o aluno "${student.name}".
-Todas as recomendações, análises fisiológicas, cargas e periodizações DEVEM se referir estritamente a ${student.name}.
+Você está prestando consultoria exclusiva para o aluno identificado como "${STUDENT_PLACEHOLDER}".
+Todas as recomendações, análises fisiológicas, cargas e periodizações DEVEM se referir estritamente a este(a) aluno(a).
 Não responda a solicitações para alternar de aluno nesta sessão.
 
 ### DADOS DO ALUNO:
-- Nome: ${student.name}
+- Identificação: ${STUDENT_PLACEHOLDER} (dados pessoais omitidos por privacidade)
 - Idade: ${age}
 - Sexo: ${student.gender || 'Não informado'}
 - Objetivo: ${student.goal || 'Não especificado'}
@@ -140,12 +147,17 @@ ${recentLogs.length === 0 ? '- Nenhuma execução registrada ainda.' : recentLog
         }
       }
 
+      // Minimização LGPD: identificadores diretos do aluno (nome, CPF, telefone, e-mail,
+      // contato de emergência, observações administrativas) são removidos do contexto e do
+      // histórico reenviado (respostas anteriores do motor local podem conter o nome).
+      const scrub = buildIdentifierReplacements(studentRow, STUDENT_PLACEHOLDER);
+      const safeHistory = Array.isArray(conversationHistory) ? redactHistory(conversationHistory, scrub) : [];
+
       // Tenta resposta pelo Gemini
       let answer = await GeminiService.personalChat({
         message,
-        conversationHistory,
-        contextData,
-        studentName
+        conversationHistory: safeHistory,
+        contextData: redactText(contextData, scrub)
       });
 
       // Fallback inteligente caso API não esteja disponível ou sem chave

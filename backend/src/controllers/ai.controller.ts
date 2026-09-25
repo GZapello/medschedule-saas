@@ -4,6 +4,14 @@ import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { v4 as uuidv4 } from 'uuid';
 import { GeminiService } from '../services/gemini.service';
 import { hasClinicalAccess } from './clinical.controller';
+import {
+  PATIENT_PLACEHOLDER,
+  PATIENT_NAME_TOKEN,
+  buildIdentifierReplacements,
+  redactText,
+  redactHistory,
+  reinsertName
+} from '../utils/ai-privacy';
 
 /**
  * Validação de perfil administrativo para bloqueio de IA clínica
@@ -52,12 +60,14 @@ export class AIController {
       // ── 1. Carregar / criar conversa para memória ─────────────
       let convId = conversationId || null;
       let conversationHistory: Array<{ sender: string; text: string }> = [];
+      let conversationPatientId: string | null = null;
 
       if (convId && tenantId) {
         try {
-          const conv = db.prepare('SELECT messages_json FROM ai_conversations WHERE id = ? AND tenant_id = ?').get(convId, tenantId) as any;
+          const conv = db.prepare('SELECT messages_json, patient_id FROM ai_conversations WHERE id = ? AND tenant_id = ?').get(convId, tenantId) as any;
           if (conv) {
             conversationHistory = JSON.parse(conv.messages_json || '[]');
+            conversationPatientId = conv.patient_id || null;
           }
         } catch (e) {}
       }
@@ -148,10 +158,20 @@ export class AIController {
 
       // ── 5. Tentar processar com Gemini ───────────────────────
       if (GeminiService.isAvailable()) {
-        const contextStr = buildContextString(patientContext, appointmentContext, tenantId, req.user);
+        // Minimização LGPD: identificadores diretos dos pacientes envolvidos (contexto,
+        // atendimento e conversa) são removidos do contexto e do histórico reenviado.
+        const identifierReplacements = collectPatientReplacements(tenantId, [
+          patientContext?.patient?.id,
+          appointmentContext?.patient_id,
+          conversationPatientId
+        ]);
+        const contextStr = redactText(
+          buildContextString(patientContext, appointmentContext, tenantId, req.user),
+          identifierReplacements
+        );
         const geminiReply = await GeminiService.chat({
           message: text,
-          conversationHistory: conversationHistory.slice(-20),
+          conversationHistory: redactHistory(conversationHistory.slice(-20), identifierReplacements),
           contextData: contextStr,
           professionalName: req.user?.name
         });
@@ -808,9 +828,9 @@ export class AIController {
         }
       }
 
-      // Tenta com Gemini
+      // Tenta com Gemini (minimização LGPD: o nome do paciente não é enviado, apenas a idade)
       if (GeminiService.isAvailable()) {
-        const result = await GeminiService.synthesizeConsultation(raw, patientName, patientAge);
+        const result = await GeminiService.synthesizeConsultation(raw, patientAge);
         if (result) {
           res.json({
             structured: {
@@ -925,21 +945,12 @@ export class AIController {
       const raw = rawInput.trim();
       const modeKey = (mode && typeof mode === 'string') ? mode.trim().toLowerCase() : 'organize';
 
-      // Identifica o paciente se fornecido
-      let patientName = 'Paciente';
-      if (patientId && tenantId) {
-        try {
-          const p = db.prepare('SELECT full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
-          if (p?.full_name) patientName = p.full_name;
-        } catch (_) {}
-      }
-
       // Tenta processar com o Gemini
       if (GeminiService.isAvailable()) {
+        // Minimização LGPD: o nome do paciente não é enviado ao modelo
         const result = await GeminiService.organizeClinicalEvolution({
           transcript: raw,
-          mode: modeKey,
-          patientName
+          mode: modeKey
         });
 
         if (result && result.organizedText) {
@@ -1130,21 +1141,28 @@ Transcrição: "${raw}"`;
       const { patientId, period, initialSummary, currentSummary, goals, notes } = req.body;
 
       let patientName = 'Paciente';
+      let patientRow: any = null;
       if (patientId && tenantId) {
         try {
-          const p = db.prepare('SELECT full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
-          if (p?.full_name) patientName = p.full_name;
+          patientRow = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+          if (patientRow?.full_name) patientName = patientRow.full_name;
         } catch (_) {}
       }
 
       if (GeminiService.isAvailable()) {
         try {
-          const prompt = `Gere um Relatório de Evolução em Terapia Ocupacional técnico, formal e completo em Markdown para o paciente ${patientName}.
-Período: ${period || 'Acompanhamento longitudinal recente'}
-Dados de Avaliação Inicial / Anterior: ${JSON.stringify(initialSummary || 'Não especificado')}
-Dados da Avaliação Atual: ${JSON.stringify(currentSummary || 'Evolução clínica recente')}
-Metas Terapêuticas: ${JSON.stringify(goals || [])}
-Notas Adicionais do Terapeuta: ${notes || 'Nenhuma'}
+          // Minimização LGPD: o modelo recebe apenas o marcador PATIENT_NAME_TOKEN; identificadores
+          // do paciente eventualmente digitados nos campos são removidos e o nome real é
+          // reinserido localmente na resposta.
+          const scrub = buildIdentifierReplacements(patientRow, PATIENT_NAME_TOKEN);
+          const safe = (v: any) => redactText(typeof v === 'string' ? v : String(v), scrub);
+          const prompt = `Gere um Relatório de Evolução em Terapia Ocupacional técnico, formal e completo em Markdown para o paciente ${PATIENT_NAME_TOKEN}.
+Refira-se ao paciente somente pelo marcador ${PATIENT_NAME_TOKEN}, sem inventar nome ou outros dados pessoais.
+Período: ${safe(period || 'Acompanhamento longitudinal recente')}
+Dados de Avaliação Inicial / Anterior: ${safe(JSON.stringify(initialSummary || 'Não especificado'))}
+Dados da Avaliação Atual: ${safe(JSON.stringify(currentSummary || 'Evolução clínica recente'))}
+Metas Terapêuticas: ${safe(JSON.stringify(goals || []))}
+Notas Adicionais do Terapeuta: ${safe(notes || 'Nenhuma')}
 
 Siga estritamente os eixos:
 # Relatório de Evolução em Terapia Ocupacional
@@ -1166,7 +1184,7 @@ Retorne o relatório completo formatado em Markdown profissional.`;
 
           if (aiResp) {
             res.json({
-              report: aiResp,
+              report: reinsertName(aiResp, patientName),
               provider: 'Google Gemini',
               disclaimer: 'Rascunho gerado por IA — revise e confirme antes de exportar ou inserir no prontuário.'
             });
@@ -1235,21 +1253,28 @@ Com base na comparação longitudinal dos registros avaliativos:
       const { patientId, period, initialSummary, currentSummary, goals, notes } = req.body;
 
       let patientName = 'Paciente';
+      let patientRow: any = null;
       if (patientId && tenantId) {
         try {
-          const p = db.prepare('SELECT full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
-          if (p?.full_name) patientName = p.full_name;
+          patientRow = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+          if (patientRow?.full_name) patientName = patientRow.full_name;
         } catch (_) {}
       }
 
       if (GeminiService.isAvailable()) {
         try {
-          const prompt = `Gere um Relatório de Evolução Fonoaudiológica técnico, formal e completo em Markdown para o paciente ${patientName}.
-Período: ${period || 'Acompanhamento longitudinal recente'}
-Dados Iniciais / Anteriores: ${JSON.stringify(initialSummary || 'Não especificado')}
-Dados Atuais: ${JSON.stringify(currentSummary || 'Registros recentes de avaliação fonoaudiológica')}
-Metas Fonoaudiológicas: ${JSON.stringify(goals || [])}
-Notas do Fonoaudiólogo: ${notes || 'Nenhuma'}
+          // Minimização LGPD: o modelo recebe apenas o marcador PATIENT_NAME_TOKEN; identificadores
+          // do paciente eventualmente digitados nos campos são removidos e o nome real é
+          // reinserido localmente na resposta.
+          const scrub = buildIdentifierReplacements(patientRow, PATIENT_NAME_TOKEN);
+          const safe = (v: any) => redactText(typeof v === 'string' ? v : String(v), scrub);
+          const prompt = `Gere um Relatório de Evolução Fonoaudiológica técnico, formal e completo em Markdown para o paciente ${PATIENT_NAME_TOKEN}.
+Refira-se ao paciente somente pelo marcador ${PATIENT_NAME_TOKEN}, sem inventar nome ou outros dados pessoais.
+Período: ${safe(period || 'Acompanhamento longitudinal recente')}
+Dados Iniciais / Anteriores: ${safe(JSON.stringify(initialSummary || 'Não especificado'))}
+Dados Atuais: ${safe(JSON.stringify(currentSummary || 'Registros recentes de avaliação fonoaudiológica'))}
+Metas Fonoaudiológicas: ${safe(JSON.stringify(goals || []))}
+Notas do Fonoaudiólogo: ${safe(notes || 'Nenhuma')}
 
 Siga os eixos estruturais:
 # Relatório de Evolução Fonoaudiológica
@@ -1272,7 +1297,7 @@ Retorne o relatório completo em formato Markdown técnico.`;
 
           if (aiResp) {
             res.json({
-              report: aiResp,
+              report: reinsertName(aiResp, patientName),
               provider: 'Google Gemini',
               disclaimer: 'Rascunho gerado por IA — revise e confirme antes de exportar ou inserir no prontuário.'
             });
@@ -1346,7 +1371,8 @@ function buildContextString(
 
   if (appointmentCtx) {
     parts.push(`\n--- ATENDIMENTO ATUAL ---`);
-    parts.push(`Paciente: ${appointmentCtx.patient_name}`);
+    // Minimização LGPD: nome real do paciente não é enviado ao modelo
+    parts.push(`Paciente: ${PATIENT_PLACEHOLDER}`);
     parts.push(`Profissional: ${appointmentCtx.prof_name}`);
     parts.push(`Serviço: ${appointmentCtx.service_name}`);
     parts.push(`Horário: ${appointmentCtx.start_time} a ${appointmentCtx.end_time}`);
@@ -1358,13 +1384,10 @@ function buildContextString(
   if (patientCtx) {
     const p = patientCtx.patient;
     parts.push(`\n--- DADOS DO PACIENTE ---`);
-    parts.push(`Nome: ${p.full_name}`);
+    // Minimização LGPD: nome substituído por marcador neutro; CPF, telefone, e-mail,
+    // contato de emergência e observações administrativas não são enviados ao modelo.
+    parts.push(`Identificação: ${PATIENT_PLACEHOLDER} (dados pessoais omitidos por privacidade)`);
     parts.push(`Idade: ${p.birth_date ? calculateAge(p.birth_date) + ' anos' : 'Não informada'}`);
-    parts.push(`Telefone: ${p.phone || 'Não informado'}`);
-    parts.push(`Email: ${p.email || 'Não informado'}`);
-    parts.push(`CPF: ${p.cpf || 'Não informado'}`);
-    if (p.emergency_contact) parts.push(`Contato de emergência: ${p.emergency_contact} (${p.emergency_phone || '-'})`);
-    if (p.notes_admin) parts.push(`Observações administrativas: ${p.notes_admin}`);
 
     // Alergias
     const activeAllergies = patientCtx.allergies.filter((a: any) => a.status === 'active');
@@ -1476,6 +1499,23 @@ function buildContextString(
   }
 
   return parts.join('\n');
+}
+
+/**
+ * Substituições de identificadores diretos (nome, CPF, telefone, e-mail, contato de
+ * emergência, observações administrativas) dos pacientes citados, usadas para limpar
+ * o contexto e o histórico antes do envio ao Gemini. Uso estritamente local.
+ */
+function collectPatientReplacements(tenantId: string, patientIds: Array<string | null | undefined>) {
+  const ids = Array.from(new Set(patientIds.filter((id): id is string => !!id)));
+  const all: ReturnType<typeof buildIdentifierReplacements> = [];
+  for (const id of ids) {
+    try {
+      const row = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (row) all.push(...buildIdentifierReplacements(row, PATIENT_PLACEHOLDER));
+    } catch (_) {}
+  }
+  return all;
 }
 
 // ============================================================================
