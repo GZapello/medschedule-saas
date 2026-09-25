@@ -43,6 +43,7 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const phraseContainerRef = useRef<HTMLDivElement>(null);
+  const lastCardTapRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
 
   const [loading, setLoading] = useState(true);
   const [boards, setBoards] = useState<AACBoard[]>([]);
@@ -258,6 +259,13 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
   // REGRA: Se card.category === 'navigation' OU card.behavior === 'navigation' OU se for atalho com target_page_id (ex: termina em →):
   // SOMENTE navegar; NÃO adicionar à frase; NÃO falar automaticamente; NÃO alterar frase existente.
   const handleCardClick = (card: AACCard) => {
+    const now = Date.now();
+    // Protege contra toques acidentais repetidos em menos de 350ms no mesmo cartão (espasmos ou tremores motores)
+    if (lastCardTapRef.current.id === card.id && (now - lastCardTapRef.current.time) < 350) {
+      return;
+    }
+    lastCardTapRef.current = { id: card.id, time: now };
+
     const isNavigationOnly =
       card.category === 'navigation' ||
       card.behavior === 'navigation' ||

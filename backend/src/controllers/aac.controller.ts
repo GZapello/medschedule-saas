@@ -1050,6 +1050,10 @@ export class AACController {
           { label: 'Gostei', spoken: 'Gostei', cat: 'descriptor', col: '#dcfce7', sym: '😊' },
           { label: 'Não gostei', spoken: 'Não gostei', cat: 'descriptor', col: '#fee2e2', sym: '😖' },
           { label: 'Ir', spoken: 'Ir', cat: 'action', col: '#bbf7d0', sym: '🚶' },
+          { label: 'Água', spoken: 'Água', cat: 'noun', col: '#fed7aa', sym: '💧' },
+          { label: 'Banheiro', spoken: 'Quero ir ao banheiro', cat: 'noun', col: '#fed7aa', sym: '🚽' },
+          { label: 'Dor', spoken: 'Estou com dor', cat: 'feeling', col: '#fee2e2', sym: '🩹' },
+          { label: 'Para', spoken: 'Para por favor', cat: 'action', col: '#fee2e2', sym: '🛑' },
 
           // Atalhos de Contexto (Navegação Real para Categorias)
           { label: 'Brincar →', cat: 'navigation', target_page_name: 'Brincadeiras', sym: '🎮', col: '#e0e7ff' },
