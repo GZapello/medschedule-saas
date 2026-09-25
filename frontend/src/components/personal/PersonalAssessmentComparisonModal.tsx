@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { dateLabel } from './posture';
+import React, { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import {
   X,
   GitCompare,
@@ -19,6 +20,8 @@ import { Assessment, AssessmentComparison, AssessmentPhoto, Student } from './ty
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { SecureFileImage } from '../common/SecureFileImage';
+
+const PersonalPostureComparison = lazy(() => import('./PersonalPostureComparison'));
 
 interface PersonalAssessmentComparisonModalProps {
   isOpen: boolean;
@@ -43,10 +46,12 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
   const [previousId, setPreviousId] = useState(initialPreviousId || '');
   const [comparison, setComparison] = useState<AssessmentComparison | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<'all' | 'composition' | 'perimeters' | 'skinfolds' | 'cardio' | 'photos'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'composition' | 'perimeters' | 'skinfolds' | 'cardio' | 'photos' | 'posture'>('all');
 
+  const requestVersion = useRef(0);
+  useEffect(() => () => { requestVersion.current++; }, []);
   useEffect(() => {
-    if (isOpen && assessmentsList.length >= 2) {
+    if (isOpen && assessmentsList.length >= 1) {
       const sorted = [...assessmentsList].sort(
         (a, b) => new Date(b.assessment_date).getTime() - new Date(a.assessment_date).getTime()
       );
@@ -58,25 +63,28 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
   }, [isOpen, assessmentsList, initialCurrentId, initialPreviousId]);
 
   useEffect(() => {
-    if (currentId && previousId && currentId !== previousId) {
+    if (currentId && previousId && (currentId !== previousId || activeCategory === 'posture')) {
       loadComparison(currentId, previousId);
     } else if (currentId && previousId && currentId === previousId) {
+      requestVersion.current++;
+      setLoading(false);
       setComparison(null);
     }
-  }, [currentId, previousId]);
+  }, [currentId, previousId, activeCategory === 'posture']);
 
   const loadComparison = async (curId: string, prevId: string) => {
+    const request = ++requestVersion.current;
     try {
       setLoading(true);
       const data = await ApiClient.get<AssessmentComparison>(
-        `/v1/personal/assessments/${curId}/compare/${prevId}`
+        `/v1/personal/assessments/${curId}/compare/${prevId}${activeCategory === 'posture' ? '?posture_baseline=1' : ''}`
       );
-      setComparison(data);
+      if (request === requestVersion.current) setComparison(data);
     } catch (err) {
       console.error('Erro ao carregar comparativo:', err);
-      showToast('Erro ao carregar comparação de avaliações', 'error');
+      if (request === requestVersion.current) { setComparison(null); showToast(activeCategory === 'posture' ? 'Nenhuma avaliação postural disponível para comparação.' : 'Erro ao carregar comparação de avaliações', 'error'); }
     } finally {
-      setLoading(false);
+      if (request === requestVersion.current) setLoading(false);
     }
   };
 
@@ -210,13 +218,14 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
               Avaliação Anterior (Base de Comparação)
             </label>
             <select
-              value={previousId}
+              disabled={activeCategory === 'posture'}
+              value={activeCategory === 'posture' ? comparison?.previous_assessment.id || previousId : previousId}
               onChange={(e) => setPreviousId(e.target.value)}
               className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
             >
               {assessmentsList.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {new Date(a.assessment_date).toLocaleDateString('pt-BR')} — {a.weight} kg, {a.body_fat_percentage}% fat ({a.protocol || 'Pollock'})
+                  {dateLabel(a.assessment_date)} — {a.weight} kg, {a.body_fat_percentage}% fat ({a.protocol || 'Pollock'})
                 </option>
               ))}
             </select>
@@ -233,13 +242,13 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
             >
               {assessmentsList.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {new Date(a.assessment_date).toLocaleDateString('pt-BR')} — {a.weight} kg, {a.body_fat_percentage}% fat ({a.protocol || 'Pollock'})
+                  {dateLabel(a.assessment_date)} — {a.weight} kg, {a.body_fat_percentage}% fat ({a.protocol || 'Pollock'})
                 </option>
               ))}
             </select>
           </div>
 
-          {assessmentsList.length >= 2 && (
+          {assessmentsList.length >= 2 && activeCategory !== 'posture' && (
             <div className="flex items-center gap-2 pt-1 md:col-span-2 flex-wrap">
               <span className="text-[10px] uppercase font-bold text-slate-400">Comparação rápida:</span>
               <button
@@ -320,6 +329,8 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
           </button>
         </div>
 
+        <button type="button" onClick={() => setActiveCategory('posture')} className="text-xs font-bold text-indigo-700 px-6 py-3 border-b text-left">Avaliação Postural • referência inicial e evolução</button>
+
         {/* Corpo Principal */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           {loading ? (
@@ -329,8 +340,10 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
             </div>
           ) : !comparison ? (
             <div className="py-16 text-center text-slate-400 text-xs">
-              Selecione duas avaliações diferentes para visualizar o comparativo detalhado.
+              {activeCategory === 'posture' ? 'Registre uma avaliação no modo postural para iniciar o histórico.' : 'Selecione duas avaliações diferentes ou abra Avaliação Postural para consultar a referência inicial.'}
             </div>
+          ) : activeCategory === 'posture' ? (
+            <Suspense fallback={<p>Carregando evolução postural…</p>}><PersonalPostureComparison comparison={comparison} /></Suspense>
           ) : (
             <>
               {/* CARD DEDICADO DE COMPARAÇÃO DO TAV */}

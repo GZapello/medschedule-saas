@@ -1,3 +1,4 @@
+import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
 import { matchesExercise, insertWorkoutExercise, imageAttribution } from '../services/personal-exercise-utils';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
@@ -1084,7 +1085,7 @@ export class PersonalController {
         ORDER BY a.assessment_date DESC
       `).all(studentId, tenantId) as any[];
 
-      res.json({ assessments });
+      res.json({ assessments: assessments.map((a: any) => { const { posture_json, ...rest } = a; return { ...rest, has_posture: Boolean(posture_json) }; }) });
     } catch (err: any) {
       console.error('[PersonalController.listAssessments] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar avaliações físicas' });
@@ -1135,6 +1136,7 @@ export class PersonalController {
       const tenantId = req.tenantId!;
       const professionalId = getProfessionalId(req);
       const b = req.body;
+      const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
 
       const patient = db.prepare('SELECT id, birth_date, gender FROM patients WHERE id = ? AND tenant_id = ?').get(b.patient_id, tenantId) as any;
       if (!patient) {
@@ -1254,6 +1256,8 @@ export class PersonalController {
       const flexibilityTestsJson = Array.isArray(b.flexibility_tests) ? JSON.stringify(b.flexibility_tests) : (b.flexibility_tests_json || null);
       const rawCompositionJson = typeof b.raw_composition_data === 'object' ? JSON.stringify(b.raw_composition_data) : (b.raw_composition_data_json || null);
 
+      validatePosturePhotoAccess(db, tenantId, b.patient_id, postureJson, b.photos);
+
       const assessmentId = 'pass-' + uuidv4().slice(0, 8);
       const assessmentDate = b.assessment_date || new Date().toISOString().split('T')[0];
 
@@ -1340,6 +1344,8 @@ export class PersonalController {
         saveAssessmentPhotos(assessmentId, b.patient_id, tenantId, assessmentDate, b.photos);
       }
 
+      if (postureJson !== undefined) db.prepare('UPDATE personal_assessments SET posture_json = ? WHERE id = ? AND tenant_id = ?').run(postureJson, assessmentId, tenantId);
+
       logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
       res.status(201).json({
         id: assessmentId,
@@ -1358,7 +1364,7 @@ export class PersonalController {
       });
     } catch (err: any) {
       console.error('[PersonalController.createAssessment] Erro:', err);
-      res.status(500).json({ error: 'Erro ao criar avaliação física' });
+      res.status(err?.message === 'Dados posturais inválidos' ? 400 : 500).json({ error: 'Erro ao criar avaliação física' });
     }
   }
 
@@ -1371,12 +1377,15 @@ export class PersonalController {
       const tenantId = req.tenantId!;
       const { id } = req.params;
       const b = req.body;
+      const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
 
       const existing = db.prepare('SELECT id, patient_id FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Avaliação física não encontrada' });
         return;
       }
+
+      validatePosturePhotoAccess(db, tenantId, existing.patient_id, postureJson, b.photos);
 
       if (b.weight !== undefined || b.height !== undefined || b.notes !== undefined || b.body_fat_percentage !== undefined) {
         db.prepare(`
@@ -1405,6 +1414,8 @@ export class PersonalController {
         saveAssessmentPhotos(String(id), String(existing.patient_id), tenantId, assessmentDate, b.photos);
       }
 
+      if (postureJson !== undefined) db.prepare(`UPDATE personal_assessments SET posture_json = ?, assessment_date = COALESCE(?, assessment_date), updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(postureJson, typeof b.assessment_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.assessment_date) ? b.assessment_date : null, id, tenantId);
+
       logAudit(req, 'UPDATE_ASSESSMENT', 'personal_assessments', id, { photosCount: Array.isArray(b.photos) ? b.photos.length : undefined });
       
       const updatedPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ? ORDER BY photo_type ASC').all(id, tenantId);
@@ -1417,7 +1428,7 @@ export class PersonalController {
       });
     } catch (err: any) {
       console.error('[PersonalController.updateAssessment] Erro:', err);
-      res.status(500).json({ error: 'Erro ao atualizar avaliação física' });
+      res.status(err?.message === 'Dados posturais inválidos' ? 400 : 500).json({ error: 'Erro ao atualizar avaliação física' });
     }
   }
 
@@ -1456,15 +1467,20 @@ export class PersonalController {
       const { id, compareId } = req.params;
 
       const current = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
-      const previous = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(compareId, tenantId) as any;
+      let previous = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(compareId, tenantId) as any;
+
+      const postureMode = req.query.posture_baseline === '1';
+      const history = postureMode && current ? db.prepare("SELECT id, assessment_date, json_object('version', 1, 'observations', json_extract(posture_json, '$.observations')) AS posture_json FROM personal_assessments WHERE tenant_id = ? AND patient_id = ? AND posture_json IS NOT NULL ORDER BY assessment_date ASC, created_at ASC, id ASC").all(tenantId, current.patient_id) as any[] : [];
+      if (postureMode) previous = history.length ? db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(history[0].id, tenantId) : null;
 
       if (!current || !previous) {
         res.status(404).json({ error: 'Uma ou ambas as avaliações não foram encontradas' });
         return;
       }
 
+      if (current.patient_id !== previous.patient_id) { res.status(400).json({ error: 'Compare avaliações do mesmo aluno.' }); return; }
       const currentPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(id, tenantId);
-      const previousPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(compareId, tenantId);
+      const previousPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(previous.id, tenantId);
 
       const buildItem = (label: string, field: string, unit: string = 'cm') => {
         const curVal = current[field] !== null && current[field] !== undefined ? Number(current[field]) : null;
@@ -1550,6 +1566,7 @@ export class PersonalController {
         previous_photos: previousPhotos,
         current_photos: currentPhotos,
         metrics,
+        posture_history: postureMode ? history.map(postureSummary) : undefined,
         tav_comparison: {
           previous: {
             value: previous.tav_value,

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { Posture, readPosture, emptyPosture } from './posture';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   X,
   ClipboardCheck,
@@ -25,6 +26,8 @@ import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
+const PersonalPostureEditor = lazy(() => import('./PersonalPostureEditor'));
+
 interface PersonalAssessmentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,6 +35,7 @@ interface PersonalAssessmentModalProps {
   student?: Student | null;
   studentsList?: Student[];
   assessmentToEdit?: any;
+  postureOnly?: boolean;
 }
 
 export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = ({
@@ -40,7 +44,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   onSaved,
   student,
   studentsList = [],
-  assessmentToEdit
+  assessmentToEdit,
+  postureOnly = false
 }) => {
   const { showToast } = useToast();
 
@@ -144,6 +149,15 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const [notes, setNotes] = useState('');
 
   const [saving, setSaving] = useState(false);
+  const [posture,setPosture] = useState<Posture|null>(null);
+  const [postureMode,setPostureMode] = useState(false);
+  const [postureBusy,setPostureBusy] = useState(false);
+  const [uploadingFront,setUploadingFront] = useState(false);
+  const [uploadingBack,setUploadingBack] = useState(false);
+  const [uploadingRight,setUploadingRight] = useState(false);
+  const [uploadingLeft,setUploadingLeft] = useState(false);
+  const photosUploading = uploadingFront || uploadingBack || uploadingRight || uploadingLeft;
+  useEffect(() => { if(isOpen) { const saved=readPosture(assessmentToEdit?.posture_json); setPosture(saved || (postureOnly ? emptyPosture() : null)); setPostureMode(Boolean(saved) || postureOnly); if(postureOnly)setActiveTab('photos_notes'); } }, [isOpen,assessmentToEdit?.id]);
 
   const autosavePayload = React.useMemo(() => ({
     weight,
@@ -311,7 +325,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     patientId: selectedStudentId,
     payload: autosavePayload,
     onRestoreDraft: handleRestoreDraft,
-    enabled: isOpen && !!selectedStudentId
+    enabled: isOpen && !!selectedStudentId && !postureOnly
   });
 
   // Carregar protocolos TAV na abertura
@@ -330,6 +344,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   }, [student]);
 
   useEffect(() => {
+    if (isOpen) { setPhotoFront('');setPhotoFrontFileId('');setPhotoBack('');setPhotoBackFileId('');setPhotoRight('');setPhotoRightFileId('');setPhotoLeft('');setPhotoLeftFileId(''); }
     if (assessmentToEdit && isOpen) {
       if (assessmentToEdit.patient_id) setSelectedStudentId(assessmentToEdit.patient_id);
       if (assessmentToEdit.assessment_date) setAssessmentDate(assessmentToEdit.assessment_date);
@@ -542,22 +557,35 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (postureBusy || saving || photosUploading) return;
     if (!selectedStudentId) {
       showToast('Selecione o aluno para a avaliação', 'error');
       return;
     }
-    if (!w || !h) {
+    if ((!w || !h) && !posture) {
       showToast('Peso e altura são obrigatórios', 'error');
       return;
     }
 
     try {
+      setSaving(true);
       // Signed URLs expire. Persist only the R2 attachment identifier.
       const photos: Array<{ photo_type: string; file_id: string }> = [];
       if (photoFrontFileId) photos.push({ photo_type: 'front', file_id: photoFrontFileId });
       if (photoBackFileId) photos.push({ photo_type: 'back', file_id: photoBackFileId });
       if (photoRightFileId) photos.push({ photo_type: 'right', file_id: photoRightFileId });
       if (photoLeftFileId) photos.push({ photo_type: 'left', file_id: photoLeftFileId });
+
+      // Preserve photo notes and extra photo types when editing posture in an existing assessment.
+      if (postureOnly && Array.isArray(assessmentToEdit?.photos)) {
+        for (const previous of assessmentToEdit.photos) {
+          const fileId = previous.file_id || previous.fileId;
+          if (!fileId) continue;
+          const selected = photos.find(p => p.photo_type === previous.photo_type && p.file_id === fileId);
+          if (selected) Object.assign(selected, { notes: previous.notes || null });
+          else if (!['front','back','right','left'].includes(previous.photo_type)) photos.push({photo_type:previous.photo_type,file_id:fileId,...{notes:previous.notes || null}});
+        }
+      }
 
       // Agrupar testes de resistência muscular
       const enduranceTests: EnduranceTestItem[] = [];
@@ -570,8 +598,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         patient_id: selectedStudentId,
         assessment_date: assessmentDate,
         protocol: skinfoldsProtocol,
-        weight: w,
-        height: h,
+        weight: w || undefined,
+        height: h || undefined,
         body_fat_percentage: calculatedFatPct,
         muscle_mass_kg: estimatedMuscleMass || null,
         composition_method: compositionMethod,
@@ -642,17 +670,18 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         muscular_endurance_tests: enduranceTests,
 
         notes,
-        photos
+        photos,
+        posture: posture || undefined
       };
 
       if (assessmentToEdit?.id) {
-        await ApiClient.put(`/v1/personal/assessments/${assessmentToEdit.id}`, payload);
+        await ApiClient.put(`/v1/personal/assessments/${assessmentToEdit.id}`, postureOnly ? {assessment_date:assessmentDate,posture:posture||undefined,photos,notes} : payload);
         showToast('Avaliação física atualizada com sucesso!', 'success');
       } else {
         await ApiClient.post('/v1/personal/assessments', payload);
         showToast('Avaliação física completa registrada com sucesso!', 'success');
       }
-      await autosave.clearDraft();
+      if(!postureOnly) await autosave.clearDraft();
       onSaved();
       onClose();
     } catch (err) {
@@ -676,18 +705,18 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-800">
-                Avaliação Física Completa & Composição Corporal
+                {postureOnly ? 'Avaliação Postural' : 'Avaliação Física Completa & Composição Corporal'}
               </h3>
               <p className="text-xs text-slate-500">
-                Antropometria, Composição, TAV, Dobras, Cardiovascular, Força 1RM e Fotos.
+                {postureOnly ? 'Fotos, marcações e observações por região.' : 'Antropometria, Composição, TAV, Dobras, Cardiovascular, Força 1RM e Fotos.'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <ClinicalAutosaveIndicator
+            {!postureOnly && <ClinicalAutosaveIndicator
               status={autosave.autosaveStatus}
               lastSavedTime={autosave.lastSavedTime}
-            />
+            />}
             <button
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
@@ -706,10 +735,11 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               clientTermLabel="Aluno"
               value={selectedStudentId}
               onChange={(id, stud) => {
+                if(id!==selectedStudentId){setPosture(postureMode?emptyPosture():null);setPhotoFrontFileId('');setPhotoBackFileId('');setPhotoRightFileId('');setPhotoLeftFileId('');setPhotoFront('');setPhotoBack('');setPhotoRight('');setPhotoLeft('');}
                 setSelectedStudentId(id);
                 setSelectedStudent((stud as any) || null);
               }}
-              disabled={!!student}
+              disabled={!!student || postureBusy || saving || photosUploading}
               placeholder="Buscar aluno pelo nome..."
             />
           </div>
@@ -735,6 +765,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           </div>
         </div>
 
+        {!postureOnly && <>
         {/* Mini KPI Preview Flutuante */}
         <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 text-white px-6 py-2.5 flex items-center justify-around text-xs flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -768,6 +799,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         <div className="flex items-center gap-1 px-6 border-b border-slate-200 bg-white overflow-x-auto py-2">
           <button
             type="button"
+            disabled={photosUploading || postureBusy}
             onClick={() => setActiveTab('anthropometry')}
             className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
               activeTab === 'anthropometry'
@@ -781,6 +813,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
           <button
             type="button"
+            disabled={photosUploading || postureBusy}
             onClick={() => setActiveTab('composition')}
             className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
               activeTab === 'composition'
@@ -794,6 +827,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
           <button
             type="button"
+            disabled={photosUploading || postureBusy}
             onClick={() => setActiveTab('skinfolds')}
             className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
               activeTab === 'skinfolds'
@@ -807,6 +841,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
           <button
             type="button"
+            disabled={photosUploading || postureBusy}
             onClick={() => setActiveTab('cardio_tests')}
             className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
               activeTab === 'cardio_tests'
@@ -820,6 +855,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
           <button
             type="button"
+            disabled={photosUploading || postureBusy}
             onClick={() => setActiveTab('photos_notes')}
             className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
               activeTab === 'photos_notes'
@@ -832,6 +868,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           </button>
         </div>
 
+        </>}
         {/* Formulário Principal */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-6">
           {/* ========================================================
@@ -1776,6 +1813,11 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
              ======================================================== */}
           {activeTab === 'photos_notes' && (
             <div className="space-y-6 animate-fadeIn">
+              <label className="flex items-center gap-2 text-sm font-semibold text-indigo-800"><input type="checkbox" checked={postureMode} disabled={postureBusy} onChange={e=>{setPostureMode(e.target.checked);if(e.target.checked&&!posture)setPosture(emptyPosture());}} />Modo Avaliação Postural</label>
+              {postureMode && posture && <Suspense fallback={<p className="text-xs">Carregando ferramentas posturais…</p>}><PersonalPostureEditor key={[selectedStudentId,photoFrontFileId,photoBackFileId,photoRightFileId,photoLeftFileId].join(':')} value={posture} onChange={setPosture} onBusy={setPostureBusy} patientId={selectedStudentId} photos={[
+                {view:'front',fileId:photoFrontFileId,url:photoFront},{view:'back',fileId:photoBackFileId,url:photoBack},
+                {view:'right',fileId:photoRightFileId,url:photoRight},{view:'left',fileId:photoLeftFileId,url:photoLeft}
+              ]} /></Suspense>}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
@@ -1802,7 +1844,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     layoutMode="stacked"
                     initialUrl={photoFront}
                     initialFileId={photoFrontFileId}
-                    disabled={!selectedStudentId}
+                    onUploadingChange={setUploadingFront}
+                    disabled={!selectedStudentId || postureBusy}
                     onUploaded={(info) => {
                       setPhotoFrontFileId(info.id);
                       setPhotoFront('');
@@ -1823,7 +1866,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     layoutMode="stacked"
                     initialUrl={photoBack}
                     initialFileId={photoBackFileId}
-                    disabled={!selectedStudentId}
+                    onUploadingChange={setUploadingBack}
+                    disabled={!selectedStudentId || postureBusy}
                     onUploaded={(info) => {
                       setPhotoBackFileId(info.id);
                       setPhotoBack('');
@@ -1844,7 +1888,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     layoutMode="stacked"
                     initialUrl={photoRight}
                     initialFileId={photoRightFileId}
-                    disabled={!selectedStudentId}
+                    onUploadingChange={setUploadingRight}
+                    disabled={!selectedStudentId || postureBusy}
                     onUploaded={(info) => {
                       setPhotoRightFileId(info.id);
                       setPhotoRight('');
@@ -1865,7 +1910,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     layoutMode="stacked"
                     initialUrl={photoLeft}
                     initialFileId={photoLeftFileId}
-                    disabled={!selectedStudentId}
+                    onUploadingChange={setUploadingLeft}
+                    disabled={!selectedStudentId || postureBusy}
                     onUploaded={(info) => {
                       setPhotoLeftFileId(info.id);
                       setPhotoLeft('');
@@ -1910,11 +1956,11 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               </button>
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || postureBusy || photosUploading}
                 className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-colors"
               >
                 <Save className="w-4 h-4" />
-                {saving ? 'Gravando Avaliação...' : 'Salvar Avaliação Física Completa'}
+                {saving ? 'Gravando Avaliação...' : postureOnly ? 'Salvar Avaliação Postural' : 'Salvar Avaliação Física Completa'}
               </button>
             </div>
           </div>
