@@ -10,7 +10,6 @@ import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
 import { migrateRemoveOutOfScopeProfessions } from './remove-out-of-scope-professions.migration';
 import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
-import { migrateAACBoard } from './aac-board.migration';
 
 const dbPath = process.env.DATABASE_PATH || path.resolve(__dirname, '../../saas_schedule.db');
 const dbDir = path.dirname(dbPath);
@@ -74,6 +73,33 @@ class SafeDatabase {
 }
 
 export const db = new SafeDatabase();
+
+function cleanupObsoleteResources(db: DatabaseSync): void {
+  try {
+    db.exec(`
+      DROP TABLE IF EXISTS aac_cards;
+      DROP TABLE IF EXISTS aac_pages;
+      DROP TABLE IF EXISTS aac_boards;
+      DROP TABLE IF EXISTS fono_aac_records;
+
+      DELETE FROM profession_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM practice_area_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM user_optional_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM medical_specialty_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM plan_capabilities WHERE capability_id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM capabilities WHERE id IN ('AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE');
+      DELETE FROM practice_areas WHERE id IN ('pa-fono-comunicacao', 'pa-to-comunicacao');
+    `);
+  } catch (err) {
+    console.error('[Database] Erro ao limpar tabelas e capacidades obsoletas:', err);
+  }
+
+  try {
+    db.exec('ALTER TABLE fono_language_assessments DROP COLUMN aac_details;');
+  } catch (_) {
+    // Coluna pode não existir ou versão do SQLite pode não suportar drop column
+  }
+}
 
 export function initializeDatabase(): void {
   // Migrações prévias seguras para tabelas existentes
@@ -1915,7 +1941,6 @@ export function initializeDatabase(): void {
         pragmatics TEXT,
         narrative TEXT,
         functional_comm TEXT,
-        aac_details TEXT,
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -3494,9 +3519,9 @@ function repairLegacyPhotoUrls(rawDb: any): void {
   }
 
   try {
-    migrateAACBoard(rawDb);
+    cleanupObsoleteResources(rawDb);
   } catch (err) {
-    console.error('[Database] Erro ao executar migrateAACBoard:', err);
+    console.error('[Database] Erro ao executar cleanupObsoleteResources:', err);
   }
 
   try {

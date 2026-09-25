@@ -28,8 +28,7 @@ import {
   LayoutDashboard,
   Calendar,
   Columns,
-  Printer,
-  MessageSquareHeart
+  Printer
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -47,7 +46,6 @@ import { EvolutionPhotoField } from '../common/EvolutionPhotoField';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
-import { AACBoardModal } from '../aac/AACBoardModal';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
@@ -76,11 +74,8 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
 
   // Switcher de Área de Atuação da TO
   const [practiceArea, setPracticeArea] = useState<
-    'pediatria' | 'neurologia' | 'comunicacao_linguagem' | 'saude_mental' | 'gerontologia' | 'reabilitacao_fisica' | 'hospitalar'
+    'pediatria' | 'neurologia' | 'saude_mental' | 'gerontologia' | 'reabilitacao_fisica' | 'hospitalar'
   >('pediatria');
-
-  // Prancha de Comunicação CAA
-  const [isAACBoardModalOpen, setIsAACBoardModalOpen] = useState(false);
 
   // Modais especializados de TO
   const [isTaskAnalysisOpen, setIsTaskAnalysisOpen] = useState(false);
@@ -539,13 +534,6 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   // Ferramentas Clínicas Rápidas do ZemdaTO (desacopladas da trilha de abas)
   const toQuickTools: ClinicalQuickToolItem[] = [
     {
-      id: 'aac_board',
-      label: 'Prancha CAA',
-      icon: MessageSquareHeart,
-      highlight: practiceArea === 'comunicacao_linguagem',
-      onClick: () => setIsAACBoardModalOpen(true)
-    },
-    {
       id: 'task_analysis',
       label: 'Análise de Tarefas',
       icon: Activity,
@@ -606,7 +594,6 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             >
               <option value="pediatria">Pediatria e Desenvolvimento Infantil</option>
               <option value="neurologia">Neurologia Adulto / Infantil</option>
-              <option value="comunicacao_linguagem">Comunicação e Linguagem / CAA</option>
               <option value="saude_mental">Saúde Mental e Psicossocial</option>
               <option value="gerontologia">Gerontologia / Saúde do Idoso</option>
               <option value="reabilitacao_fisica">Reabilitação Física / Membro Superior</option>
@@ -696,32 +683,6 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
         ) : (
           <div className="max-w-6xl mx-auto space-y-6">
 
-            {/* BANNER CLÍNICO QUANDO A ÁREA DE COMUNICAÇÃO E LINGUAGEM ESTIVER SELECIONADA */}
-            {practiceArea === 'comunicacao_linguagem' && (
-              <div className="bg-gradient-to-r from-purple-50 via-teal-50 to-white border border-purple-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-purple-600 text-white shadow-xs">
-                    <MessageSquareHeart className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-800">
-                      Área Clínica Ativa: Comunicação e Linguagem / CAA
-                    </h4>
-                    <p className="text-[11px] text-slate-600">
-                      Recursos de Comunicação Aumentativa e Alternativa habilitados para o fluxo e conduta do paciente.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAACBoardModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer active:scale-95 shrink-0"
-                >
-                  <MessageSquareHeart className="w-4 h-4" />
-                  <span>Abrir Prancha de Comunicação CAA</span>
-                </button>
-              </div>
-            )}
 
             {/* ABA 0: PAINEL FUNCIONAL LONGITUDINAL */}
             {activeTab === 'dashboard' && (
@@ -1224,42 +1185,12 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                   </div>
                 </div>
 
-                {/* PRANCHA DE COMUNICAÇÃO CAA (ALTA E BAIXA TECNOLOGIA) */}
-                <div className="p-4 sm:p-5 bg-gradient-to-r from-purple-50 via-teal-50/40 to-white border border-purple-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-                  <div className="flex items-start sm:items-center gap-3.5">
-                    <div className="p-3 rounded-2xl bg-purple-600 text-white shadow-sm shrink-0">
-                      <MessageSquareHeart className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-black text-slate-800">
-                          Prancha de Comunicação Alternativa (CAA)
-                        </h4>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-100 text-purple-700">
-                          Alta & Baixa Tecnologia
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-600 mt-0.5">
-                        Prancha interativa estruturada com Chave Fitzgerald, síntese de voz (TTS), navegação dinâmica e modo de impressão A4.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsAACBoardModalOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95 shrink-0"
-                  >
-                    <MessageSquareHeart className="w-4 h-4" />
-                    <span>Abrir Prancha de Comunicação</span>
-                  </button>
-                </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Tipo de Recurso / Órtese</label>
                     <input
                       type="text"
-                      placeholder="Ex: Órtese de punho termoplástica, engrossador de talher, prancha CAA..."
+                      placeholder="Ex: Órtese de punho termoplástica, engrossador de talher, adaptação de tesoura..."
                       value={assistiveForm.resourceType}
                       onChange={e => setAssistiveForm({ ...assistiveForm, resourceType: e.target.value })}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 focus:outline-none transition-all"
@@ -1487,16 +1418,6 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             onRecoverServer={() => autosave.resolveConflict('server')}
             onKeepCurrent={() => autosave.resolveConflict('local')}
           />
-
-          {/* PRANCHA DE COMUNICAÇÃO CAA INTEGRADA */}
-          {isAACBoardModalOpen && (
-            <AACBoardModal
-              isOpen={isAACBoardModalOpen}
-              onClose={() => setIsAACBoardModalOpen(false)}
-              patientId={selectedPatientId}
-              patientName={selectedPatient?.full_name}
-            />
-          )}
         </>
       )}
     </div>

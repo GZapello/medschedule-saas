@@ -14,9 +14,7 @@ import { ZemdaPersonalView } from '../personal/ZemdaPersonalView';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
-import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, MessageSquareHeart } from 'lucide-react';
-
-const LazyAACBoardModal = React.lazy(() => import('../aac/AACBoardModal'));
+import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell } from 'lucide-react';
 
 export function AppointmentConsultation({
   appointment,
@@ -54,7 +52,6 @@ export function AppointmentConsultation({
   } = useAuth();
   const [status, setStatus] = useState<any>(null);
   const [error, setError] = useState('');
-  const [showAACBoard, setShowAACBoard] = useState(false);
 
   const deducedModuleFromProfession =
     (isDoctor || isZemdaMed || (currentUser?.professionName || '').toLowerCase().includes('médic') || (currentUser?.professionName || '').toLowerCase().includes('medic') || (appointment.service_name || '').toLowerCase().includes('médic')) ? 'ZemdaMed' :
@@ -177,17 +174,6 @@ export function AppointmentConsultation({
             >
               <Activity className="w-3.5 h-3.5" /> ZemdaBody (Mapa Corporal)
             </button>
-
-            {hasCapability('AAC_BOARD_USE') && (
-              <button
-                type="button"
-                onClick={() => setShowAACBoard(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 cursor-pointer"
-                title="Abrir Prancha de Comunicação CAA"
-              >
-                <MessageSquareHeart className="w-3.5 h-3.5 text-purple-600" /> Prancha CAA
-              </button>
-            )}
           </div>
         </div>
 
@@ -201,17 +187,6 @@ export function AppointmentConsultation({
             onClose={onClose}
           />
         </div>
-
-        {showAACBoard && (
-          <React.Suspense fallback={null}>
-            <LazyAACBoardModal
-              isOpen={showAACBoard}
-              onClose={() => setShowAACBoard(false)}
-              patientId={appointment.patient_id}
-              patientName={appointment.patient_name}
-            />
-          </React.Suspense>
-        )}
       </div>
     );
   }
@@ -254,16 +229,6 @@ export function AppointmentConsultation({
                   <Activity className="w-3.5 h-3.5" /> ZemdaBody
                 </button>
               )}
-              {hasCapability('AAC_BOARD_USE') && (
-                <button
-                  type="button"
-                  onClick={() => setShowAACBoard(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 cursor-pointer"
-                  title="Abrir Prancha de Comunicação CAA"
-                >
-                  <MessageSquareHeart className="w-3.5 h-3.5 text-purple-600" /> Prancha CAA
-                </button>
-              )}
             </div>
           </div>
           <div className="p-4 sm:p-6 max-w-7xl mx-auto">
@@ -273,16 +238,6 @@ export function AppointmentConsultation({
               lockStudentContext={true}
             />
           </div>
-          {showAACBoard && (
-            <React.Suspense fallback={null}>
-              <LazyAACBoardModal
-                isOpen={showAACBoard}
-                onClose={() => setShowAACBoard(false)}
-                patientId={appointment.patient_id}
-                patientName={appointment.patient_name}
-              />
-            </React.Suspense>
-          )}
         </div>
       );
     }
@@ -322,16 +277,6 @@ export function AppointmentConsultation({
                 <Activity className="w-3.5 h-3.5" /> ZemdaBody
               </button>
             )}
-            {hasCapability('AAC_BOARD_USE') && (
-              <button
-                type="button"
-                onClick={() => setShowAACBoard(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 cursor-pointer"
-                title="Abrir Prancha de Comunicação CAA"
-              >
-                <MessageSquareHeart className="w-3.5 h-3.5 text-purple-600" /> Prancha CAA
-              </button>
-            )}
           </div>
         </div>
         <Workspace
@@ -340,16 +285,6 @@ export function AppointmentConsultation({
           initialAppointmentId={appointment.id}
           onFinishConsultation={onFinished}
         />
-        {showAACBoard && (
-          <React.Suspense fallback={null}>
-            <LazyAACBoardModal
-              isOpen={showAACBoard}
-              onClose={() => setShowAACBoard(false)}
-              patientId={appointment.patient_id}
-              patientName={appointment.patient_name}
-            />
-          </React.Suspense>
-        )}
       </div>
     );
   }
@@ -381,16 +316,6 @@ export function AppointmentConsultation({
           (isDoctor || isZemdaMed ? 'ZemdaMed' : isPersonalTrainer || isZemdaPersonal ? 'ZemdaPersonal' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
         }
       />
-      {showAACBoard && (
-        <React.Suspense fallback={null}>
-          <LazyAACBoardModal
-            isOpen={showAACBoard}
-            onClose={() => setShowAACBoard(false)}
-            patientId={appointment.patient_id}
-            patientName={appointment.patient_name}
-          />
-        </React.Suspense>
-      )}
     </>
   );
 }

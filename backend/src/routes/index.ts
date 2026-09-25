@@ -54,7 +54,6 @@ import { ClinicalDraftController } from '../controllers/clinical-draft.controlle
 import { CapabilityController } from '../controllers/capability.controller';
 import { MedicalController } from '../controllers/medical.controller';
 import { SandboxController } from '../controllers/sandbox.controller';
-import { AACController } from '../controllers/aac.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -538,15 +537,13 @@ api.get('/v1/speech-therapy/complementary-tests/:patientId', requireTenant, requ
 api.post('/v1/speech-therapy/complementary-tests', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveComplementaryTest);
 api.delete('/v1/speech-therapy/complementary-tests/:id', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.deleteComplementaryTest);
 
-// Itens Novos: Matriz de Disfagia, Processos Fonológicos, Amostras de Fluência, CAA/AAC, Análise de Linguagem
+// Itens Novos: Matriz de Disfagia, Processos Fonológicos, Amostras de Fluência, Análise de Linguagem
 api.get('/v1/speech-therapy/dysphagia-matrix/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getDysphagiaMatrix);
 api.post('/v1/speech-therapy/dysphagia-matrix', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveDysphagiaMatrix);
 api.get('/v1/speech-therapy/phonological-processes/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonologicalProcesses);
 api.post('/v1/speech-therapy/phonological-processes', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.savePhonologicalProcesses);
 api.get('/v1/speech-therapy/fluency-samples/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listFluencySamples);
 api.post('/v1/speech-therapy/fluency-samples', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveFluencySample);
-api.get('/v1/speech-therapy/aac/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.listAacRecords);
-api.post('/v1/speech-therapy/aac', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.saveAacRecord);
 api.post('/v1/speech-therapy/analyze-language', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.analyzeLanguageSample);
 
 // Melhorias Clínicas ZemdaFono (FOIS, IDV-10, Rastreio Leitura/Escrita, ABFW, PAC, Fonologia Longitudinal)
@@ -573,36 +570,6 @@ api.get('/v1/speech-therapy/phonemes/history/:patientId', requireTenant, require
 api.get('/v1/speech-therapy/phonemes/:patientId/history', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.getPhonemesHistory);
 
 api.post('/v1/speech-therapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), SpeechTherapyController.finishConsultation);
-
-// ==========================================
-// PRANCHA DE COMUNICAÇÃO CAA (TRANSVERSAL UNIVERSAL)
-// ==========================================
-// Leitura e Uso da Prancha: requer AAC_BOARD_USE
-api.get('/v1/aac/boards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_USE'), AACController.listBoards);
-api.get('/v1/aac/boards/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_USE'), AACController.getBoard);
-
-// Gestão e Edição da Prancha: requer AAC_BOARD_MANAGE
-api.post('/v1/aac/boards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.createBoard);
-api.put('/v1/aac/boards/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.updateBoard);
-api.post('/v1/aac/boards/:id/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.duplicateBoard);
-api.delete('/v1/aac/boards/:id', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.deleteBoard);
-
-// Gestão de Páginas: requer AAC_BOARD_MANAGE
-api.post('/v1/aac/boards/:boardId/pages', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.createPage);
-api.put('/v1/aac/boards/:boardId/pages/:pageId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.updatePage);
-api.post('/v1/aac/boards/:boardId/pages/:pageId/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.duplicatePage);
-api.post('/v1/aac/boards/:boardId/reorder-pages', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.reorderPages);
-api.delete('/v1/aac/boards/:boardId/pages/:pageId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.deletePage);
-
-// Gestão de Cartões: requer AAC_BOARD_MANAGE
-api.post('/v1/aac/boards/:boardId/cards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.createCard);
-api.put('/v1/aac/boards/:boardId/cards/:cardId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.updateCard);
-api.post('/v1/aac/boards/:boardId/cards/:cardId/duplicate', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.duplicateCard);
-api.delete('/v1/aac/boards/:boardId/cards/:cardId', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.deleteCard);
-api.post('/v1/aac/boards/:boardId/reorder-cards', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.reorderCards);
-
-// Upload de imagens personalizadas de cartões: requer AAC_BOARD_MANAGE
-api.post('/v1/aac/upload-image', requireTenant, requireRole('clinic_admin', 'professional'), requireCapability('AAC_BOARD_MANAGE'), AACController.uploadImage);
 
 // ==========================================
 // RASCUNHOS CLÍNICOS UNIVERSAIS (AUTOSAVE EM TODOS OS MÓDULOS)

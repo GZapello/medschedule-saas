@@ -417,61 +417,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.getItem('sandbox_backup_token')
   );
 
-  // REGRA OBRIGATÓRIA: Todo usuário cuja profissão canônica seja prof-fonoaudiologo ou cujo commercialModule seja ZemdaFono
-  // deve receber automaticamente como DEFAULT: AAC_BOARD_USE e AAC_BOARD_MANAGE
-  const isFonoProfile = Boolean(
-    isSpeechTherapist ||
-    isZemdaFono ||
-    commercialModule === 'ZemdaFono' ||
-    currentUser?.canonicalProfessionId === 'prof-fonoaudiologo' ||
-    currentUser?.canonicalProfessionId === 'prof-fonoaudiologia' ||
-    profId === 'prof-fonoaudiologo' ||
-    profId === 'prof-fonoaudiologia' ||
-    (currentUser?.professionName || '').toLowerCase().includes('fono') ||
-    (currentUser?.name || '').toLowerCase().includes('fono') ||
-    Boolean(currentUser?.zemdaFonoEnabled)
-  );
-
-  // REGRA PARA TERAPIA OCUPACIONAL:
-  // Profissionais de TO com área/especialidade Comunicação e Linguagem ou Tecnologia Assistiva
-  // têm acesso automático à Prancha de Comunicação CAA (AAC_BOARD_USE e AAC_BOARD_MANAGE)
-  const isTOProfile = Boolean(
-    isOccupationalTherapist ||
-    isZemdaTO ||
-    commercialModule === 'ZemdaTO' ||
-    currentUser?.canonicalProfessionId === 'prof-terapeuta-ocupacional' ||
-    profId === 'prof-terapeuta-ocupacional' ||
-    (currentUser?.professionName || '').toLowerCase().includes('ocupacional') ||
-    Boolean(currentUser?.zemdaToEnabled)
-  );
-
-  const hasTOCommFocus = isTOProfile && (
-    practiceAreaIds.some(id =>
-      id.includes('comunicacao') ||
-      id.includes('linguagem') ||
-      id.includes('tec-assistiva') ||
-      id.includes('caa')
-    ) ||
-    capabilities.includes('COMMUNICATION_ASSESSMENT') ||
-    capabilities.includes('AAC_COMMUNICATION') ||
-    Boolean((currentUser as any)?.specialtyCustom?.toLowerCase().includes('comunica')) ||
-    Boolean((currentUser as any)?.specialtyCustom?.toLowerCase().includes('linguagem')) ||
-    Boolean((currentUser as any)?.specialtyCustom?.toLowerCase().includes('assistiva')) ||
-    Boolean((currentUser as any)?.specialtyCustom?.toLowerCase().includes('caa'))
-  );
-
-  const hasAACBoardAccess = isFonoProfile || hasTOCommFocus;
-
-  const effectiveCapabilities = hasAACBoardAccess
-    ? Array.from(new Set([...capabilities, 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE']))
-    : capabilities;
-
   const hasCapability = (capId: string): boolean => {
     if (isSuperAdmin && !isSandboxSession) return true;
-    if ((capId === 'AAC_BOARD_USE' || capId === 'AAC_BOARD_MANAGE') && hasAACBoardAccess) {
-      return true;
-    }
-    return effectiveCapabilities.includes(capId);
+    return capabilities.includes(capId);
   };
 
   const clientTermLabel = (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
@@ -520,7 +468,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         taxonomyCategory: currentUser?.taxonomyCategory,
         canonicalProfessionId: currentUser?.canonicalProfessionId || currentUser?.professionId || null,
         canonicalProfessionName: currentUser?.canonicalProfessionName || currentUser?.professionName || null,
-        capabilities: effectiveCapabilities,
+        capabilities,
         practiceAreaIds,
         selectedOptionalCapabilities,
         hasCapability,

@@ -193,9 +193,6 @@ function seedCapabilities(rawDb: DatabaseSync): void {
 
     // COMMUNICATION
     { id: 'COMMUNICATION_ASSESSMENT', category: 'COMMUNICATION', name: 'Comunicação & Linguagem', description: 'Desenvolvimento comunicativo, fala e linguagem' },
-    { id: 'AAC_COMMUNICATION', category: 'COMMUNICATION', name: 'Comunicação Alternativa (CAA)', description: 'Sistemas e recursos de CAA' },
-    { id: 'AAC_BOARD_USE', category: 'COMMUNICATION', name: 'Prancha CAA (Utilização)', description: 'Permite abrir, navegar, reproduzir voz e utilizar pranchas de CAA em consultas' },
-    { id: 'AAC_BOARD_MANAGE', category: 'COMMUNICATION', name: 'Prancha CAA (Gestão e Edição)', description: 'Permite criar, editar, personalizar, duplicar e excluir pranchas, páginas e cartões de CAA' },
     { id: 'AUDIOLOGY', category: 'COMMUNICATION', name: 'Audiologia Clínica', description: 'Audiometria tonal, vocal e imitanciometria' },
 
     // LEARNING
@@ -338,7 +335,6 @@ function seedPracticeAreas(rawDb: DatabaseSync): void {
     { id: 'pa-fono-disfagia', professionId: 'prof-fonoaudiologo', name: 'Disfagia', slug: 'disfagia', type: 'SPECIALTY' },
     { id: 'pa-fono-fluencia', professionId: 'prof-fonoaudiologo', name: 'Fluência', slug: 'fluencia', type: 'SPECIALTY' },
     { id: 'pa-fono-aprendizagem', professionId: 'prof-fonoaudiologo', name: 'Aprendizagem', slug: 'aprendizagem', type: 'AREA' },
-    { id: 'pa-fono-comunicacao', professionId: 'prof-fonoaudiologo', name: 'Comunicação Aumentativa (CAA)', slug: 'comunicacao-caa', type: 'APPROACH' },
     { id: 'pa-fono-tea', professionId: 'prof-fonoaudiologo', name: 'TEA (Transtorno do Espectro Autista)', slug: 'tea', type: 'AREA' },
     { id: 'pa-fono-aba', professionId: 'prof-fonoaudiologo', name: 'Abordagem ABA', slug: 'abordagem-aba', type: 'METHOD' },
     { id: 'pa-fono-outro', professionId: 'prof-fonoaudiologo', name: 'Outra área de Fonoaudiologia', slug: 'outra-area-fono', type: 'AREA' },
@@ -578,13 +574,13 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   // 1. Fisioterapia
   const fisioDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'BODY_MAP', 'PAIN_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'FUNCTIONAL_ASSESSMENT', 'POSTURE_GAIT', 'FUNCTIONAL_TESTS', 'HOME_EXERCISES'];
   const fisioOptionals = ['ANTHROPOMETRY', 'BODY_COMPOSITION', 'PHYSICAL_ASSESSMENT', 'ADL_ASSESSMENT'];
-  const fisioHiddens = ['ODONTO_SPECIFIC', 'AUDIOLOGY', 'AAC_COMMUNICATION', 'MEDICAL_BASE', 'MEDICAL_NEURO', 'MEDICAL_VITAL_SIGNS'];
+  const fisioHiddens = ['ODONTO_SPECIFIC', 'AUDIOLOGY', 'MEDICAL_BASE', 'MEDICAL_NEURO', 'MEDICAL_VITAL_SIGNS'];
   fisioDefaults.forEach(c => insertProfCap.run('prof-fisioterapeuta', c, 'DEFAULT'));
   fisioOptionals.forEach(c => insertProfCap.run('prof-fisioterapeuta', c, 'OPTIONAL'));
   fisioHiddens.forEach(c => insertProfCap.run('prof-fisioterapeuta', c, 'HIDDEN'));
 
   // 2. Fonoaudiologia
-  const fonoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'COMMUNICATION_ASSESSMENT', 'FONO_SPECIFIC', 'AUDIOLOGY', 'AAC_COMMUNICATION', 'AAC_BOARD_USE', 'AAC_BOARD_MANAGE'];
+  const fonoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'COMMUNICATION_ASSESSMENT', 'FONO_SPECIFIC', 'AUDIOLOGY'];
   const fonoOptionals = ['LEARNING_ASSESSMENT', 'BODY_MAP', 'BEHAVIOR_ASSESSMENT', 'ADL_ASSESSMENT'];
   const fonoHiddens = ['ODONTO_SPECIFIC', 'TRAINING_PRESCRIBE', 'BODY_COMPOSITION', 'MEDICAL_BASE'];
   fonoDefaults.forEach(c => {
@@ -602,7 +598,7 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
 
   // 3. Terapia Ocupacional
   const toDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'ADL_ASSESSMENT', 'OCCUPATIONAL_PART', 'FUNCTIONAL_ASSESSMENT', 'SENSORY_ASSESSMENT'];
-  const toOptionals = ['BODY_MAP', 'BEHAVIOR_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'COMMUNICATION_ASSESSMENT', 'AAC_COMMUNICATION', 'ANTHROPOMETRY'];
+  const toOptionals = ['BODY_MAP', 'BEHAVIOR_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'COMMUNICATION_ASSESSMENT', 'ANTHROPOMETRY'];
   const toHiddens = ['ODONTO_SPECIFIC', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE'];
   toDefaults.forEach(c => insertProfCap.run('prof-terapeuta-ocupacional', c, 'DEFAULT'));
   toOptionals.forEach(c => insertProfCap.run('prof-terapeuta-ocupacional', c, 'OPTIONAL'));
@@ -627,7 +623,7 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   // 6. Nutrição
   const nutriDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'NUTRITION_SPECIFIC', 'ANTHROPOMETRY', 'BODY_COMPOSITION'];
   const nutriOptionals = ['BODY_MAP', 'BEHAVIOR_ASSESSMENT', 'PHYSICAL_ASSESSMENT'];
-  const nutriHiddens = ['ODONTO_SPECIFIC', 'AUDIOLOGY', 'AAC_COMMUNICATION', 'MEDICAL_BASE'];
+  const nutriHiddens = ['ODONTO_SPECIFIC', 'AUDIOLOGY', 'MEDICAL_BASE'];
   nutriDefaults.forEach(c => insertProfCap.run('prof-nutricionista', c, 'DEFAULT'));
   nutriOptionals.forEach(c => insertProfCap.run('prof-nutricionista', c, 'OPTIONAL'));
   nutriHiddens.forEach(c => insertProfCap.run('prof-nutricionista', c, 'HIDDEN'));
@@ -635,7 +631,7 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   // 7. Personal Trainer
   const personalDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'TRAINING_PRESCRIBE', 'PHYSICAL_ASSESSMENT', 'ANTHROPOMETRY', 'BODY_COMPOSITION', 'BODY_MAP'];
   const personalOptionals = ['POSTURE_GAIT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH'];
-  const personalHiddens = ['ODONTO_SPECIFIC', 'AUDIOLOGY', 'AAC_COMMUNICATION', 'MEDICAL_BASE', 'CORE_PRESCRIPTIONS'];
+  const personalHiddens = ['ODONTO_SPECIFIC', 'AUDIOLOGY', 'MEDICAL_BASE', 'CORE_PRESCRIPTIONS'];
   personalDefaults.forEach(c => insertProfCap.run('prof-personal-trainer', c, 'DEFAULT'));
   personalOptionals.forEach(c => insertProfCap.run('prof-personal-trainer', c, 'OPTIONAL'));
   personalHiddens.forEach(c => insertProfCap.run('prof-personal-trainer', c, 'HIDDEN'));
@@ -818,11 +814,10 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
     insertAreaCap.run('pa-fono-fluencia', c, 'DEFAULT');
   });
   ['FONO_SPECIFIC', 'ADL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fono-disfagia', c, 'DEFAULT'));
-  ['COMMUNICATION_ASSESSMENT', 'AAC_COMMUNICATION', 'BEHAVIOR_ASSESSMENT', 'FONO_SPECIFIC'].forEach(c => {
+  ['COMMUNICATION_ASSESSMENT', 'BEHAVIOR_ASSESSMENT', 'FONO_SPECIFIC'].forEach(c => {
     insertAreaCap.run('pa-fono-tea', c, 'DEFAULT');
     insertAreaCap.run('pa-fono-aba', c, 'DEFAULT');
   });
-  ['AAC_COMMUNICATION', 'COMMUNICATION_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fono-comunicacao', c, 'DEFAULT'));
   ['LEARNING_ASSESSMENT', 'COMMUNICATION_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-fono-aprendizagem', c, 'DEFAULT'));
 
   // Presets - Terapia Ocupacional
@@ -839,7 +834,7 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   });
   ['ADL_ASSESSMENT', 'OCCUPATIONAL_PART', 'FUNCTIONAL_ASSESSMENT', 'SENSORY_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-to-geronto', c, 'DEFAULT'));
   ['OCCUPATIONAL_PART', 'ADL_ASSESSMENT', 'BEHAVIOR_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-to-mental', c, 'DEFAULT'));
-  ['OCCUPATIONAL_PART', 'ADL_ASSESSMENT', 'AAC_COMMUNICATION'].forEach(c => insertAreaCap.run('pa-to-tec-assistiva', c, 'DEFAULT'));
+  ['OCCUPATIONAL_PART', 'ADL_ASSESSMENT'].forEach(c => insertAreaCap.run('pa-to-tec-assistiva', c, 'DEFAULT'));
   ['BEHAVIOR_ASSESSMENT', 'ADL_ASSESSMENT', 'OCCUPATIONAL_PART'].forEach(c => insertAreaCap.run('pa-to-aba', c, 'DEFAULT'));
 
   // Presets - Psicologia

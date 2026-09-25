@@ -250,7 +250,7 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
     "slug": "sistema-para-fonoaudiologos",
     "path": "/sistema-para-fonoaudiologos",
     "title": "Sistema para Fonoaudiólogos | ZemdaFono",
-    "metaDescription": "ZemdaFono reúne fonologia, linguagem, voz, audiologia, disfagia, CAA e evolução clínica em um prontuário conectado à agenda e à gestão do consultório.",
+    "metaDescription": "ZemdaFono reúne fonologia, linguagem, voz, audiologia, disfagia e evolução clínica em um prontuário conectado à agenda e à gestão do consultório.",
     "badge": "ZemdaFono",
     "h1": "Avaliação e evolução com o ZemdaFono",
     "h2": "Fonologia, linguagem e voz",
@@ -265,8 +265,8 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
         "description": "O módulo dispõe de registros de motricidade orofacial, disfagia e IDDSI, além de audiologia e audiograma. Os recursos documentam a avaliação conduzida pelo profissional e não determinam diagnóstico ou conduta automaticamente."
       },
       {
-        "title": "CAA, metas e plano terapêutico",
-        "description": "Organize comunicação aumentativa e alternativa, objetivos e evolução clínica. Ao registrar a sessão, explicite a atividade realizada e a resposta observada; confira o salvamento antes de finalizar."
+        "title": "Metas e plano terapêutico",
+        "description": "Organize objetivos e evolução clínica. Ao registrar a sessão, explicite a atividade realizada e a resposta observada; confira o salvamento antes de finalizar."
       }
     ],
     "sections": [

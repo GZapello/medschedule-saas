@@ -262,33 +262,7 @@ export function migrateLongitudinalClinical(rawDb: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_fluency_samp_patient ON fono_fluency_samples(tenant_id, patient_id);
   `);
 
-  // 12. Comunicação Aumentativa e Alternativa - CAA (ZemdaFono)
-  rawDb.exec(`
-    CREATE TABLE IF NOT EXISTS fono_aac_records (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      patient_id TEXT NOT NULL,
-      professional_id TEXT,
-      system_used TEXT NOT NULL,
-      modality TEXT,
-      access_method TEXT,
-      symbols_type TEXT,
-      vocabulary_details TEXT,
-      communicative_intention TEXT,
-      support_level TEXT,
-      communication_partners TEXT,
-      environments TEXT,
-      evolution_level TEXT NOT NULL DEFAULT 'emergent',
-      notes TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-      FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_aac_rec_patient ON fono_aac_records(tenant_id, patient_id);
-  `);
-
-  // 13. Matriz de Consistências e Disfagia (ZemdaFono)
+  // 12. Matriz de Consistências e Disfagia (ZemdaFono)
   rawDb.exec(`
     CREATE TABLE IF NOT EXISTS fono_dysphagia_matrix (
       id TEXT PRIMARY KEY,

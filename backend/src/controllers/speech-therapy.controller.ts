@@ -192,7 +192,6 @@ export class SpeechTherapyController {
         morphosyntax: row.morphosyntax || '',
         narrativeDiscourse: row.narrative || '',
         functionalComm: row.functional_comm || '',
-        aacDetails: row.aac_details || '',
         notes: row.notes || ''
       };
 
@@ -230,7 +229,6 @@ export class SpeechTherapyController {
       const pragmatics = raw.pragmatics || null;
       const narrative = raw.narrative || raw.narrativeDiscourse || null;
       const functionalComm = raw.functionalComm || raw.functional_comm || null;
-      const aacDetails = raw.aacDetails || raw.aac_details || null;
       const notes = raw.notes || null;
 
       let profId: string | null = null;
@@ -244,12 +242,12 @@ export class SpeechTherapyController {
         INSERT INTO fono_language_assessments (
           id, tenant_id, patient_id, professional_id, appointment_id,
           comprehension, expression, vocabulary, semantics, morphosyntax,
-          pragmatics, narrative, functional_comm, aac_details, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          pragmatics, narrative, functional_comm, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
         comprehension, expression, vocabulary, semantics, morphosyntax,
-        pragmatics, narrative, functionalComm, aacDetails, notes
+        pragmatics, narrative, functionalComm, notes
       );
 
       res.status(201).json({ id, message: 'Avaliação de linguagem registrada com sucesso' });
@@ -925,74 +923,6 @@ export class SpeechTherapyController {
       });
     } catch (err: any) {
       res.status(500).json({ error: 'Erro ao salvar amostra de fluência' });
-    }
-  }
-
-  // 7.4 COMUNICAÇÃO AUMENTATIVA E ALTERNATIVA - CAA (Item 42)
-  static listAacRecords(req: Request, res: Response): void {
-    try {
-      const patientId = String(req.params.patientId);
-      const tenantId = req.tenantId;
-      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
-        res.status(403).json({ error: 'Acesso restrito' });
-        return;
-      }
-
-      const rows = db.prepare(`
-        SELECT * FROM fono_aac_records
-        WHERE patient_id = ? AND tenant_id = ?
-        ORDER BY created_at DESC
-      `).all(patientId, tenantId) as any[];
-
-      res.json(rows);
-    } catch (err: any) {
-      res.status(500).json({ error: 'Erro ao buscar registros de CAA' });
-    }
-  }
-
-  static saveAacRecord(req: Request, res: Response): void {
-    try {
-      const tenantId = req.tenantId;
-      if (!isSpeechTherapistOrClinicManager(req)) {
-        res.status(403).json({ error: 'Acesso restrito' });
-        return;
-      }
-
-      const {
-        patientId, systemUsed, modality, accessMethod, symbolsType,
-        vocabularyDetails, communicativeIntention, supportLevel,
-        communicationPartners, environments, evolutionLevel = 'emergent', notes
-      } = req.body;
-
-      if (!patientId || !systemUsed) {
-        res.status(400).json({ error: 'patientId e systemUsed são obrigatórios' });
-        return;
-      }
-
-      let profId: string | null = null;
-      if (req.user?.role === 'professional') {
-        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
-        if (prof) profId = prof.id;
-      }
-
-      const id = 'f-aac-' + uuidv4().slice(0, 8);
-      db.prepare(`
-        INSERT INTO fono_aac_records (
-          id, tenant_id, patient_id, professional_id, system_used,
-          modality, access_method, symbols_type, vocabulary_details,
-          communicative_intention, support_level, communication_partners,
-          environments, evolution_level, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id, tenantId, patientId, profId, systemUsed,
-        modality || null, accessMethod || null, symbolsType || null, vocabularyDetails || null,
-        communicativeIntention || null, supportLevel || null, communicationPartners || null,
-        environments || null, evolutionLevel, notes || null
-      );
-
-      res.status(201).json({ id, message: 'Registro de CAA cadastrado com sucesso' });
-    } catch (err: any) {
-      res.status(500).json({ error: 'Erro ao salvar registro de CAA' });
     }
   }
 

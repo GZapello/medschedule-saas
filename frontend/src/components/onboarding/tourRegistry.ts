@@ -395,7 +395,7 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
         target: '[data-tour="clinical-tools"]',
         route: 'zemda-fono',
         title: 'Ferramentas Fonoaudiológicas',
-        description: 'Menu rápido com relatórios de IA, gestor CAA e testes complementares.',
+        description: 'Menu rápido com relatórios de IA e testes complementares.',
         position: 'bottom',
         hideIfNoTarget: true
       },

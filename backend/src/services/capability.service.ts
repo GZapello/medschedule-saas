@@ -422,19 +422,6 @@ export class CapabilityService {
       (userRow?.p_spec_custom || '').toLowerCase().includes('terapia ocupacional') ||
       (userRow?.prof_name || '').toLowerCase().includes('terapia ocupacional');
 
-    const hasTOCommFocus = isTOSignal && (
-      (userRow?.p_spec_custom || '').toLowerCase().includes('comunica') ||
-      (userRow?.p_spec_custom || '').toLowerCase().includes('linguagem') ||
-      (userRow?.p_spec_custom || '').toLowerCase().includes('assistiva') ||
-      (userRow?.p_spec_custom || '').toLowerCase().includes('caa') ||
-      (userRow?.cu_prof_custom || '').toLowerCase().includes('comunica') ||
-      (userRow?.cu_prof_custom || '').toLowerCase().includes('linguagem')
-    );
-
-    if (hasTOCommFocus && !userAreaIds.includes('pa-to-comunicacao')) {
-      userAreaIds.push('pa-to-comunicacao');
-    }
-
     // Se for médico, busca a hierarquia clínica médica (Especialidades e Áreas)
     let medSpecIds: string[] | undefined = undefined;
     let medPaIds: string[] | undefined = undefined;
@@ -518,45 +505,6 @@ export class CapabilityService {
       else if (r.rule === 'HIDDEN') hiddenCapsSet.add(r.capability_id);
     }
 
-    // REGRA OBRIGATÓRIA: Todo usuário cuja profissão canônica seja prof-fonoaudiologo ou cujo commercialModule seja ZemdaFono
-    // DEVE receber automaticamente como DEFAULT: AAC_BOARD_USE e AAC_BOARD_MANAGE sem ativação manual e sem permissão do gerente.
-    if (professionId === 'prof-fonoaudiologo' || commercialModule === 'ZemdaFono') {
-      defaultCapsSet.add('AAC_BOARD_USE');
-      defaultCapsSet.add('AAC_BOARD_MANAGE');
-      hiddenCapsSet.delete('AAC_BOARD_USE');
-      hiddenCapsSet.delete('AAC_BOARD_MANAGE');
-      optionalCapsSet.delete('AAC_BOARD_USE');
-      optionalCapsSet.delete('AAC_BOARD_MANAGE');
-    }
-
-    // REGRA PARA TERAPIA OCUPACIONAL (ZemdaTO / prof-terapeuta-ocupacional):
-    // Quando houver compatibilidade clínica de Comunicação e Linguagem ou Tecnologia Assistiva (ou se selecionada),
-    // recebe automaticamente como DEFAULT: AAC_BOARD_USE e AAC_BOARD_MANAGE sem bloqueio de permissão.
-    const isTO = professionId === 'prof-terapeuta-ocupacional' || commercialModule === 'ZemdaTO';
-    const hasTOCommCompatibility = isTO && (
-      practiceAreaIds.some(id =>
-        id.includes('comunicacao') ||
-        id.includes('linguagem') ||
-        id.includes('tec-assistiva') ||
-        id.includes('caa') ||
-        id === 'pa-to-comunicacao' ||
-        id === 'pa-to-tec-assistiva'
-      ) ||
-      defaultCapsSet.has('COMMUNICATION_ASSESSMENT') ||
-      defaultCapsSet.has('AAC_COMMUNICATION') ||
-      selectedOptionalCapabilities.includes('AAC_BOARD_USE') ||
-      selectedOptionalCapabilities.includes('COMMUNICATION_ASSESSMENT')
-    );
-
-    if (isTO && hasTOCommCompatibility) {
-      defaultCapsSet.add('AAC_BOARD_USE');
-      defaultCapsSet.add('AAC_BOARD_MANAGE');
-      hiddenCapsSet.delete('AAC_BOARD_USE');
-      hiddenCapsSet.delete('AAC_BOARD_MANAGE');
-      optionalCapsSet.delete('AAC_BOARD_USE');
-      optionalCapsSet.delete('AAC_BOARD_MANAGE');
-    }
-
     // Regras das Áreas de Atuação Selecionadas (Catálogo Geral)
     if (practiceAreaIds && practiceAreaIds.length > 0) {
       const placeholders = practiceAreaIds.map(() => '?').join(',');
@@ -619,12 +567,6 @@ export class CapabilityService {
     // União inteligente: Defaults + Opcionais Ativados
     const activeCapsSet = new Set<string>([...defaultCapsSet, ...activeOptionals]);
 
-    // Garantia estrita pós-união para Fonoaudiologia e Terapia Ocupacional compatível
-    if (professionId === 'prof-fonoaudiologo' || commercialModule === 'ZemdaFono' || (isTO && hasTOCommCompatibility)) {
-      activeCapsSet.add('AAC_BOARD_USE');
-      activeCapsSet.add('AAC_BOARD_MANAGE');
-    }
-
     // Respeito ao Plano Comercial
     const planRestrictedList: { capabilityId: string; requiredPlan: string }[] = [];
     if (params.planCode && params.planCode !== 'ALL') {
@@ -637,23 +579,10 @@ export class CapabilityService {
       const allowedPlanCaps = new Set(planCaps.map(p => p.capability_id));
       for (const cap of Array.from(activeCapsSet)) {
         if (allowedPlanCaps.size > 0 && !allowedPlanCaps.has(cap)) {
-          // AAC_BOARD_USE e AAC_BOARD_MANAGE não podem ser restritas para Fonoaudiologia ou TO compatível
-          if ((cap === 'AAC_BOARD_USE' || cap === 'AAC_BOARD_MANAGE') &&
-              (professionId === 'prof-fonoaudiologo' || commercialModule === 'ZemdaFono' || (isTO && hasTOCommCompatibility))) {
-            continue;
-          }
           activeCapsSet.delete(cap);
           planRestrictedList.push({ capabilityId: cap, requiredPlan: 'CLINIC' });
         }
       }
-    }
-
-    // Reafirmação final das capabilities de CAA para Fonoaudiologia e TO compatível
-    if (professionId === 'prof-fonoaudiologo' || commercialModule === 'ZemdaFono' || (isTO && hasTOCommCompatibility)) {
-      activeCapsSet.add('AAC_BOARD_USE');
-      activeCapsSet.add('AAC_BOARD_MANAGE');
-      defaultCapsSet.add('AAC_BOARD_USE');
-      defaultCapsSet.add('AAC_BOARD_MANAGE');
     }
 
     return {
@@ -678,27 +607,6 @@ export class CapabilityService {
    */
   public static hasCapability(userId: string, tenantId: string, capabilityId: string): boolean {
     const computed = this.computeUserCapabilities(userId, tenantId);
-    if (computed.activeCapabilities.includes(capabilityId)) {
-      return true;
-    }
-    // Salvaguarda final: Se a capability for AAC_BOARD_USE ou AAC_BOARD_MANAGE:
-    // 1) Perfil ZemdaFono ou prof-fonoaudiologo: total acesso incondicional
-    // 2) Perfil ZemdaTO ou prof-terapeuta-ocupacional com compatibilidade clínica de comunicação/linguagem/tecnologia assistiva
-    if (capabilityId === 'AAC_BOARD_USE' || capabilityId === 'AAC_BOARD_MANAGE') {
-      if (computed.commercialModule === 'ZemdaFono' || computed.professionId === 'prof-fonoaudiologo') {
-        return true;
-      }
-      if (computed.commercialModule === 'ZemdaTO' || computed.professionId === 'prof-terapeuta-ocupacional') {
-        const hasComm = computed.practiceAreaIds?.some(id =>
-          id.includes('comunicacao') || id.includes('linguagem') || id.includes('tec-assistiva') || id.includes('caa')
-        ) || computed.activeCapabilities.includes('COMMUNICATION_ASSESSMENT')
-          || computed.activeCapabilities.includes('AAC_COMMUNICATION')
-          || computed.activeCapabilities.includes('OCCUPATIONAL_PART');
-        if (hasComm) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return computed.activeCapabilities.includes(capabilityId);
   }
 }

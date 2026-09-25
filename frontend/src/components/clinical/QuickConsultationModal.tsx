@@ -41,8 +41,7 @@ import {
   Apple,
   Scale,
   Hand,
-  Brain,
-  MessageSquareHeart
+  Brain
 } from 'lucide-react';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { ReferralModal } from './ReferralModal';
@@ -51,8 +50,6 @@ import { FinishConsultationModal } from './FinishConsultationModal';
 import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
 import { OdontogramCanvas, OdontogramData } from '../dentistry/OdontogramCanvas';
 import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
-
-const LazyAACBoardModal = React.lazy(() => import('../aac/AACBoardModal'));
 
 interface QuickConsultationModalProps {
   appointment: {
@@ -75,7 +72,6 @@ interface QuickConsultationModalProps {
   onClose: () => void;
   onFinished: () => void;
   onOpenZemdaBody?: () => void;
-  onOpenAACBoard?: () => void;
   onOpenSpecializedModule?: () => void;
   specializedModuleName?: string;
 }
@@ -86,7 +82,6 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   onClose,
   onFinished,
   onOpenZemdaBody,
-  onOpenAACBoard,
   onOpenSpecializedModule,
   specializedModuleName
 }) => {
@@ -199,7 +194,6 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   );
 
   const [showZemdaBodyModal, setShowZemdaBodyModal] = useState<boolean>(false);
-  const [showAACBoardModal, setShowAACBoardModal] = useState<boolean>(false);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Campos clínicos
@@ -938,25 +932,6 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               >
                 <Activity className="w-4 h-4" />
                 <span>ZemdaBody</span>
-              </button>
-            )}
-
-            {/* Botão de Acesso à Prancha CAA */}
-            {hasCapability('AAC_BOARD_USE') && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenAACBoard) {
-                    onOpenAACBoard();
-                  } else {
-                    setShowAACBoardModal(true);
-                  }
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-purple-600 hover:bg-purple-500 text-white shadow-xs transition-colors cursor-pointer"
-                title="Abrir Prancha de Comunicação CAA"
-              >
-                <MessageSquareHeart className="w-4 h-4" />
-                <span>Prancha CAA</span>
               </button>
             )}
 
@@ -2144,18 +2119,6 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
           professionalName={appointment.professional_name}
           module={effectiveModule}
         />
-      )}
-
-      {/* Modal da Prancha CAA */}
-      {showAACBoardModal && (
-        <React.Suspense fallback={null}>
-          <LazyAACBoardModal
-            isOpen={showAACBoardModal}
-            onClose={() => setShowAACBoardModal(false)}
-            patientId={appointment.patient_id}
-            patientName={patientName}
-          />
-        </React.Suspense>
       )}
 
       {/* Modal de Gerenciamento Rápido de Alergias */}

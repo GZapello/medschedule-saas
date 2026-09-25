@@ -7,7 +7,7 @@ export const LANDING_HERO = {
 
 export const LANDING_MODULES = [
   { id: 'med', name: 'ZemdaMed', profession: 'Medicina', slug: 'sistema-para-medicos', features: ['Prontuário médico e anamnese', 'Sinais vitais e acompanhamento clínico', 'Exames, medicamentos e prescrições', 'Especialidades e acompanhamento longitudinal'] },
-  { id: 'fono', name: 'ZemdaFono', profession: 'Fonoaudiologia', slug: 'sistema-para-fonoaudiologos', features: ['Fonologia e painel fonêmico', 'Linguagem, voz e gravações', 'Audiologia, disfagia e IDDSI', 'CAA, metas e histórico clínico'] },
+  { id: 'fono', name: 'ZemdaFono', profession: 'Fonoaudiologia', slug: 'sistema-para-fonoaudiologos', features: ['Fonologia e painel fonêmico', 'Linguagem, voz e gravações', 'Audiologia, disfagia e IDDSI', 'Metas e histórico clínico'] },
   { id: 'psico', name: 'ZemdaPsico', profession: 'Psicologia', slug: 'sistema-para-psicologos', features: ['Sessões, evolução e autosave', 'Estado mental e avaliação de risco', 'Triagens, escalas e metas', 'Documentos psicológicos e histórico'] },
   { id: 'odonto', name: 'ZemdaOdonto', profession: 'Odontologia', slug: 'sistema-para-dentistas', features: ['Odontograma e periodontograma', 'Endodontia e prótese', 'Harmonização orofacial (HOF)', 'Planos de tratamento e prontuário'] },
   { id: 'nutri', name: 'ZemdaNutri', profession: 'Nutrição', slug: 'sistema-para-nutricionistas', features: ['Anamnese e antropometria', 'Bioimpedância e recordatório 24h', 'Plano alimentar', 'Evolução longitudinal'] },

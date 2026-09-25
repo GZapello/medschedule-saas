@@ -58,7 +58,7 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
       "Registre avaliações audiológicas e organize os resultados no audiograma.",
       "Documente a avaliação da deglutição e as consistências alimentares com referência à matriz IDDSI."
     ],
-    focus: 'CAA, metas terapêuticas e histórico apoiam a continuidade entre os atendimentos.'
+    focus: 'Metas terapêuticas e histórico apoiam a continuidade entre os atendimentos.'
   },
   {
     id: 'psico', name: 'ZemdaPsico', area: 'Psicologia',
