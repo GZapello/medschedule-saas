@@ -61,7 +61,6 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
   columns = 4,
   onBack,
   onHome,
-  canGoBack = false,
   accessibilityPrefs
 }) => {
   const currentPage = pages.find(p => p.id === activePageId) || pages[0];
@@ -99,11 +98,13 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
     };
   }, [isMoreOpen]);
 
-  // Cartão Errei na grade
-  const hasErreiCard = typeof onErrei === 'function';
-  const totalItems = cards.length + (hasErreiCard ? 1 : 0);
+  // Contagem dos cartões de sistema fixos dentro da grade
+  // Principal: 1. INÍCIO | 2. ERREI (2 cartões de sistema)
+  // Secundárias: 1. INÍCIO | 2. VOLTAR | 3. ERREI (3 cartões de sistema)
+  const systemCardsCount = isMainPage ? 2 : 3;
+  const totalItems = cards.length + systemCardsCount;
 
-  // Calcula dinamicamente colunas e linhas respeitando as preferências de acessibilidade
+  // Calcula dinamicamente colunas e linhas respeitando as preferências de acessibilidade e os cartões de sistema
   const effectiveCols = useMemo(() => {
     const density = accessibilityPrefs?.gridDensity || 'medium';
     if (density === 'large') {
@@ -132,54 +133,54 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
   const getPageIcon = (iconName?: string) => {
     switch (iconName?.toLowerCase()) {
       case 'home':
-        return <Home className="w-4 h-4" />;
+        return <Home className="w-3.5 h-3.5" />;
       case 'alertcircle':
       case 'alert':
-        return <AlertCircle className="w-4 h-4" />;
+        return <AlertCircle className="w-3.5 h-3.5" />;
       case 'smile':
-        return <Smile className="w-4 h-4" />;
+        return <Smile className="w-3.5 h-3.5" />;
       case 'sparkles':
-        return <Sparkles className="w-4 h-4" />;
+        return <Sparkles className="w-3.5 h-3.5" />;
       case 'coffee':
-        return <Coffee className="w-4 h-4" />;
+        return <Coffee className="w-3.5 h-3.5" />;
       case 'users':
-        return <Users className="w-4 h-4" />;
+        return <Users className="w-3.5 h-3.5" />;
       case 'mappin':
-        return <MapPin className="w-4 h-4" />;
+        return <MapPin className="w-3.5 h-3.5" />;
       case 'play':
-        return <Play className="w-4 h-4" />;
+        return <Play className="w-3.5 h-3.5" />;
       case 'droplet':
-        return <Droplet className="w-4 h-4" />;
+        return <Droplet className="w-3.5 h-3.5" />;
       case 'activity':
-        return <Activity className="w-4 h-4" />;
+        return <Activity className="w-3.5 h-3.5" />;
       case 'heart':
-        return <Heart className="w-4 h-4" />;
+        return <Heart className="w-3.5 h-3.5" />;
       case 'bookopen':
-        return <BookOpen className="w-4 h-4" />;
+        return <BookOpen className="w-3.5 h-3.5" />;
       case 'helpcircle':
-        return <HelpCircle className="w-4 h-4" />;
+        return <HelpCircle className="w-3.5 h-3.5" />;
       case 'messagesquare':
-        return <MessageCircle className="w-4 h-4" />;
+        return <MessageCircle className="w-3.5 h-3.5" />;
       case 'clock':
-        return <Clock className="w-4 h-4" />;
+        return <Clock className="w-3.5 h-3.5" />;
       case 'compass':
-        return <Compass className="w-4 h-4" />;
+        return <Compass className="w-3.5 h-3.5" />;
       case 'sun':
-        return <Sun className="w-4 h-4" />;
+        return <Sun className="w-3.5 h-3.5" />;
       case 'sliders':
-        return <Sliders className="w-4 h-4" />;
+        return <Sliders className="w-3.5 h-3.5" />;
       case 'palette':
-        return <Palette className="w-4 h-4" />;
+        return <Palette className="w-3.5 h-3.5" />;
       case 'hash':
-        return <Hash className="w-4 h-4" />;
+        return <Hash className="w-3.5 h-3.5" />;
       case 'tv':
-        return <Tv className="w-4 h-4" />;
+        return <Tv className="w-3.5 h-3.5" />;
       case 'moon':
-        return <Moon className="w-4 h-4" />;
+        return <Moon className="w-3.5 h-3.5" />;
       case 'messagecircle':
-        return <MessageCircle className="w-4 h-4" />;
+        return <MessageCircle className="w-3.5 h-3.5" />;
       default:
-        return <Layers className="w-4 h-4" />;
+        return <Layers className="w-3.5 h-3.5" />;
     }
   };
 
@@ -237,99 +238,41 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
   return (
     <div className={`flex-1 flex flex-col min-h-0 ${isHighContrast ? 'bg-black text-white' : 'bg-slate-100'} overflow-hidden`}>
       {/* ========================================================================= */}
-      {/* 1. BARRA DE NAVEGAÇÃO E CONTROLE INFANTIL FIXA (Nunca rola, sempre previsível) */}
+      {/* BARRA DE CATEGORIAS SUPERIOR (Apenas categorias, sem Início/Voltar na barra) */}
       {/* ========================================================================= */}
-      <div className={`px-2.5 py-1.5 ${isHighContrast ? 'bg-neutral-900 border-b-2 border-neutral-700' : 'bg-white border-b border-slate-200'} flex items-center justify-between gap-2 shrink-0 select-none shadow-2xs`}>
-        {/* Bloco de Navegação com Posição Espacial 100% Fixa (Canto Superior Esquerdo) */}
-        <div className="flex items-center gap-2 shrink-0">
-          {isMainPage ? (
-            /* Na página Principal: Âncora de INÍCIO fixa no mesmo canto exato */
-            <div
-              className={`inline-flex items-center gap-1.5 h-10 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-black tracking-wide border-2 ${
-                isHighContrast
-                  ? 'bg-neutral-800 text-amber-300 border-amber-400'
-                  : 'bg-amber-100/90 text-amber-950 border-amber-400 shadow-2xs'
-              } cursor-default select-none`}
-              title="Você está na tela inicial da prancha"
+      <div className={`px-2.5 py-1.5 ${isHighContrast ? 'bg-neutral-900 border-b-2 border-neutral-700' : 'bg-white border-b border-slate-200'} flex items-center justify-between gap-2 overflow-x-auto scrollbar-thin shrink-0 select-none shadow-2xs`}>
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin">
+          {primaryPages.map((p, idx) => {
+            const isActive = p.id === currentPage?.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => onSelectPage(p.id)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
+                  isActive
+                    ? 'bg-purple-600 text-white shadow-2xs ring-1 ring-purple-400'
+                    : isHighContrast
+                    ? 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {getPageIcon(p.icon)}
+                <span>{p.name || `Página ${idx + 1}`}</span>
+              </button>
+            );
+          })}
+
+          {/* Se a categoria atual não estiver entre as primárias, exibe-a com destaque */}
+          {!primaryPages.some(p => p.id === currentPage?.id) && currentPage && (
+            <button
+              type="button"
+              onClick={() => onSelectPage(currentPage.id)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 text-white shadow-2xs ring-1 ring-purple-400 whitespace-nowrap cursor-pointer"
             >
-              <Home className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 stroke-[2.5]" />
-              <span>INÍCIO</span>
-            </div>
-          ) : (
-            /* Em TODAS as páginas secundárias: [ ← VOLTAR ] e [ 🏠 INÍCIO ] SEMPRE visíveis e grandes */
-            <div className="flex items-center gap-2 shrink-0">
-              {onBack && (
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className={`inline-flex items-center justify-center gap-1.5 h-10 sm:h-11 px-3.5 sm:px-4.5 rounded-xl text-xs sm:text-sm font-black tracking-wide transition-all cursor-pointer shadow-sm active:scale-95 ${
-                    isHighContrast
-                      ? 'bg-blue-600 text-white border-2 border-white hover:bg-blue-700'
-                      : 'bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-400'
-                  }`}
-                  title="Voltar 1 página anterior"
-                  aria-label="Voltar para a página anterior"
-                >
-                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
-                  <span>VOLTAR</span>
-                </button>
-              )}
-
-              {onHome && (
-                <button
-                  type="button"
-                  onClick={onHome}
-                  className={`inline-flex items-center justify-center gap-1.5 h-10 sm:h-11 px-3.5 sm:px-4.5 rounded-xl text-xs sm:text-sm font-black tracking-wide transition-all cursor-pointer shadow-sm active:scale-95 ${
-                    isHighContrast
-                      ? 'bg-amber-500 text-black border-2 border-white hover:bg-amber-600'
-                      : 'bg-amber-400 hover:bg-amber-500 text-slate-950 border-2 border-amber-500'
-                  }`}
-                  title="Voltar diretamente para a página Principal"
-                  aria-label="Ir para a página Inicial"
-                >
-                  <Home className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
-                  <span>INÍCIO</span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Contexto da Página Atual (Símbolo + Nome) */}
-          {!isMainPage && currentPage && (
-            <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-black truncate max-w-[200px] md:max-w-xs ${
-              isHighContrast
-                ? 'bg-neutral-800 text-white border-neutral-700'
-                : 'bg-purple-50 text-purple-900 border-purple-200'
-            }`}>
-              <span className="text-purple-600">{getPageIcon(currentPage.icon)}</span>
-              <span className="truncate uppercase">{currentPage.name}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Lado Direito: Abas de Categorias ou Seletor */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin py-0.5">
-          {/* Na página principal, mostra as categorias primárias (Símbolo + Palavra, sem contadores numéricos) */}
-          {isMainPage && (
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin">
-              {primaryPages.slice(1).map(p => {
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => onSelectPage(p.id)}
-                    className={`inline-flex items-center gap-1.5 h-10 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
-                      isHighContrast
-                        ? 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700 border border-neutral-700'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/80'
-                    }`}
-                  >
-                    {getPageIcon(p.icon)}
-                    <span>{p.name}</span>
-                  </button>
-                );
-              })}
-            </div>
+              {getPageIcon(currentPage.icon)}
+              <span>{currentPage.name}</span>
+            </button>
           )}
 
           {/* Dropdown de Outras Categorias (Sem contadores numéricos) */}
@@ -341,7 +284,7 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
                   setIsMoreOpen(!isMoreOpen);
                   setSearchTerm('');
                 }}
-                className={`inline-flex items-center gap-1.5 h-10 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                   isMoreOpen
                     ? 'bg-purple-100 border-purple-300 text-purple-800'
                     : isHighContrast
@@ -350,14 +293,14 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
                 }`}
                 title="Ver todas as categorias"
               >
-                <Layers className="w-4 h-4 text-purple-600" />
+                <Layers className="w-3.5 h-3.5 text-purple-600" />
                 <span>Outras Categorias</span>
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isMoreOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Dropdown com Busca */}
               {isMoreOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-72 max-w-[90vw] bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-2.5 flex flex-col max-h-96 animate-in fade-in zoom-in-95 duration-150 text-slate-800">
+                <div className="absolute left-0 top-full mt-1.5 w-72 max-w-[90vw] bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-2.5 flex flex-col max-h-96 animate-in fade-in zoom-in-95 duration-150 text-slate-800">
                   <div className="relative mb-2 shrink-0">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input
@@ -412,170 +355,219 @@ export const AACBoardView: React.FC<AACBoardViewProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. GRADE DE CARTÕES SEM ROLAGEM VERTICAL (Área da Criança, Limpa e Tátil) */}
+      {/* GRADE DE CARTÕES DA PRANCHA COM CARTÕES DE SISTEMA DENTRO DA GRADE */}
+      {/* POSIÇÕES FIXAS: */}
+      {/* PRINCIPAL: 1. INÍCIO | 2. ERREI | 3. RESTANTE */}
+      {/* SECUNDÁRIAS: 1. INÍCIO | 2. VOLTAR | 3. ERREI | 4. RESTANTE */}
       {/* ========================================================================= */}
       <div className="flex-1 min-h-0 p-1.5 sm:p-2 overflow-hidden flex flex-col">
-        {cards.length === 0 && !hasErreiCard ? (
-          /* Categoria sem cartões: botão amigável para retornar ao início sem travar o paciente */
-          <div className={`h-full w-full flex flex-col items-center justify-center text-center p-6 rounded-2xl border-2 border-dashed ${
-            isHighContrast ? 'bg-neutral-900 border-neutral-700 text-neutral-300' : 'bg-white border-slate-300'
-          }`}>
-            <Sparkles className="w-12 h-12 text-amber-500 mb-2" />
-            <h4 className="text-base font-black text-slate-800">Pronto para Voltar</h4>
-            <p className="text-xs text-slate-500 max-w-sm mt-1 mb-4">
-              Toque no botão abaixo para voltar à tela inicial da sua prancha.
-            </p>
-            {onHome && (
-              <button
-                type="button"
-                onClick={onHome}
-                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-sm shadow-md active:scale-95 transition-all cursor-pointer border-2 border-amber-500"
-              >
-                <Home className="w-5 h-5" />
-                <span>VOLTAR AO INÍCIO</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div
-            className="h-full w-full grid gap-1.5 sm:gap-2"
-            style={{
-              gridTemplateColumns: `repeat(${effectiveCols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))`
+        <div
+          className="h-full w-full grid gap-1.5 sm:gap-2"
+          style={{
+            gridTemplateColumns: `repeat(${effectiveCols}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${rowCount}, minmax(0, 1fr))`
+          }}
+        >
+          {/* =================================================================== */}
+          {/* POSIÇÃO 1: CARTÃO DE SISTEMA [ 🏠 INÍCIO ] (Em TODAS as páginas)   */}
+          {/* =================================================================== */}
+          <button
+            type="button"
+            onClick={() => {
+              if (onHome) onHome();
             }}
+            style={{
+              backgroundColor: isHighContrast ? '#f59e0b' : '#fef3c7',
+              borderColor: isHighContrast ? '#000000' : '#f59e0b',
+              color: isHighContrast ? '#000000' : '#78350f'
+            }}
+            className={`group relative flex flex-col items-center justify-between p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border-2 sm:border-3 shadow-2xs hover:shadow-md transition-all active:scale-95 cursor-pointer h-full w-full min-h-0 min-w-0 overflow-hidden select-none ${
+              isHighContrast ? 'border-4 ring-2 ring-black font-black' : 'ring-1 ring-amber-300 hover:bg-amber-200'
+            }`}
+            title="Retornar à página Principal"
+            aria-label="Início, ir para página Principal"
           >
-            {/* CARTÃO DE AÇÃO RÁPIDA DENTRO DA GRADE: ERREI (Visível para o paciente) */}
-            {hasErreiCard && (
+            <div className="flex-1 min-h-0 flex items-center justify-center w-full my-0.5 overflow-hidden">
+              <Home
+                className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 text-amber-600 transition-transform group-hover:scale-110 stroke-[2.5]"
+              />
+            </div>
+            <div className="w-full text-center shrink-0 px-1 py-0.5 min-h-[2.2em] max-h-[3.4em] flex flex-col items-center justify-center">
+              <span className={`block tracking-tight leading-tight text-center font-black uppercase text-xs sm:text-sm md:text-base ${
+                isHighContrast ? 'text-black' : 'text-amber-900'
+              }`}>
+                INÍCIO
+              </span>
+              <span className={`text-[9px] sm:text-[10px] font-semibold leading-tight ${
+                isHighContrast ? 'text-black/80' : 'text-amber-700/80'
+              }`}>
+                Principal
+              </span>
+            </div>
+          </button>
+
+          {/* =================================================================== */}
+          {/* POSIÇÃO 2: CARTÃO DE SISTEMA [ ↩ VOLTAR ] (Nas páginas secundárias) */}
+          {/* =================================================================== */}
+          {!isMainPage && (
+            <button
+              type="button"
+              onClick={() => {
+                if (onBack) onBack();
+              }}
+              style={{
+                backgroundColor: isHighContrast ? '#3b82f6' : '#e0e7ff',
+                borderColor: isHighContrast ? '#000000' : '#818cf8',
+                color: isHighContrast ? '#000000' : '#312e81'
+              }}
+              className={`group relative flex flex-col items-center justify-between p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border-2 sm:border-3 shadow-2xs hover:shadow-md transition-all active:scale-95 cursor-pointer h-full w-full min-h-0 min-w-0 overflow-hidden select-none ${
+                isHighContrast ? 'border-4 ring-2 ring-black font-black' : 'ring-1 ring-indigo-300 hover:bg-indigo-200'
+              }`}
+              title="Voltar para a página anterior"
+              aria-label="Voltar para página anterior"
+            >
+              <div className="flex-1 min-h-0 flex items-center justify-center w-full my-0.5 overflow-hidden">
+                <Undo2
+                  className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 text-indigo-600 transition-transform group-hover:-translate-x-1 stroke-[2.5]"
+                />
+              </div>
+              <div className="w-full text-center shrink-0 px-1 py-0.5 min-h-[2.2em] max-h-[3.4em] flex flex-col items-center justify-center">
+                <span className={`block tracking-tight leading-tight text-center font-black uppercase text-xs sm:text-sm md:text-base ${
+                  isHighContrast ? 'text-black' : 'text-indigo-900'
+                }`}>
+                  VOLTAR
+                </span>
+                <span className={`text-[9px] sm:text-[10px] font-semibold leading-tight ${
+                  isHighContrast ? 'text-black/80' : 'text-indigo-700/80'
+                }`}>
+                  Retornar
+                </span>
+              </div>
+            </button>
+          )}
+
+          {/* =================================================================== */}
+          {/* POSIÇÃO 3 (ou 2 na Principal): CARTÃO DE SISTEMA [ ↶ ERREI ]       */}
+          {/* Fala "Errei" e remove a última palavra da frase montada             */}
+          {/* =================================================================== */}
+          {Boolean(onErrei) && (
+            <button
+              type="button"
+              onClick={onErrei}
+              style={{
+                backgroundColor: isHighContrast ? '#ef4444' : '#fee2e2',
+                borderColor: isHighContrast ? '#000000' : '#f87171',
+                color: isHighContrast ? '#000000' : '#991b1b'
+              }}
+              className={`group relative flex flex-col items-center justify-between p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border-2 sm:border-3 shadow-2xs hover:shadow-md transition-all active:scale-95 cursor-pointer h-full w-full min-h-0 min-w-0 overflow-hidden select-none ${
+                isHighContrast ? 'border-4 ring-2 ring-black font-black' : 'ring-1 ring-rose-300 hover:bg-rose-200'
+              }`}
+              title="Falar 'Errei' e apagar a última palavra"
+              aria-label="Errei, apagar última palavra"
+            >
+              <div className="flex-1 min-h-0 flex items-center justify-center w-full my-0.5 overflow-hidden">
+                <Undo2
+                  className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 text-rose-600 transition-transform group-hover:-rotate-12 stroke-[2.5]"
+                />
+              </div>
+              <div className="w-full text-center shrink-0 px-1 py-0.5 min-h-[2.2em] max-h-[3.4em] flex flex-col items-center justify-center">
+                <span className={`block tracking-tight leading-tight text-center font-black uppercase text-xs sm:text-sm md:text-base ${
+                  isHighContrast ? 'text-black' : 'text-rose-950'
+                }`}>
+                  ERREI
+                </span>
+                <span className={`text-[9px] sm:text-[10px] font-semibold leading-tight ${
+                  isHighContrast ? 'text-black/80' : 'text-rose-800/80'
+                }`}>
+                  Desfazer
+                </span>
+              </div>
+            </button>
+          )}
+
+          {/* =================================================================== */}
+          {/* RESTANTE DOS CARTÕES DA CATEGORIA ATUAL                             */}
+          {/* =================================================================== */}
+          {cards.map(card => {
+            const meta = FITZGERALD_COLORS[card.category] || FITZGERALD_COLORS.descriptor;
+            const isNav = card.category === 'navigation' || card.behavior === 'navigation' || (Boolean(card.target_page_id) && (!card.spoken_text || card.label.endsWith('→')));
+            const isRecentlyTapped = tappedCardId === card.id;
+
+            return (
               <button
+                key={card.id}
                 type="button"
-                onClick={onErrei}
-                disabled={phraseLength === 0}
+                onClick={() => handleCardPress(card)}
                 style={{
-                  backgroundColor: phraseLength === 0 ? (isHighContrast ? '#1e293b' : '#f8fafc') : (isHighContrast ? '#78350f' : '#fef3c7'),
-                  borderColor: phraseLength === 0 ? '#64748b' : (isHighContrast ? '#fbbf24' : '#f59e0b'),
-                  color: phraseLength === 0 ? '#94a3b8' : (isHighContrast ? '#fef3c7' : '#78350f')
+                  backgroundColor: isHighContrast
+                    ? (isNav ? '#1e1b4b' : card.color || meta.bg)
+                    : (isNav ? '#eef2ff' : card.color || meta.bg),
+                  borderColor: isHighContrast
+                    ? '#ffffff'
+                    : (isNav ? '#818cf8' : meta.border),
+                  color: isHighContrast
+                    ? '#ffffff'
+                    : (isNav ? '#312e81' : meta.text)
                 }}
-                className={`group relative flex flex-col items-center justify-between p-1 sm:p-1.5 rounded-xl sm:rounded-2xl transition-all h-full w-full min-h-0 min-w-0 overflow-hidden select-none ${
-                  isHighContrast ? 'border-3 sm:border-4' : 'border-2 sm:border-3'
+                className={`group relative flex flex-col items-center justify-between p-1 sm:p-1.5 rounded-xl sm:rounded-2xl transition-all active:scale-95 cursor-pointer h-full w-full min-h-0 min-w-0 overflow-hidden focus:outline-hidden select-none ${
+                  isRecentlyTapped ? 'ring-4 ring-purple-500 scale-95 brightness-105' : ''
                 } ${
-                  phraseLength === 0
-                    ? 'opacity-40 cursor-not-allowed shadow-none'
-                    : 'shadow-2xs hover:shadow-md active:scale-95 cursor-pointer ring-1 ring-amber-300 hover:bg-amber-200'
+                  isHighContrast
+                    ? 'border-3 sm:border-4 font-black'
+                    : isNav
+                    ? 'border-2 sm:border-3 ring-2 ring-indigo-200 shadow-xs hover:shadow-md'
+                    : 'border-2 sm:border-3 shadow-2xs hover:shadow-md'
                 }`}
-                title="Apagar apenas a última palavra (Errei)"
-                aria-label="Errei, apagar última palavra da frase"
               >
-                {/* Ícone Desfazer / Voltar grande */}
+                {/* Badge de Navegação para cartões de pasta/categoria */}
+                {isNav && (
+                  <div
+                    className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md bg-indigo-600 text-white font-black text-[9px] sm:text-[10px] flex items-center gap-0.5 shadow-2xs select-none"
+                    title="Abre outra tela"
+                  >
+                    <CornerDownRight className="w-3 h-3 stroke-[2.5]" />
+                    <span className="hidden sm:inline">➔</span>
+                  </div>
+                )}
+
+                {/* Símbolo / Ícone / Imagem Central */}
                 <div className="flex-1 min-h-0 flex items-center justify-center w-full my-0.5 overflow-hidden">
-                  <Undo2
-                    className={`w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 transition-transform stroke-[2.5] ${
-                      phraseLength === 0 ? 'text-slate-400' : 'text-amber-600 group-hover:-rotate-12'
-                    }`}
-                  />
+                  {card.symbol_type === 'image' && card.image_url ? (
+                    <img
+                      src={card.image_url}
+                      alt={card.label}
+                      className="max-h-full max-w-full object-contain rounded-lg bg-white shadow-2xs group-hover:scale-105 transition-transform"
+                    />
+                  ) : (
+                    <span
+                      className={`${getSymbolSizeStyle()} select-none leading-none group-hover:scale-110 transition-transform`}
+                      role="img"
+                      aria-hidden="true"
+                    >
+                      {card.image_url || '💬'}
+                    </span>
+                  )}
                 </div>
 
-                {/* Rótulo ERREI claro com Símbolo + Palavra */}
-                <div className="w-full text-center shrink-0 px-1 py-0.5 min-h-[2.2em] max-h-[3.4em] flex flex-col items-center justify-center">
+                {/* Rótulo Escrito */}
+                <div className="w-full text-center shrink-0 px-1 py-0.5 min-h-[2.2em] max-h-[3.4em] flex items-center justify-center">
                   <span
-                    className={`block tracking-tight leading-tight text-center font-black uppercase text-xs sm:text-sm md:text-base ${
-                      phraseLength === 0 ? 'text-slate-400' : isHighContrast ? 'text-white' : 'text-amber-900'
-                    }`}
+                    className={`block tracking-tight leading-tight text-center break-words hyphens-auto uppercase line-clamp-3 ${getCardLabelStyle(
+                      card.label
+                    )}`}
+                    title={card.label}
                   >
-                    ERREI
-                  </span>
-                  <span
-                    className={`text-[9px] sm:text-[10px] font-semibold leading-tight ${
-                      phraseLength === 0 ? 'text-slate-400' : isHighContrast ? 'text-amber-200' : 'text-amber-700/80'
-                    }`}
-                  >
-                    Desfazer
+                    {card.label}
                   </span>
                 </div>
               </button>
-            )}
-
-            {/* Cartões da Categoria Atual */}
-            {cards.map(card => {
-              const meta = FITZGERALD_COLORS[card.category] || FITZGERALD_COLORS.descriptor;
-              const isNav = card.category === 'navigation' || card.behavior === 'navigation' || (Boolean(card.target_page_id) && (!card.spoken_text || card.label.endsWith('→')));
-              const isRecentlyTapped = tappedCardId === card.id;
-
-              return (
-                <button
-                  key={card.id}
-                  type="button"
-                  onClick={() => handleCardPress(card)}
-                  style={{
-                    backgroundColor: isHighContrast
-                      ? (isNav ? '#1e1b4b' : card.color || meta.bg)
-                      : (isNav ? '#eef2ff' : card.color || meta.bg),
-                    borderColor: isHighContrast
-                      ? '#ffffff'
-                      : (isNav ? '#818cf8' : meta.border),
-                    color: isHighContrast
-                      ? '#ffffff'
-                      : (isNav ? '#312e81' : meta.text)
-                  }}
-                  className={`group relative flex flex-col items-center justify-between p-1 sm:p-1.5 rounded-xl sm:rounded-2xl transition-all active:scale-95 cursor-pointer h-full w-full min-h-0 min-w-0 overflow-hidden focus:outline-hidden select-none ${
-                    isRecentlyTapped ? 'ring-4 ring-purple-500 scale-95 brightness-105' : ''
-                  } ${
-                    isHighContrast
-                      ? 'border-3 sm:border-4 font-black'
-                      : isNav
-                      ? 'border-2 sm:border-3 ring-2 ring-indigo-200 shadow-xs hover:shadow-md'
-                      : 'border-2 sm:border-3 shadow-2xs hover:shadow-md'
-                  }`}
-                >
-                  {/* Badge Exclusivo de Categoria / Pasta para Navegação Clara */}
-                  {isNav && (
-                    <div
-                      className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md bg-indigo-600 text-white font-black text-[9px] sm:text-[10px] flex items-center gap-0.5 shadow-2xs select-none"
-                      title="Abre outra tela"
-                    >
-                      <CornerDownRight className="w-3 h-3 stroke-[2.5]" />
-                      <span className="hidden sm:inline">➔</span>
-                    </div>
-                  )}
-
-                  {/* Símbolo / Ícone / Imagem Central */}
-                  <div className="flex-1 min-h-0 flex items-center justify-center w-full my-0.5 overflow-hidden">
-                    {card.symbol_type === 'image' && card.image_url ? (
-                      <img
-                        src={card.image_url}
-                        alt={card.label}
-                        className="max-h-full max-w-full object-contain rounded-lg bg-white shadow-2xs group-hover:scale-105 transition-transform"
-                      />
-                    ) : (
-                      <span
-                        className={`${getSymbolSizeStyle()} select-none leading-none group-hover:scale-110 transition-transform`}
-                        role="img"
-                        aria-hidden="true"
-                      >
-                        {card.image_url || '💬'}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Rótulo Escrito com Símbolo + Palavra */}
-                  <div className="w-full text-center shrink-0 px-1 py-0.5 min-h-[2.2em] max-h-[3.4em] flex items-center justify-center">
-                    <span
-                      className={`block tracking-tight leading-tight text-center break-words hyphens-auto uppercase line-clamp-3 ${getCardLabelStyle(
-                        card.label
-                      )}`}
-                      title={card.label}
-                    >
-                      {card.label}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. BARRA DE VOCABULÁRIO NUCLEAR PERMANENTE (Core Dock) quando ativada */}
+      {/* BARRA DE VOCABULÁRIO NUCLEAR PERMANENTE (Core Dock) quando ativada         */}
       {/* ========================================================================= */}
       {accessibilityPrefs?.pinCoreBar && !isMainPage && coreCards.length > 0 && (
         <div className={`px-2 py-1.5 ${isHighContrast ? 'bg-neutral-900 border-t-2 border-neutral-700' : 'bg-slate-200/90 border-t border-slate-300'} flex items-center gap-1.5 overflow-x-auto shrink-0 select-none shadow-sm`}>

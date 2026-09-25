@@ -326,9 +326,10 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
     }
   };
 
-  // Função ERREI: remove APENAS a última palavra, atualiza imediatamente e NÃO reproduz a frase
+  // Função ERREI: fala "Errei" SEMPRE e remove APENAS a última palavra se houver
   const handleErrei = () => {
-    setPhrase(prev => prev.slice(0, -1));
+    speakText('Errei');
+    setPhrase(prev => (prev.length > 0 ? prev.slice(0, -1) : prev));
   };
 
   // Limpar Frase Inteira
