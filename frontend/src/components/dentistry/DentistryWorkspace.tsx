@@ -47,6 +47,7 @@ import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
@@ -63,10 +64,8 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
   // Pacientes e Seleção
   const completion = useConsultationCompletion(onFinishConsultation);
-  const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
-  const [patientSearch, setPatientSearch] = useState<string>('');
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<
@@ -238,28 +237,22 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     onRestoreDraft: handleRestoreDraft
   });
 
-  // Carrega lista de pacientes da clínica
+  // Ao selecionar paciente, carrega os dados do paciente e dados odontológicos
   useEffect(() => {
-    async function loadPatients() {
-      try {
-        const res = await ApiClient.get<any[]>('/v1/patients');
-        setPatients(res || []);
-      } catch (err) {
-        console.error('Erro ao carregar pacientes:', err);
-      }
+    if (!selectedPatientId) {
+      setSelectedPatient(null);
+      return;
     }
-    loadPatients();
-  }, []);
 
-  // Ao selecionar paciente, carrega todos os dados odontológicos
-  useEffect(() => {
-    if (!selectedPatientId) return;
-
-    const pat = patients.find(p => p.id === selectedPatientId);
-    setSelectedPatient(pat || null);
-
-    loadPatientDentalData(selectedPatientId);
-  }, [selectedPatientId, patients]);
+    ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
+      const patData = p?.patient || p;
+      setSelectedPatient(patData);
+      loadPatientDentalData(selectedPatientId);
+    }).catch(err => {
+      console.warn('Erro ao carregar paciente odontológico:', err);
+      loadPatientDentalData(selectedPatientId);
+    });
+  }, [selectedPatientId]);
 
   const loadPatientDentalData = async (patientId: string) => {
     setLoading(true);
@@ -608,10 +601,6 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     }
   };
 
-  const filteredPatients = patients.filter(p =>
-    (p.full_name || p.name || '').toLowerCase().includes(patientSearch.toLowerCase()) ||
-    (p.cpf || '').includes(patientSearch)
-  );
 
   return (
     <div className="space-y-6">
@@ -669,50 +658,22 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       )}
 
       {/* Seletor de Paciente (quando não fixado via initialPatientId) */}
-      {!initialPatientId && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold uppercase tracking-wide text-slate-700 flex items-center gap-2">
-              <User className="w-4 h-4 text-cyan-600" />
-              Selecione o Paciente para o Prontuário Odontológico:
-            </span>
-            <span className="text-xs text-slate-500 font-medium">
-              {patients.length} paciente(s) cadastrados
-            </span>
-          </div>
-
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Buscar por nome ou CPF do paciente..."
-              value={patientSearch}
-              onChange={e => setPatientSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 focus:bg-white transition-all"
-            />
-          </div>
-
-          {patientSearch && (
-            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-2xl divide-y divide-slate-100 bg-white shadow-lg">
-              {filteredPatients.map(p => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedPatientId(p.id);
-                    setPatientSearch('');
-                  }}
-                  className="w-full text-left p-3 hover:bg-cyan-50 flex items-center justify-between transition-colors"
-                >
-                  <div>
-                    <div className="text-xs font-bold text-slate-800">{p.full_name || p.name}</div>
-                    <div className="text-[11px] text-slate-500">CPF: {p.cpf || 'Não informado'} | Tel: {p.phone || '-'}</div>
-                  </div>
-                  <span className="text-xs font-bold text-cyan-600">Abrir Ficha Odontológica →</span>
-                </button>
-              ))}
-            </div>
-          )}
+      {!initialPatientId && !selectedPatientId && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
+          <label className="block text-xs font-extrabold uppercase tracking-wide text-slate-700 flex items-center gap-2">
+            <User className="w-4 h-4 text-cyan-600" />
+            Selecione o Paciente para o Prontuário Odontológico:
+          </label>
+          <PatientSearchSelect
+            value={selectedPatientId}
+            selectedPatient={selectedPatient}
+            placeholder="Buscar paciente por nome, CPF ou telefone..."
+            onChange={(id, pat) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+            }}
+          />
         </div>
       )}
 
@@ -734,6 +695,18 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {!initialPatientId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPatientId('');
+                  setSelectedPatient(null);
+                }}
+                className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer mr-1"
+              >
+                Trocar Paciente
+              </button>
+            )}
             <ClinicalQuickHeaderActions
               autosaveStatus={autosave.autosaveStatus}
               lastSavedTime={autosave.lastSavedTime}

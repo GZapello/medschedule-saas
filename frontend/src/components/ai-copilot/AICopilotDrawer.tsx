@@ -33,6 +33,7 @@ import {
   FileEdit,
   Download
 } from 'lucide-react';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface AICopilotDrawerProps {
   isOpen: boolean;
@@ -74,7 +75,6 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     'appointment' | 'full_records' | 'last_30_days' | 'last_90_days' | 'exams' | 'no_clinical'
   >(activeAppointmentId ? 'appointment' : activePatientId ? 'full_records' : 'no_clinical');
 
-  const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(activePatientId || '');
 
   // Conversa ativa com memória
@@ -131,13 +131,10 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     }
   }, [activeAppointmentId]);
 
-  // Carrega lista de pacientes quando abre
+  // Sincroniza activePatientId quando abre
   useEffect(() => {
-    if (isOpen) {
-      ApiClient.get<any[]>('/v1/patients')
-        .then(res => setPatients(res))
-        .catch(() => {});
-      if (activePatientId) setSelectedPatientId(activePatientId);
+    if (isOpen && activePatientId) {
+      setSelectedPatientId(activePatientId);
     }
   }, [isOpen, activePatientId]);
 
@@ -541,19 +538,15 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
               <option value="no_clinical">Sem Contexto Clínico</option>
             </select>
 
-            {contextScope !== 'no_clinical' && patients.length > 0 && (
-              <select
-                value={selectedPatientId}
-                onChange={e => setSelectedPatientId(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-700 mt-1"
-              >
-                <option value="">-- Selecione o Paciente para a Consulta --</option>
-                {patients.map(p => (
-                  <option key={p.id} value={p.id}>
-                    Paciente: {p.full_name}
-                  </option>
-                ))}
-              </select>
+            {contextScope !== 'no_clinical' && (
+              <div className="w-full mt-1.5">
+                <PatientSearchSelect
+                  value={selectedPatientId}
+                  onChange={(id) => setSelectedPatientId(id)}
+                  compact
+                  placeholder="Vincular paciente ao contexto da IA..."
+                />
+              </div>
             )}
           </div>
 

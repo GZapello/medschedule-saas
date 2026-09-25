@@ -25,6 +25,7 @@ import { PersonalExerciseLibraryModal } from './PersonalExerciseLibraryModal';
 import { PersonalWorkoutBuilder } from './PersonalWorkoutBuilder';
 import { PersonalAssessmentModal } from './PersonalAssessmentModal';
 import { PersonalAIAssistantModal } from './PersonalAIAssistantModal';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface ZemdaPersonalViewProps {
   initialStudentId?: string | null;
@@ -596,19 +597,18 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                       </div>
 
                       <div className="pt-2 border-t border-slate-200 flex items-center justify-between">
-                        <select
-                          onChange={(e) => {
-                            if (e.target.value) handleApplyTemplate(tpl.id, e.target.value);
-                          }}
-                          className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none font-semibold text-slate-700"
-                        >
-                          <option value="">Aplicar a um aluno...</option>
-                          {students.map((st) => (
-                            <option key={st.id} value={st.id}>
-                              {st.name}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="w-full sm:w-64">
+                          <PatientSearchSelect
+                            isStudent
+                            clientTermLabel="Aluno"
+                            compact
+                            value=""
+                            onChange={(studentId) => {
+                              if (studentId) handleApplyTemplate(tpl.id, studentId);
+                            }}
+                            placeholder="Aplicar a um aluno..."
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}

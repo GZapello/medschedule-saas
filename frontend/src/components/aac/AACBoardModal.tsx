@@ -18,7 +18,7 @@ import {
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { AACBoard, AACCard, AACPhraseItem, FITZGERALD_COLORS } from './types';
+import { AACBoard, AACCard, AACPhraseItem, FITZGERALD_COLORS, AACAccessibilityPrefs } from './types';
 import { AACBoardView } from './AACBoardView';
 import { AACBoardEditorModal } from './AACBoardEditorModal';
 
@@ -43,20 +43,63 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const phraseContainerRef = useRef<HTMLDivElement>(null);
-  const optionsMenuRef = useRef<HTMLDivElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [boards, setBoards] = useState<AACBoard[]>([]);
   const [selectedBoard, setSelectedBoard] = useState<AACBoard | null>(null);
   const [activePageId, setActivePageId] = useState<string>('');
 
+  // Pilha de Histórico de Navegação
+  const [navigationStack, setNavigationStack] = useState<string[]>([]);
+
+  // Preferências de Acessibilidade
+  const [isAccessibilityOpen, setIsAccessibilityOpen] = useState(false);
+  const [accessibilityPrefs, setAccessibilityPrefs] = useState<AACAccessibilityPrefs>(() => {
+    try {
+      const saved = localStorage.getItem('aac_accessibility_prefs');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return {
+      gridDensity: 'medium',
+      textSize: 'normal',
+      symbolSize: 'normal',
+      highContrast: false,
+      speakOnClick: true,
+      speechRate: 0.95,
+      voiceURI: '',
+      pinCoreBar: false
+    };
+  });
+
+  const updateAccessibilityPrefs = (patch: Partial<AACAccessibilityPrefs>) => {
+    setAccessibilityPrefs(prev => {
+      const next = { ...prev, ...patch };
+      try {
+        localStorage.setItem('aac_accessibility_prefs', JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+  };
+
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  useEffect(() => {
+    const updateVoices = () => {
+      if ('speechSynthesis' in window) {
+        const voices = window.speechSynthesis.getVoices();
+        const pt = voices.filter(v => v.lang.startsWith('pt') || v.lang.includes('BR') || v.lang.includes('PT'));
+        setAvailableVoices(pt.length > 0 ? pt : voices);
+      }
+    };
+    updateVoices();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
+
   // Faixa de Frase
   const [phrase, setPhrase] = useState<AACPhraseItem[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speakOnClick, setSpeakOnClick] = useState(true);
-
-  // Painel Dropdown de "Mais Opções"
-  const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
 
   // Modos de Exibição e Edição
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -70,21 +113,6 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
       phraseContainerRef.current.scrollLeft = phraseContainerRef.current.scrollWidth;
     }
   }, [phrase.length]);
-
-  // Fechar dropdown de opções ao clicar fora
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (optionsMenuRef.current && !optionsMenuRef.current.contains(e.target as Node)) {
-        setIsOptionsMenuOpen(false);
-      }
-    };
-    if (isOptionsMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOptionsMenuOpen]);
 
   // Carregar Pranchas do Paciente
   const loadBoards = useCallback(async () => {
@@ -180,6 +208,10 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
 
   // Síntese de Voz (Web Speech API)
   const speakText = (text: string, onEndCallback?: () => void) => {
+    if (!text || !text.trim()) {
+      if (onEndCallback) onEndCallback();
+      return;
+    }
     if (!('speechSynthesis' in window)) {
       showToast('Síntese de voz não suportada neste navegador.', 'info');
       if (onEndCallback) onEndCallback();
@@ -189,12 +221,17 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pt-BR';
-    utterance.rate = 0.95;
+    utterance.rate = accessibilityPrefs.speechRate || 0.95;
     utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
-    const ptVoice = voices.find(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR') || v.lang.startsWith('pt'));
-    if (ptVoice) utterance.voice = ptVoice;
+    if (accessibilityPrefs.voiceURI) {
+      const customVoice = voices.find(v => v.voiceURI === accessibilityPrefs.voiceURI);
+      if (customVoice) utterance.voice = customVoice;
+    } else {
+      const ptVoice = voices.find(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR') || v.lang.startsWith('pt'));
+      if (ptVoice) utterance.voice = ptVoice;
+    }
 
     utterance.onend = () => {
       setIsSpeaking(false);
@@ -217,8 +254,24 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
     speakText(fullText);
   };
 
-  // Clique no Cartão da Prancha: fala SOMENTE a palavra do cartão!
+  // Clique no Cartão da Prancha:
+  // REGRA: Se card.category === 'navigation' OU card.behavior === 'navigation' OU se for atalho com target_page_id (ex: termina em →):
+  // SOMENTE navegar; NÃO adicionar à frase; NÃO falar automaticamente; NÃO alterar frase existente.
   const handleCardClick = (card: AACCard) => {
+    const isNavigationOnly =
+      card.category === 'navigation' ||
+      card.behavior === 'navigation' ||
+      (Boolean(card.target_page_id) && (!card.spoken_text || card.label.endsWith('→')));
+
+    if (isNavigationOnly && card.target_page_id) {
+      if (activePageId && activePageId !== card.target_page_id) {
+        setNavigationStack(prev => [...prev, activePageId]);
+      }
+      setActivePageId(card.target_page_id);
+      return;
+    }
+
+    // Cartão de vocabulário comum: adiciona à frase
     setPhrase(prev => [
       ...prev,
       {
@@ -232,13 +285,36 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
       }
     ]);
 
-    // Fala apenas o termo do cartão selecionado
-    if (speakOnClick) {
-      speakText(card.label);
+    // Fala apenas o termo do cartão selecionado se a fala ao tocar estiver ligada
+    if (accessibilityPrefs.speakOnClick) {
+      speakText(card.spoken_text || card.label);
     }
 
-    if (card.target_page_id) {
+    // Se for cartão híbrido (palavra + navegação)
+    if (card.target_page_id && card.behavior === 'word_and_navigation') {
+      if (activePageId && activePageId !== card.target_page_id) {
+        setNavigationStack(prev => [...prev, activePageId]);
+      }
       setActivePageId(card.target_page_id);
+    }
+  };
+
+  // Histórico de Navegação: Voltar
+  const handleBack = () => {
+    if (navigationStack.length > 0) {
+      const prevPageId = navigationStack[navigationStack.length - 1];
+      setNavigationStack(prev => prev.slice(0, -1));
+      setActivePageId(prevPageId);
+    } else if (selectedBoard?.pages && selectedBoard.pages.length > 0) {
+      setActivePageId(selectedBoard.pages[0].id);
+    }
+  };
+
+  // Retornar diretamente ao Início (Principal)
+  const handleHome = () => {
+    setNavigationStack([]);
+    if (selectedBoard?.pages && selectedBoard.pages.length > 0) {
+      setActivePageId(selectedBoard.pages[0].id);
     }
   };
 
@@ -326,50 +402,50 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
         }`}
       >
         {/* ========================================================================= */}
-        {/* 1. TOPO LIMPO: [ FRASE / PALAVRAS ]   [ 🔊 FALAR ]   [ ••• MAIS OPÇÕES ]   [ ✕ ] */}
+        {/* 1. TOPO ULTRACOMPACTO: [ frase compacta ] [ 🔊 Falar ] [ ⚙ Acessibilidade ] [ ✕ ] */}
         {/* ========================================================================= */}
         {selectedBoard ? (
-          <div className="bg-white px-3 sm:px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0 z-30 shadow-2xs">
-            {/* [ FRASE / PALAVRAS SELECIONADAS ] */}
+          <div className="bg-white px-2.5 sm:px-3 py-1 border-b border-slate-200 flex items-center justify-between gap-1.5 sm:gap-2 shrink-0 z-30 shadow-2xs h-9 sm:h-10">
+            {/* [ FRASE COMPACTA (texto / mini-tokens flex-1) ] */}
             <div
               ref={phraseContainerRef}
-              className="flex-1 flex items-center gap-1.5 p-1.5 bg-slate-50 border border-slate-300 rounded-xl min-h-[46px] sm:min-h-[50px] overflow-x-auto scroll-smooth focus:outline-hidden"
+              className="flex-1 flex items-center gap-1.5 px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-lg min-h-[28px] max-h-[30px] overflow-x-auto scrollbar-none"
               role="region"
-              aria-label="Faixa de construção da frase"
+              aria-label="Faixa compacta da frase"
             >
               {phrase.length === 0 ? (
-                <div className="flex items-center gap-2 px-2 text-slate-400 text-xs select-none italic font-medium">
-                  <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>Toque nos cartões para formar a frase do paciente…</span>
+                <div className="flex items-center gap-1.5 text-slate-400 text-[11px] select-none italic font-medium truncate">
+                  <Sparkles className="w-3 h-3 text-purple-400 shrink-0" />
+                  <span>Toque nos cartões para formar a frase…</span>
                 </div>
               ) : (
                 phrase.map((item, idx) => {
                   const meta = FITZGERALD_COLORS[item.category] || FITZGERALD_COLORS.descriptor;
                   return (
-                    <div
-                      key={`${item.id}-${idx}`}
-                      style={{
-                        backgroundColor: item.color || meta.bg,
-                        borderColor: meta.border,
-                        color: meta.text
-                      }}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border shadow-2xs shrink-0 transition-transform animate-in fade-in zoom-in-95 duration-150"
-                    >
-                      {item.symbol_type === 'image' && item.image_url ? (
-                        <img
-                          src={item.image_url}
-                          alt={item.label}
-                          className="w-6 h-6 rounded-md object-cover bg-white shrink-0"
-                        />
-                      ) : (
-                        <span className="text-lg sm:text-xl select-none leading-none shrink-0" role="img" aria-hidden="true">
-                          {item.image_url || '💬'}
-                        </span>
-                      )}
-                      <span className="text-xs sm:text-sm font-black whitespace-nowrap">
-                        {item.label}
+                    <React.Fragment key={`${item.id}-${idx}`}>
+                      {idx > 0 && <span className="text-slate-300 font-bold select-none text-[10px]">·</span>}
+                      <span
+                        style={{
+                          backgroundColor: item.color || meta.bg,
+                          borderColor: meta.border,
+                          color: meta.text
+                        }}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-black border shadow-2xs shrink-0 select-none whitespace-nowrap"
+                      >
+                        {item.symbol_type === 'image' && item.image_url ? (
+                          <img
+                            src={item.image_url}
+                            alt=""
+                            className="w-3.5 h-3.5 rounded object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs select-none leading-none" role="img" aria-hidden="true">
+                            {item.image_url || '💬'}
+                          </span>
+                        )}
+                        <span>{item.label}</span>
                       </span>
-                    </div>
+                    </React.Fragment>
                   );
                 })
               )}
@@ -380,210 +456,38 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
               type="button"
               onClick={handleSpeakPhrase}
               disabled={phrase.length === 0 || isSpeaking}
-              className={`inline-flex items-center justify-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm shadow-sm transition-all cursor-pointer shrink-0 select-none ${
+              className={`h-7 sm:h-7.5 inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 rounded-lg font-black text-xs shadow-2xs transition-all cursor-pointer shrink-0 select-none ${
                 phrase.length === 0
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                  ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                   : isSpeaking
                   ? 'bg-amber-500 text-white animate-pulse ring-2 ring-amber-200'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white hover:shadow-md active:scale-95'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95'
               }`}
-              title="Reproduzir frase inteira por síntese de voz (Web Speech)"
+              title="Falar frase completa montada"
             >
-              <Volume2 className={`w-4 h-4 sm:w-4.5 sm:h-4.5 ${isSpeaking ? 'animate-bounce' : ''}`} />
+              <Volume2 className={`w-3.5 h-3.5 ${isSpeaking ? 'animate-bounce' : ''}`} />
               <span>{isSpeaking ? 'Falando…' : 'Falar'}</span>
             </button>
 
-            {/* [ ••• MAIS OPÇÕES ] */}
-            <div className="relative shrink-0" ref={optionsMenuRef}>
-              <button
-                type="button"
-                onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm border transition-all cursor-pointer ${
-                  isOptionsMenuOpen
-                    ? 'bg-purple-100 border-purple-300 text-purple-800'
-                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
-                }`}
-                title="Mais opções e configurações da prancha"
-                aria-expanded={isOptionsMenuOpen}
-              >
-                <MoreHorizontal className="w-4 h-4" />
-                <span className="hidden sm:inline">Mais opções</span>
-              </button>
-
-              {/* PAINEL PARA BAIXO com funções secundárias / profissionais */}
-              {isOptionsMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2 z-50 flex flex-col space-y-1 animate-in fade-in zoom-in-95 duration-150">
-
-                  {/* Limpar frase */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleClearPhrase();
-                      setIsOptionsMenuOpen(false);
-                    }}
-                    disabled={phrase.length === 0}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer text-left"
-                  >
-                    <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
-                    <div>
-                      <span className="block font-black">Limpar frase</span>
-                      <span className="text-[10px] text-rose-400 font-normal">Apaga todas as palavras selecionadas</span>
-                    </div>
-                  </button>
-
-                  {/* Fala ao tocar ON/OFF */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSpeakOnClick(!speakOnClick);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {speakOnClick ? (
-                        <Volume2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                      ) : (
-                        <VolumeX className="w-4 h-4 text-slate-400 shrink-0" />
-                      )}
-                      <span>Fala ao tocar no cartão</span>
-                    </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                        speakOnClick ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500'
-                      }`}
-                    >
-                      {speakOnClick ? 'ON' : 'OFF'}
-                    </span>
-                  </button>
-
-                  <div className="my-1 border-t border-slate-100" />
-
-                  {/* Duplicar prancha */}
-                  {canManage && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleDuplicateCurrentBoard();
-                        setIsOptionsMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-                    >
-                      <Copy className="w-4 h-4 text-slate-500 shrink-0" />
-                      <span>Duplicar prancha</span>
-                    </button>
-                  )}
-
-                  {/* Imprimir */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handlePrintBoard();
-                      setIsOptionsMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-                  >
-                    <Printer className="w-4 h-4 text-slate-500 shrink-0" />
-                    <span>Imprimir (Plastificação A4)</span>
-                  </button>
-
-                  {/* Personalizar */}
-                  {canManage && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditorInitialTab('cards');
-                        setIsEditorOpen(true);
-                        setIsOptionsMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-purple-50 hover:text-purple-700 transition-colors cursor-pointer text-left"
-                    >
-                      <Settings className="w-4 h-4 text-purple-600 shrink-0" />
-                      <span>Personalizar prancha e cartões</span>
-                    </button>
-                  )}
-
-                  {/* Editar categorias */}
-                  {canManage && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditorInitialTab('pages');
-                        setIsEditorOpen(true);
-                        setIsOptionsMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-purple-50 hover:text-purple-700 transition-colors cursor-pointer text-left"
-                    >
-                      <Layers className="w-4 h-4 text-purple-600 shrink-0" />
-                      <span>Editar categorias</span>
-                    </button>
-                  )}
-
-                  <div className="my-1 border-t border-slate-100" />
-
-                  {/* Trocar prancha se houver mais de uma */}
-                  {boards.length > 1 && (
-                    <div className="px-3 py-1.5">
-                      <label className="block text-[10px] font-bold text-slate-400 mb-1">
-                        Trocar prancha ativa:
-                      </label>
-                      <select
-                        value={selectedBoard?.id || ''}
-                        onChange={e => {
-                          loadBoardDetail(e.target.value);
-                          setIsOptionsMenuOpen(false);
-                        }}
-                        className="w-full text-xs font-bold px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-hidden"
-                      >
-                        {boards.map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* Tela Cheia */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleToggleFullscreen();
-                      setIsOptionsMenuOpen(false);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
-                  >
-                    {isFullscreen ? (
-                      <Minimize2 className="w-4 h-4 text-amber-600 shrink-0" />
-                    ) : (
-                      <Maximize2 className="w-4 h-4 text-slate-500 shrink-0" />
-                    )}
-                    <span>{isFullscreen ? 'Sair da tela cheia (ESC)' : 'Tela cheia'}</span>
-                  </button>
-
-                  {/* Fechar prancha */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOptionsMenuOpen(false);
-                      onClose();
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer text-left"
-                  >
-                    <X className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span>Fechar janela de CAA</span>
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* [ ⚙ ACESSIBILIDADE ] */}
+            <button
+              type="button"
+              onClick={() => setIsAccessibilityOpen(true)}
+              className="h-7 sm:h-7.5 inline-flex items-center gap-1.5 px-2.5 sm:px-3 rounded-lg font-bold text-xs text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-colors cursor-pointer shrink-0 select-none"
+              title="Acessibilidade, voz, tamanho e ajustes"
+            >
+              <Settings className="w-3.5 h-3.5 text-slate-600" />
+              <span className="hidden sm:inline">Acessibilidade</span>
+            </button>
 
             {/* Fechar discreto */}
             <button
               type="button"
               onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0 ml-1"
+              className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
               title="Fechar janela de CAA"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         ) : (
@@ -621,7 +525,7 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
               </h3>
               <p className="text-xs sm:text-sm text-slate-500 mt-2 mb-6">
                 {canManage
-                  ? `O paciente ${patientName || ''} ainda não possui pranchas cadastradas. Você pode iniciar com a prancha completa contendo 28 categorias clínicas e vocabulário amplo pré-configurado.`
+                  ? `O paciente ${patientName || ''} ainda não possui pranchas cadastradas. Você pode iniciar com a prancha completa contendo mais de 30 categorias clínicas e vocabulário dinâmico pré-configurado.`
                   : `O paciente ${patientName || ''} ainda não possui uma prancha de comunicação cadastrada no prontuário. Solicite a um profissional com permissão de gestão (Fonoaudiologia ou Terapia Ocupacional) a criação do recurso.`}
               </p>
 
@@ -634,7 +538,7 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                   >
                     <Sparkles className="w-4 h-4" />
-                    <span>{creatingTemplate ? 'Carregando 28 Categorias…' : 'Criar Prancha com Modelo Pronto (Recomendado)'}</span>
+                    <span>{creatingTemplate ? 'Carregando Categorias…' : 'Criar Prancha com Modelo Pronto (Recomendado)'}</span>
                   </button>
 
                   <button
@@ -659,7 +563,12 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
             <AACBoardView
               pages={selectedBoard.pages || []}
               activePageId={activePageId}
-              onSelectPage={setActivePageId}
+              onSelectPage={(pageId) => {
+                if (pageId !== activePageId) {
+                  setNavigationStack(prev => [...prev, activePageId]);
+                }
+                setActivePageId(pageId);
+              }}
               onCardClick={handleCardClick}
               onErrei={handleErrei}
               phraseLength={phrase.length}
@@ -669,10 +578,349 @@ export const AACBoardModal: React.FC<AACBoardModalProps> = ({
                 setEditorInitialTab('cards');
                 setIsEditorOpen(true);
               }}
+              onBack={handleBack}
+              onHome={handleHome}
+              canGoBack={navigationStack.length > 0 || (selectedBoard.pages && selectedBoard.pages[0]?.id !== activePageId)}
+              accessibilityPrefs={accessibilityPrefs}
             />
           )}
         </div>
       </div>
+
+      {/* Modal / Painel de Acessibilidade e Ajustes */}
+      {isAccessibilityOpen && (
+        <div
+          className="fixed inset-0 z-60 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="acc-title"
+        >
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-100 text-purple-700">
+                  <Settings className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 id="acc-title" className="text-sm font-black text-slate-800">
+                    Acessibilidade & Ajustes da Prancha
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Personalize para necessidades visuais, motoras e de voz
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAccessibilityOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Corpo das Opções com Scroll */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5 text-xs">
+              {/* 1. Presets de Densidade de Grade */}
+              <div>
+                <label className="block text-xs font-black text-slate-700 mb-2">
+                  Densidade da Grade (Necessidade Motora / Visual)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateAccessibilityPrefs({ gridDensity: 'large' })}
+                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                      accessibilityPrefs.gridDensity === 'large'
+                        ? 'bg-purple-50 border-purple-500 text-purple-900 ring-2 ring-purple-200 font-black'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="block font-black text-xs">Grande</span>
+                    <span className="text-[10px] text-slate-500">3-4 cartões maiores</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => updateAccessibilityPrefs({ gridDensity: 'medium' })}
+                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                      accessibilityPrefs.gridDensity === 'medium'
+                        ? 'bg-purple-50 border-purple-500 text-purple-900 ring-2 ring-purple-200 font-black'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="block font-black text-xs">Médio</span>
+                    <span className="text-[10px] text-slate-500">Grade padrão</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => updateAccessibilityPrefs({ gridDensity: 'compact' })}
+                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                      accessibilityPrefs.gridDensity === 'compact'
+                        ? 'bg-purple-50 border-purple-500 text-purple-900 ring-2 ring-purple-200 font-black'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="block font-black text-xs">Completo</span>
+                    <span className="text-[10px] text-slate-500">Mais vocabulário</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. Visual: Tamanho do Texto, Símbolos e Alto Contraste */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800">Alto Contraste</span>
+                    <p className="text-[10px] text-slate-500">Bordas reforçadas e fundo de alta legibilidade</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateAccessibilityPrefs({ highContrast: !accessibilityPrefs.highContrast })}
+                    className={`px-3 py-1 rounded-full text-xs font-black transition-colors cursor-pointer ${
+                      accessibilityPrefs.highContrast
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {accessibilityPrefs.highContrast ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800">Tamanho do Texto</span>
+                    <p className="text-[10px] text-slate-500">Escala de fonte dos cartões</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                    {(['normal', 'large', 'extra-large'] as const).map(sz => (
+                      <button
+                        key={sz}
+                        type="button"
+                        onClick={() => updateAccessibilityPrefs({ textSize: sz })}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize transition-colors cursor-pointer ${
+                          accessibilityPrefs.textSize === sz
+                            ? 'bg-white text-purple-700 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {sz === 'normal' ? 'Normal' : sz === 'large' ? 'Grande' : 'Muito Grande'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800">Tamanho dos Símbolos</span>
+                    <p className="text-[10px] text-slate-500">Ícones e emojis centrais ampliados</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                    {(['normal', 'large'] as const).map(symSz => (
+                      <button
+                        key={symSz}
+                        type="button"
+                        onClick={() => updateAccessibilityPrefs({ symbolSize: symSz })}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize transition-colors cursor-pointer ${
+                          accessibilityPrefs.symbolSize === symSz
+                            ? 'bg-white text-purple-700 shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {symSz === 'normal' ? 'Normal' : 'Amplo'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800">Fixar Barra de Núcleo Permanente</span>
+                    <p className="text-[10px] text-slate-500">Mantém Eu, Quero, Não, Mais na mesma posição</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateAccessibilityPrefs({ pinCoreBar: !accessibilityPrefs.pinCoreBar })}
+                    className={`px-3 py-1 rounded-full text-xs font-black transition-colors cursor-pointer ${
+                      accessibilityPrefs.pinCoreBar
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {accessibilityPrefs.pinCoreBar ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Síntese de Voz (TTS) */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800">Fala ao Tocar no Cartão</span>
+                    <p className="text-[10px] text-slate-500">Reproduz a palavra de cada cartão ao clicar</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateAccessibilityPrefs({ speakOnClick: !accessibilityPrefs.speakOnClick })}
+                    className={`px-3 py-1 rounded-full text-xs font-black transition-colors cursor-pointer ${
+                      accessibilityPrefs.speakOnClick
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {accessibilityPrefs.speakOnClick ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold text-slate-800">Velocidade da Voz</span>
+                    <span className="font-mono text-[11px] font-bold text-indigo-700">
+                      {accessibilityPrefs.speechRate}x
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="1.5"
+                    step="0.05"
+                    value={accessibilityPrefs.speechRate}
+                    onChange={e => updateAccessibilityPrefs({ speechRate: parseFloat(e.target.value) })}
+                    className="w-full accent-indigo-600 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[9px] text-slate-400">
+                    <span>Mais Lenta (0.5x)</span>
+                    <span>Padrão (1.0x)</span>
+                    <span>Mais Rápida (1.5x)</span>
+                  </div>
+                </div>
+
+                {availableVoices.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Voz em Português
+                    </label>
+                    <select
+                      value={accessibilityPrefs.voiceURI || ''}
+                      onChange={e => updateAccessibilityPrefs({ voiceURI: e.target.value })}
+                      className="w-full text-xs rounded-xl border border-slate-300 p-2 bg-white text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-purple-400"
+                    >
+                      <option value="">Voz Padrão do Sistema (Automática)</option>
+                      {availableVoices.map(v => (
+                        <option key={v.voiceURI} value={v.voiceURI}>
+                          {v.name} ({v.lang})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Ações Rápidas & Ferramentas Profissionais */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider block">
+                  Ações da Prancha
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleClearPhrase();
+                      setIsAccessibilityOpen(false);
+                    }}
+                    disabled={phrase.length === 0}
+                    className="flex items-center gap-2 p-2.5 rounded-xl border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-bold text-left cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
+                    <span>Limpar frase</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleToggleFullscreen();
+                      setIsAccessibilityOpen(false);
+                    }}
+                    className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors font-bold text-left cursor-pointer"
+                  >
+                    {isFullscreen ? <Minimize2 className="w-4 h-4 shrink-0" /> : <Maximize2 className="w-4 h-4 shrink-0" />}
+                    <span>{isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handlePrintBoard();
+                      setIsAccessibilityOpen(false);
+                    }}
+                    className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors font-bold text-left cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span>Imprimir A4</span>
+                  </button>
+
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleDuplicateCurrentBoard();
+                        setIsAccessibilityOpen(false);
+                      }}
+                      className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors font-bold text-left cursor-pointer"
+                    >
+                      <Copy className="w-4 h-4 text-slate-500 shrink-0" />
+                      <span>Duplicar prancha</span>
+                    </button>
+                  )}
+                </div>
+
+                {canManage && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorInitialTab('cards');
+                        setIsEditorOpen(true);
+                        setIsAccessibilityOpen(false);
+                      }}
+                      className="flex items-center gap-2 p-2.5 rounded-xl border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors font-bold text-left cursor-pointer"
+                    >
+                      <Settings className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span>Editar Cartões</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorInitialTab('pages');
+                        setIsEditorOpen(true);
+                        setIsAccessibilityOpen(false);
+                      }}
+                      className="flex items-center gap-2 p-2.5 rounded-xl border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors font-bold text-left cursor-pointer"
+                    >
+                      <Layers className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span>Editar Categorias</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsAccessibilityOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-white font-bold text-xs hover:bg-slate-900 transition-colors cursor-pointer"
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Edição da Prancha */}
       {isEditorOpen && selectedBoard && canManage && (

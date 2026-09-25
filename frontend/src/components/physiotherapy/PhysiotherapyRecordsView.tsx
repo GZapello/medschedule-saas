@@ -27,13 +27,14 @@ import {
 import { BodyPainMapCanvas } from './BodyPainMapCanvas';
 import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 export const PhysiotherapyRecordsView: React.FC = () => {
   const { clientTermLabel, currentTenant, currentUser } = useAuth();
   const { showToast } = useToast();
 
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
 
   // Aba ativa: Avaliação Funcional, Evoluções de Sessão ou Testes Externos
@@ -114,14 +115,7 @@ export const PhysiotherapyRecordsView: React.FC = () => {
   useEffect(() => {
     async function init() {
       try {
-        const [patientsData, specsData] = await Promise.all([
-          ApiClient.get<Patient[]>('/v1/patients'),
-          ApiClient.get<Specialty[]>('/v1/taxonomy/specialties')
-        ]);
-        setPatients(patientsData || []);
-        if (patientsData && patientsData.length > 0) {
-          setSelectedPatientId(patientsData[0].id);
-        }
+        const specsData = await ApiClient.get<Specialty[]>('/v1/taxonomy/specialties');
 
         // Filtra especialidades de fisioterapia
         const physioSpecs = (specsData || []).filter(s =>
@@ -157,7 +151,16 @@ export const PhysiotherapyRecordsView: React.FC = () => {
 
   useEffect(() => {
     if (selectedPatientId) {
+      if (!selectedPatient || selectedPatient.id !== selectedPatientId) {
+        ApiClient.get<any>(`/v1/patients/${selectedPatientId}`)
+          .then(res => setSelectedPatient(res?.patient || res))
+          .catch(() => {});
+      }
       loadPatientPhysioData(selectedPatientId);
+    } else {
+      setSelectedPatient(null);
+      setAssessments([]);
+      setEvolutions([]);
     }
   }, [selectedPatientId]);
 
@@ -248,7 +251,7 @@ export const PhysiotherapyRecordsView: React.FC = () => {
     }
   };
 
-  const currentPatient = patients.find(p => p.id === selectedPatientId);
+  const currentPatient = selectedPatient;
 
   return (
     <div className="space-y-6">
@@ -303,17 +306,17 @@ export const PhysiotherapyRecordsView: React.FC = () => {
           <label className="text-xs font-bold text-slate-700 whitespace-nowrap">
             {clientTermLabel} em Atendimento:
           </label>
-          <select
+          <PatientSearchSelect
             value={selectedPatientId}
-            onChange={e => setSelectedPatientId(e.target.value)}
-            className="w-full sm:w-80 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-          >
-            {patients.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.full_name} {p.cpf ? `(CPF: ${p.cpf})` : ''}
-              </option>
-            ))}
-          </select>
+            selectedPatient={selectedPatient}
+            placeholder={`Buscar ${clientTermLabel.toLowerCase()}...`}
+            onChange={(id, pat) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+            }}
+            className="w-full sm:w-80"
+          />
         </div>
 
         {/* Abas de Navegação */}

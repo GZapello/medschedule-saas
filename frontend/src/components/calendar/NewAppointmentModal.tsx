@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import { Professional, Service, Patient, AvailableSlot } from '../../types';
 import { X, Calendar, Clock, User, Plus, CheckCircle2 } from 'lucide-react';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface NewAppointmentModalProps {
   isOpen: boolean;
@@ -21,7 +22,6 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const { showToast } = useToast();
   const { clientTermLabel } = useAuth();
 
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [insurances, setInsurances] = useState<any[]>([]);
@@ -53,18 +53,15 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         setDate(initialPrefill.date);
       }
       Promise.all([
-        ApiClient.get<Patient[]>('/v1/patients'),
         ApiClient.get<Professional[]>('/v1/professionals'),
         ApiClient.get<Service[]>('/v1/services'),
         ApiClient.get<any[]>('/v1/insurances/clinic'),
         ApiClient.get<any[]>('/v1/rooms')
-      ]).then(([pats, profs, srvs, ins, rms]) => {
-        setPatients(pats);
+      ]).then(([profs, srvs, ins, rms]) => {
         setProfessionals(profs);
         setServices(srvs);
         setInsurances(ins || []);
         setRooms(rms || []);
-        if (pats.length > 0) setPatientId(pats[0].id);
         const targetProfId = initialPrefill?.professionalId && profs.some(p => p.id === initialPrefill.professionalId)
           ? initialPrefill.professionalId
           : (profs.length > 0 ? profs[0].id : '');
@@ -171,20 +168,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
         </div>
 
         <div className="space-y-3.5 text-xs">
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">{clientTermLabel} *</label>
-            <select
-              value={patientId}
-              onChange={e => setPatientId(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
-            >
-              {patients.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name} {p.is_child ? '(Pediátrico)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          <PatientSearchSelect
+            label={clientTermLabel}
+            required
+            value={patientId}
+            clientTermLabel={clientTermLabel}
+            onChange={(id) => setPatientId(id)}
+          />
 
           <div className="grid grid-cols-2 gap-3">
             <div>

@@ -117,6 +117,8 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
   // Estados de Edição de Cartão
   const [editingCard, setEditingCard] = useState<AACCard | null>(null);
   const [isCreatingCard, setIsCreatingCard] = useState(false);
+  const [cardBehavior, setCardBehavior] = useState<'word' | 'navigation' | 'word_and_navigation'>('word');
+  const [cardPageId, setCardPageId] = useState<string>(board.pages?.[0]?.id || '');
   const [cardLabel, setCardLabel] = useState('');
   const [cardSpokenText, setCardSpokenText] = useState('');
   const [cardCategory, setCardCategory] = useState<AACCategories>('action');
@@ -226,8 +228,10 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
   // Abrir Modal/Form para Novo Cartão
   const handleStartCreateCard = () => {
     setEditingCard(null);
+    setCardPageId(selectedPageId);
     setCardLabel('');
     setCardSpokenText('');
+    setCardBehavior('word');
     setCardCategory('action');
     setCardColor(FITZGERALD_COLORS.action.bg);
     setCardSymbolType('emoji');
@@ -240,6 +244,7 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
   // Abrir Modal/Form para Editar Cartão Existente
   const handleStartEditCard = (card: AACCard) => {
     setEditingCard(card);
+    setCardPageId(card.page_id || selectedPageId);
     setCardLabel(card.label);
     setCardSpokenText(card.spoken_text);
     setCardCategory(card.category);
@@ -248,6 +253,9 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
     setCardImageUrl(card.image_url || '💬');
     setCardTargetPageId(card.target_page_id || '');
     setCardActive(Boolean(card.active));
+    const initialBehavior: 'word' | 'navigation' | 'word_and_navigation' =
+      card.behavior || (card.category === 'navigation' ? 'navigation' : (card.target_page_id ? 'word_and_navigation' : 'word'));
+    setCardBehavior(initialBehavior);
     setIsCreatingCard(true);
   };
 
@@ -291,22 +299,34 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
       return;
     }
 
-    if (!selectedPageId) {
-      showToast('Selecione uma página para o cartão', 'info');
+    const targetPage = cardPageId || selectedPageId;
+    if (!targetPage) {
+      showToast('Selecione uma categoria/página para o cartão', 'info');
+      return;
+    }
+
+    if ((cardBehavior === 'navigation' || cardBehavior === 'word_and_navigation') && !cardTargetPageId) {
+      showToast('Selecione a página de destino da navegação', 'info');
       return;
     }
 
     try {
       setSavingCard(true);
+      const resolvedTargetPageId = (cardBehavior === 'navigation' || cardBehavior === 'word_and_navigation')
+        ? (cardTargetPageId || null)
+        : null;
+      const resolvedCategory = cardBehavior === 'navigation' ? 'navigation' : cardCategory;
+
       const payload = {
-        page_id: selectedPageId,
+        page_id: targetPage,
         label: cardLabel.trim(),
-        spoken_text: cardSpokenText.trim() || cardLabel.trim(),
-        category: cardCategory,
-        color: cardColor || FITZGERALD_COLORS[cardCategory]?.bg || '#f1f5f9',
+        spoken_text: cardBehavior === 'navigation' ? '' : (cardSpokenText.trim() || cardLabel.trim()),
+        category: resolvedCategory,
+        color: cardColor || FITZGERALD_COLORS[resolvedCategory]?.bg || '#f1f5f9',
         symbol_type: cardSymbolType,
         image_url: cardImageUrl,
-        target_page_id: cardTargetPageId || null,
+        target_page_id: resolvedTargetPageId,
+        behavior: cardBehavior,
         active: cardActive ? 1 : 0
       };
 
@@ -320,6 +340,9 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
 
       setIsCreatingCard(false);
       setEditingCard(null);
+      if (targetPage !== selectedPageId) {
+        setSelectedPageId(targetPage);
+      }
       onBoardUpdated();
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar cartão', 'error');
@@ -611,7 +634,127 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                     </button>
                   </div>
 
+                  {/* Seletor de Comportamento do Cartão */}
+                  <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Comportamento do Cartão *
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCardBehavior('word');
+                          setCardTargetPageId('');
+                          if (cardCategory === 'navigation') setCardCategory('action');
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          cardBehavior === 'word'
+                            ? 'bg-purple-50 border-purple-400 text-purple-900 ring-2 ring-purple-200'
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="block text-xs font-black">Palavra / Fala</span>
+                        <span className="block text-[10px] text-slate-500 mt-0.5 leading-tight">
+                          Insere na frase e pronuncia o áudio sintetizado.
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCardBehavior('navigation');
+                          setCardCategory('navigation');
+                          setCardColor(FITZGERALD_COLORS.navigation.bg);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          cardBehavior === 'navigation'
+                            ? 'bg-indigo-50 border-indigo-400 text-indigo-900 ring-2 ring-indigo-200'
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="block text-xs font-black flex items-center gap-1">
+                          <span>Navegação</span>
+                          <CornerDownRight className="w-3 h-3 text-indigo-600" />
+                        </span>
+                        <span className="block text-[10px] text-slate-500 mt-0.5 leading-tight">
+                          Apenas abre outra categoria (NÃO fala e NÃO entra na frase).
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCardBehavior('word_and_navigation');
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          cardBehavior === 'word_and_navigation'
+                            ? 'bg-blue-50 border-blue-400 text-blue-900 ring-2 ring-blue-200'
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="block text-xs font-black">Palavra + Navegação</span>
+                        <span className="block text-[10px] text-slate-500 mt-0.5 leading-tight">
+                          Pronuncia a palavra e abre a categoria de destino.
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Categoria / Página onde o cartão reside (permite transferir de categoria) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Categoria / Página deste Cartão
+                      </label>
+                      <select
+                        value={cardPageId}
+                        onChange={e => setCardPageId(e.target.value)}
+                        className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+                      >
+                        {(board.pages || []).map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} {p.id === selectedPageId ? '(atual)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        Altere para mover este cartão para outra categoria da prancha.
+                      </span>
+                    </div>
+
+                    {/* Destino da Navegação quando aplicável */}
+                    {cardBehavior !== 'word' ? (
+                      <div>
+                        <label className="block text-xs font-bold text-indigo-700 mb-1 flex items-center gap-1">
+                          <CornerDownRight className="w-3.5 h-3.5" />
+                          <span>Página de Destino ao Clicar *</span>
+                        </label>
+                        <select
+                          value={cardTargetPageId}
+                          onChange={e => setCardTargetPageId(e.target.value)}
+                          className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-indigo-300 bg-indigo-50/50 focus:ring-2 focus:ring-indigo-400 focus:outline-hidden"
+                        >
+                          <option value="">Selecione a página de destino…</option>
+                          {(board.pages || [])
+                            .filter(p => p.id !== cardPageId)
+                            .map(p => (
+                              <option key={p.id} value={p.id}>
+                                Ir para: {p.name} ({p.cards?.length || 0} cartões)
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="opacity-40">
+                        <label className="block text-xs font-bold text-slate-500 mb-1">
+                          Página de Destino
+                        </label>
+                        <div className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-slate-100 text-slate-400">
+                          Desativada para cartões de fala simples
+                        </div>
+                      </div>
+                    )}
+
                     {/* Rótulo Escrito */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -626,7 +769,7 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                             setCardSpokenText(e.target.value);
                           }
                         }}
-                        placeholder="Ex: Água, Quero, Banheiro..."
+                        placeholder={cardBehavior === 'navigation' ? 'Ex: Brincadeiras →' : 'Ex: Água, Quero, Banheiro...'}
                         className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
                       />
                     </div>
@@ -634,14 +777,17 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                     {/* Fala Sintetizada (Spoken text) */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        O que a voz deve falar
+                        O que a voz deve falar {cardBehavior === 'navigation' && <span className="text-slate-400 font-normal">(Opcional / Não falado)</span>}
                       </label>
                       <input
                         type="text"
                         value={cardSpokenText}
                         onChange={e => setCardSpokenText(e.target.value)}
-                        placeholder="Ex: Quero beber água por favor"
-                        className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+                        disabled={cardBehavior === 'navigation'}
+                        placeholder={cardBehavior === 'navigation' ? 'Cartões de navegação não pronunciam fala' : 'Ex: Quero beber água por favor'}
+                        className={`w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 ${
+                          cardBehavior === 'navigation' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white focus:ring-2 focus:ring-purple-400'
+                        } focus:outline-hidden`}
                       />
                     </div>
 
@@ -657,34 +803,16 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                           setCardCategory(cat);
                           setCardColor(FITZGERALD_COLORS[cat]?.bg || '#f1f5f9');
                         }}
-                        className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+                        disabled={cardBehavior === 'navigation'}
+                        className={`w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 ${
+                          cardBehavior === 'navigation' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white focus:ring-2 focus:ring-purple-400'
+                        } focus:outline-hidden`}
                       >
                         {Object.entries(FITZGERALD_COLORS).map(([key, meta]) => (
                           <option key={key} value={key}>
                             {meta.label}
                           </option>
                         ))}
-                      </select>
-                    </div>
-
-                    {/* Link para Outra Página (Navegação) */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Navegar para outra página ao clicar?
-                      </label>
-                      <select
-                        value={cardTargetPageId}
-                        onChange={e => setCardTargetPageId(e.target.value)}
-                        className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-300 bg-white focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
-                      >
-                        <option value="">Nenhuma (permanecer nesta página)</option>
-                        {(board.pages || [])
-                          .filter(p => p.id !== selectedPageId)
-                          .map(p => (
-                            <option key={p.id} value={p.id}>
-                              Ir para: {p.name}
-                            </option>
-                          ))}
                       </select>
                     </div>
                   </div>
@@ -839,17 +967,24 @@ export const AACBoardEditorModal: React.FC<AACBoardEditorModalProps> = ({
                               </span>
                               {card.target_page_id && (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[10px] font-bold">
-                                  <CornerDownRight className="w-3 h-3" /> Navega
+                                  <CornerDownRight className="w-3 h-3" />
+                                  <span>
+                                    {board.pages?.find(p => p.id === card.target_page_id)?.name || 'Navega'}
+                                  </span>
                                 </span>
                               )}
                               {!isActive && (
                                 <span className="px-1.5 py-0.5 rounded-md bg-slate-200 text-slate-600 text-[10px] font-bold">
-                                  Inativo
+                                  Oculto
                                 </span>
                               )}
                             </div>
                             <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                              Fala: "{card.spoken_text}"
+                              {card.category === 'navigation' || card.behavior === 'navigation'
+                                ? 'Navegação pura (não reproduz voz)'
+                                : card.behavior === 'word_and_navigation'
+                                ? `Fala: "${card.spoken_text}" + Navegação`
+                                : `Fala: "${card.spoken_text}"`}
                             </p>
                           </div>
                         </div>

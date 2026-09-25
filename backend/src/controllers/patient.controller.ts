@@ -13,7 +13,7 @@ export class PatientController {
         return;
       }
 
-      const { search } = req.query;
+      const { search, limit } = req.query;
       let query = `
         SELECT 
           p.id, p.tenant_id, p.full_name, p.social_name, p.birth_date, p.cpf, p.gender,
@@ -47,6 +47,11 @@ export class PatientController {
       }
 
       query += ' ORDER BY p.full_name ASC';
+
+      if (limit && Number(limit) > 0) {
+        query += ' LIMIT ?';
+        params.push(Number(limit));
+      }
 
       const stmt = db.prepare(query);
       const patients = stmt.all(...params);

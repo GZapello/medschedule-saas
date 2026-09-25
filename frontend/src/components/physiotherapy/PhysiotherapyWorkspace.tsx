@@ -35,6 +35,7 @@ import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface PhysiotherapyWorkspaceProps {
   initialPatientId?: string;
@@ -111,7 +112,6 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const { showToast } = useToast();
   const completion = useConsultationCompletion(onFinishConsultation);
 
-  const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
@@ -345,38 +345,21 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     onRestoreDraft: handleRestoreDraft
   });
 
-  // Carrega pacientes
-  useEffect(() => {
-    async function loadPatients() {
-      try {
-        const res = await ApiClient.get<any[]>('/v1/patients');
-        if (Array.isArray(res)) {
-          setPatients(res);
-        }
-      } catch (err) {
-        console.warn('Erro ao carregar lista de pacientes:', err);
-      }
-    }
-    loadPatients();
-  }, []);
-
-  // Seleciona paciente
+  // Seleciona paciente e carrega dados
   useEffect(() => {
     if (!selectedPatientId) {
       setSelectedPatient(null);
       return;
     }
-    const found = patients.find(p => p.id === selectedPatientId);
-    if (found) {
-      setSelectedPatient(found);
+    ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
+      const patData = p?.patient || p;
+      setSelectedPatient(patData);
       loadPatientData(selectedPatientId);
-    } else {
-      ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
-        setSelectedPatient(p);
-        loadPatientData(selectedPatientId);
-      }).catch(err => console.warn(err));
-    }
-  }, [selectedPatientId, patients]);
+    }).catch(err => {
+      console.warn('Erro ao carregar paciente fisioterapêutico:', err);
+      loadPatientData(selectedPatientId);
+    });
+  }, [selectedPatientId]);
 
   const loadPatientData = async (patId: string) => {
     try {
@@ -500,29 +483,17 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
         {/* SELETOR DE PACIENTE */}
         <div className="flex items-center gap-3">
-          <div className="relative min-w-[260px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <select
-              value={selectedPatientId}
-              disabled={!!initialAppointmentId}
-              onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-teal-500 focus:outline-none transition-colors"
-            >
-              <option value="">Selecione um Paciente...</option>
-              {patients.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name} {p.cpf ? `(${p.cpf})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {selectedPatient && (
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-200 rounded-xl text-xs font-semibold text-teal-900">
-              <User className="w-3.5 h-3.5 text-teal-600" />
-              <span>{selectedPatient.full_name}</span>
-            </div>
-          )}
+          <PatientSearchSelect
+            compact
+            value={selectedPatientId}
+            selectedPatient={selectedPatient}
+            disabled={!!initialAppointmentId}
+            onChange={(id, pat) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+            }}
+          />
 
           {selectedPatientId && (
             <ClinicalQuickHeaderActions

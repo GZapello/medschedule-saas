@@ -21,18 +21,18 @@ import {
   Share2,
   X
 } from 'lucide-react';
-import { Budget, BudgetItem, Patient } from '../../types';
+import { Budget, BudgetItem } from '../../types';
 import {
   ClinicDocumentHeader,
   ClinicDocumentFooter
 } from '../common/ClinicDocumentHeader';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 export const BudgetsView: React.FC = () => {
   const { showToast } = useToast();
   const { clientTermLabel, currentTenant } = useAuth();
 
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Tabs & Filtros
@@ -56,16 +56,6 @@ export const BudgetsView: React.FC = () => {
   ]);
   const [saving, setSaving] = useState<boolean>(false);
 
-  const fetchPatients = async () => {
-    try {
-      const pts = await ApiClient.get<Patient[]>('/v1/patients');
-      setPatients(pts);
-      if (pts.length > 0 && !selectedPatientId) setSelectedPatientId(pts[0].id);
-    } catch (e) {
-      console.warn('Erro ao carregar pacientes:', e);
-    }
-  };
-
   const fetchBudgets = async () => {
     try {
       setLoading(true);
@@ -83,10 +73,6 @@ export const BudgetsView: React.FC = () => {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchPatients();
-  }, []);
 
   useEffect(() => {
     fetchBudgets();
@@ -243,6 +229,9 @@ export const BudgetsView: React.FC = () => {
 
         <button
           onClick={() => {
+            setSelectedPatientId('');
+            setSupplierName('');
+            setSupplierContact('');
             setItems([{ description: '', quantity: 1, unitPrice: 0 }]);
             setDiscount(0);
             setNotes('');
@@ -431,15 +420,12 @@ export const BudgetsView: React.FC = () => {
               {activeTab === 'patient' ? (
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">{clientTermLabel} *</label>
-                  <select
+                  <PatientSearchSelect
                     value={selectedPatientId}
-                    onChange={e => setSelectedPatientId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                  >
-                    {patients.map(p => (
-                      <option key={p.id} value={p.id}>{p.full_name} {p.cpf ? `• CPF: ${p.cpf}` : ''}</option>
-                    ))}
-                  </select>
+                    onChange={(id) => setSelectedPatientId(id)}
+                    clientTermLabel={clientTermLabel}
+                    placeholder={`Buscar ${clientTermLabel.toLowerCase()}...`}
+                  />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">

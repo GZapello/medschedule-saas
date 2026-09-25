@@ -23,6 +23,7 @@ import { useToast } from '../../context/ToastContext';
 import { FileImageUploader } from '../common/FileImageUploader';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface PersonalAssessmentModalProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const [activeTab, setActiveTab] = useState<'anthropometry' | 'composition' | 'skinfolds' | 'cardio_tests' | 'photos_notes'>('anthropometry');
 
   const [selectedStudentId, setSelectedStudentId] = useState(student?.id || '');
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(student || null);
   const [assessmentDate, setAssessmentDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Tab 1: Antropometria Básica & Perímetros (cm)
@@ -376,7 +378,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   };
 
   // Aluno Atual e Dados Demográficos
-  const currentStudent = studentsList.find((s) => s.id === selectedStudentId) || student;
+  const currentStudent = selectedStudent || studentsList?.find((s) => s.id === selectedStudentId) || student;
   const isMale = (currentStudent?.gender || 'm').toLowerCase().startsWith('m');
   const birthDate = currentStudent?.birth_date;
   let age = 28;
@@ -699,19 +701,17 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
           <div>
             <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Aluno(a) *</label>
-            <select
-              disabled={!!student}
+            <PatientSearchSelect
+              isStudent
+              clientTermLabel="Aluno"
               value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-semibold text-slate-800"
-            >
-              <option value="">Selecione o aluno...</option>
-              {studentsList.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.gender === 'm' ? 'Masc' : 'Fem'})
-                </option>
-              ))}
-            </select>
+              onChange={(id, stud) => {
+                setSelectedStudentId(id);
+                setSelectedStudent((stud as any) || null);
+              }}
+              disabled={!!student}
+              placeholder="Buscar aluno pelo nome..."
+            />
           </div>
 
           <div>

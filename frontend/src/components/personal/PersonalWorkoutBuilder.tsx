@@ -23,6 +23,7 @@ import { PersonalExerciseLibraryModal } from './PersonalExerciseLibraryModal';
 import { SecureFileImage } from '../common/SecureFileImage';
 import { isStretch } from './exercisePresentation';
 import { ExerciseImageCredit } from './ExerciseImageCredit';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface PersonalWorkoutBuilderProps {
   isOpen: boolean;
@@ -292,19 +293,14 @@ export const PersonalWorkoutBuilder: React.FC<PersonalWorkoutBuilderProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Aluno(a) *</label>
-              <select
-                disabled={!!student || !!workoutToEdit}
+              <PatientSearchSelect
+                isStudent
+                clientTermLabel="Aluno"
                 value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-              >
-                <option value="">Selecione um aluno...</option>
-                {studentsList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(id) => setSelectedStudentId(id)}
+                disabled={!!student || !!workoutToEdit}
+                placeholder="Buscar aluno pelo nome..."
+              />
             </div>
 
             <div>

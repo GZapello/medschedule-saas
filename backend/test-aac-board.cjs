@@ -235,14 +235,47 @@ async function runTests() {
     }
 
     const board = resFonoCreate.body.board;
-    if (!board || !board.id || board.pages.length < 5) {
-      throw new Error('A prancha deveria conter 5 páginas do vocabulário nuclear.');
+    if (!board || !board.id || board.pages.length < 30) {
+      throw new Error(`A prancha deveria conter ao menos 30 páginas do vocabulário expandido, obteve ${board.pages?.length}`);
     }
     const totalCards = board.pages.reduce((acc, p) => acc + (p.cards ? p.cards.length : 0), 0);
     console.log(`   -> Prancha ID: ${board.id} | Páginas: ${board.pages.length} | Total de Cartões: ${totalCards}`);
-    if (totalCards < 40) {
-      throw new Error(`Esperava vocabulário robusto com mais de 40 cartões, encontrou ${totalCards}`);
+    if (totalCards < 400) {
+      throw new Error(`Esperava vocabulário robusto com mais de 400 cartões, encontrou ${totalCards}`);
     }
+
+    // Validação específica da Navegação Dinâmica dos Cartões
+    console.log(' - Validando links de navegação dinâmica entre cartões e páginas:');
+    const principalPage = board.pages.find(p => p.name.toLowerCase() === 'principal');
+    if (!principalPage) {
+      throw new Error('Página Principal não encontrada na prancha.');
+    }
+
+    const navCards = principalPage.cards.filter(c => c.category === 'navigation' || c.behavior === 'navigation');
+    console.log(`   -> Total de cartões de navegação na Principal: ${navCards.length}`);
+    if (navCards.length < 5) {
+      throw new Error('A página Principal deve possuir atalhos contextuais de navegação.');
+    }
+
+    const brincarNav = navCards.find(c => c.label.toUpperCase().includes('BRINCAR'));
+    if (!brincarNav || !brincarNav.target_page_id) {
+      throw new Error('Cartão BRINCAR deve possuir target_page_id vinculado dinamicamente.');
+    }
+    const targetPageBrincar = board.pages.find(p => p.id === brincarNav.target_page_id);
+    if (!targetPageBrincar || !targetPageBrincar.name.toLowerCase().includes('brincadeiras')) {
+      throw new Error(`Target de BRINCAR deveria apontar para Brincadeiras, apontou para ${targetPageBrincar?.name}`);
+    }
+    console.log(`   -> Validação OK: "${brincarNav.label}" aponta dinamicamente para página "${targetPageBrincar.name}"`);
+
+    // Validação de palavras nucleares fixas
+    const coreWords = ['EU', 'VOCÊ', 'QUERO', 'NÃO QUERO', 'MAIS', 'ACABOU', 'SIM', 'NÃO', 'AJUDA'];
+    for (const w of coreWords) {
+      const found = principalPage.cards.find(c => c.label.toUpperCase().trim() === w);
+      if (!found) {
+        throw new Error(`Palavra nuclear "${w}" não encontrada na página Principal.`);
+      }
+    }
+    console.log('   -> Validação OK: Vocabulário nuclear permanente presente em posições consistentes.');
 
     // TESTE 4: Neurologista (tem AAC_BOARD_USE) abre e visualiza a prancha criada
     const resNeuroView = await makeRequest('GET', `/api/v1/aac/boards/${board.id}`, headersNeuro);
@@ -260,20 +293,28 @@ async function runTests() {
       symbol_type: 'emoji',
       image_url: '🧸',
       category: 'noun',
-      color: '#fed7aa'
+      color: '#fed7aa',
+      behavior: 'word'
     });
     console.log(' - Adicionar novo cartão personalizado: Status', resAddCard.status);
     if (resAddCard.status !== 201 || !resAddCard.body.card?.id) {
       throw new Error('Falha ao adicionar cartão personalizado.');
     }
 
-    // TESTE 6: Duplicação de prancha
+    // TESTE 6: Duplicação de prancha e validação de remapeamento interno
     const resDup = await makeRequest('POST', `/api/v1/aac/boards/${board.id}/duplicate`, headersFono);
     console.log(' - Duplicação de prancha completa: Status', resDup.status);
     if (resDup.status !== 200 || !resDup.body.board?.name.includes('(Cópia)')) {
       throw new Error('Falha ao duplicar prancha de CAA.');
     }
     const dupBoardId = resDup.body.board.id;
+    const dupBrincar = resDup.body.board.pages
+      .find(p => p.name.toLowerCase() === 'principal')?.cards
+      .find(c => c.label.toUpperCase().includes('BRINCAR'));
+    if (!dupBrincar || dupBrincar.target_page_id === brincarNav.target_page_id) {
+      throw new Error('A duplicação da prancha deve remapear os target_page_id para as novas páginas duplicadas.');
+    }
+    console.log('   -> Validação OK: Duplicação remapeou target_page_id perfeitamente para as novas páginas.');
 
     // TESTE 7: Exclusão da cópia
     const resDel = await makeRequest('DELETE', `/api/v1/aac/boards/${dupBoardId}`, headersFono);

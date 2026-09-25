@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Payment } from '../../types';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import {
   DollarSign,
   CheckCircle2,
@@ -17,6 +19,7 @@ import {
 } from 'lucide-react';
 
 export const FinancialView: React.FC = () => {
+  const { clientTermLabel } = useAuth();
   const { showToast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [totalPaid, setTotalPaid] = useState<number>(0);
@@ -46,7 +49,6 @@ export const FinancialView: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<string>('paid');
   const [patientId, setPatientId] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
-  const [patientsList, setPatientsList] = useState<any[]>([]);
 
   const fetchPayments = async () => {
     try {
@@ -88,10 +90,6 @@ export const FinancialView: React.FC = () => {
       fetchCashRegister();
     }
   }, [financialTab, statusFilter, methodFilter]);
-
-  useEffect(() => {
-    ApiClient.get<any[]>('/v1/patients').then(setPatientsList).catch(() => {});
-  }, []);
 
   const handleOpenCash = async () => {
     try {
@@ -214,7 +212,12 @@ export const FinancialView: React.FC = () => {
             <Download className="w-4 h-4" /> Exportar CSV
           </button>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setPatientId('');
+              setAmount('');
+              setNotes('');
+              setShowModal(true);
+            }}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
           >
             <Plus className="w-4 h-4" /> Novo Recebimento
@@ -698,17 +701,13 @@ export const FinancialView: React.FC = () => {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Cliente / Paciente *</label>
-                <select
+                <label className="block font-semibold text-slate-700 mb-1">{clientTermLabel} *</label>
+                <PatientSearchSelect
                   value={patientId}
-                  onChange={e => setPatientId(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
-                >
-                  <option value="">Selecione o cliente...</option>
-                  {patientsList.map(p => (
-                    <option key={p.id} value={p.id}>{p.full_name}</option>
-                  ))}
-                </select>
+                  onChange={(id) => setPatientId(id)}
+                  clientTermLabel={clientTermLabel}
+                  placeholder={`Buscar ${clientTermLabel.toLowerCase()}...`}
+                />
               </div>
 
               <div>

@@ -19,9 +19,21 @@ export interface AACCard {
   color?: string;
   position: number;
   target_page_id?: string | null;
+  behavior?: 'word' | 'navigation' | 'word_and_navigation';
   active: boolean | number;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface AACAccessibilityPrefs {
+  gridDensity: 'large' | 'medium' | 'compact';
+  textSize: 'normal' | 'large' | 'extra-large';
+  symbolSize: 'normal' | 'large';
+  highContrast: boolean;
+  speakOnClick: boolean;
+  speechRate: number;
+  voiceURI?: string;
+  pinCoreBar?: boolean;
 }
 
 export interface AACPage {

@@ -6,6 +6,7 @@ import { Patient } from '../../types';
 import { ZemdaBodyModal } from './ZemdaBodyModal';
 import { ZemdaBodyCanvas } from './ZemdaBodyCanvas';
 import { getRegionLabel } from './bodyRegionsData';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import {
   Activity,
   User,
@@ -122,8 +123,8 @@ export const ZemdaBodyRecordsView: React.FC = () => {
   const { clientTermLabel } = useAuth();
   const { showToast } = useToast();
 
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [assessments, setAssessments] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -143,22 +144,6 @@ export const ZemdaBodyRecordsView: React.FC = () => {
   const [comparingData, setComparingData] = useState<{ assessA: any; assessB: any } | null>(null);
   const [loadingCompare, setLoadingCompare] = useState<boolean>(false);
 
-  // Carrega lista de pacientes
-  useEffect(() => {
-    async function loadPatients() {
-      try {
-        const data = await ApiClient.get<Patient[]>('/v1/patients');
-        setPatients(data || []);
-        if (data && data.length > 0) {
-          setSelectedPatientId(data[0].id);
-        }
-      } catch (err: any) {
-        showToast('Erro ao carregar lista de pacientes', 'error');
-      }
-    }
-    loadPatients();
-  }, []);
-
   // Carrega avaliações do paciente selecionado
   const fetchAssessments = async (patientId: string) => {
     try {
@@ -175,7 +160,16 @@ export const ZemdaBodyRecordsView: React.FC = () => {
 
   useEffect(() => {
     if (selectedPatientId) {
+      if (!selectedPatient || selectedPatient.id !== selectedPatientId) {
+        ApiClient.get<any>(`/v1/patients/${selectedPatientId}`)
+          .then(res => setSelectedPatient(res?.patient || res))
+          .catch(() => {});
+      }
       fetchAssessments(selectedPatientId);
+    } else {
+      setSelectedPatient(null);
+      setAssessments([]);
+      setSelectedForCompare([]);
     }
   }, [selectedPatientId]);
 
@@ -208,7 +202,6 @@ export const ZemdaBodyRecordsView: React.FC = () => {
     };
   }, [detailsAssessment]);
 
-  const selectedPatient = patients.find(p => p.id === selectedPatientId);
 
   // Selecionar para comparação
   const toggleSelectForCompare = (id: string) => {
@@ -268,21 +261,22 @@ export const ZemdaBodyRecordsView: React.FC = () => {
 
         {/* Seletor de Paciente e Botão de Nova Avaliação */}
         <div className="flex items-center gap-3 flex-wrap max-w-lg w-full justify-end">
-          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+          <div className="flex items-center gap-2 flex-1 min-w-[280px]">
             <label className="text-xs font-bold text-slate-500 whitespace-nowrap">
               {clientTermLabel}:
             </label>
-            <select
+            <PatientSearchSelect
+              compact
               value={selectedPatientId}
-              onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full text-xs font-semibold text-slate-800 border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-            >
-              {patients.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name} {p.cpf ? `(${p.cpf})` : ''}
-                </option>
-              ))}
-            </select>
+              selectedPatient={selectedPatient}
+              clientTermLabel={clientTermLabel}
+              onChange={(id, pat) => {
+                setSelectedPatientId(id);
+                if (pat) setSelectedPatient(pat);
+                else if (!id) setSelectedPatient(null);
+              }}
+              className="flex-1"
+            />
           </div>
 
           <button

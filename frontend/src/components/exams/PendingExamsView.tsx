@@ -20,15 +20,15 @@ import {
   Printer,
   Download
 } from 'lucide-react';
-import { PendingExam, Patient, Professional } from '../../types';
+import { PendingExam, Professional } from '../../types';
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 export const PendingExamsView: React.FC = () => {
   const { showToast } = useToast();
   const { clientTermLabel } = useAuth();
 
   const [exams, setExams] = useState<PendingExam[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -64,13 +64,8 @@ export const PendingExamsView: React.FC = () => {
 
   const fetchAuxData = async () => {
     try {
-      const [pts, profs] = await Promise.all([
-        ApiClient.get<Patient[]>('/v1/patients'),
-        ApiClient.get<Professional[]>('/v1/professionals')
-      ]);
-      setPatients(pts);
+      const profs = await ApiClient.get<Professional[]>('/v1/professionals');
       setProfessionals(profs);
-      if (pts.length > 0 && !selectedPatientId) setSelectedPatientId(pts[0].id);
       if (profs.length > 0 && !selectedProfId) setSelectedProfId(profs[0].id);
     } catch (e) {
       console.warn('Erro ao carregar dados auxiliares:', e);
@@ -499,15 +494,12 @@ export const PendingExamsView: React.FC = () => {
             <div className="space-y-3 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">{clientTermLabel} *</label>
-                <select
+                <PatientSearchSelect
                   value={selectedPatientId}
-                  onChange={e => setSelectedPatientId(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                >
-                  {patients.map(p => (
-                    <option key={p.id} value={p.id}>{p.full_name}</option>
-                  ))}
-                </select>
+                  onChange={(id) => setSelectedPatientId(id)}
+                  clientTermLabel={clientTermLabel}
+                  placeholder={`Buscar ${clientTermLabel.toLowerCase()}...`}
+                />
               </div>
 
               <div>

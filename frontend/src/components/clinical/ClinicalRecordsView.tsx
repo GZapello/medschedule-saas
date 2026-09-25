@@ -5,6 +5,7 @@ import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Patient, ClinicalRecord } from '../../types';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import {
   FileText,
   ShieldCheck,
@@ -34,8 +35,8 @@ export const ClinicalRecordsView: React.FC = () => {
   const { clientTermLabel, currentTenant } = useAuth();
   const { showToast } = useToast();
 
-  const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  const [currentPatient, setCurrentPatient] = useState<any | null>(null);
   const [records, setRecords] = useState<ClinicalRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
@@ -83,23 +84,11 @@ export const ClinicalRecordsView: React.FC = () => {
   };
 
   useEffect(() => {
-    async function loadPatients() {
-      try {
-        const data = await ApiClient.get<Patient[]>('/v1/patients');
-        setPatients(data);
-        if (data.length > 0) {
-          setSelectedPatientId(data[0].id);
-        }
-      } catch (err: any) {
-        showToast('Erro ao carregar lista de pacientes', 'error');
-      }
-    }
-    loadPatients();
-  }, []);
-
-  useEffect(() => {
     if (selectedPatientId) {
       fetchRecords(selectedPatientId);
+    } else {
+      setRecords([]);
+      setPatientBodyAssessments([]);
     }
   }, [selectedPatientId]);
 
@@ -183,8 +172,6 @@ export const ClinicalRecordsView: React.FC = () => {
     window.open(printUrl, '_blank');
   };
 
-  const currentPatient = patients.find(p => p.id === selectedPatientId);
-
   // Parser de histórico de auditoria
   const parseEditHistory = (jsonStr?: string): any[] => {
     if (!jsonStr) return [];
@@ -218,26 +205,33 @@ export const ClinicalRecordsView: React.FC = () => {
 
       {/* Patient Selector & Action */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           <label className="text-xs font-bold text-slate-700 whitespace-nowrap">
             Selecione o {clientTermLabel}:
           </label>
-          <select
-            value={selectedPatientId}
-            onChange={e => setSelectedPatientId(e.target.value)}
-            className="w-full sm:w-72 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
-          >
-            {patients.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.full_name} {p.is_child ? '(Pediátrico)' : ''}
-              </option>
-            ))}
-          </select>
+          <div className="w-full sm:w-80">
+            <PatientSearchSelect
+              value={selectedPatientId}
+              onChange={(id, pat) => {
+                setSelectedPatientId(id);
+                setCurrentPatient(pat || null);
+              }}
+              clientTermLabel={clientTermLabel}
+              placeholder={`Buscar ${clientTermLabel.toLowerCase()}...`}
+            />
+          </div>
         </div>
 
         <button
-          onClick={() => setShowNewModal(true)}
-          className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer"
+          onClick={() => {
+            if (!selectedPatientId) {
+              showToast(`Selecione um ${clientTermLabel.toLowerCase()} primeiro`, 'info');
+              return;
+            }
+            setShowNewModal(true);
+          }}
+          disabled={!selectedPatientId}
+          className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="w-4 h-4" />
           Nova Evolução Clínica
@@ -250,6 +244,12 @@ export const ClinicalRecordsView: React.FC = () => {
           <div className="py-12 text-center text-xs text-slate-400">
             <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
             Carregando histórico do prontuário...
+          </div>
+        ) : !selectedPatientId ? (
+          <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
+            <User className="w-10 h-10 mx-auto mb-2 opacity-40 text-slate-400" />
+            <p className="font-medium text-sm text-slate-600">Nenhum {clientTermLabel.toLowerCase()} selecionado.</p>
+            <p className="text-xs text-slate-400 mt-1">Busque e selecione um {clientTermLabel.toLowerCase()} acima para carregar o prontuário.</p>
           </div>
         ) : records.length === 0 ? (
           <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
@@ -849,7 +849,7 @@ export const ClinicalRecordsView: React.FC = () => {
           isOpen={!!viewingBodyAssessment}
           onClose={() => setViewingBodyAssessment(null)}
           patientId={viewingBodyAssessment.patient_id}
-          patientName={patients.find(p => p.id === viewingBodyAssessment.patient_id)?.full_name}
+          patientName={viewingBodyAssessment.patient_name || currentPatient?.full_name}
           assessmentId={viewingBodyAssessment.id}
           appointmentId={viewingBodyAssessment.appointment_id}
           professionalId={viewingBodyAssessment.professional_id}

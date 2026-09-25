@@ -10,6 +10,7 @@ import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import {
   GraduationCap,
   BookOpen,
@@ -71,10 +72,8 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
   const { showToast } = useToast();
 
   // Pacientes e Seleção
-  const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [patientData, setPatientData] = useState<any>(null);
-  const [searchPatient, setSearchPatient] = useState<string>('');
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Navegação horizontal moderna das 8 abas
@@ -293,22 +292,12 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
   const [aiResult, setAiResult] = useState<string>('');
   const [generatingAi, setGeneratingAi] = useState<boolean>(false);
 
-  // Carrega lista de pacientes
-  useEffect(() => {
-    async function loadPatients() {
-      try {
-        const res = await ApiClient.get<any[]>('/v1/patients');
-        setPatients(res || []);
-      } catch (err) {
-        console.error('[PsychopedagogyWorkspace] Erro ao carregar pacientes:', err);
-      }
-    }
-    loadPatients();
-  }, []);
-
   // Ao selecionar um aprendente, carrega dados completos do paciente
   useEffect(() => {
-    if (!selectedPatientId) return;
+    if (!selectedPatientId) {
+      setPatientData(null);
+      return;
+    }
 
     async function loadPatientDetails() {
       try {
@@ -801,9 +790,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     }
   };
 
-  const selectedPatient = useMemo(() => {
-    return patients.find(p => p.id === selectedPatientId) || patientData;
-  }, [patients, selectedPatientId, patientData]);
+  const selectedPatient = patientData;
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
@@ -833,22 +820,18 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
         {/* CONTROLES À DIREITA: SELETOR DE APRENDENTE E AÇÕES RÁPIDAS */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="relative min-w-[240px]">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <select
-              value={selectedPatientId}
-              disabled={!!initialAppointmentId}
-              onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full pl-8 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors"
-            >
-              <option value="">Selecione o Aprendente...</option>
-              {patients.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name || p.name} {p.birth_date ? `(${new Date(p.birth_date).toLocaleDateString('pt-BR')})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          <PatientSearchSelect
+            compact
+            value={selectedPatientId}
+            selectedPatient={selectedPatient}
+            clientTermLabel="Aprendente"
+            disabled={!!initialAppointmentId}
+            onChange={(id, pat) => {
+              setSelectedPatientId(id);
+              if (pat) setPatientData(pat);
+              else if (!id) setPatientData(null);
+            }}
+          />
 
           {selectedPatientId && (
             <ClinicalQuickHeaderActions

@@ -37,6 +37,7 @@ import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface PsychologyWorkspaceProps {
   initialPatientId?: string;
@@ -53,10 +54,8 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   const { showToast } = useToast();
 
   // Pacientes e Seleção
-  const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
-  const [searchPatient, setSearchPatient] = useState<string>('');
 
   type TabKey = 'anamnese' | 'eem' | 'risk' | 'assessments' | 'screenings' | 'sessions' | 'goals' | 'external_tests';
   const [activeTab, setActiveTab] = useState<TabKey>('sessions');
@@ -226,18 +225,14 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   // Documentos emitidos do paciente
   const [documentsList, setDocumentsList] = useState<any[]>([]);
 
-  // Carrega lista de pacientes da clínica
+  // Sincroniza e carrega dados do paciente selecionado
   useEffect(() => {
-    ApiClient.get('/v1/patients')
-      .then((res: any) => {
-        const list = Array.isArray(res) ? res : res?.patients || [];
-        setPatients(list);
-        if (!selectedPatientId && list.length > 0 && !initialPatientId) {
-          setSelectedPatientId(list[0].id);
-        }
-      })
-      .catch(err => console.warn('[PsychologyWorkspace] Erro ao carregar pacientes:', err));
-  }, [initialPatientId]);
+    if (selectedPatientId) {
+      loadPatientProfile(selectedPatientId);
+    } else {
+      setSelectedPatient(null);
+    }
+  }, [selectedPatientId]);
 
   // Persistência de Rascunho (Autosave Backend + Fallback Local)
   const performSaveDraft = useCallback(async () => {
@@ -902,21 +897,19 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
         {/* Seleção do Paciente */}
         {!initialPatientId && (
-          <div className="max-w-7xl mx-auto mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 flex-1 max-w-md">
-              <User className="w-4 h-4 text-slate-400" />
-              <select
+          <div className="max-w-7xl mx-auto mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs flex-wrap gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-[280px] max-w-md">
+              <PatientSearchSelect
+                compact
                 value={selectedPatientId}
-                onChange={e => setSelectedPatientId(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-teal-500"
-              >
-                <option value="">Selecione o paciente...</option>
-                {patients.map((p: any) => (
-                  <option key={p.id} value={p.id}>
-                    {p.full_name || p.name} {p.cpf ? `(${p.cpf})` : ''}
-                  </option>
-                ))}
-              </select>
+                selectedPatient={selectedPatient}
+                clientTermLabel={clientTermLabel || 'Paciente'}
+                onChange={(id, pat) => {
+                  setSelectedPatientId(id);
+                  if (pat) setSelectedPatient(pat);
+                  else if (!id) setSelectedPatient(null);
+                }}
+              />
             </div>
             {selectedPatient && (
               <div className="text-xs text-slate-600 flex items-center gap-3">

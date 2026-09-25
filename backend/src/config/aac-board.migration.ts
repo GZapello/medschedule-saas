@@ -56,6 +56,10 @@ export function migrateAACBoard(rawDb: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_aac_cards_board ON aac_cards(board_id);
   `);
 
+  try {
+    rawDb.exec(`ALTER TABLE aac_cards ADD COLUMN behavior TEXT DEFAULT 'word'`);
+  } catch (_) {}
+
   // 2. Registro das Capabilities no Catálogo Universal
   const insCapStmt = rawDb.prepare(`
     INSERT OR IGNORE INTO capabilities (id, category, name, description, active)

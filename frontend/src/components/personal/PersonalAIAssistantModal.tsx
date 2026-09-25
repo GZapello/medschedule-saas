@@ -15,6 +15,7 @@ import {
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { Student } from './types';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 interface PersonalAIAssistantModalProps {
   isOpen: boolean;
@@ -183,20 +184,18 @@ export const PersonalAIAssistantModal: React.FC<PersonalAIAssistantModalProps> =
               </span>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-600">Aluno em Análise:</span>
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-semibold text-slate-800 outline-none"
-              >
-                <option value="">Geral (Sem aluno específico)</option>
-                {studentsList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <span className="font-semibold text-slate-600 whitespace-nowrap">Aluno em Análise:</span>
+              <div className="w-full sm:w-64">
+                <PatientSearchSelect
+                  isStudent
+                  clientTermLabel="Aluno"
+                  compact
+                  value={selectedStudentId}
+                  onChange={(id) => setSelectedStudentId(id)}
+                  placeholder="Geral (ou buscar aluno)..."
+                />
+              </div>
             </div>
           )}
 

@@ -19,9 +19,10 @@ import {
   User,
   DollarSign
 } from 'lucide-react';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 export const ReceiptsView: React.FC = () => {
-  const { currentTenant, isClinicAdmin } = useAuth();
+  const { currentTenant, isClinicAdmin, clientTermLabel } = useAuth();
   const { showToast } = useToast();
 
   const [receipts, setReceipts] = useState<any[]>([]);
@@ -35,7 +36,6 @@ export const ReceiptsView: React.FC = () => {
   const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
 
   // Dados para novo recibo
-  const [patients, setPatients] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
 
@@ -63,17 +63,15 @@ export const ReceiptsView: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [recData, setDataSettings, patData, profData, srvData] = await Promise.all([
+      const [recData, setDataSettings, profData, srvData] = await Promise.all([
         ApiClient.get<any[]>('/v1/receipts'),
         ApiClient.get<any>('/v1/receipts/settings'),
-        ApiClient.get<any[]>('/v1/patients'),
         ApiClient.get<any[]>('/v1/professionals'),
         ApiClient.get<any[]>('/v1/services')
       ]);
 
       setReceipts(recData);
       setSettings(setDataSettings);
-      setPatients(patData);
       setProfessionals(profData);
       setServices(srvData);
     } catch (err) {
@@ -87,17 +85,26 @@ export const ReceiptsView: React.FC = () => {
     loadData();
   }, []);
 
-  const handlePatientSelect = (patId: string) => {
-    const pat = patients.find(p => p.id === patId);
+  const handlePatientSelect = (patId: string, pat?: any) => {
     if (pat) {
       setNewReceiptForm(prev => ({
         ...prev,
         patientId: pat.id,
-        payerName: pat.full_name,
+        payerName: pat.full_name || '',
         payerDocument: pat.cpf || '',
         payerEmail: pat.email || '',
         payerPhone: pat.phone || '',
         payerAddress: pat.address ? `${pat.address}, ${pat.city || ''}/${pat.state || ''}` : ''
+      }));
+    } else {
+      setNewReceiptForm(prev => ({
+        ...prev,
+        patientId: patId,
+        payerName: '',
+        payerDocument: '',
+        payerEmail: '',
+        payerPhone: '',
+        payerAddress: ''
       }));
     }
   };
@@ -372,16 +379,13 @@ export const ReceiptsView: React.FC = () => {
               {/* Seletores rápidos */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Preencher Paciente</label>
-                  <select
-                    onChange={e => handlePatientSelect(e.target.value)}
-                    className="w-full px-2 py-1.5 border border-slate-200 rounded-xl bg-white text-xs"
-                  >
-                    <option value="">-- Selecionar Paciente --</option>
-                    {patients.map(p => (
-                      <option key={p.id} value={p.id}>{p.full_name}</option>
-                    ))}
-                  </select>
+                  <label className="block font-bold text-slate-700 mb-1">Preencher {clientTermLabel}</label>
+                  <PatientSearchSelect
+                    value={newReceiptForm.patientId}
+                    onChange={(id, pat) => handlePatientSelect(id, pat)}
+                    clientTermLabel={clientTermLabel}
+                    placeholder={`Buscar ${clientTermLabel.toLowerCase()}...`}
+                  />
                 </div>
 
                 <div>

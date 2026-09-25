@@ -63,6 +63,7 @@ import { ReadingWritingScreening } from './ReadingWritingScreening';
 import { AbfwRecordsSection } from './AbfwRecordsSection';
 import { AuditoryProcessingScreening } from './AuditoryProcessingScreening';
 import { PhonologyComparisonView } from './PhonologyComparisonView';
+import { PatientSearchSelect } from '../common/PatientSearchSelect';
 
 export interface StructuredGoalItem {
   id: string;
@@ -88,7 +89,6 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
   // Pacientes e Seleção
   const completion = useConsultationCompletion(onFinishConsultation);
-  const [patients, setPatients] = useState<any[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
 
@@ -385,36 +385,21 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
     return Math.round((s / z) * 100) / 100;
   }, [voiceData.tmfSSeconds, voiceData.tmfZSeconds]);
 
-  // Carrega pacientes
-  useEffect(() => {
-    async function loadPatients() {
-      try {
-        const res = await ApiClient.get<any[]>('/v1/patients');
-        if (Array.isArray(res)) setPatients(res);
-      } catch (err) {
-        console.warn('Erro ao carregar pacientes:', err);
-      }
-    }
-    loadPatients();
-  }, []);
-
-  // Seleciona paciente
+  // Seleciona paciente e carrega dados
   useEffect(() => {
     if (!selectedPatientId) {
       setSelectedPatient(null);
       return;
     }
-    const found = patients.find(p => p.id === selectedPatientId);
-    if (found) {
-      setSelectedPatient(found);
+    ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
+      const patData = p?.patient || p;
+      setSelectedPatient(patData);
       loadPatientData(selectedPatientId);
-    } else {
-      ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
-        setSelectedPatient(p);
-        loadPatientData(selectedPatientId);
-      }).catch(err => console.warn(err));
-    }
-  }, [selectedPatientId, patients]);
+    }).catch(err => {
+      console.warn('Erro ao carregar dados do paciente:', err);
+      loadPatientData(selectedPatientId);
+    });
+  }, [selectedPatientId]);
 
   // Carrega dados fonoaudiológicos
   const loadPatientData = async (patId: string) => {
@@ -785,29 +770,17 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
             </select>
           </div>
 
-          <div className="relative min-w-[240px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <select
-              value={selectedPatientId}
-              disabled={!!initialAppointmentId}
-              onChange={e => setSelectedPatientId(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-sky-500 focus:outline-none transition-colors cursor-pointer"
-            >
-              <option value="">Selecione um Paciente...</option>
-              {patients.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name} {p.cpf ? `(${p.cpf})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {selectedPatient && (
-            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-sky-50 border border-sky-200 rounded-xl text-xs font-semibold text-sky-900">
-              <User className="w-3.5 h-3.5 text-sky-600" />
-              <span>{selectedPatient.full_name}</span>
-            </div>
-          )}
+          <PatientSearchSelect
+            compact
+            value={selectedPatientId}
+            selectedPatient={selectedPatient}
+            disabled={!!initialAppointmentId}
+            onChange={(id, pat) => {
+              setSelectedPatientId(id);
+              if (pat) setSelectedPatient(pat);
+              else if (!id) setSelectedPatient(null);
+            }}
+          />
 
           {selectedPatientId && (
             <ClinicalQuickHeaderActions
