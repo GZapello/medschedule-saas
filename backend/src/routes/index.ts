@@ -1,3 +1,4 @@
+import { PersonalPostureAIController } from '../controllers/personal-posture-ai.controller';
 import { Router } from 'express';
 import { mountBillingRoutes, subscriptionGate } from '../controllers/billing.controller';
 import path from 'path';
@@ -709,6 +710,8 @@ api.post('/v1/personal/tav/classify', requireTenant, requireRole('clinic_admin',
 // Avaliações Físicas, Comparativo & Fotos
 api.get('/v1/personal/students/:studentId/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listAssessments);
 api.get('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAssessment);
+api.get('/v1/personal/posture-ai/status', requireTenant, requireRole('clinic_admin', 'professional'), PersonalPostureAIController.status);
+api.post('/v1/personal/posture-ai/analyze', requireTenant, requireRole('clinic_admin', 'professional'), PersonalPostureAIController.analyze);
 api.get('/v1/personal/assessments/:id/compare/:compareId', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.compareAssessments);
 api.post('/v1/personal/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createAssessment);
 api.put('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateAssessment);

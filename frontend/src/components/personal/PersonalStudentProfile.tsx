@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   User,
   Dumbbell,
@@ -38,6 +38,8 @@ import { PersonalAssessmentComparisonModal } from './PersonalAssessmentCompariso
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 
+const AssessmentEditor = lazy(() => import('./PersonalAssessmentModal').then(module => ({default:module.PersonalAssessmentModal})));
+
 interface PersonalStudentProfileProps {
   studentId: string;
   onBack?: () => void;
@@ -76,6 +78,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   const [selectedWorkoutForExecution, setSelectedWorkoutForExecution] = useState<Workout | null>(null);
   const [isBeforeAfterOpen, setIsBeforeAfterOpen] = useState(false);
   const [isPdfExportOpen, setIsPdfExportOpen] = useState(false);
+  const [editingAssessment,setEditingAssessment] = useState<any>(null);
+  const [loadingAssessment,setLoadingAssessment] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [compareCurrentId, setCompareCurrentId] = useState<string | undefined>(undefined);
   const [comparePreviousId, setComparePreviousId] = useState<string | undefined>(undefined);
@@ -750,11 +754,11 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                 <span>Histórico de Avaliações Físicas & Protocolo Pollock</span>
               </h4>
               <div className="flex items-center gap-2">
-                {assessments.length >= 2 && (
+                {assessments.length >= 1 && (
                   <button
                     onClick={() => {
                       setCompareCurrentId(assessments[0].id);
-                      setComparePreviousId(assessments[1].id);
+                      setComparePreviousId((assessments[1] || assessments[0]).id);
                       setIsComparisonOpen(true);
                     }}
                     className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl flex items-center gap-1 shadow-sm transition-colors"
@@ -825,7 +829,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {assessments.length >= 2 && (
+                      {assessments.length >= 1 && (
                         <button
                           onClick={() => {
                             const prev = assessments[idx + 1] || assessments[idx - 1] || assessments[0];
@@ -840,6 +844,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                           <span className="hidden sm:inline">Comparar</span>
                         </button>
                       )}
+                      <button type="button" disabled={loadingAssessment} className="text-xs text-indigo-700 px-2 py-1 rounded-lg hover:bg-indigo-50" onClick={async()=>{setLoadingAssessment(true);try{const data=await ApiClient.get<any>(`/v1/personal/assessments/${a.id}`);setEditingAssessment({...data.assessment,photos:data.photos});}catch{showToast('Não foi possível abrir a avaliação.','error');}finally{setLoadingAssessment(false);}}}>Avaliação postural</button>
                       <button
                         onClick={() => handleDeleteAssessment(a.id)}
                         className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
@@ -1085,6 +1090,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
       />
 
       {/* MODAL DE COMPARAÇÃO DE AVALIAÇÕES */}
+      {editingAssessment && <Suspense fallback={<p>Carregando avaliação…</p>}><AssessmentEditor isOpen postureOnly student={student} assessmentToEdit={editingAssessment} onClose={()=>setEditingAssessment(null)} onSaved={()=>{setEditingAssessment(null);loadAllStudentData();}} /></Suspense>}
       {isComparisonOpen && (
         <PersonalAssessmentComparisonModal
           isOpen={isComparisonOpen}

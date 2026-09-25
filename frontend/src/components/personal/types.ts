@@ -271,6 +271,8 @@ export interface Assessment {
   protocol?: string;
   notes?: string;
   photos_count?: number;
+  has_posture?: boolean;
+  posture_json?: string | null;
 }
 
 export interface WorkoutLog {

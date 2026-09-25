@@ -2521,6 +2521,9 @@ export function initializeDatabase(): void {
     `);
   } catch (_) {}
 
+  const postureColumns = rawDb.prepare('PRAGMA table_info(personal_assessments)').all().map((c: any) => c.name);
+  if (!postureColumns.includes('posture_json')) rawDb.exec('ALTER TABLE personal_assessments ADD COLUMN posture_json TEXT');
+
   // Fallback artwork is shipped locally. R2 imports are explicit maintenance operations.
   for (const [column, definition] of Object.entries({
     instructions: 'TEXT', category: 'TEXT', duration_seconds: 'REAL', side: 'TEXT', snapshot_version: 'INTEGER', image_attribution_json: 'TEXT'
