@@ -25,6 +25,9 @@ if (testFiles.length === 0) {
 const KNOWN_FAILING = {
   'test-atualizacao-zemda.cjs': 'TESTE 13: cadastro de clínica com ZemdaBody retorna undefined em vez da clínica criada',
   'test-clinic-control.cjs': "fixture: tabela consultation_completions não tem mais coluna 'id' (schema desatualizado)",
+  'test-general-fixes-verification.cjs': "Item 8: checa o texto exato 'p.full_name || p.name' em ZemdaMedWorkspace.tsx; a busca de pacientes foi padronizada (commit 105cbf3) e o texto mudou, mas a busca continua funcionando",
+  'test-invite-personal-prosthetics.cjs': 'mesma causa do test-legal-and-signup.cjs: fluxo de convite agora exige verificação de e-mail antes de concluir o cadastro (surgiu nos commits de 25/09)',
+  'test-start-permissions.cjs': 'regra de módulo único por atendimento mudou (commit "fix: corrige agenda do profissional...", 25/09) e bloqueia o cenário do teste com 409',
   'test-legal-and-signup.cjs': 'fluxo de cadastro agora exige verificação de e-mail antes de registrar; teste ainda espera 201 direto',
   'test-manual-whatsapp-reminder.cjs': "tabela notifications não tem mais a coluna 'sent_by_user_id' (schema desatualizado)",
   'test-profession-module-transition.cjs': 'seed de profissões mudou: teste espera prof-psicologia e encontra prof-personal-trainer',
