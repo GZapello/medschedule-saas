@@ -122,8 +122,11 @@ api.get('/v1/public/professionals/:slug/slots', ProfessionalController.getPublic
 // ZemdaPersonal — Acesso Externo do Aluno aos Treinos Prescritos
 api.get('/v1/public/personal/workouts/:token', PersonalStudentLinkController.getPublicWorkout);
 api.get('/public/personal/workouts/:token', PersonalStudentLinkController.getPublicWorkout);
+api.get('/v1/public/personal/workouts/:token/records', PersonalStudentLinkController.getPublicRecords);
+api.get('/public/personal/workouts/:token/records', PersonalStudentLinkController.getPublicRecords);
 api.post('/v1/public/personal/workouts/:token/sessions/start', PersonalStudentLinkController.startSession);
 api.post('/public/personal/workouts/:token/sessions/start', PersonalStudentLinkController.startSession);
+
 api.post('/v1/public/personal/workouts/:token/sessions/:sessionId/progress', PersonalStudentLinkController.saveProgress);
 api.post('/public/personal/workouts/:token/sessions/:sessionId/progress', PersonalStudentLinkController.saveProgress);
 api.post('/v1/public/personal/workouts/:token/sessions/:sessionId/finish', PersonalStudentLinkController.finishSession);

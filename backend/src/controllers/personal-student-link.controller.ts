@@ -8,8 +8,15 @@ import {
   decryptStudentAccessToken,
   evaluateInactivity
 } from '../services/personal-student-link.service';
+import {
+  resolveExerciseMediaAndDetails,
+  normalizeExerciseLookup,
+  getExerciseMaxCompletedLoad
+} from '../services/exercise-media';
 import { hasPersonalAccess, getProfessionalId } from './personal.controller';
 import { logAudit } from '../middlewares/audit.middleware';
+
+
 
 export class PersonalStudentLinkController {
   // ==========================================
@@ -330,18 +337,51 @@ export class PersonalStudentLinkController {
         ORDER BY division ASC, created_at DESC
       `).all(link.student_id, link.tenant_id) as any[];
 
-      // Anexa exercícios para cada treino
+      // Anexa exercícios para cada treino com resolução completa de mídia/GIF/instruções
       for (const w of workouts) {
         const exercises = db.prepare(`
-          SELECT id, workout_id, order_index, name, muscle_group, sets, reps, load_kg,
-                 rest_seconds, cadence, tempo, rpe, rir, technique, technique_custom, notes, photo_url
+          SELECT id, workout_id, exercise_id, order_index, name, muscle_group, sets, reps, load_kg,
+                 rest_seconds, cadence, tempo, rpe, rir, technique, technique_custom, notes,
+                 photo_url, exercise_file_id, instructions, category, duration_seconds, side
           FROM personal_workout_exercises
           WHERE workout_id = ? AND tenant_id = ?
           ORDER BY order_index ASC
         `).all(w.id, link.tenant_id) as any[];
 
+        for (const ex of exercises) {
+          const resolved = resolveExerciseMediaAndDetails(db, ex);
+          Object.assign(ex, resolved);
+        }
+
         w.exercises = exercises;
       }
+
+      // Calcula indicadores rápidos para cabeçalho do aluno (KPIs de progresso)
+      const logsCountRow = db.prepare(`
+        SELECT COUNT(*) as count FROM personal_workout_logs
+        WHERE patient_id = ? AND tenant_id = ?
+      `).get(link.student_id, link.tenant_id) as any;
+      const totalWorkoutsCompleted = Number(logsCountRow?.count || 0);
+
+      const studentLogs = db.prepare(`
+        SELECT log_details_json FROM personal_workout_logs
+        WHERE patient_id = ? AND tenant_id = ?
+      `).all(link.student_id, link.tenant_id) as any[];
+
+      const recordsSet = new Set<string>();
+      studentLogs.forEach((l: any) => {
+        try {
+          const list = JSON.parse(l.log_details_json);
+          if (Array.isArray(list)) {
+            list.forEach((e: any) => {
+              if (getExerciseMaxCompletedLoad(e) > 0) {
+                const key = e.exercise_id ? `id:${e.exercise_id}` : `name:${normalizeExerciseLookup(e.name)}`;
+                if (key) recordsSet.add(key);
+              }
+            });
+          }
+        } catch {}
+      });
 
       // Verifica se há alguma sessão em andamento iniciada pelo aluno
       const activeSession = db.prepare(`
@@ -374,7 +414,11 @@ export class PersonalStudentLinkController {
         },
         clinicName: tenant?.name || 'ZemdaPersonal',
         workouts,
-        activeSession: sessionData
+        activeSession: sessionData,
+        summary: {
+          total_workouts_completed: totalWorkoutsCompleted,
+          total_records: recordsSet.size
+        }
       });
     } catch (err: any) {
       console.error('[PersonalStudentLinkController.getPublicWorkout] Erro:', err);
@@ -603,8 +647,14 @@ export class PersonalStudentLinkController {
         detailsJson
       );
 
-      // 2. Cálculo e detecção de Recordes Pessoais (PRs - Carga máxima superada)
-      const newPRs: Array<{ exercise_name: string; previous_max: number; new_pr: number }> = [];
+      // 2. Cálculo e detecção de Recordes Pessoais (PRs - Carga máxima superada estritamente em séries concluídas)
+      const newPRs: Array<{
+        exercise_name: string;
+        exercise_id?: string | null;
+        previous_max: number;
+        new_pr: number;
+        evolution_kg: number;
+      }> = [];
 
       if (Array.isArray(exercises_performed)) {
         const priorLogs = db.prepare(`
@@ -612,16 +662,24 @@ export class PersonalStudentLinkController {
           WHERE patient_id = ? AND tenant_id = ? AND id != ?
         `).all(link.student_id, link.tenant_id, logId) as any[];
 
-        const bestPriorLoads: Record<string, number> = {};
+        const bestPriorLoads = new Map<string, number>();
+
         priorLogs.forEach((pl: any) => {
           try {
             const exList = JSON.parse(pl.log_details_json);
             if (Array.isArray(exList)) {
               exList.forEach((e: any) => {
-                const name = (e.name || '').trim().toLowerCase();
-                const load = Number(e.load_kg || e.load || 0);
-                if (load > (bestPriorLoads[name] || 0)) {
-                  bestPriorLoads[name] = load;
+                const maxLoad = getExerciseMaxCompletedLoad(e);
+                if (maxLoad > 0) {
+                  const norm = normalizeExerciseLookup(e.name);
+                  if (norm) {
+                    const prev = bestPriorLoads.get('name:' + norm) || 0;
+                    if (maxLoad > prev) bestPriorLoads.set('name:' + norm, maxLoad);
+                  }
+                  if (e.exercise_id) {
+                    const prevId = bestPriorLoads.get('id:' + e.exercise_id) || 0;
+                    if (maxLoad > prevId) bestPriorLoads.set('id:' + e.exercise_id, maxLoad);
+                  }
                 }
               });
             }
@@ -629,17 +687,26 @@ export class PersonalStudentLinkController {
         });
 
         exercises_performed.forEach((ex: any) => {
-          const name = (ex.name || '').trim();
-          const key = name.toLowerCase();
-          const currentLoad = Number(ex.load_kg || ex.load || 0);
-          const prevBest = bestPriorLoads[key] || 0;
+          const currentLoad = getExerciseMaxCompletedLoad(ex);
+          if (currentLoad > 0) {
+            const norm = normalizeExerciseLookup(ex.name);
+            const prevByName = norm ? (bestPriorLoads.get('name:' + norm) || 0) : 0;
+            const prevById = ex.exercise_id ? (bestPriorLoads.get('id:' + ex.exercise_id) || 0) : 0;
+            const prevBest = Math.max(prevByName, prevById);
 
-          if (currentLoad > 0 && currentLoad > prevBest) {
-            newPRs.push({
-              exercise_name: name,
-              previous_max: prevBest,
-              new_pr: currentLoad
-            });
+            if (currentLoad > prevBest) {
+              const diff = prevBest > 0 ? Number((currentLoad - prevBest).toFixed(1)) : currentLoad;
+              newPRs.push({
+                exercise_name: (ex.name || '').trim(),
+                exercise_id: ex.exercise_id || null,
+                previous_max: prevBest,
+                new_pr: currentLoad,
+                evolution_kg: diff
+              });
+
+              if (norm) bestPriorLoads.set('name:' + norm, currentLoad);
+              if (ex.exercise_id) bestPriorLoads.set('id:' + ex.exercise_id, currentLoad);
+            }
           }
         });
       }
@@ -672,4 +739,200 @@ export class PersonalStudentLinkController {
       res.status(500).json({ error: 'Erro ao finalizar treino' });
     }
   }
+
+  /**
+   * Consulta pública de Recordes Pessoais do Aluno (Área "Meus Recordes")
+   * Resolvido EXCLUSIVAMENTE pelo token seguro do aluno (nunca aceita studentId do frontend)
+   */
+  static async getPublicRecords(req: Request, res: Response): Promise<void> {
+    try {
+      const { token } = req.params;
+      if (!token || typeof token !== 'string') {
+        res.status(400).json({ error: 'Token de treino inválido' });
+        return;
+      }
+
+      const tokenHash = hashStudentAccessToken(token);
+      const link = db.prepare(`
+        SELECT * FROM personal_student_access_links
+        WHERE token_hash = ?
+      `).get(tokenHash) as any;
+
+      if (!link) {
+        res.status(404).json({ error: 'Link de treino não encontrado ou inválido' });
+        return;
+      }
+
+      if (link.status === 'revoked') {
+        res.status(403).json({
+          error: 'Este link de acesso foi revogado pelo seu personal trainer.',
+          code: 'REVOKED'
+        });
+        return;
+      }
+
+      const inactivity = evaluateInactivity(link);
+      if (inactivity.isExpired || link.status === 'expired') {
+        if (link.status !== 'expired') {
+          db.prepare(`
+            UPDATE personal_student_access_links
+            SET status = 'expired', updated_at = datetime('now')
+            WHERE id = ?
+          `).run(link.id);
+        }
+        res.status(410).json({
+          error: 'Este link expirou por 30 dias consecutivos sem acesso.',
+          code: 'EXPIRED'
+        });
+        return;
+      }
+
+      // Estende a validade do link pelo acesso
+      db.prepare(`
+        UPDATE personal_student_access_links
+        SET last_access_at = datetime('now'), updated_at = datetime('now')
+        WHERE id = ?
+      `).run(link.id);
+
+      // Dados do aluno
+      const student = db.prepare(`
+        SELECT id, COALESCE(full_name, social_name) as name, gender
+        FROM patients
+        WHERE id = ? AND tenant_id = ?
+      `).get(link.student_id, link.tenant_id) as any;
+
+      if (!student) {
+        res.status(404).json({ error: 'Registro do aluno não localizado' });
+        return;
+      }
+
+      const tenant = db.prepare(`
+        SELECT name FROM tenants WHERE id = ?
+      `).get(link.tenant_id) as any;
+
+      // Busca todos os logs concluídos do aluno em ordem cronológica
+      const logs = db.prepare(`
+        SELECT id, workout_id, completed_at, duration_minutes, rpe, feedback_notes, log_details_json
+        FROM personal_workout_logs
+        WHERE patient_id = ? AND tenant_id = ?
+        ORDER BY completed_at ASC
+      `).all(link.student_id, link.tenant_id) as any[];
+
+      interface RecordEntry {
+        exercise_id: string | null;
+        exercise_name: string;
+        muscle_group: string;
+        best_load: number;
+        best_load_date: string;
+        initial_load: number;
+        previous_record: number | null;
+        evolution_kg: number;
+        execution_count: number;
+        history: Array<{
+          date: string;
+          load_kg: number;
+          sets_completed: number;
+          reps?: string;
+        }>;
+        photo_url?: string | null;
+        gif_url?: string | null;
+        gif_attribution?: string | null;
+        instructions?: string | null;
+      }
+
+      const recordsMap = new Map<string, RecordEntry>();
+
+      logs.forEach((log: any) => {
+        try {
+          const exList = JSON.parse(log.log_details_json);
+          if (Array.isArray(exList)) {
+            exList.forEach((e: any) => {
+              const load = getExerciseMaxCompletedLoad(e);
+              if (load <= 0) return;
+
+              const key = e.exercise_id ? `id:${e.exercise_id}` : `name:${normalizeExerciseLookup(e.name)}`;
+              const displayName = (e.name || '').trim() || 'Exercício';
+              const muscle = e.muscle_group || 'Geral';
+              const setsDone = Array.isArray(e.sets_data)
+                ? e.sets_data.filter((s: any) => s.completed === true).length
+                : Number(e.sets_completed || 1);
+
+              const historyItem = {
+                date: log.completed_at,
+                load_kg: load,
+                sets_completed: setsDone,
+                reps: e.reps || ''
+              };
+
+              if (!recordsMap.has(key)) {
+                recordsMap.set(key, {
+                  exercise_id: e.exercise_id || null,
+                  exercise_name: displayName,
+                  muscle_group: muscle,
+                  best_load: load,
+                  best_load_date: log.completed_at,
+                  initial_load: load,
+                  previous_record: null,
+                  evolution_kg: 0,
+                  execution_count: 1,
+                  history: [historyItem]
+                });
+              } else {
+                const entry = recordsMap.get(key)!;
+                entry.execution_count++;
+                entry.history.push(historyItem);
+
+                if (load > entry.best_load) {
+                  entry.previous_record = entry.best_load;
+                  entry.evolution_kg = Number((load - entry.best_load).toFixed(1));
+                  entry.best_load = load;
+                  entry.best_load_date = log.completed_at;
+                }
+              }
+            });
+          }
+        } catch {}
+      });
+
+      // Enriquece os dados com fotos, GIFs e instruções existentes na biblioteca
+      const recordsList = Array.from(recordsMap.values()).map(entry => {
+        const resolved = resolveExerciseMediaAndDetails(db, {
+          exercise_id: entry.exercise_id,
+          name: entry.exercise_name,
+          muscle_group: entry.muscle_group
+        });
+        return {
+          ...entry,
+          exercise_id: resolved.exercise_id || entry.exercise_id,
+          photo_url: resolved.photo_url,
+          gif_url: resolved.gif_url,
+          gif_attribution: resolved.gif_attribution,
+          instructions: resolved.instructions
+        };
+      });
+
+      // Ordena por data do recorde mais recente
+      recordsList.sort((a, b) => new Date(b.best_load_date).getTime() - new Date(a.best_load_date).getTime());
+
+      const recentRecords = recordsList.slice(0, 5);
+
+      res.json({
+        student: {
+          name: student.name,
+          gender: student.gender
+        },
+        clinicName: tenant?.name || 'ZemdaPersonal',
+        summary: {
+          total_workouts_completed: logs.length,
+          total_records: recordsList.length,
+          recent_records: recentRecords
+        },
+        records: recordsList
+      });
+    } catch (err: any) {
+      console.error('[PersonalStudentLinkController.getPublicRecords] Erro:', err);
+      res.status(500).json({ error: 'Erro ao consultar recordes do aluno' });
+    }
+  }
 }
+

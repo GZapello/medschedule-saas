@@ -1,4 +1,4 @@
-import { exerciseAnimation } from '../services/exercise-media';
+import { exerciseAnimation, getExerciseMaxCompletedLoad } from '../services/exercise-media';
 import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
 import { matchesExercise, insertWorkoutExercise, imageAttribution } from '../services/personal-exercise-utils';
 import { Request, Response } from 'express';
@@ -2450,8 +2450,9 @@ export class PersonalController {
             exList.forEach((e: any) => {
               const name = (e.name || '').trim();
               if (!name) return;
-              const load = Number(e.load_kg || e.load || 0);
+              const load = getExerciseMaxCompletedLoad(e);
               if (load > 0) {
+
                 if (!recordsMap[name] || load > recordsMap[name].max_load) {
                   recordsMap[name] = {
                     exercise_name: name,

@@ -1,10 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Play,
-  Pause,
-  RotateCcw,
-  Check,
-  CheckCircle2,
   Clock,
   Dumbbell,
   Flame,
@@ -12,17 +8,24 @@ import {
   ChevronRight,
   ChevronLeft,
   AlertCircle,
-  HelpCircle,
   MessageSquare,
   Sparkles,
-  ArrowRight,
-  Maximize2,
   X,
-  Volume2
+  Check,
+  CheckCircle2,
+  TrendingUp,
+  History,
+  Info
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
+import { getRandomMotivationalQuote } from './studentMotivationalQuotes';
+import {
+  PersonalPublicExerciseDemoModal,
+  ExerciseDemoDetails
+} from './PersonalPublicExerciseDemoModal';
+import { PersonalPublicStudentRecordsModal } from './PersonalPublicStudentRecordsModal';
 
-interface PublicExercise {
+export interface PublicExercise {
   id: string;
   order_index: number;
   name: string;
@@ -37,9 +40,16 @@ interface PublicExercise {
   technique_custom?: string;
   notes?: string;
   photo_url?: string;
+  exercise_id?: string | null;
+  gif_url?: string | null;
+  gif_attribution?: string | null;
+  instructions?: string | null;
+  technical_notes?: string | null;
+  equipment?: string | null;
+  category?: string | null;
 }
 
-interface PublicWorkout {
+export interface PublicWorkout {
   id: string;
   title: string;
   division: string;
@@ -49,7 +59,7 @@ interface PublicWorkout {
   exercises: PublicExercise[];
 }
 
-interface SessionSummary {
+export interface SessionSummary {
   completed_at: string;
   duration_minutes: number;
   exercises_count: number;
@@ -58,11 +68,14 @@ interface SessionSummary {
   feedback_notes?: string;
 }
 
-interface PersonalPublicStudentWorkoutViewProps {
+export interface PersonalPublicStudentWorkoutViewProps {
   token: string;
 }
 
 export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWorkoutViewProps> = ({ token }) => {
+  // Frase motivacional estável durante toda a sessão (selecionada uma única vez na montagem)
+  const [motivationalQuote] = useState<string>(() => getRandomMotivationalQuote());
+
   // Estado geral
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<'REVOKED' | 'EXPIRED' | 'NOT_FOUND' | 'ERROR' | null>(null);
@@ -71,6 +84,18 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
   const [clinicName, setClinicName] = useState('ZemdaPersonal');
   const [workouts, setWorkouts] = useState<PublicWorkout[]>([]);
   const [selectedWorkoutIndex, setSelectedWorkoutIndex] = useState(0);
+
+  // KPIs de resumo
+  const [summaryKPI, setSummaryKPI] = useState<{ total_workouts_completed: number; total_records: number }>({
+    total_workouts_completed: 0,
+    total_records: 0
+  });
+
+  // Modal de Demonstração "Ver como fazer"
+  const [demoExercise, setDemoExercise] = useState<ExerciseDemoDetails | null>(null);
+
+  // Modal de "Meus Recordes"
+  const [showRecordsModal, setShowRecordsModal] = useState(false);
 
   // Sessão em andamento
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -101,8 +126,18 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
   const [sessionCompletedSummary, setSessionCompletedSummary] = useState<SessionSummary | null>(null);
   const [newPRsList, setNewPRsList] = useState<any[]>([]);
 
-  // Zoom de imagem
-  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  // Saudação de boas-vindas dinâmica pelo horário do dia
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
+    return 'Boa noite';
+  }, []);
+
+  const studentFirstName = useMemo(() => {
+    if (!studentName) return 'Aluno';
+    return studentName.trim().split(' ')[0];
+  }, [studentName]);
 
   // Carrega dados iniciais do link
   const loadWorkoutData = async () => {
@@ -113,6 +148,13 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
       setStudentName(res.student?.name || 'Aluno');
       setClinicName(res.clinicName || 'ZemdaPersonal');
       setWorkouts(res.workouts || []);
+
+      if (res.summary) {
+        setSummaryKPI({
+          total_workouts_completed: Number(res.summary.total_workouts_completed || 0),
+          total_records: Number(res.summary.total_records || 0)
+        });
+      }
 
       // Se houver sessão em andamento já iniciada, restaura o estado
       if (res.activeSession) {
@@ -310,19 +352,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
     });
   };
 
-  const handleUpdateExerciseRpe = (exIdx: number, rpe: number) => {
-    const newRpe = { ...exerciseRpe, [`${exIdx}`]: rpe };
-    setExerciseRpe(newRpe);
-    triggerSaveProgress({
-      completedSets,
-      actualLoads,
-      actualReps,
-      exerciseNotes,
-      exerciseRpe: newRpe,
-      currentExerciseIndex: exIdx
-    });
-  };
-
+  // Finalização do treino com cálculo auditado de PRs (somente séries completadas com carga > 0)
   const handleFinishWorkout = async () => {
     if (!sessionId || !sessionWorkout) return;
     try {
@@ -336,29 +366,41 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
         for (let s = 0; s < ex.sets; s++) {
           const key = `${exIdx}-${s}`;
           const isDone = !!completedSets[key];
-          if (isDone) setsCompletedCount++;
-          const loadVal = Number(actualLoads[key]) || Number(ex.load_kg) || 0;
-          if (loadVal > maxLoadThisEx) maxLoadThisEx = loadVal;
+          const rawLoad = actualLoads[key] !== undefined ? Number(actualLoads[key]) : Number(ex.load_kg || 0);
+          const loadVal = Number.isFinite(rawLoad) && rawLoad > 0 ? rawLoad : 0;
+          const repsVal = actualReps[key] || ex.reps || '';
+
+          // REGRA AUDITADA: Recorde de carga somente a partir de série realmente concluída
+          if (isDone) {
+            setsCompletedCount++;
+            if (loadVal > maxLoadThisEx) {
+              maxLoadThisEx = loadVal;
+            }
+          }
 
           setsData.push({
             set: s + 1,
             completed: isDone,
             load_kg: loadVal,
-            reps: actualReps[key] || ex.reps
+            reps: repsVal
           });
         }
 
+        const isSkipped = setsCompletedCount === 0;
+
         return {
+          id: ex.id,
+          exercise_id: ex.exercise_id || null,
           name: ex.name,
           muscle_group: ex.muscle_group,
-          load_kg: maxLoadThisEx,
+          load_kg: isSkipped ? 0 : maxLoadThisEx,
           reps: ex.reps,
           sets_total: ex.sets,
           sets_completed: setsCompletedCount,
           sets_data: setsData,
           notes: exerciseNotes[`${exIdx}`] || null,
           rpe: exerciseRpe[`${exIdx}`] || null,
-          skipped: setsCompletedCount === 0
+          skipped: isSkipped
         };
       });
 
@@ -466,13 +508,13 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
 
           <div className="space-y-1">
             <span className="text-xs uppercase font-extrabold tracking-widest text-teal-400">Treino Concluído!</span>
-            <h2 className="text-2xl font-black text-white">Parabéns, {studentName}!</h2>
+            <h2 className="text-2xl font-black text-white">Parabéns, {studentFirstName}!</h2>
             <p className="text-xs text-slate-400">
               Sua sessão foi salva e sincronizada automaticamente com o ZemdaPersonal.
             </p>
           </div>
 
-          {/* Destaque de Recordes Pessoais (PRs) */}
+          {/* Destaque de Recordes Pessoais Batidos (PRs) */}
           {newPRsList.length > 0 && (
             <div className="bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 text-left space-y-2">
               <div className="flex items-center gap-2 text-amber-400 font-extrabold text-xs uppercase tracking-wider">
@@ -481,10 +523,13 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
               </div>
               <div className="space-y-1.5">
                 {newPRsList.map((pr, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs bg-amber-900/20 p-2 rounded-xl border border-amber-500/20">
+                  <div key={idx} className="flex items-center justify-between text-xs bg-amber-900/20 p-2.5 rounded-xl border border-amber-500/20">
                     <span className="font-semibold text-slate-200">{pr.exercise_name}</span>
                     <span className="font-black text-amber-300">
-                      {pr.new_pr} kg <span className="text-[10px] text-amber-500/80 font-normal">({pr.previous_max ? `+${pr.new_pr - pr.previous_max}kg` : '1º registro'})</span>
+                      {pr.new_pr} kg{' '}
+                      <span className="text-[10px] text-emerald-400 font-bold ml-1">
+                        ({pr.previous_max ? `+${pr.evolution_kg || (pr.new_pr - pr.previous_max)}kg` : '1º recorde'})
+                      </span>
                     </span>
                   </div>
                 ))}
@@ -516,16 +561,34 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
             </div>
           )}
 
-          <button
-            onClick={() => {
-              setSessionCompletedSummary(null);
-              loadWorkoutData();
-            }}
-            className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black rounded-2xl text-sm transition-all shadow-lg shadow-teal-500/20 cursor-pointer"
-          >
-            Voltar aos Meus Treinos
-          </button>
+          <div className="flex flex-col gap-2 pt-1">
+            <button
+              onClick={() => setShowRecordsModal(true)}
+              className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-amber-500/20 cursor-pointer"
+            >
+              <Trophy className="w-4 h-4 fill-slate-950" />
+              Consultar Meus Recordes
+            </button>
+
+            <button
+              onClick={() => {
+                setSessionCompletedSummary(null);
+                loadWorkoutData();
+              }}
+              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-2xl text-xs sm:text-sm transition-all cursor-pointer"
+            >
+              Voltar aos Meus Treinos
+            </button>
+          </div>
         </div>
+
+        {/* Modal de Recordes acessível pelo pós-treino */}
+        <PersonalPublicStudentRecordsModal
+          token={token}
+          isOpen={showRecordsModal}
+          onClose={() => setShowRecordsModal(false)}
+          onSelectExerciseDemo={(ex) => setDemoExercise(ex)}
+        />
       </div>
     );
   }
@@ -620,7 +683,7 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
         <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-4">
           {currentEx && (
             <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
-              {/* Header do Exercício */}
+              {/* Header do Exercício com Botão Destacado "Ver como fazer" */}
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -638,20 +701,36 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
                   </h3>
                 </div>
 
-                {/* Miniatura de Foto / Mídia (se houver) */}
-                {currentEx.photo_url && (
-                  <button
-                    onClick={() => setZoomedImage(currentEx.photo_url || null)}
-                    className="w-14 h-14 rounded-2xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0 group relative cursor-pointer"
-                    title="Ampliar demonstração"
-                  >
-                    <img src={currentEx.photo_url} alt={currentEx.name} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                      <Maximize2 className="w-4 h-4" />
-                    </div>
-                  </button>
-                )}
+                {/* Miniatura do Exercício (clique abre demonstração grande) */}
+                <button
+                  type="button"
+                  onClick={() => setDemoExercise(currentEx)}
+                  className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-700 overflow-hidden shrink-0 group relative cursor-pointer flex items-center justify-center"
+                  title="Ver demonstração animada"
+                >
+                  <img
+                    src={currentEx.photo_url || '/exercise-fallbacks/default.webp'}
+                    alt={currentEx.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/exercise-photos/ex-supino-reto-barra-78c675419896.webp';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-teal-300">
+                    <Play className="w-5 h-5 fill-teal-400 text-teal-400" />
+                  </div>
+                </button>
               </div>
+
+              {/* Botão Primário e Visível: VER COMO FAZER DURANTE O TREINO */}
+              <button
+                type="button"
+                onClick={() => setDemoExercise(currentEx)}
+                className="w-full py-2.5 px-3 bg-gradient-to-r from-teal-500/20 to-emerald-500/20 hover:from-teal-500/30 hover:to-emerald-500/30 border border-teal-500/40 rounded-2xl text-xs font-black text-teal-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-98"
+              >
+                <Play className="w-4 h-4 fill-teal-400 text-teal-400" />
+                Ver como fazer (Animação & Técnica)
+              </button>
 
               {/* Instruções / Notas do Personal */}
               {currentEx.notes && (
@@ -799,6 +878,12 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
           )}
         </main>
 
+        {/* Modal de Demonstração "Ver como fazer" durante o treino (não reseta o cronômetro ou progresso) */}
+        <PersonalPublicExerciseDemoModal
+          exercise={demoExercise}
+          onClose={() => setDemoExercise(null)}
+        />
+
         {/* Modal de Confirmação de Finalização */}
         {showFinishModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
@@ -892,36 +977,18 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
             </div>
           </div>
         )}
-
-        {/* Modal de Zoom de Imagem do Exercício */}
-        {zoomedImage && (
-          <div
-            onClick={() => setZoomedImage(null)}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md cursor-pointer animate-in fade-in"
-          >
-            <div className="relative max-w-lg w-full max-h-[80vh] flex items-center justify-center">
-              <img src={zoomedImage} alt="Exercício" className="max-w-full max-h-[80vh] object-contain rounded-2xl" />
-              <button
-                onClick={() => setZoomedImage(null)}
-                className="absolute top-2 right-2 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
 
   // ==========================================
-  // TELA INICIAL / VISÃO GERAL DOS TREINOS PRESCRITOS
+  // TELA INICIAL / HOME DO ALUNO (NOVO LAYOUT)
   // ==========================================
   const currentSelectedWorkout = workouts[selectedWorkoutIndex] || workouts[0];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-teal-500 selection:text-white pb-12">
-      {/* Header Mobile-First */}
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-teal-500 selection:text-white pb-14">
+      {/* Header do Aluno com Saudação e Identidade */}
       <header className="bg-slate-900 border-b border-slate-800 px-4 py-4 sticky top-0 z-20">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -932,18 +999,96 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
               <span className="text-[10px] uppercase font-black tracking-wider text-teal-400 block">
                 {clinicName}
               </span>
-              <h1 className="text-sm font-extrabold text-white">Treinos de {studentName}</h1>
+              <h1 className="text-sm font-extrabold text-white">ZemdaPersonal</h1>
             </div>
           </div>
 
-          <div className="text-[11px] font-semibold text-slate-400 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800">
-            {workouts.length} {workouts.length === 1 ? 'Treino' : 'Divisões'}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowRecordsModal(true)}
+            className="flex items-center gap-1.5 text-xs font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-xl transition-colors cursor-pointer shadow-xs"
+          >
+            <Trophy className="w-3.5 h-3.5 fill-amber-400" />
+            <span>Recordes</span>
+          </button>
         </div>
       </header>
 
-      {/* Corpo da Página */}
+      {/* Conteúdo da Home do Aluno */}
       <main className="max-w-lg mx-auto w-full p-4 space-y-5">
+        {/* Bloco de Boas-Vindas & Frase Motivacional Estável */}
+        <section className="bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-3xl p-5 space-y-3 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="space-y-0.5">
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              {greeting}, {studentFirstName} 👋
+            </h2>
+            <p className="text-xs text-slate-400 font-medium">
+              Seu treino está esperando por você.
+            </p>
+          </div>
+
+          {/* Frase Motivacional Estável da Sessão */}
+          <div className="p-3 bg-slate-950/80 border border-teal-500/20 rounded-2xl flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
+            <p className="text-xs font-semibold text-teal-200/90 italic leading-snug">
+              "{motivationalQuote}"
+            </p>
+          </div>
+        </section>
+
+        {/* Resumo / KPI Cards */}
+        <section className="grid grid-cols-3 gap-2">
+          <div className="bg-slate-900 border border-slate-800 p-3 rounded-2xl text-center">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block">Treinos</span>
+            <strong className="text-sm sm:text-base font-black text-teal-400">
+              {workouts.length} {workouts.length === 1 ? 'divisão' : 'divisões'}
+            </strong>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 p-3 rounded-2xl text-center">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block">Concluídos</span>
+            <strong className="text-sm sm:text-base font-black text-emerald-400">
+              {summaryKPI.total_workouts_completed}
+            </strong>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowRecordsModal(true)}
+            className="bg-slate-900 border border-slate-800 hover:border-amber-500/50 p-3 rounded-2xl text-center cursor-pointer transition-colors"
+          >
+            <span className="text-[10px] uppercase font-bold text-slate-500 block">Recordes</span>
+            <strong className="text-sm sm:text-base font-black text-amber-400 flex items-center justify-center gap-1">
+              <Trophy className="w-3.5 h-3.5 fill-amber-400" />
+              {summaryKPI.total_records}
+            </strong>
+          </button>
+        </section>
+
+        {/* Ações Rápidas */}
+        <section className="grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            onClick={() => currentSelectedWorkout && handleStartWorkout(currentSelectedWorkout)}
+            disabled={!currentSelectedWorkout}
+            className="py-3 px-3 bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-black rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-teal-500/20 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+          >
+            <Play className="w-4 h-4 fill-slate-950" />
+            Iniciar Treino
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowRecordsModal(true)}
+            className="py-3 px-3 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 text-amber-300 font-extrabold rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
+          >
+            <Trophy className="w-4 h-4 fill-amber-400 text-amber-400" />
+            Meus Recordes
+          </button>
+        </section>
+
         {workouts.length === 0 ? (
           <div className="py-16 text-center space-y-3 bg-slate-900 border border-slate-800 rounded-3xl p-6">
             <Dumbbell className="w-12 h-12 text-slate-600 mx-auto" />
@@ -996,59 +1141,84 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
                     <span>{currentSelectedWorkout.notes}</span>
                   </div>
                 )}
-
-                {/* Botão de Ação Primária: INICIAR TREINO */}
-                <button
-                  onClick={() => handleStartWorkout(currentSelectedWorkout)}
-                  className="w-full py-4 bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-black rounded-2xl text-base flex items-center justify-center gap-2 shadow-xl shadow-teal-500/25 transition-all active:scale-98 cursor-pointer"
-                >
-                  <Play className="w-5 h-5 fill-slate-950" />
-                  INICIAR TREINO
-                </button>
               </div>
             )}
 
-            {/* Lista dos Exercícios Prescritos */}
+            {/* Lista dos Exercícios Prescritos com Botão "Ver como fazer" */}
             <div className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
-                Exercícios Prescritos:
-              </h3>
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Exercícios Prescritos:
+                </h3>
+                <span className="text-[11px] text-slate-500">
+                  Clique para ver técnica e animação
+                </span>
+              </div>
 
               {currentSelectedWorkout?.exercises?.map((ex, idx) => (
                 <div
                   key={ex.id || idx}
-                  className="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-4 flex items-center justify-between gap-3 hover:border-slate-700 transition-colors"
+                  className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-3 hover:border-slate-700 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="w-7 h-7 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center font-bold text-xs shrink-0">
-                      {idx + 1}
-                    </span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      {/* Miniatura do Exercício */}
+                      <button
+                        type="button"
+                        onClick={() => setDemoExercise(ex)}
+                        className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shrink-0 cursor-pointer relative group flex items-center justify-center"
+                        title="Ver demonstração animada"
+                      >
+                        <img
+                          src={ex.photo_url || '/exercise-fallbacks/default.webp'}
+                          alt={ex.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/exercise-photos/ex-supino-reto-barra-78c675419896.webp';
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-teal-300">
+                          <Play className="w-4 h-4 fill-teal-400 text-teal-400" />
+                        </div>
+                      </button>
 
-                    <div className="space-y-0.5">
-                      <h4 className="font-bold text-slate-100 text-xs">
-                        {ex.name}
-                      </h4>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                        <span className="text-teal-400 font-semibold">{ex.sets} séries x {ex.reps} reps</span>
-                        {ex.load_kg ? (
-                          <>
-                            <span>•</span>
-                            <span className="text-amber-400 font-semibold">{ex.load_kg} kg</span>
-                          </>
-                        ) : null}
+                      <div className="space-y-0.5">
+                        <h4 className="font-extrabold text-slate-100 text-xs leading-snug">
+                          {ex.name}
+                        </h4>
+                        <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400">
+                          <span className="text-teal-400 font-semibold">{ex.sets} séries × {ex.reps} reps</span>
+                          {ex.load_kg ? (
+                            <>
+                              <span>•</span>
+                              <span className="text-amber-400 font-semibold">{ex.load_kg} kg</span>
+                            </>
+                          ) : null}
+                          {ex.rest_seconds ? (
+                            <>
+                              <span>•</span>
+                              <span className="text-slate-500">{ex.rest_seconds}s descanso</span>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="px-2 py-0.5 bg-slate-950 text-slate-400 border border-slate-800 text-[10px] font-semibold rounded-lg block">
+                    <span className="px-2 py-0.5 bg-slate-950 text-slate-400 border border-slate-800 text-[10px] font-semibold rounded-lg shrink-0">
                       {ex.muscle_group || 'Geral'}
                     </span>
-                    {ex.rest_seconds && (
-                      <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
-                        {ex.rest_seconds}s descanso
-                      </span>
-                    )}
+                  </div>
+
+                  {/* Botão "Ver como fazer" */}
+                  <div className="pt-1 border-t border-slate-800/60">
+                    <button
+                      type="button"
+                      onClick={() => setDemoExercise(ex)}
+                      className="w-full py-1.5 px-3 bg-teal-500/10 hover:bg-teal-500/20 active:bg-teal-500/30 text-teal-300 border border-teal-500/30 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-teal-400 text-teal-400" />
+                      Ver como fazer
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1056,6 +1226,20 @@ export const PersonalPublicStudentWorkoutView: React.FC<PersonalPublicStudentWor
           </>
         )}
       </main>
+
+      {/* Modal de Demonstração "Ver como fazer" */}
+      <PersonalPublicExerciseDemoModal
+        exercise={demoExercise}
+        onClose={() => setDemoExercise(null)}
+      />
+
+      {/* Modal de Recordes Pessoais do Aluno */}
+      <PersonalPublicStudentRecordsModal
+        token={token}
+        isOpen={showRecordsModal}
+        onClose={() => setShowRecordsModal(false)}
+        onSelectExerciseDemo={(ex) => setDemoExercise(ex)}
+      />
 
       {/* Rodapé Seguro */}
       <footer className="text-center text-[11px] text-slate-600 mt-8 space-y-1">
