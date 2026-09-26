@@ -94,7 +94,8 @@ async function runTests() {
 
     assert(indexHtmlContent.includes('G-QFFJ7Y25ML'), 'index.html contém Measurement ID oficial G-QFFJ7Y25ML');
     assert(indexHtmlContent.includes('googletagmanager.com/gtag/js?id=G-QFFJ7Y25ML'), 'index.html contém script tag do GA4');
-    assert(indexHtmlContent.includes("gtag('config', 'G-QFFJ7Y25ML')"), 'index.html inicializa config do GA4');
+    assert(indexHtmlContent.includes("gtag('config', 'G-QFFJ7Y25ML'"), 'index.html inicializa config do GA4');
+    assert(indexHtmlContent.includes('send_page_view: false'), 'index.html desliga o pageview automático do GA4 (a aplicação já envia manualmente, com caminho saneado)');
 
     const analyticsTsPath = path.resolve(__dirname, '../frontend/src/utils/analytics.ts');
     assert(fs.existsSync(analyticsTsPath), 'Utilitário frontend/src/utils/analytics.ts criado com sucesso');
