@@ -1074,6 +1074,11 @@ export function isValidInternalRoute(rawPath: string): boolean {
     return true;
   }
 
+  // Link de execução de treino do aluno no ZemdaPersonal: /treino/:token
+  if (/^\/treino\/[a-zA-Z0-9_-]+$/i.test(norm)) {
+    return true;
+  }
+
   return false;
 }
 

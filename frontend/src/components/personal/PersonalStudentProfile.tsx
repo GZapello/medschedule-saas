@@ -22,7 +22,8 @@ import {
   Copy,
   GitCompare,
   X,
-  FileText
+  FileText,
+  Link2
 } from 'lucide-react';
 import { Student, Workout, Assessment, WorkoutLog, PersonalRecord, AttendanceStats } from './types';
 import { ApiClient } from '../../api/client';
@@ -37,6 +38,7 @@ import { PersonalPdfExportModal } from './PersonalPdfExportModal';
 import { PersonalAssessmentComparisonModal } from './PersonalAssessmentComparisonModal';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
+import { PersonalStudentLinkModal } from './PersonalStudentLinkModal';
 
 const AssessmentEditor = lazy(() => import('./PersonalAssessmentModal').then(module => ({default:module.PersonalAssessmentModal})));
 
@@ -84,6 +86,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
   const [compareCurrentId, setCompareCurrentId] = useState<string | undefined>(undefined);
   const [comparePreviousId, setComparePreviousId] = useState<string | undefined>(undefined);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
+  const [isStudentLinkOpen, setIsStudentLinkOpen] = useState(false);
 
   // Modal de Edição de Aluno
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -389,6 +392,14 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           >
             <Printer className="w-3.5 h-3.5" />
             Ficha / PDF
+          </button>
+          <button
+            onClick={() => setIsStudentLinkOpen(true)}
+            className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+            title="Gerenciar link exclusivo do aluno para execução dos treinos prescritos"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            Link do Aluno
           </button>
           <button
             type="button"
@@ -1326,6 +1337,14 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal de Gerenciamento do Link do Aluno */}
+      <PersonalStudentLinkModal
+        isOpen={isStudentLinkOpen}
+        onClose={() => setIsStudentLinkOpen(false)}
+        studentId={studentId}
+        studentName={student.name}
+      />
     </div>
   );
 };

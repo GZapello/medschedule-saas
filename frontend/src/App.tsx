@@ -25,6 +25,7 @@ const SpeechTherapyWorkspace = lazyWithRetry(() => import('./components/speech-t
 const PsychologyWorkspace = lazyWithRetry(() => import('./components/psychology/PsychologyWorkspace').then(module => ({ default: module.PsychologyWorkspace })), 'PsychologyWorkspace');
 const PsychopedagogyWorkspace = lazyWithRetry(() => import('./components/psychopedagogy/PsychopedagogyWorkspace').then(module => ({ default: module.PsychopedagogyWorkspace })), 'PsychopedagogyWorkspace');
 const VerifyDocumentView = lazyWithRetry(() => import('./components/public/VerifyDocumentView').then(module => ({ default: module.VerifyDocumentView })), 'VerifyDocumentView');
+const PersonalPublicStudentWorkoutView = lazyWithRetry(() => import('./components/personal/PersonalPublicStudentWorkoutView').then(module => ({ default: module.PersonalPublicStudentWorkoutView })), 'PersonalPublicStudentWorkoutView');
 const ProfessionalsView = lazyWithRetry(() => import('./components/professionals/ProfessionalsView').then(module => ({ default: module.ProfessionalsView })), 'ProfessionalsView');
 const ServicesView = lazyWithRetry(() => import('./components/services/ServicesView').then(module => ({ default: module.ServicesView })), 'ServicesView');
 const FinancialView = lazyWithRetry(() => import('./components/financial/FinancialView').then(module => ({ default: module.FinancialView })), 'FinancialView');
@@ -336,10 +337,17 @@ const AppContent: React.FC = () => {
   };
   const [activeVerificationToken, setActiveVerificationToken] = useState<string | null>(getInitialVerificationToken);
 
+  // Roteamento para execução de treinos do aluno (/treino/:token)
+  const getInitialWorkoutToken = (): string | null => {
+    const match = window.location.pathname.match(/^\/treino\/([^/]+)/);
+    return match ? match[1] : null;
+  };
+  const [activeWorkoutToken, setActiveWorkoutToken] = useState<string | null>(getInitialWorkoutToken);
+
   useLayoutEffect(() => {
     const publicScreen = !loading && !currentUser && publicView === 'landing'
       && currentView !== 'public_preview' && !activeProfSlug && !activeInvite
-      && !activeTrialToken && !activeVerificationToken;
+      && !activeTrialToken && !activeVerificationToken && !activeWorkoutToken;
     updateMetaPixelContext(publicScreen ? window.location.pathname : null);
   });
 
@@ -439,7 +447,7 @@ const AppContent: React.FC = () => {
     if (loading) return;
     const path = window.location.pathname;
     const route = getRouteByPath(path);
-    const sensitiveScreen = activeProfSlug || activeInvite || activeTrialToken || activeVerificationToken || currentView === 'public_preview';
+    const sensitiveScreen = activeProfSlug || activeInvite || activeTrialToken || activeVerificationToken || activeWorkoutToken || currentView === 'public_preview';
     const publicScreen = !currentUser && !sensitiveScreen && (publicView === 'landing' || activeSeoSlug || activeLegalPage || path === '/planos');
     if (publicScreen && route) {
       updatePublicSeo(route);
@@ -478,7 +486,7 @@ const AppContent: React.FC = () => {
     const title = currentUser ? (viewTitles[currentView] ? `Zemda • ${viewTitles[currentView]}` : `Zemda • ${currentView}`) : !isValidApplicationRoute(path) ? 'Página não encontrada (404) | Zemda' : 'Zemda • Acesso Seguro';
     updateDocumentSeo({title, description:'Acesso à plataforma Zemda.', robots:'noindex, nofollow'});
     trackPageView(currentUser ? `/${currentView}` : '/login', title);
-  }, [loading, currentUser, currentView, publicView, activeSeoSlug, activeProfSlug, activeInvite, activeLegalPage, activeTrialToken, activeVerificationToken]);
+  }, [loading, currentUser, currentView, publicView, activeSeoSlug, activeProfSlug, activeInvite, activeLegalPage, activeTrialToken, activeVerificationToken, activeWorkoutToken]);
 
   // Tratamento do botão Voltar nativo do Android
   useEffect(() => {
@@ -515,6 +523,12 @@ const AppContent: React.FC = () => {
       // 3.0 Se estiver em verificação pública de documento, volta para home
       if (activeVerificationToken) {
         setActiveVerificationToken(null);
+        window.history.pushState(null, '', '/');
+        return;
+      }
+      // 3.01 Se estiver em treino do aluno, volta para home
+      if (activeWorkoutToken) {
+        setActiveWorkoutToken(null);
         window.history.pushState(null, '', '/');
         return;
       }
@@ -580,6 +594,9 @@ const AppContent: React.FC = () => {
       const verificationMatch = window.location.pathname.match(/^\/verificar-documento\/([^/]+)/);
       setActiveVerificationToken(verificationMatch ? verificationMatch[1] : null);
 
+      const workoutMatch = window.location.pathname.match(/^\/treino\/([^/]+)/);
+      setActiveWorkoutToken(workoutMatch ? workoutMatch[1] : null);
+
       const match = window.location.pathname.match(/^\/agendar\/([^/]+)/);
       setActiveProfSlug(match ? match[1] : null);
 
@@ -618,6 +635,11 @@ const AppContent: React.FC = () => {
         const token = href.replace('/verificar-documento/', '');
         window.history.pushState(null, '', href);
         setActiveVerificationToken(token);
+      } else if (href && href.startsWith('/treino/')) {
+        e.preventDefault();
+        const token = href.replace('/treino/', '');
+        window.history.pushState(null, '', href);
+        setActiveWorkoutToken(token);
       }
     };
 
@@ -683,6 +705,19 @@ const AppContent: React.FC = () => {
           if (!currentUser) setPublicView('landing');
         }}
       />
+    );
+  }
+
+  // Se o aluno está acessando a área exclusiva de execução de treinos (/treino/:token)
+  if (activeWorkoutToken) {
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+          <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }>
+        <PersonalPublicStudentWorkoutView token={activeWorkoutToken} />
+      </Suspense>
     );
   }
 

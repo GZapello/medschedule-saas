@@ -38,6 +38,7 @@ import { SpeechTherapyController } from '../controllers/speech-therapy.controlle
 import { BodyAssessmentController } from '../controllers/body-assessment.controller';
 import { PersonalController } from '../controllers/personal.controller';
 import { PersonalAIController } from '../controllers/personal-ai.controller';
+import { PersonalStudentLinkController } from '../controllers/personal-student-link.controller';
 import { IntegrationsController } from '../controllers/integrations.controller';
 import { FreeTrialController } from '../controllers/free-trial.controller';
 import { FileController } from '../controllers/file.controller';
@@ -117,6 +118,16 @@ api.post('/v1/public/appointments', AppointmentController.create);
 // Página Pública do Profissional & Agendamento Direto (/agendar/:slug)
 api.get('/v1/public/professionals/:slug', ProfessionalController.getPublicProfile);
 api.get('/v1/public/professionals/:slug/slots', ProfessionalController.getPublicSlots);
+
+// ZemdaPersonal — Acesso Externo do Aluno aos Treinos Prescritos
+api.get('/v1/public/personal/workouts/:token', PersonalStudentLinkController.getPublicWorkout);
+api.get('/public/personal/workouts/:token', PersonalStudentLinkController.getPublicWorkout);
+api.post('/v1/public/personal/workouts/:token/sessions/start', PersonalStudentLinkController.startSession);
+api.post('/public/personal/workouts/:token/sessions/start', PersonalStudentLinkController.startSession);
+api.post('/v1/public/personal/workouts/:token/sessions/:sessionId/progress', PersonalStudentLinkController.saveProgress);
+api.post('/public/personal/workouts/:token/sessions/:sessionId/progress', PersonalStudentLinkController.saveProgress);
+api.post('/v1/public/personal/workouts/:token/sessions/:sessionId/finish', PersonalStudentLinkController.finishSession);
+api.post('/public/personal/workouts/:token/sessions/:sessionId/finish', PersonalStudentLinkController.finishSession);
 
 // Verificação de Versão da Aplicação (Mecanismo de Auto-Update / Notificação)
 api.get('/v1/public/app-version', (req, res) => {
@@ -602,6 +613,9 @@ api.post('/v1/personal/students/:id/profile', requireTenant, requireRole('clinic
 api.post('/personal/students/:id/profile', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.upsertProfile);
 api.get('/v1/personal/students/:studentId/attendance', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAttendanceStats);
 api.get('/v1/personal/students/:studentId/records', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getRecords);
+api.get('/v1/personal/students/:studentId/access-link', requireTenant, requireRole('clinic_admin', 'professional'), PersonalStudentLinkController.getAccessLink);
+api.post('/v1/personal/students/:studentId/access-link', requireTenant, requireRole('clinic_admin', 'professional'), PersonalStudentLinkController.generateOrGetAccessLink);
+api.post('/v1/personal/students/:studentId/access-link/revoke', requireTenant, requireRole('clinic_admin', 'professional'), PersonalStudentLinkController.revokeAccessLink);
 
 // Protocolos de TAV (Tecido Adiposo Visceral) & Classificação
 api.get('/v1/personal/tav/protocols', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listTavProtocols);

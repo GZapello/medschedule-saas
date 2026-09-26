@@ -5,6 +5,7 @@ import { runSeed } from './seed';
 import { migrateBilling } from './billing-migration';
 import { migrateConsultations } from './consultation-migration';
 import { migrateLongitudinalClinical } from './longitudinal-clinical.migration';
+import { migratePersonalStudentLinks } from './personal-student-links.migration';
 import { seedExerciseLibrary } from './exercise-library.seed';
 import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
 import { migrateRemoveOutOfScopeProfessions } from './remove-out-of-scope-professions.migration';
@@ -2760,6 +2761,7 @@ export function initializeDatabase(): void {
   }
   migrateBilling(rawDb);
   migrateLongitudinalClinical(rawDb);
+  migratePersonalStudentLinks(rawDb);
   seedExerciseLibrary(rawDb);
   seedNutritionFoodDatabase(rawDb);
   repairLegacyPhotoUrls(rawDb);
