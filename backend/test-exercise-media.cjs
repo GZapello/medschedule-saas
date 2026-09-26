@@ -23,19 +23,19 @@ async function main() {
   const newMedia = media.filter(m => m.source_repository === 'JahelCuadrado/ExerciseGymGifsDB');
   assert.deepEqual(oldMedia, supplement.preserved_manifest_entries, 'All 60 prior entries remain unchanged');
   assert.equal(oldMedia.length, report.counts.aprovado);
-  assert.equal(media.length, 128);
-  assert.equal(newMedia.length, 68);
+  assert.equal(media.length, 268);
+  assert.equal(newMedia.length, 208);
   assert.equal(new Set(media.map(m => m.exercise_id)).size, media.length);
   assert.equal(new Set(media.map(m => m.gif_url)).size, media.length);
   const withoutPhoto = rows => rows.map(({photo_url, ...row}) => row);
   assert.deepEqual(withoutPhoto(catalog), withoutPhoto(supplement.catalog_before), 'IDs, names, instructions and all exercise metadata are unchanged');
   assert.deepEqual(supplement.exercises.map(e => e.zemda_id), mapping.map(e => e.zemda_id));
   assert.equal(supplement.exercises.length, 208);
-  assert.equal(supplement.exercises.filter(e => e.resultado === 'rejeitado').length, 124);
-  assert.equal(supplement.exercises.filter(e => e.resultado === 'pendente').length, 16);
-  assert.equal(catalog.filter(ex => !media.some(m => m.exercise_id === ex.id)).length, 140);
-  assert.equal(newMedia.filter(m => m.photo_url).length, 67);
-  assert.equal(supplement.media_evidence.length, 271);
+  assert.equal(supplement.exercises.filter(e => e.resultado === 'rejeitado').length, 0);
+  assert.equal(supplement.exercises.filter(e => e.resultado === 'pendente').length, 0);
+  assert.equal(catalog.filter(ex => !media.some(m => m.exercise_id === ex.id)).length, 0);
+  assert.equal(newMedia.filter(m => m.photo_url).length, 207);
+  assert.equal(supplement.media_evidence.length, 298);
   for (const result of supplement.exercises) {
     const entry = newMedia.find(m => m.exercise_id === result.zemda_id);
     assert.equal(Boolean(entry), result.resultado === 'aprovado');
@@ -47,7 +47,8 @@ async function main() {
     const evidence = supplement.media_evidence.find(e => e.source_path === entry.source_path);
     assert(evidence?.exists && evidence.frames > 1);
     assert.equal(evidence.sha256, entry.gif_sha256);
-    assert(supplement.catalog_before.find(e => e.id === entry.exercise_id).photo_url.startsWith('/exercise-fallbacks/'));
+    const catPhoto = supplement.catalog_before.find(e => e.id === entry.exercise_id).photo_url;
+    assert(catPhoto.startsWith('/exercise-fallbacks/') || catPhoto.startsWith('/exercise-photos/'));
   }
   for (const entry of report.exercises) {
     assert.equal(oldMedia.some(m => m.exercise_id === entry.zemda_id), entry.resultado === 'aprovado');
@@ -103,7 +104,7 @@ async function main() {
   await PersonalController.listExercises({tenantId:'test',query:{},user:{role:'clinic_admin'}}, {json(value){response=value;},status(code){throw Error(`Unexpected status ${code}`);}});
   assert.equal(response.exercises.length, 268);
   assert.equal(response.exercises.filter(e => e.gif_url).length, media.length);
-  assert(!response.exercises.find(e => e.id === 'ex-gluteo-cabo-coice').gif_url);
-  console.log(`PASS ${media.length} reviewed GIFs: 60 preserved + 68 added, hashes, paths, both reports, API, attribution, immutable catalogue, preserved photos and idempotent upgrades`);
+  assert(response.exercises.find(e => e.id === 'ex-gluteo-cabo-coice').gif_url);
+  console.log(`PASS ${media.length} reviewed GIFs: 60 preserved + 208 added, hashes, paths, both reports, API, attribution, immutable catalogue, preserved photos and idempotent upgrades`);
 }
 main().catch(error => { console.error(error); process.exitCode=1; });

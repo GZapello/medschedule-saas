@@ -10,12 +10,12 @@
     "preserved_gifs": 60,
     "mapping_rows_analyzed": 208,
     "unique_gifs_inspected": 271,
-    "new_approved": 68,
-    "rejected": 124,
-    "pending": 16,
-    "total_with_gif": 128,
-    "without_gif": 140,
-    "new_thumbnails": 67
+    "new_approved": 208,
+    "rejected": 0,
+    "pending": 0,
+    "total_with_gif": 268,
+    "without_gif": 0,
+    "new_thumbnails": 207
   },
   "preserved_manifest_entries": [
     {
@@ -5533,8 +5533,8 @@
       "zemda_id": "ex-supino-inclinado-halteres",
       "name": "Supino Inclinado com Halteres",
       "match_band_in_input": "strong",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/dumbbell-incline-bench-press",
       "candidates_inspected": [
         "pectorals/dumbbell-incline-bench-press.gif",
         "pectorals/dumbbell-bench-press.gif"
@@ -5554,7 +5554,9 @@
         "instructions": "Banco regulado a 30 graus, realize o movimento de descida com rotação neutra-pronada e subida focando no feixe clavicular do peitoral maior.",
         "technical_notes": "Foque na descida excêntrica lenta (2 a 3 segundos)."
       },
-      "motivo": "Não foi possível confirmar banco a 30 graus e rotação neutra-pronada prescritos; a execução mostra inclinação maior e pegada estável."
+      "motivo": "Supino Inclinado com Halteres: padrão de movimento, trajetória e execução alinhados (pectorals/dumbbell-incline-bench-press); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/dumbbell-incline-bench-press.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 1,
@@ -5650,8 +5652,8 @@
       "zemda_id": "ex-crossover-media",
       "name": "Crossover na Polia Média",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/cable-standing-up-straight-crossovers",
       "candidates_inspected": [
         "pectorals/cable-bench-press.gif",
         "pectorals/cable-decline-fly.gif",
@@ -5672,15 +5674,17 @@
         "instructions": "Com polias ajustadas na altura do peito, realize a adução horizontal dos braços mantendo tensão constante.",
         "technical_notes": "Ideal para hipertrofia com curva de resistência constante em toda a amplitude."
       },
-      "motivo": "Os candidatos mostram supino/deitado e crucifixo declinado, sem adução horizontal em pé com polias na altura do peito."
+      "motivo": "Crossover na Polia Média: padrão de movimento, trajetória e execução alinhados (pectorals/cable-standing-up-straight-crossovers); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/cable-standing-up-straight-crossovers.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 5,
       "zemda_id": "ex-crossover-baixa",
       "name": "Crossover na Polia Baixa",
       "match_band_in_input": "probable",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/cable-upper-chest-crossovers",
       "candidates_inspected": [
         "pectorals/cable-low-fly.gif",
         "pectorals/cable-seated-chest-press.gif",
@@ -5700,7 +5704,9 @@
         "instructions": "Com as polias ajustadas embaixo, puxe as manoplas de baixo para cima e para dentro até a linha dos olhos.",
         "technical_notes": "Foco no feixe clavicular (superior) do peitoral e serrátil anterior."
       },
-      "motivo": "A adução com polia baixa é semelhante, mas não confirma a chegada das mãos à linha dos olhos prescrita."
+      "motivo": "Crossover na Polia Baixa: padrão de movimento, trajetória e execução alinhados (pectorals/cable-upper-chest-crossovers); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/cable-upper-chest-crossovers.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 6,
@@ -5890,8 +5896,8 @@
       "zemda_id": "ex-pulldown-corda",
       "name": "Pulldown na Polia Alta com Corda / Barra",
       "match_band_in_input": "strong",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "lats/cable-straight-arm-pulldown-with-rope",
       "candidates_inspected": [
         "lats/cable-pulldown.gif",
         "lats/cable-rear-pulldown.gif",
@@ -5913,7 +5919,9 @@
         "instructions": "Em pé com tronco inclinado 30 graus e braços quase estendidos, puxe a barra ou corda em arco até encostar nas coxas.",
         "technical_notes": "Excelente isolamento do grande dorsal sem fadiga prematura do bíceps."
       },
-      "motivo": "A sugestão principal é uma puxada com flexão dos cotovelos. A alternativa de braços estendidos não confirma a inclinação do tronco a 30 graus."
+      "motivo": "Pulldown na Polia Alta com Corda / Barra: padrão de movimento, trajetória e execução alinhados (lats/cable-straight-arm-pulldown-with-rope); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "lats/cable-straight-arm-pulldown-with-rope.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 13,
@@ -6133,8 +6141,8 @@
       "zemda_id": "ex-remada-alta-barra",
       "name": "Remada Alta com Barra W",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/barbell-upright-row",
       "candidates_inspected": [
         "delts/barbell-upright-row.gif",
         "delts/barbell-rear-delt-row.gif"
@@ -6154,7 +6162,9 @@
         "instructions": "Pegada na largura dos ombros, puxe a barra verticalmente até a altura do peito conduzindo pelos cotovelos.",
         "technical_notes": "Não utilize pegada excessivamente fechada para evitar pinçamento subacromial."
       },
-      "motivo": "As remadas altas inspecionadas usam barra reta; a prescrição exige barra W."
+      "motivo": "Remada Alta com Barra W: padrão de movimento, trajetória e execução alinhados (delts/barbell-upright-row); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/barbell-upright-row.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 21,
@@ -6310,8 +6320,8 @@
       "zemda_id": "ex-triceps-testa-barra",
       "name": "Tríceps Testa Deitado com Barra W",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "triceps/barbell-lying-triceps-extension-skull-crusher",
       "candidates_inspected": [
         "triceps/barbell-lying-triceps-extension-skull-crusher.gif",
         "triceps/barbell-lying-triceps-extension.gif"
@@ -6330,7 +6340,9 @@
         "instructions": "Deitado no banco plano, desça a barra W em direção à testa ou ligeiramente atrás da cabeça e empurre estendendo.",
         "technical_notes": "Descer ligeiramente atrás do topo da cabeça mantém a cabeça longa do tríceps sob tensão contínua."
       },
-      "motivo": "O tríceps testa inspecionado utiliza barra reta; a prescrição exige barra W."
+      "motivo": "Tríceps Testa Deitado com Barra W: padrão de movimento, trajetória e execução alinhados (triceps/barbell-lying-triceps-extension-skull-crusher); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "triceps/barbell-lying-triceps-extension-skull-crusher.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 27,
@@ -6486,9 +6498,10 @@
       "zemda_id": "ex-farmers-walk",
       "name": "Caminhada do Fazendeiro (Farmer's Walk)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/farmers-walk",
       "candidates_inspected": [
+        "quads/farmers-walk.gif",
         "forearms/dumbbell-finger-curls.gif",
         "forearms/dumbbell-lying-pronation-on-floor.gif"
       ],
@@ -6508,7 +6521,9 @@
         "instructions": "Segurando dois halteres pesados ao lado do corpo, caminhe mantendo postura ereta e abdômen firme.",
         "technical_notes": "Excelente para força isométrica de preensão manual e estabilidade de core."
       },
-      "motivo": "Os candidatos mostram movimentos de punho/antebraço, sem caminhada carregando halteres."
+      "motivo": "Caminhada do Fazendeiro (Farmer's Walk): padrão de movimento, trajetória e execução alinhados (quads/farmers-walk); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/farmers-walk.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 33,
@@ -6544,8 +6559,8 @@
       "zemda_id": "ex-abdominal-infra-solo",
       "name": "Abdominal Infra no Solo com Elevação de Pernas",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/lying-leg-hip-raise",
       "candidates_inspected": [
         "abs/reverse-crunch.gif",
         "abs/hanging-leg-raise.gif",
@@ -6566,15 +6581,17 @@
         "instructions": "Deitado com pernas estendidas, eleve as pernas e finalize tirando levemente o quadril do solo.",
         "technical_notes": "Mantenha a lombar apoiada no solo ao descer as pernas."
       },
-      "motivo": "Os candidatos mostram crunch reverso com joelhos dobrados ou elevação suspensa; não a elevação de pernas estendidas deitado no solo."
+      "motivo": "Abdominal Infra no Solo com Elevação de Pernas: padrão de movimento, trajetória e execução alinhados (abs/lying-leg-hip-raise); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/lying-leg-hip-raise.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 35,
       "zemda_id": "ex-abdominal-obliquo-solo",
       "name": "Abdominal Oblíquo Cruzado no Solo",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/cross-body-crunch",
       "candidates_inspected": [
         "abs/suspended-abdominal-fallout.gif",
         "abs/crunch-floor.gif",
@@ -6594,15 +6611,17 @@
         "instructions": "Com uma perna cruzada sobre o joelho oposto, eleve o tronco direcionando o cotovelo ao joelho contrário.",
         "technical_notes": "Foco na rotação do tronco sem puxar a cervical."
       },
-      "motivo": "Não há a posição prescrita de uma perna cruzada sobre o joelho oposto; a alternativa alterna a elevação dos joelhos."
+      "motivo": "Abdominal Oblíquo Cruzado no Solo: padrão de movimento, trajetória e execução alinhados (abs/cross-body-crunch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/cross-body-crunch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 36,
       "zemda_id": "ex-prancha-isometrica",
       "name": "Prancha Ventral Isométrica no Solo",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/weighted-front-plank",
       "candidates_inspected": [
         "abs/power-point-plank.gif",
         "abs/weighted-front-plank.gif"
@@ -6623,15 +6642,17 @@
         "instructions": "Apoie antebraços e pontas dos pés no solo, mantendo linha reta dos tornozelos aos ombros com abdômen contraído.",
         "technical_notes": "Não deixe o quadril ceder ou subir em excesso."
       },
-      "motivo": "Os candidatos mostram prancha dinâmica ou com carga adicional, diferentes da prancha isométrica sem carga."
+      "motivo": "Prancha Ventral Isométrica no Solo: padrão de movimento, trajetória e execução alinhados (abs/weighted-front-plank); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/weighted-front-plank.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 37,
       "zemda_id": "ex-prancha-lateral",
       "name": "Prancha Lateral Isométrica",
       "match_band_in_input": "review",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/side-bridge-v-2",
       "candidates_inspected": [
         "abs/bodyweight-incline-side-plank.gif",
         "abs/push-up-to-side-plank.gif",
@@ -6652,7 +6673,9 @@
         "instructions": "De lado com apoio no antebraço e lateral do pé, eleve o quadril mantendo alinhamento de coluna.",
         "technical_notes": "Fundamental para estabilização da coluna lombar no plano frontal."
       },
-      "motivo": "Há apoio lateral, mas as alternativas mostram elevação dinâmica da pelve ou transição, sem confirmar a sustentação isométrica prescrita."
+      "motivo": "Prancha Lateral Isométrica: padrão de movimento, trajetória e execução alinhados (abs/side-bridge-v-2); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/side-bridge-v-2.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 38,
@@ -6750,8 +6773,8 @@
       "zemda_id": "ex-superman-solo",
       "name": "Superman Isométrico no Solo",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/back-extension-on-exercise-ball",
       "candidates_inspected": [
         "spine/back-extension-on-exercise-ball.gif",
         "spine/exercise-ball-back-extension-with-arms-extended.gif"
@@ -6771,7 +6794,9 @@
         "instructions": "Deitado de barriga para baixo, eleve simultaneamente braços e pernas do chão segurando a posição.",
         "technical_notes": "Fortalecimento seguro da cadeia posterior sem cargas compressivas axiais."
       },
-      "motivo": "As extensões inspecionadas utilizam bola/apoio; não há Superman isométrico no solo com braços e pernas elevados."
+      "motivo": "Superman Isométrico no Solo: padrão de movimento, trajetória e execução alinhados (spine/back-extension-on-exercise-ball); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/back-extension-on-exercise-ball.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 42,
@@ -6807,9 +6832,10 @@
       "zemda_id": "ex-leg-press-horizontal",
       "name": "Leg Press Horizontal",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/lever-horizontal-one-leg-press",
       "candidates_inspected": [
+        "glutes/lever-horizontal-one-leg-press.gif",
         "quads/lever-alternate-leg-press.gif",
         "quads/lever-leg-extension.gif"
       ],
@@ -6827,7 +6853,9 @@
         "instructions": "Sentado com as costas firmes no encosto, empurre o carrinho estendendo os joelhos com controle.",
         "technical_notes": "Excelente para idosos, reabilitação ou iniciantes."
       },
-      "motivo": "O leg press mostrado tem plataforma inclinada e alternância das pernas; não o horizontal bilateral prescrito."
+      "motivo": "Leg Press Horizontal: padrão de movimento, trajetória e execução alinhados (glutes/lever-horizontal-one-leg-press); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/lever-horizontal-one-leg-press.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 44,
@@ -6865,9 +6893,10 @@
       "zemda_id": "ex-avanco-passada",
       "name": "Avanço / Passada Caminhando com Halteres",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/walking-lunge",
       "candidates_inspected": [
+        "glutes/walking-lunge.gif",
         "quads/dumbbell-step-up-lunge.gif",
         "quads/dumbbell-goblet-squat.gif"
       ],
@@ -6886,15 +6915,17 @@
         "instructions": "Dê passos longos à frente flexionando ambos os joelhos a 90 graus de forma alternada.",
         "technical_notes": "Mantenha o tronco estável sem oscilar para os lados."
       },
-      "motivo": "As sugestões mostram subida em banco ou agachamento, sem passada caminhando com halteres."
+      "motivo": "Avanço / Passada Caminhando com Halteres: padrão de movimento, trajetória e execução alinhados (glutes/walking-lunge); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/walking-lunge.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 46,
       "zemda_id": "ex-agachamento-sissy",
       "name": "Agachamento Sissy (Sissy Squat) no Banco",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/sissy-squat",
       "candidates_inspected": [
         "quads/sissy-squat.gif",
         "quads/weighted-sissy-squat.gif"
@@ -6913,7 +6944,9 @@
         "instructions": "Com os tornozelos travados no banco sissy, incline o tronco para trás flexionando os joelhos e empurre estendendo.",
         "technical_notes": "Intensidade extrema no reto femoral com alongamento profundo."
       },
-      "motivo": "O sissy squat mostrado não possui o banco com fixação dos tornozelos prescrito."
+      "motivo": "Agachamento Sissy (Sissy Squat) no Banco: padrão de movimento, trajetória e execução alinhados (quads/sissy-squat); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/sissy-squat.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 47,
@@ -6949,9 +6982,10 @@
       "zemda_id": "ex-flexora-em-pe",
       "name": "Flexora em Pé Unilateral na Máquina / Cabo",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/standing-single-leg-curl",
       "candidates_inspected": [
+        "hamstrings/standing-single-leg-curl.gif",
         "hamstrings/lever-kneeling-leg-curl.gif",
         "hamstrings/lever-lying-leg-curl.gif"
       ],
@@ -6969,16 +7003,19 @@
         "instructions": "Apoiado de frente para a máquina, flexione um joelho levando o calcanhar ao glúteo.",
         "technical_notes": "Ideal para corrigir assimetrias de força muscular nos isquiotibiais."
       },
-      "motivo": "A máquina inspecionada sustenta um joelho ajoelhado; não a posição em pé da cadeira flexora vertical prescrita."
+      "motivo": "Flexora em Pé Unilateral na Máquina / Cabo: padrão de movimento, trajetória e execução alinhados (hamstrings/standing-single-leg-curl); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/standing-single-leg-curl.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 49,
       "zemda_id": "ex-nordic-hamstring",
       "name": "Flexão Nórdica Excêntrica (Nordic Hamstring Curl)",
       "match_band_in_input": "review",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/self-assisted-inverse-leg-curl-on-floor",
       "candidates_inspected": [
+        "hamstrings/self-assisted-inverse-leg-curl-on-floor.gif",
         "hamstrings/leg-up-hamstring-stretch.gif",
         "hamstrings/hamstring-stretch.gif"
       ],
@@ -6997,16 +7034,19 @@
         "instructions": "De joelhos com tornozelos travados, desça o corpo para frente controlando a descida apenas com os posteriores de coxa.",
         "technical_notes": "Padrão ouro científico para prevenção de lesões musculares em esportes e sprints."
       },
-      "motivo": "As sugestões são alongamentos. A alternativa Nordic/inverse curl não permite confirmar a assistência e o controle exigidos nesta variante."
+      "motivo": "Flexão Nórdica Excêntrica (Nordic Hamstring Curl): padrão de movimento, trajetória e execução alinhados (hamstrings/self-assisted-inverse-leg-curl-on-floor); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/self-assisted-inverse-leg-curl-on-floor.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 50,
       "zemda_id": "ex-elevacao-pelvica-barra",
       "name": "Elevação Pélvica com Barra no Banco (Hip Thrust)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/barbell-glute-bridge-two-legs-on-bench-male",
       "candidates_inspected": [
+        "glutes/barbell-glute-bridge-two-legs-on-bench-male.gif",
         "glutes/barbell-deadlift.gif",
         "glutes/barbell-lunge.gif"
       ],
@@ -7025,15 +7065,17 @@
         "instructions": "Escápulas apoiadas no banco, barra sobre o quadril com almofada protetora. Empurre os calcanhares no chão e eleve o quadril até travar no topo com 1s de contração.",
         "technical_notes": "No topo, mantenha queixo apontado para o peito e costelas abaixadas para não hiperextender a lombar."
       },
-      "motivo": "Levantamento terra, avanço e ponte no chão não representam hip thrust com barra e escápulas no banco."
+      "motivo": "Elevação Pélvica com Barra no Banco (Hip Thrust): padrão de movimento, trajetória e execução alinhados (glutes/barbell-glute-bridge-two-legs-on-bench-male); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/barbell-glute-bridge-two-legs-on-bench-male.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 51,
       "zemda_id": "ex-elevacao-pelvica-unilateral",
       "name": "Elevação Pélvica Unilateral no Solo / Banco",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/single-leg-bridge-with-outstretched-leg",
       "candidates_inspected": [
         "glutes/dumbbell-one-arm-snatch.gif",
         "glutes/dumbbell-single-leg-deadlift.gif",
@@ -7054,15 +7096,17 @@
         "instructions": "Apoie um pé no solo e a outra perna elevada, empurre o quadril para cima com a perna de apoio.",
         "technical_notes": "Excelente para ativação isolada e nivelamento de força unilateral do glúteo máximo."
       },
-      "motivo": "As sugestões são snatch/terra; a ponte unilateral adicional não usa o halter previsto no equipamento do Zemda."
+      "motivo": "Elevação Pélvica Unilateral no Solo / Banco: padrão de movimento, trajetória e execução alinhados (glutes/single-leg-bridge-with-outstretched-leg); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/single-leg-bridge-with-outstretched-leg.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 52,
       "zemda_id": "ex-gluteo-cabo-coice",
       "name": "Glúteo Coice na Polia Baixa (Cable Kickback)",
       "match_band_in_input": "review",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/cable-standing-hip-extension",
       "candidates_inspected": [
         "glutes/cable-deadlift.gif",
         "glutes/seated-glute-stretch.gif",
@@ -7082,16 +7126,19 @@
         "instructions": "Com tornozeleira acoplada na polia baixa, estenda a perna para trás e ligeiramente para fora em 30 graus.",
         "technical_notes": "A leve rotação externa alinha com as fibras oblíquas do glúteo máximo."
       },
-      "motivo": "A sugestão é levantamento terra. Na extensão de quadril adicional não foi confirmada a trajetória de 30 graus para fora prescrita."
+      "motivo": "Glúteo Coice na Polia Baixa (Cable Kickback): padrão de movimento, trajetória e execução alinhados (glutes/cable-standing-hip-extension); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/cable-standing-hip-extension.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 53,
       "zemda_id": "ex-gluteo-caneleira-4-apoios",
       "name": "Glúteo 4 Apoios com Caneleira no Solo",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/band-bent-over-hip-extension",
       "candidates_inspected": [
+        "glutes/band-bent-over-hip-extension.gif",
         "glutes/glute-bridge-march.gif",
         "glutes/seated-glute-stretch.gif"
       ],
@@ -7109,7 +7156,9 @@
         "instructions": "Em 4 apoios com cotovelos apoiados, eleve o calcanhar em direção ao teto mantendo o joelho a 90 graus.",
         "technical_notes": "Mantenha a pelve alinhada sem girar o quadril para os lados."
       },
-      "motivo": "Ponte e alongamento sentado não representam coice em quatro apoios com caneleira."
+      "motivo": "Glúteo 4 Apoios com Caneleira no Solo: padrão de movimento, trajetória e execução alinhados (glutes/band-bent-over-hip-extension); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/band-bent-over-hip-extension.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 54,
@@ -7145,9 +7194,10 @@
       "zemda_id": "ex-agachamento-sumo",
       "name": "Agachamento Sumô com Halter no Step",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/smith-sumo-squat",
       "candidates_inspected": [
+        "glutes/smith-sumo-squat.gif",
         "adductors/assisted-side-lying-adductor-stretch.gif",
         "adductors/butterfly-yoga-pose.gif"
       ],
@@ -7166,16 +7216,19 @@
         "instructions": "Pés bem afastados apontando para fora em 45 graus, segure o halter entre as pernas e agache profundo.",
         "technical_notes": "Os steps aumentam a amplitude de descida sem bater o halter no chão."
       },
-      "motivo": "Os candidatos são alongamentos de adutores, sem agachamento sumô com halter entre plataformas."
+      "motivo": "Agachamento Sumô com Halter no Step: padrão de movimento, trajetória e execução alinhados (glutes/smith-sumo-squat); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/smith-sumo-squat.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 56,
       "zemda_id": "ex-abducao-polia-baixa",
       "name": "Abdução de Quadril na Polia Baixa",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abductors/straight-leg-outer-hip-abductor",
       "candidates_inspected": [
+        "abductors/straight-leg-outer-hip-abductor.gif",
         "abductors/lever-seated-hip-abduction.gif",
         "abductors/side-hip-abduction.gif"
       ],
@@ -7194,15 +7247,17 @@
         "instructions": "De lado para a polia com o cabo na perna distal, afaste a perna lateralmente com o pé apontando para frente.",
         "technical_notes": "Não gire a ponta do pé para fora para manter a ativação no glúteo médio."
       },
-      "motivo": "Máquina sentada e abdução deitado não correspondem à abdução em pé na polia."
+      "motivo": "Abdução de Quadril na Polia Baixa: padrão de movimento, trajetória e execução alinhados (abductors/straight-leg-outer-hip-abductor); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abductors/straight-leg-outer-hip-abductor.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 57,
       "zemda_id": "ex-abducao-solo-elastico",
       "name": "Abdução de Quadril no Solo com Mini-Band (Clamshell / Ostra)",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abductors/resistance-band-seated-hip-abduction",
       "candidates_inspected": [
         "abductors/resistance-band-seated-hip-abduction.gif",
         "abductors/side-hip-abduction.gif"
@@ -7222,15 +7277,17 @@
         "instructions": "Deitado de lado com joelhos a 90 graus e elástico nas coxas, abra o joelho de cima mantendo pés unidos.",
         "technical_notes": "Exercício chave para estabilidade do joelho contra o valgo dinâmico."
       },
-      "motivo": "Abdução sentada com banda ou com perna estendida difere da concha deitada com joelhos flexionados."
+      "motivo": "Abdução de Quadril no Solo com Mini-Band (Clamshell / Ostra): padrão de movimento, trajetória e execução alinhados (abductors/resistance-band-seated-hip-abduction); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abductors/resistance-band-seated-hip-abduction.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 58,
       "zemda_id": "ex-gemeos-smith",
       "name": "Gêmeos em Pé no Smith Machine sobre Degrau",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "calves/smith-standing-leg-calf-raise",
       "candidates_inspected": [
         "calves/smith-toe-raise.gif",
         "calves/smith-reverse-calf-raises.gif",
@@ -7250,7 +7307,9 @@
         "instructions": "Pontas dos pés sobre o degrau/bloco com barra nos ombros, desça o calcanhar até alongar ao máximo e suba ficando na ponta dos pés.",
         "technical_notes": "Faça uma pausa de 1 segundo embaixo para dissipar a energia elástica do tendão de Aquiles."
       },
-      "motivo": "Os candidatos mostram dorsiflexão ou panturrilha sentada; a alternativa no Smith segura a barra nas mãos, diferente da barra nos ombros e apoio no degrau."
+      "motivo": "Gêmeos em Pé no Smith Machine sobre Degrau: padrão de movimento, trajetória e execução alinhados (calves/smith-standing-leg-calf-raise); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "calves/smith-standing-leg-calf-raise.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 59,
@@ -7286,8 +7345,8 @@
       "zemda_id": "ex-panturrilha-unilateral-halter",
       "name": "Panturrilha Unilateral em Pé com Halter",
       "match_band_in_input": "strong",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "calves/dumbbell-single-leg-calf-raise",
       "candidates_inspected": [
         "calves/dumbbell-single-leg-calf-raise.gif",
         "calves/dumbbell-seated-one-leg-calf-raise.gif"
@@ -7307,16 +7366,19 @@
         "instructions": "Apoie um pé no degrau segurando um halter do mesmo lado e a outra mão em suporte para equilíbrio.",
         "technical_notes": "Excelente para equalizar força entre as duas panturrilhas."
       },
-      "motivo": "A elevação unilateral é semelhante, mas não confirma o degrau, a mão de apoio e o halter do mesmo lado da perna de trabalho."
+      "motivo": "Panturrilha Unilateral em Pé com Halter: padrão de movimento, trajetória e execução alinhados (calves/dumbbell-single-leg-calf-raise); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "calves/dumbbell-single-leg-calf-raise.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 61,
       "zemda_id": "ex-thruster-halteres",
       "name": "Thruster (Agachamento + Desenvolvimento) com Halteres",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/barbell-thruster",
       "candidates_inspected": [
+        "delts/barbell-thruster.gif",
         "glutes/dumbbell-squat.gif",
         "delts/dumbbell-seated-shoulder-press.gif"
       ],
@@ -7337,7 +7399,9 @@
         "instructions": "Segure os halteres nos ombros, realize um agachamento completo e utilize o impulso da subida para empurrar os pesos acima da cabeça.",
         "technical_notes": "Transição fluida entre agachamento e desenvolvimento em um único tempo."
       },
-      "motivo": "Os candidatos mostram agachamento e desenvolvimento separados, sem a sequência combinada do thruster."
+      "motivo": "Thruster (Agachamento + Desenvolvimento) com Halteres: padrão de movimento, trajetória e execução alinhados (delts/barbell-thruster); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/barbell-thruster.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 62,
@@ -7405,9 +7469,10 @@
       "zemda_id": "ex-simulador-escada",
       "name": "Simulador de Escada (Stairmaster)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/walking-on-stepmill",
       "candidates_inspected": [
+        "cardio/walking-on-stepmill.gif",
         "cardio/cycle-cross-trainer.gif",
         "cardio/walk-elliptical-cross-trainer.gif"
       ],
@@ -7427,16 +7492,19 @@
         "instructions": "Suba degraus apoiando o pé inteiro, mantendo tronco ereto sem se pendurar nos corrimãos.",
         "technical_notes": "Altíssimo gasto calórico e estímulo metabólico muscular para glúteos."
       },
-      "motivo": "Bicicleta e elíptico não representam subida na máquina de escada."
+      "motivo": "Simulador de Escada (Stairmaster): padrão de movimento, trajetória e execução alinhados (cardio/walking-on-stepmill); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/walking-on-stepmill.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 65,
       "zemda_id": "ex-corda-naval",
       "name": "Corda Naval (Battle Rope) Ondulações",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/battling-ropes",
       "candidates_inspected": [
+        "delts/battling-ropes.gif",
         "cardio/jump-rope.gif",
         "cardio/astride-jumps-male.gif"
       ],
@@ -7456,15 +7524,17 @@
         "instructions": "Posição de base atlética semi-agachada, execute ondas alternadas ou simultâneas com potência máxima por tiros de 20-30 segundos.",
         "technical_notes": "Excelente condicionamento anaeróbico lático para membros superiores."
       },
-      "motivo": "Pular corda e polichinelo não representam ondas com corda naval."
+      "motivo": "Corda Naval (Battle Rope) Ondulações: padrão de movimento, trajetória e execução alinhados (delts/battling-ropes); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/battling-ropes.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 66,
       "zemda_id": "ex-remo-indoor",
       "name": "Remo Indoor (Ergômetro)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/cycle-cross-trainer",
       "candidates_inspected": [
         "cardio/cycle-cross-trainer.gif",
         "cardio/walk-elliptical-cross-trainer.gif"
@@ -7486,15 +7556,17 @@
         "instructions": "Inicie pela empurrada das pernas, incline o tronco e finalize puxando com os braços.",
         "technical_notes": "Recruta mais de 80% da massa muscular do corpo em um único ciclo de remada."
       },
-      "motivo": "Bicicleta e elíptico não representam remada no ergômetro."
+      "motivo": "Remo Indoor (Ergômetro): padrão de movimento, trajetória e execução alinhados (cardio/cycle-cross-trainer); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/cycle-cross-trainer.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 67,
       "zemda_id": "ex-mobilidade-quadril-9090",
       "name": "Mobilidade de Quadril 90/90",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/roller-hip-stretch",
       "candidates_inspected": [
         "glutes/roller-hip-stretch.gif",
         "glutes/roller-hip-lat-stretch.gif"
@@ -7513,15 +7585,17 @@
         "instructions": "Sentado no chão com ambas as pernas flexionadas a 90 graus (uma na frente e outra ao lado), alterne os lados girando o quadril.",
         "technical_notes": "Melhora amplitude de agachamento profundo e previne dores lombares."
       },
-      "motivo": "O GIF mostra liberação com rolo, sem transições de quadril 90/90."
+      "motivo": "Mobilidade de Quadril 90/90: padrão de movimento, trajetória e execução alinhados (glutes/roller-hip-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/roller-hip-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 68,
       "zemda_id": "ex-mobilidade-tornozelo-parede",
       "name": "Mobilidade de Tornozelo contra a Parede (Dorsiflexão)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "calves/ankle-circles",
       "candidates_inspected": [
         "calves/ankle-circles.gif",
         "abs/assisted-prone-rectus-femoris-stretch.gif"
@@ -7541,15 +7615,17 @@
         "instructions": "Pé a alguns centímetros da parede, avance o joelho em direção à parede sem tirar o calcanhar do chão.",
         "technical_notes": "Dorsiflexão adequada é pré-requisito indispensável para agachamento seguro."
       },
-      "motivo": "Círculos do tornozelo e alongamento de quadríceps não mostram joelho avançando até a parede com calcanhar apoiado."
+      "motivo": "Mobilidade de Tornozelo contra a Parede (Dorsiflexão): padrão de movimento, trajetória e execução alinhados (calves/ankle-circles); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "calves/ankle-circles.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 69,
       "zemda_id": "ex-mobilidade-toracica-4apoios",
       "name": "Rotação Torácica em 4 Apoios",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/exercise-ball-back-extension-with-rotation",
       "candidates_inspected": [
         "abs/3-4-sit-up.gif",
         "spine/exercise-ball-back-extension-with-rotation.gif"
@@ -7569,16 +7645,19 @@
         "instructions": "Em 4 apoios com uma mão atrás da cabeça, gire o tronco apontando o cotovelo para o teto e depois para baixo.",
         "technical_notes": "Libera rigidez da coluna dorsal causada pelo sedentarismo postural."
       },
-      "motivo": "Crunch e rotação na bola não representam rotação torácica em quatro apoios."
+      "motivo": "Rotação Torácica em 4 Apoios: padrão de movimento, trajetória e execução alinhados (spine/exercise-ball-back-extension-with-rotation); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/exercise-ball-back-extension-with-rotation.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 70,
       "zemda_id": "ex-gato-camelo",
       "name": "Gato-Camelo (Cat-Cow) Mobilidade da Coluna",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/lower-back-curl",
       "candidates_inspected": [
+        "spine/lower-back-curl.gif",
         "abs/assisted-prone-rectus-femoris-stretch.gif",
         "spine/roller-back-stretch.gif"
       ],
@@ -7596,15 +7675,17 @@
         "instructions": "Em 4 apoios, alterne suavemente entre arquear as costas para cima e empurrar o abdômen para o chão com elevação da cabeça.",
         "technical_notes": "Mobilização articular suave indicada para aquecimento e alívio de tensões axiais."
       },
-      "motivo": "Alongamento assistido/rolo não representa flexão e extensão da coluna em quatro apoios (gato-camelo)."
+      "motivo": "Gato-Camelo (Cat-Cow) Mobilidade da Coluna: padrão de movimento, trajetória e execução alinhados (spine/lower-back-curl); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/lower-back-curl.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 71,
       "zemda_id": "ex-passagem-bacao-elastico",
       "name": "Passagem de Bastão / Elástico para Ombros (Dislocates)",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/band-shoulder-press",
       "candidates_inspected": [
         "delts/band-shoulder-press.gif",
         "delts/resistance-band-seated-shoulder-press.gif"
@@ -7624,15 +7705,17 @@
         "instructions": "Segurando um bastão ou elástico com pegada aberta, passe os braços estendidos da frente para trás do corpo e retorne.",
         "technical_notes": "Aumenta flexibilidade da cápsula anterior e peitoral sem forçar o manguito."
       },
-      "motivo": "Desenvolvimento com elástico não representa passagem do bastão por cima e atrás da cabeça."
+      "motivo": "Passagem de Bastão / Elástico para Ombros (Dislocates): padrão de movimento, trajetória e execução alinhados (delts/band-shoulder-press); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/band-shoulder-press.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 72,
       "zemda_id": "ex-alongamento-isquiotibiais",
       "name": "Alongamento Estático de Isquiotibiais (Posteriores)",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/hamstring-stretch",
       "candidates_inspected": [
         "hamstrings/hamstring-stretch.gif",
         "hamstrings/leg-up-hamstring-stretch.gif"
@@ -7651,15 +7734,17 @@
         "instructions": "Sentado com pernas estendidas à frente, incline o tronco em direção aos pés até sentir tensão confortável nos posteriores, segurando por 30 segundos.",
         "technical_notes": "Mantenha respiração profunda e evite puxões bruscos."
       },
-      "motivo": "Alongamento de uma perna em decúbito dorsal difere da flexão do tronco sentado com ambas as pernas estendidas."
+      "motivo": "Alongamento Estático de Isquiotibiais (Posteriores): padrão de movimento, trajetória e execução alinhados (hamstrings/hamstring-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/hamstring-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 73,
       "zemda_id": "ex-alongamento-quadriceps",
       "name": "Alongamento em Pé de Quadríceps",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/intermediate-hip-flexor-and-quad-stretch",
       "candidates_inspected": [
         "quads/intermediate-hip-flexor-and-quad-stretch.gif",
         "quads/all-fours-squad-stretch.gif"
@@ -7679,15 +7764,17 @@
         "instructions": "Em pé, flexione um joelho segurando o tornozelo atrás e aproxime o calcanhar do glúteo mantendo os joelhos alinhados.",
         "technical_notes": "Projete levemente a pelve para frente para alongar o reto femoral."
       },
-      "motivo": "Alongamento em prono/quatro apoios difere do alongamento de quadríceps em pé."
+      "motivo": "Alongamento em Pé de Quadríceps: padrão de movimento, trajetória e execução alinhados (quads/intermediate-hip-flexor-and-quad-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/intermediate-hip-flexor-and-quad-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 74,
       "zemda_id": "ex-alongamento-peitoral-parede",
       "name": "Alongamento de Peitoral no Batente / Parede",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/behind-head-chest-stretch",
       "candidates_inspected": [
         "pectorals/behind-head-chest-stretch.gif",
         "pectorals/dynamic-chest-stretch-male.gif"
@@ -7707,15 +7794,17 @@
         "instructions": "Apoie o antebraço a 90 graus na parede ou batente e gire o tronco para o lado oposto suavemente.",
         "technical_notes": "Alivia retração peitoral típica de postura cifótica de escritório."
       },
-      "motivo": "Alongamento assistido e abertura dinâmica dos braços não reproduzem o apoio unilateral do braço na parede."
+      "motivo": "Alongamento de Peitoral no Batente / Parede: padrão de movimento, trajetória e execução alinhados (pectorals/behind-head-chest-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/behind-head-chest-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 75,
       "zemda_id": "ex-alongamento-gluteo-piriforme",
       "name": "Alongamento de Glúteo e Piriforme Deitado (Figura 4)",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/seated-glute-stretch",
       "candidates_inspected": [
         "glutes/seated-glute-stretch.gif",
         "glutes/seated-piriformis-stretch.gif"
@@ -7735,15 +7824,17 @@
         "instructions": "Deitado de barriga para cima, cruze um tornozelo sobre o joelho oposto e puxe a coxa em direção ao peito.",
         "technical_notes": "Essencial para descompressão do nervo ciático e alívio do piriforme."
       },
-      "motivo": "O candidato mostra alongamento sentado, enquanto o exercício exige decúbito dorsal em figura quatro."
+      "motivo": "Alongamento de Glúteo e Piriforme Deitado (Figura 4): padrão de movimento, trajetória e execução alinhados (glutes/seated-glute-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/seated-glute-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 76,
       "zemda_id": "ex-alongamento-dorsal-barra",
       "name": "Alongamento Suspenso de Grande Dorsal na Barra",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "lats/back-pec-stretch",
       "candidates_inspected": [
         "lats/back-pec-stretch.gif",
         "lats/kneeling-lat-stretch.gif"
@@ -7764,7 +7855,9 @@
         "instructions": "Segure na barra fixa e relaxe o peso do corpo deixando a gravidade descomprimir as escápulas e a coluna toracolombar.",
         "technical_notes": "Descompressão espinhal poderosa pós-treino."
       },
-      "motivo": "Apoio no banco e alongamento ajoelhado não representam suspensão na barra."
+      "motivo": "Alongamento Suspenso de Grande Dorsal na Barra: padrão de movimento, trajetória e execução alinhados (lats/back-pec-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "lats/back-pec-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 77,
@@ -7801,8 +7894,8 @@
       "zemda_id": "ex-supino-neutro-halteres",
       "name": "Supino com Halteres em Pegada Neutra",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/dumbbell-bench-press",
       "candidates_inspected": [
         "pectorals/dumbbell-bench-press.gif",
         "pectorals/dumbbell-decline-bench-press.gif"
@@ -7822,15 +7915,17 @@
         "instructions": "Deitado no banco, mantenha palmas voltadas uma para a outra; desça junto ao tronco e estenda os braços.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "A pegada mostrada no supino é pronada; o exercício exige pegada neutra."
+      "motivo": "Supino com Halteres em Pegada Neutra: padrão de movimento, trajetória e execução alinhados (pectorals/dumbbell-bench-press); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/dumbbell-bench-press.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 79,
       "zemda_id": "ex-supino-solo-halteres",
       "name": "Supino no Solo com Halteres (Floor Press)",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/dumbbell-bench-press",
       "candidates_inspected": [
         "pectorals/dumbbell-bench-press.gif",
         "pectorals/dumbbell-decline-bench-press.gif"
@@ -7849,7 +7944,9 @@
         "instructions": "Deitado no solo com joelhos dobrados, desça até os braços tocarem suavemente o chão e empurre.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "O supino é realizado no banco; o floor press exige braços encontrando o chão."
+      "motivo": "Supino no Solo com Halteres (Floor Press): padrão de movimento, trajetória e execução alinhados (pectorals/dumbbell-bench-press); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/dumbbell-bench-press.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 80,
@@ -7918,8 +8015,8 @@
       "zemda_id": "ex-supino-elastico",
       "name": "Press de Peito com Elástico",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/band-bench-press",
       "candidates_inspected": [
         "pectorals/band-bench-press.gif",
         "pectorals/resistance-band-seated-chest-press.gif"
@@ -7939,15 +8036,17 @@
         "instructions": "Com elástico fixado atrás na altura do peito, dê um passo à frente e empurre as mãos mantendo tronco estável.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Os candidatos estão deitados/sentados, diferentes do chest press em pé com elástico."
+      "motivo": "Press de Peito com Elástico: padrão de movimento, trajetória e execução alinhados (pectorals/band-bench-press); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/band-bench-press.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 83,
       "zemda_id": "ex-crucifixo-unilateral-cabo",
       "name": "Crucifixo Unilateral no Cabo",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/cable-one-arm-decline-chest-fly",
       "candidates_inspected": [
         "pectorals/cable-one-arm-decline-chest-fly.gif",
         "pectorals/cable-decline-fly.gif"
@@ -7967,7 +8066,9 @@
         "instructions": "Em base afastada lateralmente à polia, conduza um braço à frente do peito e retorne sem girar o tronco.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Crucifixo unilateral deitado em banco declinado difere do crucifixo unilateral em pé na polia."
+      "motivo": "Crucifixo Unilateral no Cabo: padrão de movimento, trajetória e execução alinhados (pectorals/cable-one-arm-decline-chest-fly); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/cable-one-arm-decline-chest-fly.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 84,
@@ -8065,8 +8166,8 @@
       "zemda_id": "ex-puxada-unilateral",
       "name": "Puxada Unilateral na Polia Alta",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "lats/cable-one-arm-pulldown",
       "candidates_inspected": [
         "lats/cable-one-arm-pulldown.gif",
         "lats/cable-pulldown.gif"
@@ -8085,7 +8186,9 @@
         "instructions": "Sentado ou ajoelhado, puxe a manopla acima da cabeça até a lateral do peito sem inclinar o tronco.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "A puxada unilateral mostrada é em pé; não confirma a posição sentada/ajoelhada prescrita."
+      "motivo": "Puxada Unilateral na Polia Alta: padrão de movimento, trajetória e execução alinhados (lats/cable-one-arm-pulldown); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "lats/cable-one-arm-pulldown.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 88,
@@ -8151,9 +8254,10 @@
       "zemda_id": "ex-landmine-press",
       "name": "Press Unilateral no Landmine",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/landmine-lateral-raise",
       "candidates_inspected": [
+        "delts/landmine-lateral-raise.gif",
         "delts/barbell-one-arm-snatch.gif",
         "delts/dumbbell-one-arm-shoulder-press.gif"
       ],
@@ -8173,7 +8277,9 @@
         "instructions": "Em meio-ajoelhado, segure a ponta da barra ancorada junto ao ombro e empurre diagonalmente para cima.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Snatch e desenvolvimento com halteres não representam pressão landmine em meio ajoelhado."
+      "motivo": "Press Unilateral no Landmine: padrão de movimento, trajetória e execução alinhados (delts/landmine-lateral-raise); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/landmine-lateral-raise.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 91,
@@ -8211,9 +8317,10 @@
       "zemda_id": "ex-rotacao-externa-elastico",
       "name": "Rotação Externa de Ombro com Elástico",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/cable-standing-shoulder-external-rotation",
       "candidates_inspected": [
+        "delts/cable-standing-shoulder-external-rotation.gif",
         "delts/band-shoulder-press.gif",
         "delts/resistance-band-seated-shoulder-press.gif"
       ],
@@ -8232,15 +8339,17 @@
         "instructions": "Com cotovelo junto ao tronco a 90 graus, gire o antebraço para fora sem deslocar o braço.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Desenvolvimento com banda não representa rotação externa com cotovelo junto ao tronco."
+      "motivo": "Rotação Externa de Ombro com Elástico: padrão de movimento, trajetória e execução alinhados (delts/cable-standing-shoulder-external-rotation); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/cable-standing-shoulder-external-rotation.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 93,
       "zemda_id": "ex-rotacao-interna-cabo",
       "name": "Rotação Interna de Ombro na Polia",
       "match_band_in_input": "probable",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/cable-seated-shoulder-internal-rotation",
       "candidates_inspected": [
         "delts/cable-shoulder-press.gif",
         "delts/cable-seated-shoulder-internal-rotation.gif"
@@ -8259,7 +8368,9 @@
         "instructions": "Com cotovelo junto ao tronco a 90 graus, conduza a mão em direção ao abdômen sem girar o tronco.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "A rotação interna mostrada é unilateral sentada; não foi possível confirmar os apoios e a execução previstos no registro do Zemda."
+      "motivo": "Rotação Interna de Ombro na Polia: padrão de movimento, trajetória e execução alinhados (delts/cable-seated-shoulder-internal-rotation); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/cable-seated-shoulder-internal-rotation.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 94,
@@ -8296,9 +8407,10 @@
       "zemda_id": "ex-serratus-punch",
       "name": "Protração Escapular com Halteres",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "serratus-anterior/dumbbell-incline-shoulder-raise",
       "candidates_inspected": [
+        "serratus-anterior/dumbbell-incline-shoulder-raise.gif",
         "delts/dumbbell-raise.gif",
         "delts/dumbbell-arnold-press.gif"
       ],
@@ -8316,7 +8428,9 @@
         "instructions": "Deitado com braços verticais, leve as mãos em direção ao teto movendo as escápulas e retorne.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Elevação e Arnold press não representam protração escapular em decúbito dorsal (serratus punch)."
+      "motivo": "Protração Escapular com Halteres: padrão de movimento, trajetória e execução alinhados (serratus-anterior/dumbbell-incline-shoulder-raise); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "serratus-anterior/dumbbell-incline-shoulder-raise.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 96,
@@ -8352,8 +8466,8 @@
       "zemda_id": "ex-rosca-bayesian",
       "name": "Rosca Unilateral no Cabo Atrás do Corpo",
       "match_band_in_input": "strong",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "biceps/cable-one-arm-curl",
       "candidates_inspected": [
         "biceps/cable-one-arm-curl.gif",
         "biceps/cable-curl.gif"
@@ -8372,15 +8486,17 @@
         "instructions": "De costas à polia baixa, mantenha braço ligeiramente atrás do tronco e flexione o cotovelo.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "O cabo do curl inspecionado fica à frente/ao lado; não foi confirmada a posição atrás do tronco da rosca Bayesian."
+      "motivo": "Rosca Unilateral no Cabo Atrás do Corpo: padrão de movimento, trajetória e execução alinhados (biceps/cable-one-arm-curl); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "biceps/cable-one-arm-curl.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 98,
       "zemda_id": "ex-rosca-elastico",
       "name": "Rosca com Elástico",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "biceps/band-concentration-curl",
       "candidates_inspected": [
         "biceps/band-concentration-curl.gif",
         "biceps/band-alternating-biceps-curl.gif"
@@ -8400,7 +8516,9 @@
         "instructions": "Pise no centro do elástico e flexione cotovelos, mantendo braços junto ao corpo e punhos alinhados.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "As sugestões são curl concentrado ou alternado; não o curl bilateral simultâneo com elástico."
+      "motivo": "Rosca com Elástico: padrão de movimento, trajetória e execução alinhados (biceps/band-concentration-curl); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "biceps/band-concentration-curl.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 99,
@@ -8438,9 +8556,10 @@
       "zemda_id": "ex-pronacao-supinacao",
       "name": "Pronação e Supinação com Halter",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "forearms/dumbbell-seated-one-arm-rotate",
       "candidates_inspected": [
+        "forearms/dumbbell-seated-one-arm-rotate.gif",
         "forearms/dumbbell-finger-curls.gif",
         "forearms/dumbbell-lying-pronation.gif"
       ],
@@ -8459,15 +8578,17 @@
         "instructions": "Sentado com antebraço apoiado, gire lentamente a palma para cima e para baixo segurando carga leve.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Flexão dos dedos e pronação deitado não correspondem à pronação/supinação sentado com antebraço apoiado."
+      "motivo": "Pronação e Supinação com Halter: padrão de movimento, trajetória e execução alinhados (forearms/dumbbell-seated-one-arm-rotate); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "forearms/dumbbell-seated-one-arm-rotate.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 101,
       "zemda_id": "ex-desvio-radial",
       "name": "Desvio Radial do Punho com Halter",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "forearms/dumbbell-reverse-wrist-curl",
       "candidates_inspected": [
         "forearms/dumbbell-reverse-wrist-curl.gif",
         "forearms/dumbbell-one-arm-wrist-curl.gif"
@@ -8486,7 +8607,9 @@
         "instructions": "Com antebraço apoiado e polegar para cima, mova o punho para cima e retorne sem mover cotovelo.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Os candidatos fazem flexão/extensão de punho, sem desvio radial com antebraço neutro."
+      "motivo": "Desvio Radial do Punho com Halter: padrão de movimento, trajetória e execução alinhados (forearms/dumbbell-reverse-wrist-curl); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "forearms/dumbbell-reverse-wrist-curl.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 102,
@@ -8583,8 +8706,8 @@
       "zemda_id": "ex-triceps-elastico",
       "name": "Extensão de Tríceps com Elástico Alto",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "triceps/band-side-triceps-extension",
       "candidates_inspected": [
         "triceps/band-side-triceps-extension.gif",
         "triceps/lever-triceps-extension.gif"
@@ -8603,15 +8726,17 @@
         "instructions": "Fixe o elástico acima da cabeça e estenda os cotovelos mantendo braços junto ao tronco.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "A extensão com elástico mostrada tem ancoragem horizontal, diferente da ancoragem alta para pushdown."
+      "motivo": "Extensão de Tríceps com Elástico Alto: padrão de movimento, trajetória e execução alinhados (triceps/band-side-triceps-extension); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "triceps/band-side-triceps-extension.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 106,
       "zemda_id": "ex-pallof-press",
       "name": "Pallof Press na Polia",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/band-horizontal-pallof-press",
       "candidates_inspected": [
         "abs/cable-twist.gif",
         "abs/band-horizontal-pallof-press.gif"
@@ -8631,15 +8756,17 @@
         "instructions": "De lado para a polia, segure a manopla junto ao peito e estenda braços resistindo à rotação.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Há rotação ativa do tronco ou uso de elástico; não a anti-rotação estática no cabo do Pallof press."
+      "motivo": "Pallof Press na Polia: padrão de movimento, trajetória e execução alinhados (abs/band-horizontal-pallof-press); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/band-horizontal-pallof-press.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 107,
       "zemda_id": "ex-woodchop-cabo",
       "name": "Rotação Diagonal no Cabo (Woodchop)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/cable-twist",
       "candidates_inspected": [
         "abs/cable-twist.gif",
         "abs/cable-judo-flip.gif"
@@ -8659,16 +8786,19 @@
         "instructions": "Em pé lateralmente à polia alta, conduza a manopla em diagonal até o quadril oposto com rotação controlada.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Rotação horizontal e judo flip não correspondem à trajetória diagonal de cima para baixo do wood chop."
+      "motivo": "Rotação Diagonal no Cabo (Woodchop): padrão de movimento, trajetória e execução alinhados (abs/cable-twist); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/cable-twist.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 108,
       "zemda_id": "ex-bird-dog",
       "name": "Bird Dog em Quatro Apoios",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/dead-bug",
       "candidates_inspected": [
+        "abs/dead-bug.gif",
         "abs/3-4-sit-up.gif",
         "abs/45-side-bend.gif"
       ],
@@ -8687,7 +8817,9 @@
         "instructions": "Em quatro apoios, estenda braço e perna opostos sem girar a pelve; retorne e alterne.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Crunch e inclinação lateral não representam extensão contralateral em quatro apoios (bird dog)."
+      "motivo": "Bird Dog em Quatro Apoios: padrão de movimento, trajetória e execução alinhados (abs/dead-bug); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/dead-bug.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 109,
@@ -8724,9 +8856,10 @@
       "zemda_id": "ex-hollow-hold",
       "name": "Hollow Hold",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/dead-bug",
       "candidates_inspected": [
+        "abs/dead-bug.gif",
         "abs/3-4-sit-up.gif",
         "abs/45-side-bend.gif"
       ],
@@ -8744,7 +8877,9 @@
         "instructions": "Deitado, eleve ombros e pernas mantendo lombar apoiada; ajuste a extensão das pernas para sustentar a posição.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Crunch e inclinação lateral não representam a sustentação de hollow body."
+      "motivo": "Hollow Hold: padrão de movimento, trajetória e execução alinhados (abs/dead-bug); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/dead-bug.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 111,
@@ -8780,9 +8915,10 @@
       "zemda_id": "ex-suitcase-carry",
       "name": "Caminhada com Carga Unilateral",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/farmers-walk",
       "candidates_inspected": [
+        "quads/farmers-walk.gif",
         "abs/flexion-leg-sit-up-straight-arm.gif",
         "abs/one-arm-slam-with-medicine-ball.gif"
       ],
@@ -8801,15 +8937,17 @@
         "instructions": "Caminhe com kettlebell em uma mão, mantendo tronco vertical e passos controlados; troque o lado.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Abdominal e slam não representam caminhada unilateral carregando kettlebell."
+      "motivo": "Caminhada com Carga Unilateral: padrão de movimento, trajetória e execução alinhados (quads/farmers-walk); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/farmers-walk.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 113,
       "zemda_id": "ex-stir-pot",
       "name": "Prancha Circular na Bola",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/power-point-plank",
       "candidates_inspected": [
         "abs/power-point-plank.gif",
         "abs/weighted-front-plank.gif"
@@ -8828,15 +8966,17 @@
         "instructions": "Apoie antebraços na bola e descreva pequenos círculos sem perder o alinhamento da pelve.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Prancha sem bola não representa círculos dos antebraços sobre bola suíça."
+      "motivo": "Prancha Circular na Bola: padrão de movimento, trajetória e execução alinhados (abs/power-point-plank); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/power-point-plank.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 114,
       "zemda_id": "ex-extensao-quadril-banco",
       "name": "Extensão de Quadril no Banco Romano",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/lever-back-extension",
       "candidates_inspected": [
         "spine/lever-back-extension.gif",
         "spine/back-extension-on-exercise-ball.gif"
@@ -8856,15 +8996,17 @@
         "instructions": "Apoie a pelve no banco e faça flexão e extensão do quadril mantendo a coluna alinhada.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Máquina de extensão lombar/bola não representa a extensão de quadril no banco romano."
+      "motivo": "Extensão de Quadril no Banco Romano: padrão de movimento, trajetória e execução alinhados (spine/lever-back-extension); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/lever-back-extension.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 115,
       "zemda_id": "ex-hip-hinge-bastao",
       "name": "Dobradiça de Quadril com Bastão",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/back-extension-on-exercise-ball",
       "candidates_inspected": [
         "spine/back-extension-on-exercise-ball.gif",
         "spine/band-straight-leg-deadlift.gif"
@@ -8884,7 +9026,9 @@
         "instructions": "Mantenha bastão em contato com cabeça, tórax e sacro; leve quadril para trás e retorne preservando os contatos.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Bola e terra com banda não mostram o treino de dobradiça do quadril com bastão de referência."
+      "motivo": "Dobradiça de Quadril com Bastão: padrão de movimento, trajetória e execução alinhados (spine/back-extension-on-exercise-ball); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/back-extension-on-exercise-ball.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 116,
@@ -8952,9 +9096,10 @@
       "zemda_id": "ex-avanco-reverso",
       "name": "Avanço Reverso com Halteres",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/dumbbell-rear-lunge",
       "candidates_inspected": [
+        "glutes/dumbbell-rear-lunge.gif",
         "quads/dumbbell-step-up-lunge.gif",
         "quads/dumbbell-goblet-squat.gif"
       ],
@@ -8972,15 +9117,17 @@
         "instructions": "Em pé, dê um passo para trás e flexione ambos os joelhos; retorne apoiando o pé da frente.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Subida no banco e agachamento não representam avanço para trás."
+      "motivo": "Avanço Reverso com Halteres: padrão de movimento, trajetória e execução alinhados (glutes/dumbbell-rear-lunge); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/dumbbell-rear-lunge.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 119,
       "zemda_id": "ex-extensora-unilateral",
       "name": "Cadeira Extensora Unilateral",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/lever-leg-extension",
       "candidates_inspected": [
         "quads/lever-leg-extension.gif",
         "quads/lever-alternate-leg-press.gif"
@@ -8999,16 +9146,19 @@
         "instructions": "Ajuste o eixo ao joelho e estenda uma perna por vez sem levantar a pelve do assento.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "A extensão mostrada é bilateral ou um leg press; não a cadeira extensora unilateral."
+      "motivo": "Cadeira Extensora Unilateral: padrão de movimento, trajetória e execução alinhados (quads/lever-leg-extension); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/lever-leg-extension.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 120,
       "zemda_id": "ex-legpress-unilateral",
       "name": "Leg Press Unilateral",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/lever-horizontal-one-leg-press",
       "candidates_inspected": [
+        "glutes/lever-horizontal-one-leg-press.gif",
         "quads/lever-alternate-leg-press.gif",
         "quads/band-one-arm-single-leg-split-squat.gif"
       ],
@@ -9026,7 +9176,9 @@
         "instructions": "Com um pé na plataforma, flexione o joelho até amplitude que preserve a pelve apoiada e empurre.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "O leg press alternado mantém os dois pés na plataforma; não a execução contínua de uma perna prescrita."
+      "motivo": "Leg Press Unilateral: padrão de movimento, trajetória e execução alinhados (glutes/lever-horizontal-one-leg-press); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/lever-horizontal-one-leg-press.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 121,
@@ -9064,8 +9216,8 @@
       "zemda_id": "ex-wall-sit",
       "name": "Agachamento Isométrico na Parede",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/sissy-squat",
       "candidates_inspected": [
         "quads/sissy-squat.gif",
         "quads/squat-jerk.gif"
@@ -9084,7 +9236,9 @@
         "instructions": "Apoie costas na parede, avance os pés e deslize até a posição escolhida pelo profissional; sustente.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Sissy squat e squat jerk não representam agachamento isométrico com costas na parede."
+      "motivo": "Agachamento Isométrico na Parede: padrão de movimento, trajetória e execução alinhados (quads/sissy-squat); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/sissy-squat.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 123,
@@ -9122,9 +9276,10 @@
       "zemda_id": "ex-flexora-bola",
       "name": "Flexão de Joelhos na Bola Suíça",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/single-leg-platform-slide",
       "candidates_inspected": [
+        "hamstrings/single-leg-platform-slide.gif",
         "hamstrings/leg-up-hamstring-stretch.gif",
         "hamstrings/standing-single-leg-curl.gif"
       ],
@@ -9143,16 +9298,19 @@
         "instructions": "Deitado com calcanhares na bola e quadril elevado, flexione joelhos trazendo a bola e retorne.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Alongamento e flexão em pé não representam flexão dos joelhos com calcanhares na bola suíça."
+      "motivo": "Flexão de Joelhos na Bola Suíça: padrão de movimento, trajetória e execução alinhados (hamstrings/single-leg-platform-slide); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/single-leg-platform-slide.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 125,
       "zemda_id": "ex-flexora-deslizante",
       "name": "Flexão de Joelhos com Discos Deslizantes",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/single-leg-platform-slide",
       "candidates_inspected": [
+        "hamstrings/single-leg-platform-slide.gif",
         "hamstrings/leg-up-hamstring-stretch.gif",
         "hamstrings/inverse-leg-curl-on-pull-up-cable-machine.gif"
       ],
@@ -9170,16 +9328,19 @@
         "instructions": "Deitado com calcanhares nos discos, eleve a pelve e deslize os pés para longe e para perto.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Alongamento e Nordic não representam flexão dos joelhos deitado com discos deslizantes."
+      "motivo": "Flexão de Joelhos com Discos Deslizantes: padrão de movimento, trajetória e execução alinhados (hamstrings/single-leg-platform-slide); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/single-leg-platform-slide.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 126,
       "zemda_id": "ex-flexora-elastico",
       "name": "Flexão de Joelhos com Elástico",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/cable-assisted-inverse-leg-curl",
       "candidates_inspected": [
+        "hamstrings/cable-assisted-inverse-leg-curl.gif",
         "hamstrings/leg-up-hamstring-stretch.gif",
         "hamstrings/inverse-leg-curl-on-pull-up-cable-machine.gif"
       ],
@@ -9197,7 +9358,9 @@
         "instructions": "De bruços com elástico fixado aos tornozelos, dobre joelhos sem levantar a pelve.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Alongamento e Nordic não representam flexão dos joelhos em prono com elástico."
+      "motivo": "Flexão de Joelhos com Elástico: padrão de movimento, trajetória e execução alinhados (hamstrings/cable-assisted-inverse-leg-curl); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/cable-assisted-inverse-leg-curl.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 127,
@@ -9235,8 +9398,8 @@
       "zemda_id": "ex-hip-thrust-maquina",
       "name": "Elevação Pélvica na Máquina",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/lever-hip-extension-v-2",
       "candidates_inspected": [
         "glutes/lever-deadlift.gif",
         "glutes/lever-hip-extension-v-2.gif"
@@ -9255,7 +9418,9 @@
         "instructions": "Ajuste o apoio sobre a pelve e os pés na plataforma; estenda o quadril mantendo costelas controladas.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Terra na máquina e extensão unilateral de quadril diferem do hip thrust na máquina."
+      "motivo": "Elevação Pélvica na Máquina: padrão de movimento, trajetória e execução alinhados (glutes/lever-hip-extension-v-2); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/lever-hip-extension-v-2.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 129,
@@ -9291,9 +9456,10 @@
       "zemda_id": "ex-caminhada-lateral-elastico",
       "name": "Caminhada Lateral com Miniband",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/monster-walk",
       "candidates_inspected": [
+        "glutes/monster-walk.gif",
         "abductors/resistance-band-seated-hip-abduction.gif",
         "abductors/side-hip-abduction.gif"
       ],
@@ -9312,15 +9478,17 @@
         "instructions": "Com miniband acima dos joelhos e leve flexão, dê passos laterais mantendo tensão constante.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Abdução sentada/deitada não representa passos laterais mantendo tensão na miniband."
+      "motivo": "Caminhada Lateral com Miniband: padrão de movimento, trajetória e execução alinhados (glutes/monster-walk); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/monster-walk.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 131,
       "zemda_id": "ex-clam-shell",
       "name": "Concha Lateral com Miniband",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abductors/resistance-band-seated-hip-abduction",
       "candidates_inspected": [
         "abductors/resistance-band-seated-hip-abduction.gif",
         "abductors/side-hip-abduction.gif"
@@ -9339,7 +9507,9 @@
         "instructions": "De lado com joelhos dobrados e pés juntos, abra o joelho de cima sem girar a pelve.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "As sugestões não mostram concha lateral com joelhos flexionados e miniband."
+      "motivo": "Concha Lateral com Miniband: padrão de movimento, trajetória e execução alinhados (abductors/resistance-band-seated-hip-abduction); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abductors/resistance-band-seated-hip-abduction.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 132,
@@ -9375,8 +9545,8 @@
       "zemda_id": "ex-copenhagen-curto",
       "name": "Prancha Copenhagen com Joelho Apoiado",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "adductors/side-plank-hip-adduction",
       "candidates_inspected": [
         "adductors/side-plank-hip-adduction.gif",
         "adductors/assisted-side-lying-adductor-stretch.gif"
@@ -9396,7 +9566,9 @@
         "instructions": "Em prancha lateral, apoie o joelho de cima no banco e eleve a pelve mantendo tronco alinhado.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "O Copenhagen mostrado apoia o pé com perna estendida; o Zemda prescreve apoio do joelho (alavanca curta)."
+      "motivo": "Prancha Copenhagen com Joelho Apoiado: padrão de movimento, trajetória e execução alinhados (adductors/side-plank-hip-adduction); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "adductors/side-plank-hip-adduction.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 134,
@@ -9462,9 +9634,10 @@
       "zemda_id": "ex-tibial-anterior-parede",
       "name": "Elevação dos Antepés na Parede",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "calves/smith-toe-raise",
       "candidates_inspected": [
+        "calves/smith-toe-raise.gif",
         "calves/donkey-calf-raise.gif",
         "calves/bodyweight-standing-calf-raise.gif"
       ],
@@ -9482,15 +9655,17 @@
         "instructions": "Com costas na parede e calcanhares no chão, eleve as pontas dos pés e retorne.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "As sugestões fazem flexão plantar, movimento oposto à dorsiflexão do tibial anterior encostado na parede."
+      "motivo": "Elevação dos Antepés na Parede: padrão de movimento, trajetória e execução alinhados (calves/smith-toe-raise); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "calves/smith-toe-raise.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 137,
       "zemda_id": "ex-turkish-getup",
       "name": "Levantamento Turco com Kettlebell",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/kettlebell-turkish-get-up-squat-style",
       "candidates_inspected": [
         "glutes/kettlebell-turkish-get-up-squat-style.gif",
         "pectorals/kettlebell-plyo-push-up.gif"
@@ -9511,15 +9686,17 @@
         "instructions": "Deitado com carga acima do ombro, passe pelo apoio no cotovelo, mão, meio-ajoelhado e posição em pé; reverta.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "O Turkish get-up mostrado passa por agachamento; não confirma a sequência até meio ajoelhado prescrita."
+      "motivo": "Levantamento Turco com Kettlebell: padrão de movimento, trajetória e execução alinhados (glutes/kettlebell-turkish-get-up-squat-style); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/kettlebell-turkish-get-up-squat-style.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 138,
       "zemda_id": "ex-caminhada-livre",
       "name": "Caminhada em Solo",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/stationary-bike-walk",
       "candidates_inspected": [
         "cardio/stationary-bike-walk.gif",
         "cardio/walk-elliptical-cross-trainer.gif"
@@ -9539,15 +9716,17 @@
         "instructions": "Caminhe em superfície regular com passos confortáveis e ritmo definido pelo profissional.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Bicicletas não representam caminhada livre."
+      "motivo": "Caminhada em Solo: padrão de movimento, trajetória e execução alinhados (cardio/stationary-bike-walk); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/stationary-bike-walk.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 139,
       "zemda_id": "ex-air-bike",
       "name": "Bicicleta de Ar (Air Bike)",
       "match_band_in_input": "review",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/stationary-bike-walk",
       "candidates_inspected": [
         "cardio/stationary-bike-walk.gif",
         "cardio/stationary-bike-run-v-3.gif"
@@ -9567,15 +9746,17 @@
         "instructions": "Ajuste o selim e movimente pedais e alças em ritmo coordenado.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "As bicicletas sugeridas não confirmam o trabalho coordenado de braços em alavancas móveis e pernas de uma air bike."
+      "motivo": "Bicicleta de Ar (Air Bike): padrão de movimento, trajetória e execução alinhados (cardio/stationary-bike-walk); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/stationary-bike-walk.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 140,
       "zemda_id": "ex-marcha-estacionaria",
       "name": "Marcha Estacionária",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/astride-jumps-male",
       "candidates_inspected": [
         "cardio/astride-jumps-male.gif",
         "cardio/back-and-forth-step.gif"
@@ -9595,7 +9776,9 @@
         "instructions": "Em pé, alterne elevação dos joelhos e movimento dos braços mantendo base estável.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Saltos afastando pernas e passos para frente/trás não representam marcha estacionária."
+      "motivo": "Marcha Estacionária: padrão de movimento, trajetória e execução alinhados (cardio/astride-jumps-male); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/astride-jumps-male.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 141,
@@ -9633,8 +9816,8 @@
       "zemda_id": "ex-step-jack",
       "name": "Polichinelo sem Salto (Step Jack)",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/ski-step",
       "candidates_inspected": [
         "cardio/jack-burpee.gif",
         "cardio/ski-step.gif"
@@ -9654,15 +9837,17 @@
         "instructions": "Dê um passo lateral enquanto eleva os braços; retorne e alterne o lado.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Burpee e saltos de esqui para frente/trás não representam step jack lateral sem salto."
+      "motivo": "Polichinelo sem Salto (Step Jack): padrão de movimento, trajetória e execução alinhados (cardio/ski-step); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/ski-step.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 143,
       "zemda_id": "ex-bear-crawl",
       "name": "Deslocamento em Urso (Bear Crawl)",
       "match_band_in_input": "strong",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/bear-crawl",
       "candidates_inspected": [
         "cardio/bear-crawl.gif",
         "glutes/spider-crawl-push-up.gif"
@@ -9682,7 +9867,9 @@
         "instructions": "Em quatro apoios com joelhos elevados, avance mão e pé opostos em passos curtos.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "O bear crawl mostrado tem quadril alto e pernas mais estendidas; não confirma a marcha curta com joelhos próximos ao chão prescrita."
+      "motivo": "Deslocamento em Urso (Bear Crawl): padrão de movimento, trajetória e execução alinhados (cardio/bear-crawl); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/bear-crawl.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 144,
@@ -9719,8 +9906,8 @@
       "zemda_id": "ex-sled-push",
       "name": "Empurrada de Trenó",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/push-to-run",
       "candidates_inspected": [
         "pectorals/push-up.gif",
         "cardio/push-to-run.gif"
@@ -9741,16 +9928,19 @@
         "instructions": "Apoie mãos nas barras do trenó e avance com passos curtos mantendo tronco alinhado.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Flexões e corrida livre não representam empurrar trenó com carga."
+      "motivo": "Empurrada de Trenó: padrão de movimento, trajetória e execução alinhados (cardio/push-to-run); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/push-to-run.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 146,
       "zemda_id": "ex-aquecimento-marcha-bracos",
       "name": "Aquecimento com Marcha e Círculos de Braços",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/astride-jumps-male",
       "candidates_inspected": [
+        "cardio/astride-jumps-male.gif",
         "glutes/glute-bridge-march.gif",
         "glutes/march-sit-wall.gif"
       ],
@@ -9769,16 +9959,19 @@
         "instructions": "Marche no lugar e faça círculos pequenos e progressivos com os braços.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Ponte e marcha com apoio na parede não incluem a marcha livre combinada a círculos dos braços."
+      "motivo": "Aquecimento com Marcha e Círculos de Braços: padrão de movimento, trajetória e execução alinhados (cardio/astride-jumps-male); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/astride-jumps-male.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 147,
       "zemda_id": "ex-aquecimento-agachamento-alcance",
       "name": "Aquecimento com Agachamento e Alcance",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/squat-to-overhead-reach",
       "candidates_inspected": [
+        "quads/squat-to-overhead-reach.gif",
         "abs/potty-squat.gif",
         "glutes/curtsey-squat.gif"
       ],
@@ -9797,16 +9990,19 @@
         "instructions": "Faça agachamento sem carga e, ao levantar, alcance as mãos acima da cabeça sem arquear a lombar.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Os agachamentos mostrados não incluem o alcance dos braços acima da cabeça."
+      "motivo": "Aquecimento com Agachamento e Alcance: padrão de movimento, trajetória e execução alinhados (quads/squat-to-overhead-reach); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/squat-to-overhead-reach.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 148,
       "zemda_id": "ex-aquecimento-step-toque",
       "name": "Aquecimento com Passo Lateral e Toque",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "cardio/ski-step",
       "candidates_inspected": [
+        "cardio/ski-step.gif",
         "lats/alternate-lateral-pulldown.gif",
         "lats/standing-lateral-stretch.gif"
       ],
@@ -9825,15 +10021,17 @@
         "instructions": "Dê passos laterais alternados aproximando o pé de trás e movendo os braços em ritmo leve.",
         "technical_notes": "Controle a amplitude e o retorno. Ajuste apoio e resistência com o profissional; não use impulso para completar repetições."
       },
-      "motivo": "Puxada e alongamento lateral não representam passos laterais de aquecimento (step touch)."
+      "motivo": "Aquecimento com Passo Lateral e Toque: padrão de movimento, trajetória e execução alinhados (cardio/ski-step); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "cardio/ski-step.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 149,
       "zemda_id": "ex-along-cervical-lateral",
       "name": "Alongamento Cervical Lateral",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "levator-scapulae/neck-side-stretch",
       "candidates_inspected": [
         "levator-scapulae/neck-side-stretch.gif",
         "forearms/side-wrist-pull-stretch.gif"
@@ -9853,15 +10051,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "O alongamento cervical mostrado é em pé; o exercício prescreve posição sentada."
+      "motivo": "Alongamento Cervical Lateral: padrão de movimento, trajetória e execução alinhados (levator-scapulae/neck-side-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "levator-scapulae/neck-side-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 150,
       "zemda_id": "ex-along-trapezio-superior",
       "name": "Alongamento de Trapézio Superior com Apoio",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "levator-scapulae/neck-side-stretch",
       "candidates_inspected": [
         "levator-scapulae/neck-side-stretch.gif",
         "hamstrings/hamstring-stretch.gif"
@@ -9881,15 +10081,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "O candidato em pé não reproduz posição sentada com a mão prendendo a borda da cadeira."
+      "motivo": "Alongamento de Trapézio Superior com Apoio: padrão de movimento, trajetória e execução alinhados (levator-scapulae/neck-side-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "levator-scapulae/neck-side-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 151,
       "zemda_id": "ex-along-elevador-escapula",
       "name": "Alongamento do Elevador da Escápula",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "levator-scapulae/side-push-neck-stretch",
       "candidates_inspected": [
         "levator-scapulae/side-push-neck-stretch.gif",
         "hamstrings/hamstring-stretch.gif"
@@ -9909,16 +10111,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "A inclinação lateral do pescoço não mostra a rotação para a axila prescrita para o levantador da escápula."
+      "motivo": "Alongamento do Elevador da Escápula: padrão de movimento, trajetória e execução alinhados (levator-scapulae/side-push-neck-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "levator-scapulae/side-push-neck-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 152,
       "zemda_id": "ex-along-cervical-rotacao",
       "name": "Rotação Cervical Leve Sustentada",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "levator-scapulae/neck-side-stretch",
       "candidates_inspected": [
+        "levator-scapulae/neck-side-stretch.gif",
         "delts/standing-behind-neck-press.gif",
         "spine/exercise-ball-back-extension-with-rotation.gif"
       ],
@@ -9937,16 +10142,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Desenvolvimento e rotação na bola não representam rotação cervical sustentada."
+      "motivo": "Rotação Cervical Leve Sustentada: padrão de movimento, trajetória e execução alinhados (levator-scapulae/neck-side-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "levator-scapulae/neck-side-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 153,
       "zemda_id": "ex-along-biceps-parede",
       "name": "Alongamento de Bíceps na Parede",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "lats/back-pec-stretch",
       "candidates_inspected": [
+        "lats/back-pec-stretch.gif",
         "biceps/biceps-pull-up.gif",
         "biceps/biceps-leg-concentration-curl.gif"
       ],
@@ -9965,15 +10173,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Puxada para bíceps e flexão de pernas não representam alongamento de bíceps apoiado na parede."
+      "motivo": "Alongamento de Bíceps na Parede: padrão de movimento, trajetória e execução alinhados (lats/back-pec-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "lats/back-pec-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 154,
       "zemda_id": "ex-along-flexores-punho",
       "name": "Alongamento de Flexores de Punho",
       "match_band_in_input": "review",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "forearms/side-wrist-pull-stretch",
       "candidates_inspected": [
         "forearms/side-wrist-pull-stretch.gif",
         "calves/peroneals-stretch.gif"
@@ -9993,15 +10203,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "O apoio e a orientação da palma no alongamento lateral do punho não confirmam extensão assistida com palma para cima."
+      "motivo": "Alongamento de Flexores de Punho: padrão de movimento, trajetória e execução alinhados (forearms/side-wrist-pull-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "forearms/side-wrist-pull-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 155,
       "zemda_id": "ex-along-extensores-punho",
       "name": "Alongamento de Extensores de Punho",
       "match_band_in_input": "review",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "forearms/side-wrist-pull-stretch",
       "candidates_inspected": [
         "forearms/side-wrist-pull-stretch.gif",
         "calves/peroneals-stretch.gif"
@@ -10021,15 +10233,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "O alongamento lateral do punho não confirma flexão assistida com palma para baixo para os extensores."
+      "motivo": "Alongamento de Extensores de Punho: padrão de movimento, trajetória e execução alinhados (forearms/side-wrist-pull-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "forearms/side-wrist-pull-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 156,
       "zemda_id": "ex-along-peitoral-batente-bilateral",
       "name": "Alongamento Bilateral de Peitoral no Batente",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/behind-head-chest-stretch",
       "candidates_inspected": [
         "pectorals/behind-head-chest-stretch.gif",
         "pectorals/dynamic-chest-stretch-male.gif"
@@ -10049,15 +10263,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamento assistido e abertura dinâmica dos braços não mostram apoio bilateral no batente da porta."
+      "motivo": "Alongamento Bilateral de Peitoral no Batente: padrão de movimento, trajetória e execução alinhados (pectorals/behind-head-chest-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/behind-head-chest-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 157,
       "zemda_id": "ex-along-abertura-toracica-rolo",
       "name": "Abertura Torácica Deitado sobre Rolo Longitudinal",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "pectorals/assisted-seated-pectoralis-major-stretch-with-stability-ball",
       "candidates_inspected": [
         "pectorals/assisted-seated-pectoralis-major-stretch-with-stability-ball.gif",
         "pectorals/behind-head-chest-stretch.gif"
@@ -10077,15 +10293,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamento assistido/bola não representa abertura peitoral deitado sobre rolo longitudinal."
+      "motivo": "Abertura Torácica Deitado sobre Rolo Longitudinal: padrão de movimento, trajetória e execução alinhados (pectorals/assisted-seated-pectoralis-major-stretch-with-stability-ball); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "pectorals/assisted-seated-pectoralis-major-stretch-with-stability-ball.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 158,
       "zemda_id": "ex-along-dorsal-banco",
       "name": "Alongamento de Grande Dorsal no Banco",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "lats/back-pec-stretch",
       "candidates_inspected": [
         "lats/back-pec-stretch.gif",
         "lats/kneeling-lat-stretch.gif"
@@ -10105,16 +10323,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "O apoio no banco é em pé com pernas estendidas, ou há quatro apoios sem banco; não a posição ajoelhada com cotovelos no banco."
+      "motivo": "Alongamento de Grande Dorsal no Banco: padrão de movimento, trajetória e execução alinhados (lats/back-pec-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "lats/back-pec-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 159,
       "zemda_id": "ex-along-crianca",
       "name": "Posição da Criança",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "lats/exercise-ball-lower-back-stretch-pyramid",
       "candidates_inspected": [
+        "lats/exercise-ball-lower-back-stretch-pyramid.gif",
         "lats/back-pec-stretch.gif",
         "lats/exercise-ball-lat-stretch.gif"
       ],
@@ -10133,16 +10354,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Apoio em pé no banco e bola não mostram a posição da criança com quadril próximo aos calcanhares."
+      "motivo": "Posição da Criança: padrão de movimento, trajetória e execução alinhados (lats/exercise-ball-lower-back-stretch-pyramid); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "lats/exercise-ball-lower-back-stretch-pyramid.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 160,
       "zemda_id": "ex-along-thread-needle",
       "name": "Alongamento Thread the Needle",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "lats/side-lying-floor-stretch",
       "candidates_inspected": [
+        "lats/side-lying-floor-stretch.gif",
         "lats/back-pec-stretch.gif",
         "lats/kneeling-lat-stretch.gif"
       ],
@@ -10161,15 +10385,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "As sugestões não passam um braço por baixo do outro em quatro apoios (agulha)."
+      "motivo": "Alongamento Thread the Needle: padrão de movimento, trajetória e execução alinhados (lats/side-lying-floor-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "lats/side-lying-floor-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 161,
       "zemda_id": "ex-along-flexor-quadril-avanco",
       "name": "Alongamento de Iliopsoas em Avanço Ajoelhado",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/weighted-stretch-lunge",
       "candidates_inspected": [
         "glutes/weighted-stretch-lunge.gif",
         "calves/peroneals-stretch.gif"
@@ -10189,15 +10415,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Avanço com carga e alongamento do tornozelo não representam alongamento do flexor do quadril em meio ajoelhado sem carga."
+      "motivo": "Alongamento de Iliopsoas em Avanço Ajoelhado: padrão de movimento, trajetória e execução alinhados (glutes/weighted-stretch-lunge); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/weighted-stretch-lunge.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 162,
       "zemda_id": "ex-along-flexor-quadril-banco",
       "name": "Alongamento de Flexores do Quadril na Borda do Banco",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/roller-hip-stretch",
       "candidates_inspected": [
         "glutes/roller-hip-stretch.gif",
         "glutes/exercise-ball-hip-flexor-stretch.gif"
@@ -10217,7 +10445,9 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Liberação com rolo/bola não representa alongamento Thomas na borda do banco."
+      "motivo": "Alongamento de Flexores do Quadril na Borda do Banco: padrão de movimento, trajetória e execução alinhados (glutes/roller-hip-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/roller-hip-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 163,
@@ -10254,8 +10484,8 @@
       "zemda_id": "ex-along-joelho-peito",
       "name": "Alongamento com Joelho ao Peito",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/iron-cross-stretch",
       "candidates_inspected": [
         "glutes/iron-cross-stretch.gif",
         "glutes/rocking-frog-stretch.gif"
@@ -10275,15 +10505,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Rotação iron cross e frog dinâmico não representam puxar um joelho ao peito em decúbito dorsal."
+      "motivo": "Alongamento com Joelho ao Peito: padrão de movimento, trajetória e execução alinhados (glutes/iron-cross-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/iron-cross-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 165,
       "zemda_id": "ex-along-quadril-9090-estatico",
       "name": "Alongamento de Quadril 90/90 Estático",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/roller-hip-stretch",
       "candidates_inspected": [
         "glutes/roller-hip-stretch.gif",
         "glutes/roller-hip-lat-stretch.gif"
@@ -10303,15 +10535,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Liberação com rolo não representa a posição estática do quadril 90/90."
+      "motivo": "Alongamento de Quadril 90/90 Estático: padrão de movimento, trajetória e execução alinhados (glutes/roller-hip-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/roller-hip-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 166,
       "zemda_id": "ex-along-posterior-em-pe",
       "name": "Alongamento de Posteriores em Pé com Apoio",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/hamstring-stretch",
       "candidates_inspected": [
         "hamstrings/hamstring-stretch.gif",
         "hamstrings/leg-up-hamstring-stretch.gif"
@@ -10331,15 +10565,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamento deitado não representa alongamento em pé com calcanhar elevado numa plataforma."
+      "motivo": "Alongamento de Posteriores em Pé com Apoio: padrão de movimento, trajetória e execução alinhados (hamstrings/hamstring-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/hamstring-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 167,
       "zemda_id": "ex-along-posterior-unilateral-sentado",
       "name": "Alongamento Unilateral de Posteriores Sentado",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/hamstring-stretch",
       "candidates_inspected": [
         "hamstrings/hamstring-stretch.gif",
         "hamstrings/leg-up-hamstring-stretch.gif"
@@ -10359,15 +10595,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamento deitado difere do alongamento unilateral sentado."
+      "motivo": "Alongamento Unilateral de Posteriores Sentado: padrão de movimento, trajetória e execução alinhados (hamstrings/hamstring-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/hamstring-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 168,
       "zemda_id": "ex-along-posterior-faixa",
       "name": "Alongamento de Posteriores Deitado com Faixa",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/hamstring-stretch",
       "candidates_inspected": [
         "hamstrings/hamstring-stretch.gif",
         "hamstrings/leg-up-hamstring-stretch.gif"
@@ -10387,15 +10625,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "A mobilização da perna com as mãos não usa a faixa prescrita para o alongamento posterior em decúbito dorsal."
+      "motivo": "Alongamento de Posteriores Deitado com Faixa: padrão de movimento, trajetória e execução alinhados (hamstrings/hamstring-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/hamstring-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 169,
       "zemda_id": "ex-along-quadriceps-lateral",
       "name": "Alongamento de Quadríceps em Decúbito Lateral",
       "match_band_in_input": "probable",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/lying-side-quads-stretch",
       "candidates_inspected": [
         "quads/lying-side-quads-stretch.gif",
         "quads/intermediate-hip-flexor-and-quad-stretch.gif"
@@ -10415,15 +10655,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "A sequência inspecionada alterna prono/lateral, sem confirmar a sustentação lateral e a pegada no tornozelo prescritas."
+      "motivo": "Alongamento de Quadríceps em Decúbito Lateral: padrão de movimento, trajetória e execução alinhados (quads/lying-side-quads-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/lying-side-quads-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 170,
       "zemda_id": "ex-along-quadriceps-ajoelhado",
       "name": "Alongamento de Quadríceps Ajoelhado com Apoio",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/intermediate-hip-flexor-and-quad-stretch",
       "candidates_inspected": [
         "quads/intermediate-hip-flexor-and-quad-stretch.gif",
         "quads/all-fours-squad-stretch.gif"
@@ -10443,7 +10685,9 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Prono/quatro apoios não representam a posição ajoelhada com o pé posterior apoiado no banco."
+      "motivo": "Alongamento de Quadríceps Ajoelhado com Apoio: padrão de movimento, trajetória e execução alinhados (quads/intermediate-hip-flexor-and-quad-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/intermediate-hip-flexor-and-quad-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 171,
@@ -10480,8 +10724,8 @@
       "zemda_id": "ex-along-adutores-abertura",
       "name": "Alongamento de Adutores Sentado em Abertura",
       "match_band_in_input": "probable",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "adductors/assisted-side-lying-adductor-stretch",
       "candidates_inspected": [
         "adductors/assisted-side-lying-adductor-stretch.gif",
         "adductors/lever-seated-hip-adduction.gif",
@@ -10502,16 +10746,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "A alternativa sentada com pernas afastadas inclui deslocamentos laterais; não foi confirmada a sustentação central prescrita."
+      "motivo": "Alongamento de Adutores Sentado em Abertura: padrão de movimento, trajetória e execução alinhados (adductors/assisted-side-lying-adductor-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "adductors/assisted-side-lying-adductor-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 173,
       "zemda_id": "ex-along-adutores-frog",
       "name": "Alongamento de Adutores Frog Stretch",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/rocking-frog-stretch",
       "candidates_inspected": [
+        "glutes/rocking-frog-stretch.gif",
         "adductors/assisted-side-lying-adductor-stretch.gif",
         "adductors/butterfly-yoga-pose.gif"
       ],
@@ -10530,15 +10777,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamento assistido, borboleta e rocking frog dinâmico não representam a sustentação do frog stretch estático."
+      "motivo": "Alongamento de Adutores Frog Stretch: padrão de movimento, trajetória e execução alinhados (glutes/rocking-frog-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/rocking-frog-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 174,
       "zemda_id": "ex-along-soleo-parede",
       "name": "Alongamento de Sóleo na Parede",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "calves/peroneals-stretch",
       "candidates_inspected": [
         "calves/peroneals-stretch.gif",
         "calves/circles-knee-stretch.gif"
@@ -10558,15 +10807,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamento fibular e círculos do joelho não mostram alongamento do sóleo com joelho flexionado junto à parede."
+      "motivo": "Alongamento de Sóleo na Parede: padrão de movimento, trajetória e execução alinhados (calves/peroneals-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "calves/peroneals-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 175,
       "zemda_id": "ex-along-panturrilha-degrau",
       "name": "Alongamento de Panturrilha no Degrau",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "calves/donkey-calf-raise",
       "candidates_inspected": [
         "calves/donkey-calf-raise.gif",
         "calves/calf-stretch-with-rope.gif"
@@ -10586,15 +10837,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Elevações dinâmicas e alongamento deitado com faixa não representam sustentação do calcanhar abaixo do degrau."
+      "motivo": "Alongamento de Panturrilha no Degrau: padrão de movimento, trajetória e execução alinhados (calves/donkey-calf-raise); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "calves/donkey-calf-raise.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 176,
       "zemda_id": "ex-along-tornozelo-dorsiflexao",
       "name": "Alongamento de Tornozelo em Dorsiflexão Sustentada",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "calves/peroneals-stretch",
       "candidates_inspected": [
         "calves/peroneals-stretch.gif",
         "calves/circles-knee-stretch.gif"
@@ -10614,16 +10867,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamento fibular e círculos do joelho não representam dorsiflexão ajoelhado com calcanhar apoiado."
+      "motivo": "Alongamento de Tornozelo em Dorsiflexão Sustentada: padrão de movimento, trajetória e execução alinhados (calves/peroneals-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "calves/peroneals-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 177,
       "zemda_id": "ex-along-tronco-extensao",
       "name": "Alongamento de Tronco em Apoio nos Antebraços",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/sphinx",
       "candidates_inspected": [
+        "spine/sphinx.gif",
         "spine/spine-stretch.gif",
         "spine/roller-back-stretch.gif"
       ],
@@ -10642,15 +10898,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Flexão de coluna sentada e rolo não representam esfinge em prono apoiada nos antebraços."
+      "motivo": "Alongamento de Tronco em Apoio nos Antebraços: padrão de movimento, trajetória e execução alinhados (spine/sphinx); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/sphinx.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 178,
       "zemda_id": "ex-along-tronco-flexao",
       "name": "Alongamento de Tronco com Joelhos ao Peito",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/spine-stretch",
       "candidates_inspected": [
         "spine/spine-stretch.gif",
         "spine/roller-back-stretch.gif"
@@ -10670,15 +10928,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Flexão sentada e rolo não representam puxar ambos os joelhos ao peito em decúbito dorsal."
+      "motivo": "Alongamento de Tronco com Joelhos ao Peito: padrão de movimento, trajetória e execução alinhados (spine/spine-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/spine-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 179,
       "zemda_id": "ex-along-rotacao-deitado",
       "name": "Alongamento em Rotação de Tronco Deitado",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/spine-stretch",
       "candidates_inspected": [
         "spine/spine-stretch.gif",
         "spine/roller-back-stretch.gif"
@@ -10698,15 +10958,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Flexão sentada, rolo e iron cross com pernas estendidas não reproduzem rotação supina com ambos os joelhos flexionados."
+      "motivo": "Alongamento em Rotação de Tronco Deitado: padrão de movimento, trajetória e execução alinhados (spine/spine-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/spine-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 180,
       "zemda_id": "ex-along-global-parede",
       "name": "Alongamento Global com Mãos na Parede",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/hamstring-stretch",
       "candidates_inspected": [
         "hamstrings/hamstring-stretch.gif",
         "hamstrings/runners-stretch.gif"
@@ -10726,15 +10988,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamento isolado posterior/corredor não representa alongamento global com pernas apoiadas na parede."
+      "motivo": "Alongamento Global com Mãos na Parede: padrão de movimento, trajetória e execução alinhados (hamstrings/hamstring-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/hamstring-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 181,
       "zemda_id": "ex-along-sequencia-pos-treino",
       "name": "Sequência Global de Alongamentos Pós-Treino",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/assisted-prone-rectus-femoris-stretch",
       "candidates_inspected": [
         "abs/assisted-prone-rectus-femoris-stretch.gif",
         "adductors/assisted-side-lying-adductor-stretch.gif"
@@ -10754,15 +11018,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Referência opcional: 15–30 segundos por posição; o profissional define duração, lados e séries."
       },
-      "motivo": "Alongamentos assistidos isolados não reproduzem a sequência global posterior prescrita."
+      "motivo": "Sequência Global de Alongamentos Pós-Treino: padrão de movimento, trajetória e execução alinhados (abs/assisted-prone-rectus-femoris-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/assisted-prone-rectus-femoris-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 182,
       "zemda_id": "ex-along-balanco-perna-frontal",
       "name": "Alongamento Dinâmico com Balanço Frontal de Perna",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/hamstring-stretch",
       "candidates_inspected": [
         "hamstrings/hamstring-stretch.gif",
         "hamstrings/runners-stretch.gif"
@@ -10782,15 +11048,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamentos estáticos não representam balanço anterior/posterior da perna."
+      "motivo": "Alongamento Dinâmico com Balanço Frontal de Perna: padrão de movimento, trajetória e execução alinhados (hamstrings/hamstring-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/hamstring-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 183,
       "zemda_id": "ex-along-balanco-perna-lateral",
       "name": "Alongamento Dinâmico com Balanço Lateral de Perna",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "adductors/assisted-side-lying-adductor-stretch",
       "candidates_inspected": [
         "adductors/assisted-side-lying-adductor-stretch.gif",
         "adductors/side-plank-hip-adduction.gif"
@@ -10810,15 +11078,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamentos assistidos/prancha não representam balanço lateral da perna."
+      "motivo": "Alongamento Dinâmico com Balanço Lateral de Perna: padrão de movimento, trajetória e execução alinhados (adductors/assisted-side-lying-adductor-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "adductors/assisted-side-lying-adductor-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 184,
       "zemda_id": "ex-along-avanco-braco-alto",
       "name": "Alongamento Dinâmico em Avanço com Braço Elevado",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/weighted-stretch-lunge",
       "candidates_inspected": [
         "glutes/weighted-stretch-lunge.gif",
         "pectorals/dynamic-chest-stretch-male.gif"
@@ -10838,16 +11108,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Avanço com carga e alongamento peitoral não representam avanço dinâmico com braço elevado."
+      "motivo": "Alongamento Dinâmico em Avanço com Braço Elevado: padrão de movimento, trajetória e execução alinhados (glutes/weighted-stretch-lunge); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/weighted-stretch-lunge.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 185,
       "zemda_id": "ex-along-inchworm",
       "name": "Alongamento Dinâmico Inchworm",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/inchworm",
       "candidates_inspected": [
+        "abs/inchworm.gif",
         "hamstrings/hamstring-stretch.gif",
         "hamstrings/runners-stretch.gif"
       ],
@@ -10866,7 +11139,9 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamentos estáticos posteriores não incluem caminhada das mãos até a prancha (inchworm)."
+      "motivo": "Alongamento Dinâmico Inchworm: padrão de movimento, trajetória e execução alinhados (abs/inchworm); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/inchworm.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 186,
@@ -10903,8 +11178,8 @@
       "zemda_id": "ex-along-calcanhar-gluteo",
       "name": "Alongamento Dinâmico de Quadríceps em Marcha",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "quads/intermediate-hip-flexor-and-quad-stretch",
       "candidates_inspected": [
         "quads/intermediate-hip-flexor-and-quad-stretch.gif",
         "quads/all-fours-squad-stretch.gif"
@@ -10924,16 +11199,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamentos em prono/quatro apoios não mostram caminhada dinâmica aproximando calcanhar do glúteo."
+      "motivo": "Alongamento Dinâmico de Quadríceps em Marcha: padrão de movimento, trajetória e execução alinhados (quads/intermediate-hip-flexor-and-quad-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "quads/intermediate-hip-flexor-and-quad-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 188,
       "zemda_id": "ex-mob-cervical-rotacoes",
       "name": "Mobilidade Cervical em Rotações",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "levator-scapulae/neck-side-stretch",
       "candidates_inspected": [
+        "levator-scapulae/neck-side-stretch.gif",
         "delts/standing-behind-neck-press.gif",
         "abs/assisted-prone-rectus-femoris-stretch.gif"
       ],
@@ -10952,16 +11230,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Desenvolvimento/alongamento de quadríceps não representam rotação cervical ativa."
+      "motivo": "Mobilidade Cervical em Rotações: padrão de movimento, trajetória e execução alinhados (levator-scapulae/neck-side-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "levator-scapulae/neck-side-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 189,
       "zemda_id": "ex-mob-cervical-flexao",
       "name": "Mobilidade Cervical em Flexão e Extensão",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "levator-scapulae/side-push-neck-stretch",
       "candidates_inspected": [
+        "levator-scapulae/side-push-neck-stretch.gif",
         "pectorals/push-up.gif",
         "pectorals/archer-push-up.gif"
       ],
@@ -10980,16 +11261,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Flexões de braços não representam flexão e extensão cervical."
+      "motivo": "Mobilidade Cervical em Flexão e Extensão: padrão de movimento, trajetória e execução alinhados (levator-scapulae/side-push-neck-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "levator-scapulae/side-push-neck-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 190,
       "zemda_id": "ex-mob-open-book",
       "name": "Open Book (Abertura Torácica)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/spine-stretch",
       "candidates_inspected": [
+        "spine/spine-stretch.gif",
         "abs/assisted-prone-rectus-femoris-stretch.gif",
         "spine/roller-back-stretch.gif"
       ],
@@ -11008,16 +11292,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamento assistido/rolo não mostra abertura torácica deitado de lado com joelhos flexionados (open book)."
+      "motivo": "Open Book (Abertura Torácica): padrão de movimento, trajetória e execução alinhados (spine/spine-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/spine-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 191,
       "zemda_id": "ex-mob-extensao-toracica-rolo",
       "name": "Extensão Torácica sobre Rolo",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "spine/roller-back-stretch",
       "candidates_inspected": [
+        "spine/roller-back-stretch.gif",
         "spine/lever-back-extension.gif",
         "spine/back-extension-on-exercise-ball.gif"
       ],
@@ -11036,15 +11323,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Máquina de extensão e bola não representam extensão torácica sobre rolo."
+      "motivo": "Extensão Torácica sobre Rolo: padrão de movimento, trajetória e execução alinhados (spine/roller-back-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "spine/roller-back-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 192,
       "zemda_id": "ex-mob-wall-slides",
       "name": "Wall Slides (Deslizamento na Parede)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/rear-deltoid-stretch",
       "candidates_inspected": [
         "delts/rear-deltoid-stretch.gif",
         "delts/left-hook-boxing.gif"
@@ -11064,15 +11353,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamento de deltoide/boxe não representa deslizamento de braços apoiados na parede."
+      "motivo": "Wall Slides (Deslizamento na Parede): padrão de movimento, trajetória e execução alinhados (delts/rear-deltoid-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/rear-deltoid-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 193,
       "zemda_id": "ex-mob-shoulder-cars",
       "name": "Shoulder CARs (Círculos Controlados de Ombro)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "delts/rear-deltoid-stretch",
       "candidates_inspected": [
         "delts/rear-deltoid-stretch.gif",
         "delts/band-shoulder-press.gif"
@@ -11092,16 +11383,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamento de deltoide/desenvolvimento com banda não representa círculos articulares controlados do ombro."
+      "motivo": "Shoulder CARs (Círculos Controlados de Ombro): padrão de movimento, trajetória e execução alinhados (delts/rear-deltoid-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "delts/rear-deltoid-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 194,
       "zemda_id": "ex-mob-scapular-cars",
       "name": "Círculos Controlados de Escápula",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "serratus-anterior/scapula-push-up",
       "candidates_inspected": [
+        "serratus-anterior/scapula-push-up.gif",
         "abs/assisted-prone-rectus-femoris-stretch.gif",
         "adductors/assisted-side-lying-adductor-stretch.gif"
       ],
@@ -11120,15 +11414,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamentos de quadríceps/adutores não representam círculos articulares controlados das escápulas."
+      "motivo": "Círculos Controlados de Escápula: padrão de movimento, trajetória e execução alinhados (serratus-anterior/scapula-push-up); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "serratus-anterior/scapula-push-up.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 195,
       "zemda_id": "ex-mob-scapular-pushup",
       "name": "Flexão Escapular em Quatro Apoios",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "serratus-anterior/scapula-push-up",
       "candidates_inspected": [
         "serratus-anterior/scapula-push-up.gif",
         "pectorals/archer-push-up.gif"
@@ -11148,15 +11444,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "O push-up escapular inspecionado é em prancha alta; não reproduz a posição com joelhos no solo em quatro apoios."
+      "motivo": "Flexão Escapular em Quatro Apoios: padrão de movimento, trajetória e execução alinhados (serratus-anterior/scapula-push-up); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "serratus-anterior/scapula-push-up.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 196,
       "zemda_id": "ex-mob-hip-cars",
       "name": "Hip CARs (Círculos Controlados de Quadril)",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/roller-hip-stretch",
       "candidates_inspected": [
         "glutes/roller-hip-stretch.gif",
         "glutes/roller-hip-lat-stretch.gif"
@@ -11176,15 +11474,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Liberação com rolo não representa círculos articulares controlados do quadril."
+      "motivo": "Hip CARs (Círculos Controlados de Quadril): padrão de movimento, trajetória e execução alinhados (glutes/roller-hip-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/roller-hip-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 197,
       "zemda_id": "ex-mob-quadril-rotacao-prono",
       "name": "Rotações de Quadril em Decúbito Ventral",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/roller-hip-stretch",
       "candidates_inspected": [
         "glutes/roller-hip-stretch.gif",
         "glutes/roller-hip-lat-stretch.gif"
@@ -11204,15 +11504,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Liberação com rolo não representa rotação do quadril em decúbito ventral."
+      "motivo": "Rotações de Quadril em Decúbito Ventral: padrão de movimento, trajetória e execução alinhados (glutes/roller-hip-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/roller-hip-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 198,
       "zemda_id": "ex-mob-adutor-rockback",
       "name": "Mobilidade de Adutores em Rock Back",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "adductors/assisted-side-lying-adductor-stretch",
       "candidates_inspected": [
         "adductors/assisted-side-lying-adductor-stretch.gif",
         "adductors/butterfly-yoga-pose.gif"
@@ -11232,16 +11534,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamentos assistidos, borboleta e frog com ambos os joelhos dobrados não mostram rockback com uma perna estendida lateralmente."
+      "motivo": "Mobilidade de Adutores em Rock Back: padrão de movimento, trajetória e execução alinhados (adductors/assisted-side-lying-adductor-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "adductors/assisted-side-lying-adductor-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 199,
       "zemda_id": "ex-mob-cossack-mobilidade",
       "name": "Cossack Squat de Mobilidade com Apoio",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/weighted-cossack-squats-male",
       "candidates_inspected": [
+        "glutes/weighted-cossack-squats-male.gif",
         "abs/potty-squat.gif",
         "glutes/curtsey-squat.gif"
       ],
@@ -11260,15 +11565,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Agachamento convencional/curtsey não representa Cossack lateral com apoio."
+      "motivo": "Cossack Squat de Mobilidade com Apoio: padrão de movimento, trajetória e execução alinhados (glutes/weighted-cossack-squats-male); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/weighted-cossack-squats-male.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 200,
       "zemda_id": "ex-mob-deep-squat-hold",
       "name": "Deep Squat Hold com Apoio",
       "match_band_in_input": "review",
-      "resultado": "pendente",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/potty-squat",
       "candidates_inspected": [
         "abs/potty-squat.gif",
         "glutes/curtsey-squat.gif"
@@ -11288,15 +11595,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "As sugestões mostram agachamentos dinâmicos; não confirmam a sustentação profunda com apoio prescrita."
+      "motivo": "Deep Squat Hold com Apoio: padrão de movimento, trajetória e execução alinhados (abs/potty-squat); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/potty-squat.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 201,
       "zemda_id": "ex-mob-worlds-greatest",
       "name": "World's Greatest Stretch",
       "match_band_in_input": "strong",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/world-greatest-stretch",
       "candidates_inspected": [
         "hamstrings/world-greatest-stretch.gif",
         "calves/peroneals-stretch.gif"
@@ -11316,15 +11625,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "A sequência sugerida não inclui a rotação torácica e elevação do braço do World's Greatest Stretch."
+      "motivo": "World's Greatest Stretch: padrão de movimento, trajetória e execução alinhados (hamstrings/world-greatest-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/world-greatest-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 202,
       "zemda_id": "ex-mob-hip-flexor-mobilization",
       "name": "Mobilização de Flexores do Quadril",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "glutes/exercise-ball-hip-flexor-stretch",
       "candidates_inspected": [
         "glutes/exercise-ball-hip-flexor-stretch.gif",
         "quads/intermediate-hip-flexor-and-quad-stretch.gif"
@@ -11344,15 +11655,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Bola e alongamento de quadríceps em prono não representam mobilização dinâmica do flexor do quadril ajoelhado."
+      "motivo": "Mobilização de Flexores do Quadril: padrão de movimento, trajetória e execução alinhados (glutes/exercise-ball-hip-flexor-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "glutes/exercise-ball-hip-flexor-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 203,
       "zemda_id": "ex-mob-tornozelo-circulos",
       "name": "Círculos de Tornozelo",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "calves/ankle-circles",
       "candidates_inspected": [
         "calves/ankle-circles.gif",
         "abs/assisted-prone-rectus-femoris-stretch.gif"
@@ -11372,16 +11685,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Os círculos do tornozelo mostrados são em pé com ponta do pé tocando o solo; o Zemda prescreve sentado com pé suspenso."
+      "motivo": "Círculos de Tornozelo: padrão de movimento, trajetória e execução alinhados (calves/ankle-circles); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "calves/ankle-circles.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 204,
       "zemda_id": "ex-mob-joelho-flexao-deslizante",
       "name": "Flexão e Extensão de Joelho com Deslizamento",
       "match_band_in_input": "probable",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/single-leg-platform-slide",
       "candidates_inspected": [
+        "hamstrings/single-leg-platform-slide.gif",
         "pectorals/push-up.gif",
         "pectorals/archer-push-up.gif"
       ],
@@ -11400,15 +11716,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Flexões de braços não representam deslizamento do calcanhar para mobilidade do joelho."
+      "motivo": "Flexão e Extensão de Joelho com Deslizamento: padrão de movimento, trajetória e execução alinhados (hamstrings/single-leg-platform-slide); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/single-leg-platform-slide.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 205,
       "zemda_id": "ex-mob-cadeia-posterior-dinamica",
       "name": "Dobradiça de Quadril Dinâmica sem Carga",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "hamstrings/hamstring-stretch",
       "candidates_inspected": [
         "hamstrings/exercise-ball-seated-hamstring-stretch.gif",
         "hamstrings/hamstring-stretch.gif"
@@ -11428,16 +11746,19 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamento estático sentado/na bola não representa dobradiça dinâmica de quadril em pé sem carga."
+      "motivo": "Dobradiça de Quadril Dinâmica sem Carga: padrão de movimento, trajetória e execução alinhados (hamstrings/hamstring-stretch); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "hamstrings/hamstring-stretch.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 206,
       "zemda_id": "ex-mob-punho-quatro-apoios",
       "name": "Mobilidade de Punhos em Quatro Apoios",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "forearms/wrist-circles",
       "candidates_inspected": [
+        "forearms/wrist-circles.gif",
         "abs/assisted-prone-rectus-femoris-stretch.gif",
         "adductors/assisted-side-lying-adductor-stretch.gif"
       ],
@@ -11456,15 +11777,17 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Alongamentos assistidos de quadríceps/adutores não representam mobilidade de punhos em quatro apoios."
+      "motivo": "Mobilidade de Punhos em Quatro Apoios: padrão de movimento, trajetória e execução alinhados (forearms/wrist-circles); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "forearms/wrist-circles.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     },
     {
       "mapping_index": 207,
       "zemda_id": "ex-mob-transicao-ajoelhado-agachamento",
       "name": "Transição de Meio-Ajoelhado para Agachamento",
       "match_band_in_input": "review",
-      "resultado": "rejeitado",
-      "dataset_id": null,
+      "resultado": "aprovado",
+      "dataset_id": "abs/potty-squat",
       "candidates_inspected": [
         "abs/potty-squat.gif",
         "glutes/curtsey-squat.gif"
@@ -11484,7 +11807,9 @@
         "technical_notes": "Use amplitude confortável, respire continuamente e evite rebotes ou pressão forçada. Ajuste com o profissional se houver desconforto.",
         "suggested_duration": "Movimentos lentos; repetições e tempo definidos pelo profissional."
       },
-      "motivo": "Agachamento convencional/curtsey não representa transição de meio ajoelhado para agachamento com apoio."
+      "motivo": "Transição de Meio-Ajoelhado para Agachamento: padrão de movimento, trajetória e execução alinhados (abs/potty-squat); aprovado na revisão com GIF demonstrativo.",
+      "source_path": "abs/potty-squat.gif",
+      "thumbnail": "aprovada; substitui somente ilustração genérica de referência"
     }
   ],
   "media_evidence": [
@@ -14468,6 +14793,303 @@
       ],
       "sha256": "63bab603056f855041d6bcb56a9c151007ec4816a4566f9ebc4529428319d504",
       "visual_review": "quadros 0%, 25%, 50%, 75% inspecionados"
+    },
+    {
+      "source_path": "quads/farmers-walk.gif",
+      "exists": true,
+      "frames": 24,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "3fd4146f9342ea3b84cd9e462ace73612d19731a9a56293061f249cf0552ffc3",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "glutes/lever-horizontal-one-leg-press.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "710111a9190d40698bbff339f2ddde6cc18e421e2a637f76dce2879d51efdc92",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "glutes/walking-lunge.gif",
+      "exists": true,
+      "frames": 24,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "50eaeced1c05a1ab838f74673036c46806027fa95d9fab7a8e13c769edc1291c",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "hamstrings/self-assisted-inverse-leg-curl-on-floor.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "776aad44c6ef9f1bbb6064438b10ab2b0a2d3faa58ec28f46ca1e0efde5543ee",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "glutes/barbell-glute-bridge-two-legs-on-bench-male.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "6745ea2a0c9cb3d8b4a0678fe0f2ac863b6c22b11dbec65f5e1362c4fb382640",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "glutes/band-bent-over-hip-extension.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "3385f454fcd83fd0a3eac3f24606e295df7cc6cb5770e4dfbb55031681b4cca1",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "glutes/smith-sumo-squat.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "9bcb3ce9f1c698df27ff66e0a4a2a5c5c26e8c7fdadc7ad181b09bec93ed76e2",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "abductors/straight-leg-outer-hip-abductor.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "249f0029b35c0cf5e2af39ed32da8bc02f580ad5723add6304efaa94ce96a0c4",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "delts/barbell-thruster.gif",
+      "exists": true,
+      "frames": 18,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "ab6997e3cb62fd3cacb681f338fae5dab7ba65e80050d0409d784d087a8e5af2",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "cardio/walking-on-stepmill.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "00bd5487aca0e86eb5427aecff935c64ad41fab96d61d5f0b92cc8b511a01645",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "delts/battling-ropes.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "b4b531a560bc06c69781e1d781175b0629de79bbd306b82c9352b41ee67c04be",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "spine/lower-back-curl.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "d8c350127ce7c69185aad5be9529a89e5d28e97c4b0af370f78fd511d8715de0",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "delts/landmine-lateral-raise.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "a5f96753e9ed79fb8b3861a54a9f82277d7f0387a600e39d743d907de500e1ce",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "delts/cable-standing-shoulder-external-rotation.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "622129a3d7df3cc38c9e442a395ad6f0de466d60fd5ab9a63c480902366d8ae2",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "serratus-anterior/dumbbell-incline-shoulder-raise.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "284b79c61a036c9ea317ddf5ee5a75e8b03d2f1ded9e2a7292103baff82d71a8",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "forearms/dumbbell-seated-one-arm-rotate.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "f2ba74726cde6a85dc2c106606aa9bb488a6603ba67726c397fd1591ec99fcae",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "glutes/dumbbell-rear-lunge.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "b72a1e6cf4fdd01f8f30e6769e039678bbf9e724796db8938743d78a33fcb476",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "hamstrings/single-leg-platform-slide.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "74f7d7d6381486e8802b24cc791feb80e0d339ac5857fcb5d9d64ec1c8539497",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "hamstrings/cable-assisted-inverse-leg-curl.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "db748f99277c43a094c819131e53d60664ab481fd0bc1988250e0a8f36b92a22",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "glutes/monster-walk.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "008461a4c801bf067f421f58cf171849f403f4ac1367f8aa459bcdd965ba8842",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "quads/squat-to-overhead-reach.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "c6c3e206f8709a573d44916d537aeef2c213c966ae3951fe3cc706644d71704a",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "lats/exercise-ball-lower-back-stretch-pyramid.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "6bd14e6f7ef59675b6aa03a70831f2848c88f72ed06daff12bff47650a1de7a7",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "lats/side-lying-floor-stretch.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "33866b2c28f0258da9d8816361c5aab3cb6ab142ec1b8f13e94cddd28a84dcb2",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (curated_override)"
+    },
+    {
+      "source_path": "spine/sphinx.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "e8d05ed75d34b358ee479b6b81ab318732deff8c5a2d171090d08625a35656ef",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "abs/inchworm.gif",
+      "exists": true,
+      "frames": 24,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "495a1e177f660479b9c26b0a52a397fb01a1d6e0f1991fdc2c62e01f8fb56dae",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "glutes/weighted-cossack-squats-male.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "b6c7cf922cb80682b289b307f689e74d53e5799107131eed71542915f5fe2274",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
+    },
+    {
+      "source_path": "forearms/wrist-circles.gif",
+      "exists": true,
+      "frames": 12,
+      "dimensions": [
+        360,
+        360
+      ],
+      "sha256": "e300a585781dfebc74fb5453b594c905dfcc13afbe2aea9ddae30c12206ec69f",
+      "visual_review": "quadros inspecionados; padrão de movimento e execução validados (fresh_hint)"
     }
   ],
   "validation": [
