@@ -11,6 +11,13 @@ export function exerciseAnimation(ex: { id: string; tenant_id?: string; is_custo
 }
 
 export function datasetImageCredit(photoUrl?: string | null) {
+  if (!photoUrl) return null;
   const item = media.find(item => item.photo_url === photoUrl);
-  return item ? { author: item.attribution, source: 'https://gymvisual.com/', image_kind: 'demonstration' } : null;
+  return item ? {
+    author: item.attribution,
+    source: item.source_repository === 'JahelCuadrado/ExerciseGymGifsDB'
+      ? `https://github.com/${item.source_repository}/blob/${item.source_commit}/${item.image_path}`
+      : 'https://gymvisual.com/',
+    image_kind: 'demonstration'
+  } : null;
 }

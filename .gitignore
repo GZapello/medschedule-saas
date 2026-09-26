@@ -33,3 +33,4 @@ frontend/android/.gradle/
 .env
 .env*
 !.env.example
+ExerciseGymGifsDB/

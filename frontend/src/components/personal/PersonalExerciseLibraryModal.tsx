@@ -91,11 +91,18 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showInactive, setShowInactive] = useState(false);
 
+  // One card animation at a time, including touch screens and filtered lists.
+  const [activeAnimationId, setActiveAnimationId] = useState<string | null>(null);
+  useEffect(() => { setActiveAnimationId(null); }, [isOpen, exercises]);
+
   // Zoom
   const [zoomedExercise, setZoomedExercise] = useState<Exercise | null>(null);
 
+  useEffect(() => { if (zoomedExercise) setActiveAnimationId(null); }, [zoomedExercise]);
+
   // Formulário para novo exercício customizado / edição
   const [isFormOpen, setIsFormOpen] = useState(false);
+  useEffect(() => { if (isFormOpen) setActiveAnimationId(null); }, [isFormOpen]);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formMuscle, setFormMuscle] = useState('peitoral');
@@ -385,6 +392,8 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                         exercise={ex}
                         onZoom={() => setZoomedExercise(ex)}
                         isInactive={isInactive}
+                        active={activeAnimationId === ex.id && !zoomedExercise && !isFormOpen && !loading}
+                        onActiveChange={active => setActiveAnimationId(current => active ? ex.id : current === ex.id ? null : current)}
                       />
 
                       {/* Informações */}

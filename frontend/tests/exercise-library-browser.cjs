@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const { DEFAULT_EXERCISE_LIBRARY } = require('../../backend/dist/config/exercise-library.seed');
 const photos = require('../../backend/src/config/exercise-library.photos.json');
 const { matchesExercise } = require('../../backend/dist/services/personal-exercise-utils');
+const { exerciseAnimation } = require('../../backend/dist/services/exercise-media');
 const base = process.env.TEST_BASE_URL || 'http://127.0.0.1:5173';
 const out = process.env.TEST_OUTPUT_DIR || path.join(__dirname, 'results');
 fs.mkdirSync(out, { recursive:true });
@@ -13,7 +14,7 @@ async function main() {
   try {
     const page = await browser.newPage({ viewport:{ width:1440, height:1000 } });
     const errors = []; page.on('pageerror', error => errors.push(error.message));
-    let catalog = DEFAULT_EXERCISE_LIBRARY.map(ex => ({...ex, is_active:1, is_custom:0, image_attribution_json:JSON.stringify(photos.find(photo => photo.photo_url === ex.photo_url) || null), secondary_muscles_json:JSON.stringify(ex.secondary_muscles)}));
+    let catalog = DEFAULT_EXERCISE_LIBRARY.map(ex => ({...ex, ...exerciseAnimation({...ex,tenant_id:'global',is_custom:0}), is_active:1, is_custom:0, image_attribution_json:JSON.stringify(photos.find(photo => photo.photo_url === ex.photo_url) || null), secondary_muscles_json:JSON.stringify(ex.secondary_muscles)}));
     let workout = null;
     let imageRequests = 0;
     await page.route('**/*', async route => {
@@ -51,7 +52,7 @@ async function main() {
     const search = page.locator('input[type="text"]').first();
     await search.fill('Supino Reto com Barra'); await search.press('Enter');
     await page.getByText('1 exercícios encontrados').waitFor();
-    await page.getByRole('button',{name:'Ver detalhes'}).click();
+    await page.getByRole('button',{name:'Ver detalhes',exact:true}).click();
     await page.getByText('Notas Técnicas & Cuidados').waitFor();
     await page.locator('img[src^="/exercise-photos/"]').last().waitFor();
     await page.waitForFunction(() => [...document.images].filter(img => img.src.includes('/exercise-photos/')).every(img => img.complete && img.naturalWidth > 0));
