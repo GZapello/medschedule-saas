@@ -845,27 +845,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                     });
 
                     const isAvailable = availability.available;
+                    const hasAppointments = slotAppts.length > 0;
+                    const canSchedule = isAvailable && !hasAppointments;
 
                     return (
                       <div
                         key={dayIdx}
-                        onClick={(e) => {
-                          if (!isAvailable) return;
-                          if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-empty-slot') === 'true') {
-                            onOpenNewAppointment({
-                              date: dayStr,
-                              time: timeSlot,
-                              professionalId: selectedProf !== 'all' ? selectedProf : undefined
-                            });
-                          }
+                        onClick={() => {
+                          if (!canSchedule) return;
+                          onOpenNewAppointment({
+                            date: dayStr,
+                            time: timeSlot,
+                            professionalId: selectedProf !== 'all' ? selectedProf : undefined
+                          });
                         }}
                         className={`border-r border-slate-100 last:border-r-0 p-1 relative transition-colors min-h-[75px] bg-white ${
-                          !isAvailable && slotAppts.length === 0
-                            ? 'cursor-default select-none'
+                          !canSchedule
+                            ? (hasAppointments ? 'cursor-default' : 'cursor-default select-none')
                             : 'hover:bg-indigo-50/40 group/slot cursor-pointer'
                         }`}
                         title={
-                          slotAppts.length > 0
+                          hasAppointments
                             ? undefined
                             : availability.isBlocked
                             ? `Horário Bloqueado (${dayDate.toLocaleDateString('pt-BR')} às ${timeSlot})`
@@ -895,7 +895,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                             </div>
                           </div>
                         ))}
-                        {slotAppts.length === 0 && (
+                        {!hasAppointments && (
                           !isAvailable ? (
                             availability.isBlocked ? (
                               <div className="h-full w-full min-h-[50px] flex items-center justify-center p-1 text-center">
@@ -905,13 +905,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                               </div>
                             ) : null
                           ) : (
-                            <div
-                              data-empty-slot="true"
-                              className="h-full w-full min-h-[50px] flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity"
-                            >
-                              <span data-empty-slot="true" className="text-[10px] font-semibold text-indigo-600 bg-white border border-indigo-200 px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
-                                <Plus className="w-3 h-3" /> {timeSlot}
-                              </span>
+                            <div className="h-full w-full min-h-[60px] flex items-center justify-center opacity-0 group-hover/slot:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenNewAppointment({
+                                    date: dayStr,
+                                    time: timeSlot,
+                                    professionalId: selectedProf !== 'all' ? selectedProf : undefined
+                                  });
+                                }}
+                                className="inline-flex items-center justify-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 bg-white hover:bg-indigo-50 border border-indigo-200 hover:border-indigo-300 rounded-lg shadow-xs transition-all cursor-pointer pointer-events-auto"
+                              >
+                                <Plus className="w-3.5 h-3.5 pointer-events-none shrink-0" />
+                                <span className="pointer-events-none">{timeSlot}</span>
+                              </button>
                             </div>
                           )
                         )}
@@ -951,27 +960,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 a.start_time.startsWith(`${currentDateStr}T${timeSlot.slice(0, 2)}`)
               );
               const isAvailable = availability.available;
+              const hasAppointments = slotAppts.length > 0;
+              const canSchedule = isAvailable && !hasAppointments;
 
               return (
                 <div
                   key={timeSlot}
-                  onClick={(e) => {
-                    if (!isAvailable) return;
-                    if (e.target === e.currentTarget || (e.target as HTMLElement).getAttribute('data-empty-slot') === 'true') {
-                      onOpenNewAppointment({
-                        date: currentDateStr,
-                        time: timeSlot,
-                        professionalId: selectedProf !== 'all' ? selectedProf : undefined
-                      });
-                    }
+                  onClick={() => {
+                    if (!canSchedule) return;
+                    onOpenNewAppointment({
+                      date: currentDateStr,
+                      time: timeSlot,
+                      professionalId: selectedProf !== 'all' ? selectedProf : undefined
+                    });
                   }}
                   className={`py-2.5 px-3 flex items-start gap-4 rounded-xl transition-colors bg-white min-h-[52px] ${
-                    !isAvailable && slotAppts.length === 0
-                      ? 'cursor-default select-none'
-                      : 'hover:bg-indigo-50/30 cursor-pointer group'
+                    !canSchedule
+                      ? (hasAppointments ? 'cursor-default' : 'cursor-default select-none')
+                      : 'hover:bg-indigo-50/40 cursor-pointer group'
                   }`}
                   title={
-                    slotAppts.length > 0
+                    hasAppointments
                       ? undefined
                       : availability.isBlocked
                       ? `Horário Bloqueado às ${timeSlot}`
@@ -980,11 +989,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       : undefined
                   }
                 >
-                  <div className="w-16 text-xs font-bold text-slate-400 group-hover:text-indigo-600 pt-1">
+                  <div className={`w-16 text-xs font-bold pt-1 transition-colors ${
+                    canSchedule ? 'text-slate-400 group-hover:text-indigo-600' : 'text-slate-400'
+                  }`}>
                     {timeSlot}
                   </div>
                   <div className="flex-1">
-                    {slotAppts.length > 0 ? (
+                    {hasAppointments ? (
                       <div className="space-y-2">
                         {slotAppts.map(appt => (
                           <div
@@ -1019,13 +1030,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                         </div>
                       ) : null
                     ) : (
-                      <div
-                        data-empty-slot="true"
-                        className="py-1 text-xs text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5"
-                      >
-                        <span data-empty-slot="true" className="font-semibold bg-white border border-indigo-200 px-2.5 py-1 rounded-md shadow-xs flex items-center gap-1">
-                          <Plus className="w-3.5 h-3.5" /> {timeSlot}
-                        </span>
+                      <div className="py-0.5 flex items-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenNewAppointment({
+                              date: currentDateStr,
+                              time: timeSlot,
+                              professionalId: selectedProf !== 'all' ? selectedProf : undefined
+                            });
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-white hover:bg-indigo-50 border border-indigo-200 hover:border-indigo-300 rounded-lg shadow-xs cursor-pointer pointer-events-auto"
+                        >
+                          <Plus className="w-3.5 h-3.5 pointer-events-none shrink-0" />
+                          <span className="pointer-events-none">{timeSlot}</span>
+                        </button>
                       </div>
                     )}
                   </div>
