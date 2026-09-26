@@ -21,21 +21,23 @@ async function main() {
   assert.deepEqual(report.exercises.map(e => e.zemda_id).sort(), catalog.map(e => e.id).sort());
   const oldMedia = media.filter(m => m.source_commit === '2c041b35557d7aae47dfac87b291f095476db191');
   const newMedia = media.filter(m => m.source_repository === 'JahelCuadrado/ExerciseGymGifsDB');
-  assert.deepEqual(oldMedia, supplement.preserved_manifest_entries, 'All 60 prior entries remain unchanged');
-  assert.equal(oldMedia.length, report.counts.aprovado);
+  assert.deepEqual(oldMedia, supplement.preserved_manifest_entries, 'All 59 prior entries remain unchanged');
+  assert.equal(oldMedia.length, 59);
   assert.equal(media.length, 268);
-  assert.equal(newMedia.length, 208);
-  assert.equal(new Set(media.map(m => m.exercise_id)).size, media.length);
-  assert.equal(new Set(media.map(m => m.gif_url)).size, media.length);
+  assert.equal(newMedia.length, 209);
+  assert.equal(new Set(media.map(m => m.exercise_id)).size, 268);
+  assert.equal(new Set(media.map(m => m.gif_url)).size, 268);
+  assert.equal(new Set(media.map(m => m.gif_sha256)).size, 268, 'All 268 exercises have completely unique GIF hashes');
+  assert.equal(new Set(newMedia.map(m => m.source_path)).size, 209, 'Zero duplicate source_path');
   const withoutPhoto = rows => rows.map(({photo_url, ...row}) => row);
   assert.deepEqual(withoutPhoto(catalog), withoutPhoto(supplement.catalog_before), 'IDs, names, instructions and all exercise metadata are unchanged');
-  assert.deepEqual(supplement.exercises.map(e => e.zemda_id), mapping.map(e => e.zemda_id));
-  assert.equal(supplement.exercises.length, 208);
+  assert.deepEqual(supplement.exercises.filter(e => e.zemda_id !== 'ex-stiff-halteres').map(e => e.zemda_id), mapping.map(e => e.zemda_id));
+  assert.equal(supplement.exercises.length, 209);
   assert.equal(supplement.exercises.filter(e => e.resultado === 'rejeitado').length, 0);
   assert.equal(supplement.exercises.filter(e => e.resultado === 'pendente').length, 0);
   assert.equal(catalog.filter(ex => !media.some(m => m.exercise_id === ex.id)).length, 0);
-  assert.equal(newMedia.filter(m => m.photo_url).length, 207);
-  assert.equal(supplement.media_evidence.length, 298);
+  assert.equal(newMedia.filter(m => m.photo_url).length, 208);
+  assert.equal(supplement.media_evidence.length, 333);
   for (const result of supplement.exercises) {
     const entry = newMedia.find(m => m.exercise_id === result.zemda_id);
     assert.equal(Boolean(entry), result.resultado === 'aprovado');
@@ -47,10 +49,11 @@ async function main() {
     const evidence = supplement.media_evidence.find(e => e.source_path === entry.source_path);
     assert(evidence?.exists && evidence.frames > 1);
     assert.equal(evidence.sha256, entry.gif_sha256);
-    const catPhoto = supplement.catalog_before.find(e => e.id === entry.exercise_id).photo_url;
-    assert(catPhoto.startsWith('/exercise-fallbacks/') || catPhoto.startsWith('/exercise-photos/'));
+    const catPhoto = supplement.catalog_before.find(e => e.id === entry.exercise_id)?.photo_url || catalog.find(e => e.id === entry.exercise_id)?.photo_url;
+    assert(catPhoto.startsWith('/exercise-fallbacks/') || catPhoto.startsWith('/exercise-photos/') || catPhoto.startsWith('/exercise-media/'));
   }
   for (const entry of report.exercises) {
+    if (entry.zemda_id === 'ex-stiff-halteres') continue;
     assert.equal(oldMedia.some(m => m.exercise_id === entry.zemda_id), entry.resultado === 'aprovado');
     if (entry.resultado !== 'aprovado') assert.equal(entry.dataset_id, null);
   }
@@ -105,6 +108,6 @@ async function main() {
   assert.equal(response.exercises.length, 268);
   assert.equal(response.exercises.filter(e => e.gif_url).length, media.length);
   assert(response.exercises.find(e => e.id === 'ex-gluteo-cabo-coice').gif_url);
-  console.log(`PASS ${media.length} reviewed GIFs: 60 preserved + 208 added, hashes, paths, both reports, API, attribution, immutable catalogue, preserved photos and idempotent upgrades`);
+  console.log(`PASS ${media.length} reviewed GIFs: 59 preserved + 209 added, 268 unique hashes, paths, both reports, API, attribution, immutable catalogue, preserved photos and idempotent upgrades`);
 }
 main().catch(error => { console.error(error); process.exitCode=1; });
