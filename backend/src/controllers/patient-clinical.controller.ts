@@ -729,8 +729,13 @@ export class PatientClinicalController {
       const { id: patientId } = req.params;
       const tenantId = req.tenantId;
 
+      // Aliases mantêm o contrato que o front-end já consome (cs.content, cs.signed_by_name,
+      // cs.signed_at, cs.is_revoked) apesar dos nomes reais das colunas serem outros
+      // (content_text/accepted_by_name/accepted_at/revoked_at — ver migração em database.ts).
       const consents = db.prepare(`
-        SELECT pc.*, p.name as professional_name
+        SELECT pc.*, p.name as professional_name,
+               pc.content_text as content, pc.accepted_by_name as signed_by_name,
+               pc.accepted_at as signed_at, (pc.revoked_at IS NOT NULL) as is_revoked
         FROM patient_consents pc
         LEFT JOIN professionals p ON p.id = pc.professional_id
         WHERE pc.patient_id = ? AND pc.tenant_id = ?
