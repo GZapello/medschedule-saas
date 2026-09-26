@@ -44,8 +44,8 @@
 | 2.1 | Registro do aceite de termos e política, com versão, data, IP e user-agent | ✅ | `legal_acceptances` (`schema.sql:615-628`), gravado em `auth.controller.ts:536-548`. Novo aceite é pedido quando a versão muda (`CURRENT_TERMS_VERSION`, `database.ts:20`) | — |
 | 2.2 | Base legal para dados de saúde: tutela da saúde (art. 11, II, "f") | ⚠️ | É a base adequada para o atendimento. Deve estar explícita na política e no DPA | P1 |
 | 2.3 | **Crianças: autorização do responsável** (art. 14) | ✅ (26/09) | Corrigido: só grava autorização quando de fato informada; edição preserva o valor já registrado por responsável; agendamento público grava como pendente. **Ressalva:** todo responsável cadastrado antes de 26/09 continua com o valor antigo (1); recomenda-se pedir reconfirmação às clínicas — decisão do dono do produto, não alterada automaticamente | — |
-| 2.4 | TCLE / consentimentos clínicos com assinatura, CPF, IP e hash | ✅ | `patient_consents` (`patient-clinical.controller.ts:803-830`) | — |
-| 2.5 | **Revogação** de consentimento (art. 8º, §5º) | ❌ | Não há rota para revogar `patient_consents` (`routes/index.ts:710-711`) | P1 |
+| 2.4 | TCLE / consentimentos clínicos com assinatura, CPF, IP e hash | ⚠️→✅ (26/09) | **Achado na correção do item 2.5:** o recurso nunca funcionou. As colunas do `INSERT` (`professional_id`, `signature_data_url`, etc.) nunca existiam de verdade — a migração que as criava rodava antes da própria `CREATE TABLE patient_consents` e virava no-op. Toda tentativa de registrar um consentimento sempre retornou erro 500. Corrigido em 26/09 (migração reordenada, nomes de coluna alinhados) | — |
+| 2.5 | **Revogação** de consentimento (art. 8º, §5º) | ✅ (26/09) | `POST /v1/patients/:patientId/consents/:consentId/revoke`. Marca `revoked_at`/`revoked_by`, nunca apaga a linha | — |
 | 2.6 | Cookies e analytics só com consentimento | ✅ (26/09) | `frontend/index.html` agora usa `send_page_view: false`; o app já enviava `page_view` manualmente com caminho saneado (`trackPageView`), então o pageview automático (que enviava a URL bruta, inclusive com token) foi desligado. O gtag.js ainda carrega em toda página, mas sem consentimento nada é enviado (Consent Mode) | — |
 | 2.7 | Aviso de privacidade no **agendamento público** (paciente sem conta) | ✅ (26/09) | `PublicBookingView.tsx` e `PublicProfessionalBookingView.tsx` agora mostram um aviso com link para `/privacidade` antes do botão de confirmação | — |
 
@@ -65,7 +65,7 @@
 
 | # | Item | Estado | Evidência / observação | Prioridade |
 |---|---|---|---|---|
-| 4.1 | **Acesso e portabilidade**: a clínica consegue exportar todos os dados de um paciente | ❌ | Não existe. Há só exportação CSV de agendamentos e pagamentos (`report.controller.ts:118-153`) e impressão de um prontuário | P1 |
+| 4.1 | **Acesso e portabilidade**: a clínica consegue exportar todos os dados de um paciente | ✅ (26/09) | `GET /v1/patients/:id/export` reúne cadastro, responsáveis, agendamentos, prontuário, alergias, medicamentos, anamnese, documentos clínicos, exames (só metadados), consentimentos, pagamentos, recibos, anexos (só metadados, sem URL assinada) e um exemplo de tabela por especialidade. **Falta ampliar** para as demais tabelas por especialidade (odontologia, fono, corporal/personal — listado em comentário no código) e não há botão na tela ainda, só o endpoint | — |
 | 4.2 | Correção | ✅ | `PUT /v1/patients/:id`. Ressalva: os responsáveis são apagados e reinseridos a cada edição, e o histórico se perde (`patient.controller.ts:354`) | — |
 | 4.3 | **Eliminação / anonimização / bloqueio de paciente** | ❌ | Não há `DELETE /v1/patients/:id` (`routes/index.ts:253-256`). Só é possível inativar (`active = 0`). O prontuário precisa ser guardado por **20 anos** (Lei 13.787/2018, art. 6º). Por isso a resposta certa costuma ser **bloquear e anonimizar o cadastro, mantendo o prontuário pelo prazo legal**, e não apagar | P1 |
 | 4.4 | **Exclusão de clínica** preservando o que a lei exige | ❌ | O expurgo (`clinic-control.service.ts:127-145`) apaga **toda tabela com `tenant_id`**, inclusive `audit_logs` e `legal_acceptances`, que são a prova de consentimento e de acesso. Também não há **exportação/devolução dos dados antes** do expurgo nem regra para os 20 anos de prontuário. Isso contradiz a própria política (`PrivacyPolicyView.tsx:213`) | P1 |
@@ -135,13 +135,13 @@
    - configurar `BACKUP_ENCRYPTION_KEY` e `ERROR_ALERT_EMAILS` no Railway (5.4, 5.5, 9.3);
    - confirmar que o Gemini é plano pago (3.2);
    - decidir o que fazer com os `guardians.authorization_signed = 1` cadastrados antes de 26/09 (2.3).
-2. **P1 (código):**
-   - exportação de dados por paciente e por clínica (4.1);
+2. **P1 (código) — ainda por fazer:**
    - bloqueio/anonimização de paciente respeitando os 20 anos (4.3);
    - expurgo de clínica que preserve auditoria e aceites e entregue os dados antes (4.4);
-   - 2FA e política de senha (5.6, 5.7);
-   - derrubar sessões ao trocar a senha (5.8);
-   - auditoria de leituras e falhas de login (6.2, 6.3);
+   - 2FA (5.7);
+   - política de senha mais forte (5.6);
+   - ampliar a auditoria de leitura a mais tabelas sensíveis (6.2 — hoje cobre prontuário, arquivos e exportação; falta cadastro/anamnese/exames avulsos);
+   - ampliar a exportação de paciente (4.1) às demais tabelas por especialidade;
    - DPA com as clínicas (1.4) e ROPA (1.5).
 3. **P2:** o restante, como melhoria contínua.
 
@@ -149,17 +149,20 @@
 
 **Antes de 24/09:** nada — este era o primeiro levantamento.
 
-**24–26/09/2026 (já na `main`):**
+**Na `main` (mesclado em 26/09):**
 - Segredos hardcoded e backdoor removidos; o servidor falha se os segredos não estiverem configurados.
 - Contas com senha padrão não são mais criadas em produção.
 - CORS restrito, helmet e rate limiting.
 - Backup automático criptografado com cópia fora do Railway (código pronto; falta configurar a chave no Railway).
 - Alerta de erros de produção por e-mail, sem dados pessoais (código pronto; falta configurar os e-mails no Railway).
 - Query string (com `?token=`) fora dos logs do servidor.
-- Política de privacidade corrigida (sem afirmações falsas) e com a lista completa de suboperadores.
-- Plano de resposta a incidentes escrito (`docs/INCIDENTE.md`).
 - Autorização do responsável por menores só é gravada quando realmente informada.
 - Dados enviados à IA (Google Gemini) minimizados: CPF, telefone, e-mail, contato de emergência e observações administrativas removidos; nome trocado por marcador neutro.
 - Acesso a anexos clínicos restrito a gestor/profissional, com auditoria.
-- GA4 sem pageview automático (a aplicação já envia manualmente, com caminho saneado).
-- Aviso de privacidade no agendamento público, com link para a política.
+
+**Prontos, aguardando revisão/merge (branches locais, ainda não na `main`):**
+- Política de privacidade corrigida (sem afirmações falsas) e com a lista completa de suboperadores (`fix/politica-privacidade-lgpd`).
+- Plano de resposta a incidentes escrito, `docs/INCIDENTE.md` (`fix/politica-privacidade-lgpd`).
+- GA4 sem pageview automático; aviso de privacidade no agendamento público, com link para a política (`fix/politica-privacidade-lgpd`).
+- Falhas de login auditadas; sessão do próprio usuário invalidada ao trocar a senha, sem afetar outros usuários da clínica (`fix/auditoria-login-sessao`).
+- Exportação completa de dados do paciente e revogação de consentimento — nesse trabalho, achamos e corrigimos um bug pré-existente que fazia todo registro de consentimento (item 2.4) falhar com erro 500 desde sempre (`feat/exportacao-paciente-lgpd`).
