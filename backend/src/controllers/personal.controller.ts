@@ -1,3 +1,4 @@
+import { exerciseAnimation } from '../services/exercise-media';
 import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
 import { matchesExercise, insertWorkoutExercise, imageAttribution } from '../services/personal-exercise-utils';
 import { Request, Response } from 'express';
@@ -1732,7 +1733,10 @@ export class PersonalController {
       }
       sql += ' ORDER BY name ASC';
       const exercises = (db.prepare(sql).all(...params) as any[]).filter(ex => matchesExercise(ex, { muscle, region, equipment, category, level, q }));
-      for (const ex of exercises) ex.image_attribution_json = imageAttribution(db, ex.exercise_file_id, ex.photo_url);
+      for (const ex of exercises) {
+        ex.image_attribution_json = imageAttribution(db, ex.exercise_file_id, ex.photo_url);
+        Object.assign(ex, exerciseAnimation(ex));
+      }
       res.json({ exercises });
     } catch (err: any) {
       console.error('[PersonalController.listExercises] Erro:', err);

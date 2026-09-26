@@ -1,3 +1,4 @@
+import reviewedMedia from './exercise-library.media.json';
 import licensedPhotos from './exercise-library.photos.json';
 import { EXPANDED_EXERCISES } from './exercise-library.expansion';
 export interface SeedExercise {
@@ -1759,7 +1760,7 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
 ];
 
 DEFAULT_EXERCISE_LIBRARY.push(...EXPANDED_EXERCISES);
-for (const ex of DEFAULT_EXERCISE_LIBRARY) ex.photo_url = licensedPhotos.find(photo => photo.exercise_id === ex.id)?.photo_url || `/exercise-fallbacks/${ex.id}.webp`;
+for (const ex of DEFAULT_EXERCISE_LIBRARY) ex.photo_url = licensedPhotos.find(photo => photo.exercise_id === ex.id)?.photo_url || reviewedMedia.find(media => media.exercise_id === ex.id)?.photo_url || `/exercise-fallbacks/${ex.id}.webp`;
 
 export function seedExerciseLibrary(rawDb: any): void {
   try {
@@ -1875,6 +1876,11 @@ export function seedExerciseLibrary(rawDb: any): void {
       for (const ex of DEFAULT_EXERCISE_LIBRARY) fallback.run(ex.photo_url, ex.id);
       const upgradePhoto = rawDb.prepare("UPDATE personal_exercises SET photo_url = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND photo_url = ?");
       for (const photo of licensedPhotos) upgradePhoto.run(photo.photo_url, photo.exercise_id, `/exercise-fallbacks/${photo.exercise_id}.webp`);
+      // Replace only our generated placeholder; preserve real photos and attachments.
+      for (const media of reviewedMedia) {
+        if (!licensedPhotos.some(photo => photo.exercise_id === media.exercise_id))
+          upgradePhoto.run(media.photo_url, media.exercise_id, `/exercise-fallbacks/${media.exercise_id}.webp`);
+      }
       for (const ex of DEFAULT_EXERCISE_LIBRARY) duration.run(ex.suggested_duration || (ex.category === 'Alongamento' ? 'Referência opcional: 15–30 segundos; ajustar com o profissional.' : null), ex.id);
       // Only detach provably dangling references in the standard catalogue. Never delete attachments or historical rows.
       rawDb.exec(`UPDATE personal_exercises SET exercise_file_id = NULL

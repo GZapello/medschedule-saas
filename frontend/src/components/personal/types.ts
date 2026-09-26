@@ -49,6 +49,8 @@ export interface Exercise {
   technical_notes?: string;
   suggested_duration?: string;
   instructions?: string;
+  gif_url?: string;
+  gif_attribution?: string;
   photo_url?: string;
   exercise_file_id?: string;
   is_active?: number;

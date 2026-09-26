@@ -10,7 +10,7 @@
     "test": "npm run build && node run-tests.cjs",
     "test:billing": "npm run build && node test-billing.cjs",
     "test:posture": "npm run build && node test-personal-posture.cjs",
-    "test:exercises": "npm run build && node test-exercise-library.cjs && node test-personal-expansion-and-students.cjs",
+    "test:exercises": "npm run build && node test-exercise-media.cjs && node test-exercise-library.cjs && node test-personal-expansion-and-students.cjs",
     "exercises:audit": "node audit-and-sync-exercise-images.cjs",
     "exercises:photos": "node import-exercise-photos.cjs",
     "exercises:fallbacks": "npm run build && node build-exercise-fallbacks.cjs"

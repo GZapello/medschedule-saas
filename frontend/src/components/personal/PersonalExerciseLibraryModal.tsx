@@ -1,3 +1,4 @@
+import { ExerciseAnimation } from './ExerciseAnimation';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -385,7 +386,7 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                           fileId={ex.exercise_file_id}
                           fallbackUrl={ex.photo_url}
                           alt={ex.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className={`w-full h-full ${ex.photo_url?.startsWith('/exercise-media/') ? 'object-contain' : 'object-cover'} group-hover:scale-105 transition-transform duration-300`}
                         />
 
                         <button
@@ -522,10 +523,12 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                   fileId={zoomedExercise.exercise_file_id}
                   fallbackUrl={zoomedExercise.photo_url}
                   alt={zoomedExercise.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                   placeholderText="Foto ou imagem não disponível"
                 />
               </div>
+
+              {zoomedExercise.gif_url && <ExerciseAnimation key={zoomedExercise.id} url={zoomedExercise.gif_url} name={zoomedExercise.name} attribution={zoomedExercise.gif_attribution} />}
 
               <p className="text-xs text-slate-600">Execução: {zoomedExercise.execution_type} • Mecânica: {zoomedExercise.mechanics} • Região: {zoomedExercise.body_region}</p>
               <p className="text-xs text-slate-600">Músculos secundários: {zoomedExercise.secondary_muscles_json || 'Não informados'}</p>

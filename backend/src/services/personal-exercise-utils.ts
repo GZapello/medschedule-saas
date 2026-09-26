@@ -1,3 +1,5 @@
+import reviewedMedia from '../config/exercise-library.media.json';
+import { datasetImageCredit } from './exercise-media';
 import licensedPhotos from '../config/exercise-library.photos.json';
 export const normalizeExerciseText = (value: unknown): string => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_/]/g, ' ').replace(/\s+/g, ' ').trim();
 const aliases: Record<string, string> = {
@@ -21,13 +23,14 @@ export function matchesExercise(ex: any, filters: Record<string, string>): boole
 
 // Persist only application-owned, stable paths. Signed URLs are resolved from file IDs at display time.
 export function stableExercisePhoto(value: unknown): string | null {
-  return typeof value === 'string' && /^\/exercise-(?:fallbacks|photos)\/[a-z0-9-]+\.webp$/.test(value) ? value : null;
+  return typeof value === 'string' && (reviewedMedia.some(item => item.photo_url === value) || /^\/exercise-(?:fallbacks|photos)\/[a-z0-9-]+\.webp$/.test(value)) ? value : null;
 }
 
 export function imageAttribution(db: any, fileId: string | null, photoUrl?: string | null): string | null {
   if (!fileId) {
     const photo = licensedPhotos.find(item => item.photo_url === photoUrl);
-    return photo ? JSON.stringify({ author: photo.author, source: photo.source, license: photo.license }) : null;
+    const credit = photo ? { author: photo.author, source: photo.source, license: photo.license } : datasetImageCredit(photoUrl);
+    return credit ? JSON.stringify(credit) : null;
   }
   const record = db.prepare('SELECT author, source, license FROM exercise_image_provenance WHERE file_id = ?').get(fileId);
   return record ? JSON.stringify(record) : null;

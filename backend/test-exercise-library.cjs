@@ -30,7 +30,7 @@ async function main() {
   const previousIds = require('./test-fixtures/legacy-exercise-ids.json');
   check(previousIds.length === 119 && previousIds.every(id => catalog.some(ex => ex.id === id)), 'All 119 original exercise IDs preserved');
   const initialAudit = await audit(rawDb, async () => 'unverified', row => Boolean(row.photo_url?.startsWith('/exercise-fallbacks/')), bundledPhotoExists);
-  check(initialAudit.totals.LOCAL_REAL_IMAGE === 2 && initialAudit.totals.WITH_REAL_IMAGE === 2 && initialAudit.totals.FALLBACK_ONLY === 266, 'Audit verifies bundled photo hashes and separates 266 illustrations');
+  check(initialAudit.totals.LOCAL_REAL_IMAGE === 2 && initialAudit.totals.WITH_REAL_IMAGE === 2 && initialAudit.totals.FALLBACK_ONLY === 207 && initialAudit.totals.REVIEWED_DEMONSTRATION === 59 && initialAudit.totals.WITHOUT_IMAGE === 0, 'Audit distinguishes photos, 59 reviewed demonstrations and 207 placeholders');
   check(!bundledPhotoExists({photo_url:'/exercise-photos/unknown.webp'}), 'Unknown local image is not classified as a verified photograph');
   const original = catalog.find(ex => ex.id === 'ex-supino-reto-barra');
   db.prepare("UPDATE personal_exercises SET name='Personalizado', is_active=0 WHERE id=?").run(original.id);

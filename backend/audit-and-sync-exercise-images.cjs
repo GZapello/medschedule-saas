@@ -11,10 +11,16 @@ function bundledPhotoExists(row) {
   const file = path.resolve(__dirname, '../frontend/public', photo.photo_url.slice(1));
   return fs.existsSync(file) && require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') === photo.sha256;
 }
+function bundledDemonstrationExists(row) {
+  const item = require('./src/config/exercise-library.media.json').find(item => item.photo_url === row.photo_url);
+  if (!item) return false;
+  const file = path.resolve(__dirname, '../frontend/public', item.photo_url.slice(1));
+  return fs.existsSync(file) && require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') === item.jpg_sha256;
+}
 async function audit(db, head, fallbackExists, localPhotoExists = () => false) {
   const hasProvenance = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='exercise_image_provenance'").get();
   const rows = db.prepare(`SELECT pe.*, fa.id AS attachment_id, fa.object_key, fa.mime_type, fa.category AS file_category, fa.storage_provider, fa.clinic_id FROM personal_exercises pe LEFT JOIN file_attachments fa ON fa.id = pe.exercise_file_id`).all();
-  const totals = { EXERCISES_TOTAL: rows.length, STANDARD: 0, CUSTOM: 0, WITH_REAL_IMAGE: 0, LOCAL_REAL_IMAGE: 0, WITHOUT_REAL_IMAGE: 0, BROKEN_FILE_REFERENCE: 0, FALLBACK_ONLY: 0, R2_FOUND: 0, R2_MISSING: 0, R2_UNVERIFIED: 0, ATTACHMENT_MISSING: 0, EXTERNAL_URL: 0, WITHOUT_IMAGE: 0, VALID_IMAGE: 0 };
+  const totals = { EXERCISES_TOTAL: rows.length, STANDARD: 0, CUSTOM: 0, WITH_REAL_IMAGE: 0, LOCAL_REAL_IMAGE: 0, REVIEWED_DEMONSTRATION: 0, WITHOUT_REAL_IMAGE: 0, BROKEN_FILE_REFERENCE: 0, FALLBACK_ONLY: 0, R2_FOUND: 0, R2_MISSING: 0, R2_UNVERIFIED: 0, ATTACHMENT_MISSING: 0, EXTERNAL_URL: 0, WITHOUT_IMAGE: 0, VALID_IMAGE: 0 };
   const details = [];
   for (const row of rows) {
     const standard = row.tenant_id === 'global' && row.is_custom === 0;
@@ -37,14 +43,16 @@ async function audit(db, head, fallbackExists, localPhotoExists = () => false) {
     const external = /^https?:\/\//i.test(row.photo_url || '');
     if (external) totals.EXTERNAL_URL++;
     const fallback = fallbackExists(row);
+    const demonstration = bundledDemonstrationExists(row);
+    if (demonstration) totals.REVIEWED_DEMONSTRATION++;
     const localReal = status !== 'found' && localPhotoExists(row);
     if (localReal) { real = true; totals.LOCAL_REAL_IMAGE++; }
     if (!real && (fallback || (generated && status === 'found'))) totals.FALLBACK_ONLY++;
-    if (!fallback && !localReal && status !== 'found') totals.WITHOUT_IMAGE++;
-    if ((fallback || localReal) && status !== 'found') totals.VALID_IMAGE++;
+    if (!fallback && !demonstration && !localReal && status !== 'found') totals.WITHOUT_IMAGE++;
+    if ((fallback || demonstration || localReal) && status !== 'found') totals.VALID_IMAGE++;
     if (broken) totals.BROKEN_FILE_REFERENCE++;
     totals[real ? 'WITH_REAL_IMAGE' : 'WITHOUT_REAL_IMAGE']++;
-    details.push({ id: row.id, name: row.name, standard, active: row.is_active !== 0, category: row.category, muscle_group: row.muscle_group, file_status: status, broken, external_url: external, fallback, local_real_photo: localReal, real_photo_verified: Boolean(real) });
+    details.push({ id: row.id, name: row.name, standard, active: row.is_active !== 0, category: row.category, muscle_group: row.muscle_group, file_status: status, broken, external_url: external, fallback, reviewed_demonstration: demonstration, local_real_photo: localReal, real_photo_verified: Boolean(real) });
   }
   return { totals, standard_broken_references: details.filter(row => row.standard && row.broken).length, details };
 }
