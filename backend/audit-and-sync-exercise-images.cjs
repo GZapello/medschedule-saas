@@ -12,10 +12,11 @@ function bundledPhotoExists(row) {
   return fs.existsSync(file) && require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') === photo.sha256;
 }
 function bundledDemonstrationExists(row) {
+  if (!row.photo_url) return false;
   const item = require('./src/config/exercise-library.media.json').find(item => item.photo_url === row.photo_url);
   if (!item) return false;
   const file = path.resolve(__dirname, '../frontend/public', item.photo_url.slice(1));
-  return fs.existsSync(file) && require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') === item.jpg_sha256;
+  return fs.existsSync(file) && require('node:crypto').createHash('sha256').update(fs.readFileSync(file)).digest('hex') === (item.photo_sha256 || item.jpg_sha256);
 }
 async function audit(db, head, fallbackExists, localPhotoExists = () => false) {
   const hasProvenance = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='exercise_image_provenance'").get();

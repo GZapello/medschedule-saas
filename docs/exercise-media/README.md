@@ -1,6 +1,13 @@
 # Mídias revisadas do catálogo
 
-Resultado final: **60 aprovados, 192 rejeitados, 16 pendentes** nos 268 exercícios existentes.
+Estado atual: **128 exercícios com GIF**, entre 268 existentes. A complementação com ExerciseGymGifsDB preservou os 60 anteriores e aprovou 68 novos; dos 208 candidatos, 124 foram rejeitados e 16 permanecem pendentes.
+
+- [Complementação: decisões individuais, lista completa sem GIF, arquivos e testes](exercisegymgifs-validation.md)
+- [Complementação: relatório estruturado e evidências por arquivo](exercisegymgifs-validation.json)
+
+## Histórico da primeira revisão — exercises-dataset
+
+Resultado dessa etapa: **60 aprovados, 192 rejeitados, 16 pendentes** nos 268 exercícios existentes. O comportamento e os números abaixo descrevem essa primeira entrega; o relatório de complementação acima documenta as mudanças posteriores, inclusive hover/touch no catálogo.
 
 - [Relatório por exercício](validation-report.md)
 - [Relatório estruturado, candidatos e existência dos arquivos](validation-report.json)

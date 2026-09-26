@@ -1878,7 +1878,7 @@ export function seedExerciseLibrary(rawDb: any): void {
       for (const photo of licensedPhotos) upgradePhoto.run(photo.photo_url, photo.exercise_id, `/exercise-fallbacks/${photo.exercise_id}.webp`);
       // Replace only our generated placeholder; preserve real photos and attachments.
       for (const media of reviewedMedia) {
-        if (!licensedPhotos.some(photo => photo.exercise_id === media.exercise_id))
+        if (media.photo_url && !licensedPhotos.some(photo => photo.exercise_id === media.exercise_id))
           upgradePhoto.run(media.photo_url, media.exercise_id, `/exercise-fallbacks/${media.exercise_id}.webp`);
       }
       for (const ex of DEFAULT_EXERCISE_LIBRARY) duration.run(ex.suggested_duration || (ex.category === 'Alongamento' ? 'Referência opcional: 15–30 segundos; ajustar com o profissional.' : null), ex.id);

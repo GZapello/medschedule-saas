@@ -46,7 +46,7 @@ async function main() {
     // Every shipped pair must decode through the same HTTP paths used by the UI.
     const decoded = await page.evaluate(async urls => Promise.all(urls.map(url => new Promise(resolve => {
       const img = new Image(); img.onload=() => resolve(img.naturalWidth > 0); img.onerror=() => resolve(false); img.src=url;
-    }))), media.flatMap(m => [m.photo_url,m.gif_url]));
+    }))), media.flatMap(m => [m.photo_url,m.gif_url]).filter(Boolean));
     assert(decoded.every(Boolean));
     failImage=true; failGif=true;
     await page.reload(); await page.getByText('268 exercícios encontrados').waitFor();
