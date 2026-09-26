@@ -1,4 +1,5 @@
 import { ExerciseAnimation } from './ExerciseAnimation';
+import { ExerciseCardThumbnail } from './ExerciseCardThumbnail';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -379,38 +380,12 @@ export const PersonalExerciseLibraryModal: React.FC<PersonalExerciseLibraryModal
                         isInactive ? 'border-dashed border-slate-300 opacity-60' : 'border-slate-200 hover:border-indigo-300'
                       } p-3 flex flex-col justify-between shadow-sm hover:shadow-md transition-all group relative`}
                     >
-                      {/* Thumbnail com Zoom */}
-                      <div onClick={() => setZoomedExercise(ex)} className="relative w-full h-36 bg-slate-100 rounded-xl overflow-hidden mb-3 flex items-center justify-center border border-slate-100">
-                        <SecureFileImage
-                          lazy
-                          fileId={ex.exercise_file_id}
-                          fallbackUrl={ex.photo_url}
-                          alt={ex.name}
-                          className={`w-full h-full ${ex.photo_url?.startsWith('/exercise-media/') ? 'object-contain' : 'object-cover'} group-hover:scale-105 transition-transform duration-300`}
-                        />
-
-                        <button
-                          onClick={() => setZoomedExercise(ex)}
-                          title="Ampliar visualização e foto"
-                          className="absolute top-2 right-2 p-1.5 bg-slate-900/60 hover:bg-slate-900 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
-                        >
-                          <ZoomIn className="w-3.5 h-3.5" />
-                        </button>
-
-                        <div className="absolute bottom-2 left-2 flex items-center gap-1">
-                          {ex.is_custom === 1 && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-indigo-600/90 text-white rounded-md backdrop-blur-sm">
-                              Customizado
-                            </span>
-                          )}
-                          {!ex.exercise_file_id && ex.photo_url?.startsWith('/exercise-fallbacks/') && <span className="text-[9px] bg-slate-900/80 text-white rounded px-1.5">Ilustração de referência</span>}
-                          {isInactive && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-600/90 text-white rounded-md backdrop-blur-sm">
-                              Inativo
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      {/* Thumbnail com Zoom e GIF no hover */}
+                      <ExerciseCardThumbnail
+                        exercise={ex}
+                        onZoom={() => setZoomedExercise(ex)}
+                        isInactive={isInactive}
+                      />
 
                       {/* Informações */}
                       <div className="space-y-1">

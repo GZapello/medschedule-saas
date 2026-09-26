@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 process.env.DATABASE_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'zemda-library-')), 'test.db');
 process.env.R2_MOCK_STORAGE = 'true';
+process.env.ZEMDA_FILES_SIGNING_SECRET = process.env.ZEMDA_FILES_SIGNING_SECRET || 'test-signing-secret-32-chars-long-hex';
 const { db, initializeDatabase } = require('./dist/config/database');
 const rawDb = db;
 initializeDatabase();
