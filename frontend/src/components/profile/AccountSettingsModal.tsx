@@ -107,10 +107,15 @@ export const AccountSettingsModal: React.FC<AccountSettingsModalProps> = ({
 
     try {
       setLoadingPassword(true);
-      const res = await ApiClient.put<{ message: string }>('/v1/auth/profile/password', {
+      const res = await ApiClient.put<{ message: string; token?: string }>('/v1/auth/profile/password', {
         currentPassword: currentPassword || undefined,
         newPassword: newPassword.trim()
       });
+      // A troca de senha invalida o token anterior; o backend já devolve um novo válido,
+      // sem isso a própria sessão atual seria derrubada na próxima requisição.
+      if (res.token) {
+        localStorage.setItem('auth_token', res.token);
+      }
       showToast(res.message || 'Senha alterada com sucesso!', 'success');
       setCurrentPassword('');
       setNewPassword('');
