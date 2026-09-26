@@ -17,6 +17,18 @@ import {
 export type { SeoRoute, SeoPageData };
 export const BACKEND_SEO_PAGES = PUBLIC_NICHE_PAGES;
 
+/**
+ * Envolve o HTML pré-renderizado (para Googlebot e crawlers que não executam JS) num contêiner
+ * "visualmente oculto": permanece no HTML e é lido normalmente por buscadores e leitores de tela,
+ * mas não é visível para quem abre a página no navegador. Sem isso, esse HTML sem nenhuma classe
+ * de estilo (só para indexação) fica visível por um instante em toda página pública, até o React
+ * assumir a div "#root" e substituí-lo pela interface real — o "flash de HTML cru" reportado.
+ * Ver: https://webaim.org/techniques/css/invisiblecontent/
+ */
+function visuallyHidden(html: string): string {
+  return `<div style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">${html}</div>`;
+}
+
 function setMetaTag(html: string, nameOrProperty: 'name' | 'property', key: string, content: string): string {
   const regex = new RegExp(`<meta\\s+[^>]*${nameOrProperty}=["']${key}["'][^>]*>`, 'i');
   const newTag = `<meta ${nameOrProperty}="${key}" content="${content}" />`;
@@ -92,7 +104,7 @@ export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): s
       </a>
     </main>
     `;
-    html = html.replace('<div id="root"></div>', `<div id="root">${notFoundContent}</div>`);
+    html = html.replace('<div id="root"></div>', `<div id="root">${visuallyHidden(notFoundContent)}</div>`);
     return html;
   }
 
@@ -166,7 +178,7 @@ export function renderPreRenderedHtml(baseIndexHtml: string, reqPath: string): s
   `;
 
   // Injeta dentro do div #root antes da hidratação do React
-  html = html.replace('<div id="root"></div>', `<div id="root">${semanticContent}</div>`);
+  html = html.replace('<div id="root"></div>', `<div id="root">${visuallyHidden(semanticContent)}</div>`);
 
   return html;
 }
