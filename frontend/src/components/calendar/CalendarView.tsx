@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -353,6 +354,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<Appointment | null>(null);
   const [communications, setCommunications] = useState<any[]>([]);
   const [loadingComms, setLoadingComms] = useState<boolean>(false);
+
+  // Bloqueio do scroll da página enquanto qualquer modal da agenda estiver aberto
+  const isAnyModalOpen = Boolean(
+    selectedAppt ||
+    cancellingAppt ||
+    selectingModuleAppt ||
+    activeConsultationAppt ||
+    finishingAppt ||
+    whatsappReminderAppt
+  );
+
+  useEffect(() => {
+    if (!isAnyModalOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isAnyModalOpen]);
 
   const refreshCommunications = (apptId: string) => {
     setLoadingComms(true);
@@ -1017,9 +1037,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       )}
 
       {/* Appointment Detail & Actions Modal */}
-      {selectedAppt && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+      {selectedAppt && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+          {/* Backdrop cobrindo 100vw/100vh */}
+          <div
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+            onClick={() => {
+              setSelectedAppt(null);
+              setIsRescheduling(false);
+            }}
+            aria-hidden="true"
+          />
+
+          {/* Modal posicionado acima do backdrop */}
+          <div className="relative z-10 bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div>
                 <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">{selectedAppt.appointment_number}</span>
@@ -1327,13 +1358,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal de Cancelamento Estruturado com Motivo Obrigatório (Item 10) */}
-      {cancellingAppt && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4">
+      {cancellingAppt && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+          {/* Backdrop cobrindo 100vw/100vh */}
+          <div
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
+            onClick={() => setCancellingAppt(null)}
+            aria-hidden="true"
+          />
+
+          {/* Modal posicionado acima do backdrop */}
+          <div className="relative z-10 bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 my-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-xs font-bold text-rose-600 uppercase">Cancelamento Obrigatório</span>
@@ -1341,7 +1381,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               </div>
               <button
                 onClick={() => setCancellingAppt(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1382,96 +1422,109 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
               <button
                 onClick={() => setCancellingAppt(null)}
-                className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
               >
                 Voltar
               </button>
               <button
                 onClick={() => handleUpdateStatus(cancellingAppt.id, 'cancelled', cancellationReason, cancellationCategory)}
-                className="px-5 py-2 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs"
+                className="px-5 py-2 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs cursor-pointer"
               >
                 Confirmar Cancelamento
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal de Seleção de Módulo Clínico (quando profissional possui múltiplas especialidades compatíveis) */}
-      {selectingModuleAppt && (
-        <SelectConsultationModuleModal
-          isOpen={!!selectingModuleAppt}
-          onClose={() => setSelectingModuleAppt(null)}
-          modules={compatibleModules}
-          patientName={selectingModuleAppt.patient_name}
-          serviceName={selectingModuleAppt.service_name}
-          onSelectModule={(moduleId) => executeStartConsultation(selectingModuleAppt, moduleId)}
-        />
+      {selectingModuleAppt && createPortal(
+        <div className="relative z-[9999]">
+          <SelectConsultationModuleModal
+            isOpen={!!selectingModuleAppt}
+            onClose={() => setSelectingModuleAppt(null)}
+            modules={compatibleModules}
+            patientName={selectingModuleAppt.patient_name}
+            serviceName={selectingModuleAppt.service_name}
+            onSelectModule={(moduleId) => executeStartConsultation(selectingModuleAppt, moduleId)}
+          />
+        </div>,
+        document.body
       )}
 
       {/* Modal de Atendimento Rápido */}
-      {activeConsultationAppt && (
-        <AppointmentConsultation
-          appointment={{
-            id: activeConsultationAppt.id,
-            patient_id: activeConsultationAppt.patient_id,
-            patient_name: activeConsultationAppt.patient_name,
-            patient_phone: activeConsultationAppt.patient_phone,
-            professional_id: activeConsultationAppt.professional_id,
-            professional_name: activeConsultationAppt.professional_name,
-            service_id: activeConsultationAppt.service_id,
-            service_name: activeConsultationAppt.service_name,
-            start_time: activeConsultationAppt.start_time,
-            end_time: activeConsultationAppt.end_time,
-            modality: activeConsultationAppt.modality,
-            status: activeConsultationAppt.status,
-            clinical_module: activeConsultationAppt.clinical_module || activeConsultationModule
-          }}
-          initialModuleType={activeConsultationModule || activeConsultationAppt.clinical_module}
-          onClose={() => setActiveConsultationAppt(null)}
-          onFinished={() => {
-            setActiveConsultationAppt(null);
-            fetchCalendarData();
-            notifyAppointmentChange();
-          }}
-        />
+      {activeConsultationAppt && createPortal(
+        <div className="relative z-[9999]">
+          <AppointmentConsultation
+            appointment={{
+              id: activeConsultationAppt.id,
+              patient_id: activeConsultationAppt.patient_id,
+              patient_name: activeConsultationAppt.patient_name,
+              patient_phone: activeConsultationAppt.patient_phone,
+              professional_id: activeConsultationAppt.professional_id,
+              professional_name: activeConsultationAppt.professional_name,
+              service_id: activeConsultationAppt.service_id,
+              service_name: activeConsultationAppt.service_name,
+              start_time: activeConsultationAppt.start_time,
+              end_time: activeConsultationAppt.end_time,
+              modality: activeConsultationAppt.modality,
+              status: activeConsultationAppt.status,
+              clinical_module: activeConsultationAppt.clinical_module || activeConsultationModule
+            }}
+            initialModuleType={activeConsultationModule || activeConsultationAppt.clinical_module}
+            onClose={() => setActiveConsultationAppt(null)}
+            onFinished={() => {
+              setActiveConsultationAppt(null);
+              fetchCalendarData();
+              notifyAppointmentChange();
+            }}
+          />
+        </div>,
+        document.body
       )}
 
       {/* Modal de Finalização de Consulta (Item 5) */}
-      {finishingAppt && (
-        <FinishConsultationModal
-          appointment={{
-            id: finishingAppt.id,
-            patient_id: finishingAppt.patient_id,
-            patient_name: finishingAppt.patient_name,
-            professional_id: finishingAppt.professional_id,
-            professional_name: finishingAppt.professional_name,
-            service_id: finishingAppt.service_id,
-            service_name: finishingAppt.service_name,
-            start_time: finishingAppt.start_time
-          }}
-          onClose={() => setFinishingAppt(null)}
-          onFinished={() => {
-            setFinishingAppt(null);
-            fetchCalendarData();
-            notifyAppointmentChange();
-          }}
-        />
+      {finishingAppt && createPortal(
+        <div className="relative z-[9999]">
+          <FinishConsultationModal
+            appointment={{
+              id: finishingAppt.id,
+              patient_id: finishingAppt.patient_id,
+              patient_name: finishingAppt.patient_name,
+              professional_id: finishingAppt.professional_id,
+              professional_name: finishingAppt.professional_name,
+              service_id: finishingAppt.service_id,
+              service_name: finishingAppt.service_name,
+              start_time: finishingAppt.start_time
+            }}
+            onClose={() => setFinishingAppt(null)}
+            onFinished={() => {
+              setFinishingAppt(null);
+              fetchCalendarData();
+              notifyAppointmentChange();
+            }}
+          />
+        </div>,
+        document.body
       )}
 
       {/* Modal de Envio Manual de Lembrete pelo WhatsApp */}
-      {whatsappReminderAppt && (
-        <WhatsAppReminderModal
-          isOpen={Boolean(whatsappReminderAppt)}
-          onClose={() => setWhatsappReminderAppt(null)}
-          appointment={whatsappReminderAppt}
-          clinicName={currentTenant?.name || 'Clínica'}
-          onSuccess={() => {
-            refreshCommunications(whatsappReminderAppt.id);
-            fetchCalendarData();
-            notifyAppointmentChange();
-          }}
-        />
+      {whatsappReminderAppt && createPortal(
+        <div className="relative z-[9999]">
+          <WhatsAppReminderModal
+            isOpen={Boolean(whatsappReminderAppt)}
+            onClose={() => setWhatsappReminderAppt(null)}
+            appointment={whatsappReminderAppt}
+            clinicName={currentTenant?.name || 'Clínica'}
+            onSuccess={() => {
+              refreshCommunications(whatsappReminderAppt.id);
+              fetchCalendarData();
+              notifyAppointmentChange();
+            }}
+          />
+        </div>,
+        document.body
       )}
     </div>
   );
