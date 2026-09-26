@@ -897,6 +897,25 @@ export function initializeDatabase(): void {
     addColIfMissing('clinical_exam_requests', 'is_sealed', 'INTEGER DEFAULT 0');
     addColIfMissing('clinical_exam_requests', 'created_at', "TEXT DEFAULT (datetime('now'))");
 
+    // Migração de patient_consents: as chamadas de addColIfMissing feitas antes de a tabela
+    // ser criada (mais acima neste arquivo) eram no-ops (tableColumns retornava [] e a
+    // condição `cols.length > 0` nunca era satisfeita), então essas colunas nunca existiam
+    // de fato e o INSERT em createConsent falhava. Reaplicadas aqui, após a criação da tabela.
+    addColIfMissing('patient_consents', 'professional_id', 'TEXT');
+    addColIfMissing('patient_consents', 'signature_data_url', 'TEXT');
+    addColIfMissing('patient_consents', 'signed_by_cpf', 'TEXT');
+    addColIfMissing('patient_consents', 'modality', "TEXT DEFAULT 'telehealth'");
+    addColIfMissing('patient_consents', 'profession_id', 'TEXT');
+    addColIfMissing('patient_consents', 'profession_name', 'TEXT');
+    addColIfMissing('patient_consents', 'ip_address', 'TEXT');
+    addColIfMissing('patient_consents', 'user_agent', 'TEXT');
+    addColIfMissing('patient_consents', 'metadata_json', 'TEXT');
+    addColIfMissing('patient_consents', 'signature_hash', 'TEXT');
+    // LGPD art. 8º §5º: revogação de consentimento (item 2.5 do checklist). Nunca apagamos a
+    // linha — só marcamos revoked_at/revoked_by, preservando o rastro de que o consentimento
+    // existiu e foi revogado.
+    addColIfMissing('patient_consents', 'revoked_by', 'TEXT');
+
     addColIfMissing('patients', 'import_batch_id', 'TEXT');
     addColIfMissing('patients', 'communication_preferences_json', "TEXT DEFAULT '{\"email\":true,\"sms\":true,\"whatsapp\":true}'");
     addColIfMissing('appointments', 'import_batch_id', 'TEXT');

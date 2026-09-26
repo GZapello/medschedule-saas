@@ -211,7 +211,7 @@ export class PatientClinicalController {
       // H. Termos de Consentimento
       const consentsStmt = db.prepare(`
         SELECT 
-          cs.id, cs.title, cs.consent_type, cs.signed_at as date, cs.is_revoked,
+          cs.id, cs.title, cs.consent_type, cs.accepted_at as date, (cs.revoked_at IS NOT NULL) as is_revoked,
           p.name as professional_name, p.id as professional_id
         FROM patient_consents cs
         LEFT JOIN professionals p ON p.id = cs.professional_id
@@ -734,7 +734,7 @@ export class PatientClinicalController {
         FROM patient_consents pc
         LEFT JOIN professionals p ON p.id = pc.professional_id
         WHERE pc.patient_id = ? AND pc.tenant_id = ?
-        ORDER BY pc.signed_at DESC
+        ORDER BY pc.accepted_at DESC
       `).all(patientId, tenantId);
 
       res.json(consents);
@@ -805,8 +805,8 @@ export class PatientClinicalController {
 
       db.prepare(`
         INSERT INTO patient_consents (
-          id, tenant_id, patient_id, professional_id, title, consent_type, content,
-          signature_data_url, signed_by_name, signed_by_cpf, signed_at,
+          id, tenant_id, patient_id, professional_id, title, consent_type, content_text,
+          signature_data_url, accepted_by_name, signed_by_cpf, accepted_at,
           modality, profession_id, profession_name, ip_address, user_agent,
           metadata_json, signature_hash
         )
@@ -843,6 +843,232 @@ export class PatientClinicalController {
     } catch (err: any) {
       console.error('[PatientClinicalController.createConsent] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar consentimento' });
+    }
+  }
+
+  // Revogação de termo de consentimento (LGPD art. 8º, §5º / item 2.5 do checklist).
+  // Nunca apagamos a linha: apenas marcamos revoked_at/revoked_by, pois o registro de que o
+  // consentimento existiu e foi revogado também é parte do rastro exigido pela LGPD.
+  static revokeConsent(req: Request, res: Response): void {
+    try {
+      const patientId = req.params.patientId as string;
+      const consentId = req.params.consentId as string;
+      const tenantId = req.tenantId;
+
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant obrigatório' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: profissional não possui vínculo assistencial com este paciente (Sigilo LGPD).',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
+        return;
+      }
+
+      const consent = db.prepare(
+        'SELECT id, revoked_at FROM patient_consents WHERE id = ? AND patient_id = ? AND tenant_id = ?'
+      ).get(consentId, patientId, tenantId) as any;
+
+      if (!consent) {
+        res.status(404).json({ error: 'Termo de consentimento não encontrado' });
+        return;
+      }
+
+      if (consent.revoked_at) {
+        res.status(409).json({ error: 'Este termo de consentimento já foi revogado anteriormente' });
+        return;
+      }
+
+      const revokedBy = req.user?.userId || null;
+
+      db.prepare(`
+        UPDATE patient_consents
+        SET revoked_at = datetime('now'), revoked_by = ?, status = 'revoked'
+        WHERE id = ? AND patient_id = ? AND tenant_id = ?
+      `).run(revokedBy, consentId, patientId, tenantId);
+
+      logAudit(req, 'REVOKE_PATIENT_CONSENT', 'patient_consents', consentId, { patientId, revokedBy });
+      res.json({ message: 'Termo de consentimento revogado com sucesso' });
+    } catch (err: any) {
+      console.error('[PatientClinicalController.revokeConsent] Erro:', err);
+      res.status(500).json({ error: 'Erro ao revogar termo de consentimento' });
+    }
+  }
+
+  // 7. EXPORTAÇÃO COMPLETA DOS DADOS DO PACIENTE (LGPD art. 18 — acesso e portabilidade / item 4.1)
+  // Retorna, num único documento JSON, tudo que a plataforma guarda sobre o paciente, sempre
+  // filtrado por tenant_id. Anexos (file_attachments) trazem só metadados: nunca URL assinada
+  // nem os bytes do arquivo.
+  static exportPatientData(req: Request, res: Response): void {
+    try {
+      const patientId = req.params.id as string;
+      const tenantId = req.tenantId;
+
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant obrigatório' });
+        return;
+      }
+
+      const patient = db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+      if (!patient) {
+        res.status(404).json({ error: 'Paciente não encontrado' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({
+          error: 'Acesso clínico restrito: profissional não possui vínculo assistencial com este paciente (Sigilo LGPD).',
+          code: 'CLINICAL_PRIVACY_RESTRICTION'
+        });
+        return;
+      }
+
+      const guardians = db.prepare(
+        'SELECT * FROM guardians WHERE patient_id = ? AND tenant_id = ?'
+      ).all(patientId, tenantId);
+
+      const appointments = db.prepare(`
+        SELECT a.*, p.name as professional_name, s.name as service_name
+        FROM appointments a
+        LEFT JOIN professionals p ON p.id = a.professional_id
+        LEFT JOIN services s ON s.id = a.service_id
+        WHERE a.patient_id = ? AND a.tenant_id = ?
+        ORDER BY a.start_time
+      `).all(patientId, tenantId);
+
+      const clinicalRecords = db.prepare(`
+        SELECT r.*, p.name as professional_name
+        FROM records r
+        LEFT JOIN professionals p ON p.id = r.professional_id
+        WHERE r.patient_id = ? AND r.tenant_id = ?
+        ORDER BY r.session_date
+      `).all(patientId, tenantId);
+
+      const allergies = db.prepare(
+        'SELECT * FROM patient_allergies WHERE patient_id = ? AND tenant_id = ?'
+      ).all(patientId, tenantId);
+
+      const medications = db.prepare(
+        'SELECT * FROM patient_medications WHERE patient_id = ? AND tenant_id = ?'
+      ).all(patientId, tenantId);
+
+      const anamnesis = db.prepare(`
+        SELECT an.*, p.name as professional_name
+        FROM patient_anamnesis an
+        LEFT JOIN professionals p ON p.id = an.professional_id
+        WHERE an.patient_id = ? AND an.tenant_id = ?
+      `).all(patientId, tenantId);
+
+      const certificates = db.prepare(`
+        SELECT c.*, p.name as professional_name
+        FROM clinical_certificates c
+        LEFT JOIN professionals p ON p.id = c.professional_id
+        WHERE c.patient_id = ? AND c.tenant_id = ?
+      `).all(patientId, tenantId);
+
+      const prescriptions = db.prepare(`
+        SELECT c.*, p.name as professional_name
+        FROM clinical_prescriptions c
+        LEFT JOIN professionals p ON p.id = c.professional_id
+        WHERE c.patient_id = ? AND c.tenant_id = ?
+      `).all(patientId, tenantId);
+
+      const examRequests = db.prepare(`
+        SELECT c.*, p.name as professional_name
+        FROM clinical_exam_requests c
+        LEFT JOIN professionals p ON p.id = c.professional_id
+        WHERE c.patient_id = ? AND c.tenant_id = ?
+      `).all(patientId, tenantId);
+
+      // Sem file_url: é um link direto (não assinado, mas ainda assim um ponteiro de armazenamento)
+      // para o arquivo do exame — mantemos só os metadados, na mesma linha do que é feito para
+      // file_attachments logo abaixo.
+      const exams = db.prepare(`
+        SELECT pe.id, pe.title, pe.exam_type, pe.exam_date, pe.file_type, pe.notes,
+               pe.ai_extracted_summary, pe.created_at, p.name as professional_name
+        FROM patient_exams pe
+        LEFT JOIN professionals p ON p.id = pe.professional_id
+        WHERE pe.patient_id = ? AND pe.tenant_id = ?
+      `).all(patientId, tenantId);
+
+      const consents = db.prepare(`
+        SELECT pc.id, pc.title, pc.consent_type, pc.version, pc.content_text, pc.status,
+               pc.accepted_by_name, pc.accepted_at, pc.revoked_at, pc.revoked_by, pc.modality,
+               pc.profession_name, pc.signature_hash, pc.created_at, p.name as professional_name
+        FROM patient_consents pc
+        LEFT JOIN professionals p ON p.id = pc.professional_id
+        WHERE pc.patient_id = ? AND pc.tenant_id = ?
+      `).all(patientId, tenantId);
+
+      const payments = db.prepare(
+        'SELECT * FROM payments WHERE patient_id = ? AND tenant_id = ?'
+      ).all(patientId, tenantId);
+
+      const receipts = db.prepare(
+        'SELECT * FROM receipts WHERE patient_id = ? AND tenant_id = ?'
+      ).all(patientId, tenantId);
+
+      // Anexos: só metadados (id, categoria, nome do arquivo, tipo, tamanho, data). NUNCA
+      // incluir URL assinada nem o conteúdo binário do arquivo aqui.
+      const attachments = db.prepare(`
+        SELECT id, category, original_filename, mime_type, file_size, module_type, created_at
+        FROM file_attachments
+        WHERE patient_id = ? AND clinic_id = ?
+      `).all(patientId, tenantId);
+
+      // Módulos de especialidade: cobertura de exemplo (padrão extensível), não exaustiva.
+      const physiotherapyAssessments = db.prepare(
+        'SELECT * FROM physiotherapy_assessments WHERE patient_id = ? AND tenant_id = ?'
+      ).all(patientId, tenantId);
+
+      const nutritionAssessments = db.prepare(
+        'SELECT * FROM nutrition_assessments WHERE patient_id = ? AND tenant_id = ?'
+      ).all(patientId, tenantId);
+
+      const psychologySessions = db.prepare(
+        'SELECT * FROM psychology_sessions WHERE patient_id = ? AND tenant_id = ?'
+      ).all(patientId, tenantId);
+
+      const exportPayload = {
+        exportedAt: new Date().toISOString(),
+        patient,
+        guardians,
+        appointments,
+        clinicalRecords,
+        allergies,
+        medications,
+        anamnesis,
+        clinicalDocuments: { certificates, prescriptions, examRequests },
+        exams,
+        consents,
+        payments,
+        receipts,
+        attachments,
+        specialtyModules: {
+          // Exemplo do padrão para módulos por especialidade. NÃO incluídos ainda (extensível
+          // seguindo o mesmo padrão: SELECT * FROM <tabela> WHERE patient_id = ? AND tenant_id = ?):
+          //  - Odontologia: dental_tooth_records, dental_periodontal_records,
+          //    dental_endodontic_records, dental_anamnesis, dental_treatment_plans,
+          //    dental_prosthetics_lab, dental_orthodontics, dental_hof
+          //  - Fonoaudiologia: fono_audiology_records, fono_abfw_records
+          //  - Fisioterapia (parcial): physiotherapy_evolutions (só as avaliações estão abaixo)
+          //  - Avaliação física/Personal: body_assessments, body_markers,
+          //    personal_assessment_*, personal_workout_*
+          //  - Psicologia (parcial): psychology_goals, psychology_documents, psychology_audit_logs
+          physiotherapyAssessments,
+          nutritionAssessments,
+          psychologySessions
+        }
+      };
+
+      logAudit(req, 'EXPORT_PATIENT_DATA', 'patients', patientId, { patientId });
+      res.json(exportPayload);
+    } catch (err: any) {
+      console.error('[PatientClinicalController.exportPatientData] Erro:', err);
+      res.status(500).json({ error: 'Erro ao exportar dados do paciente' });
     }
   }
 }

@@ -711,6 +711,10 @@ api.delete('/v1/patients/:id/exams/:examId', requireTenant, requireRole('clinic_
 
 api.get('/v1/patients/:id/consents', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.listConsents);
 api.post('/v1/patients/:id/consents', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.createConsent);
+api.post('/v1/patients/:patientId/consents/:consentId/revoke', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.revokeConsent);
+
+// LGPD art. 18 (acesso e portabilidade) — exportação completa dos dados do paciente
+api.get('/v1/patients/:id/export', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.exportPatientData);
 
 // Documentos Clínicos: Atestados, Receituários e Pedidos de Exame
 api.post('/v1/clinical/certificates', requireTenant, requireRole('clinic_admin', 'professional'), DocumentsController.createCertificate);
