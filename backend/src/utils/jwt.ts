@@ -14,6 +14,7 @@ const JWT_EXPIRES_IN = '7d';
 
 export interface TokenPayload {
   sessionVersion?: number;
+  userSessionVersion?: number;
   userId: string;
   tenantId: string | null;
   role: 'superadmin' | 'clinic_admin' | 'professional' | 'receptionist' | 'patient';
@@ -23,7 +24,12 @@ export interface TokenPayload {
 
 export function generateToken(payload: TokenPayload): string {
   const tenant = payload.tenantId ? db.prepare('SELECT session_version FROM tenants WHERE id = ?').get(payload.tenantId) : null;
-  return jwt.sign({ ...payload, sessionVersion: tenant?.session_version || 0 }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  const user = payload.userId ? db.prepare('SELECT session_version FROM users WHERE id = ?').get(payload.userId) : null;
+  return jwt.sign({
+    ...payload,
+    sessionVersion: tenant?.session_version || 0,
+    userSessionVersion: user?.session_version || 0
+  }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
 export function verifyToken(token: string): TokenPayload | null {

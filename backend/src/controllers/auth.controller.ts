@@ -23,6 +23,8 @@ export class AuthController {
         return;
       }
 
+      const attemptedEmail = String(email).trim().toLowerCase();
+
       const userStmt = db.prepare(`
         SELECT id, tenant_id, name, email, password_hash, role, phone, avatar_url, status,
                terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at
@@ -46,18 +48,21 @@ export class AuthController {
       } | undefined;
 
       if (!user) {
+        logAudit(req, 'LOGIN_FAILED', 'users', undefined, { email: attemptedEmail, reason: 'invalid_credentials' });
         res.status(401).json({ error: 'Credenciais inválidas' });
         return;
       }
 
       const valid = await comparePassword(password, user.password_hash);
       if (!valid) {
+        logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'invalid_credentials' });
         res.status(401).json({ error: 'Credenciais inválidas' });
         return;
       }
 
       // Validação de status do usuário
       if (user.status === 'pending' && !pendingBillingManager(user)) {
+        logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'account_pending' });
         res.status(403).json({
           error: 'Sua solicitação de acesso está aguardando aprovação pelo gestor da clínica.',
           code: 'USER_PENDING'
@@ -66,6 +71,7 @@ export class AuthController {
       }
 
       if (user.status === 'rejected') {
+        logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'account_rejected' });
         res.status(403).json({
           error: 'Sua solicitação de acesso a esta clínica foi recusada pela administração.',
           code: 'USER_REJECTED'
@@ -74,6 +80,7 @@ export class AuthController {
       }
 
       if (user.status === 'blocked' || user.status === 'inactive') {
+        logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'account_inactive' });
         res.status(403).json({
           error: 'Sua conta de usuário está desativada ou bloqueada. Entre em contato com o gestor da clínica.',
           code: 'USER_BLOCKED'
@@ -96,6 +103,7 @@ export class AuthController {
 
         if (tenantData) {
           if (tenantData.status === 'banned') {
+            logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'clinic_banned' });
             res.status(403).json({
               error: 'Esta clínica foi banida pelo Administrador do Sistema. O acesso está permanentemente bloqueado.',
               code: 'CLINIC_BANNED',
@@ -105,6 +113,7 @@ export class AuthController {
           }
 
           if (tenantData.status === 'pending' && !pendingBillingManager(user)) {
+            logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'clinic_pending' });
             res.status(403).json({
               error: 'O cadastro da sua clínica está em análise e pendente de aprovação pelo Administrador do SaaS. Você será notificado assim que o acesso for liberado.',
               code: 'CLINIC_PENDING'
@@ -113,6 +122,7 @@ export class AuthController {
           }
 
           if (tenantData.status === 'blocked' || tenantData.status === 'suspended') {
+            logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'clinic_blocked' });
             res.status(403).json({
               error: 'O acesso a esta clínica está temporariamente suspenso ou bloqueado. Entre em contato com o suporte.',
               code: 'CLINIC_BLOCKED'
@@ -121,6 +131,7 @@ export class AuthController {
           }
 
           if (tenantData.status === 'rejected') {
+            logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'clinic_rejected' });
             res.status(403).json({
               error: 'O cadastro desta clínica foi recusado pela administração do SaaS.',
               code: 'CLINIC_REJECTED'
@@ -760,10 +771,22 @@ export class AuthController {
       }
 
       const hashedPassword = await hashPassword(newPassword.trim());
-      db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(hashedPassword, user.id);
+      // Invalida sessões (tokens JWT) emitidas antes da troca, apenas para este usuário.
+      db.prepare("UPDATE users SET password_hash = ?, session_version = session_version + 1, updated_at = datetime('now') WHERE id = ?").run(hashedPassword, user.id);
 
       logAudit(req, 'UPDATE_OWN_PASSWORD', 'users', user.id);
-      res.json({ message: 'Sua senha foi alterada com sucesso!' });
+
+      // Emite um novo token (já com a session_version atualizada) para que a sessão atual,
+      // que acabou de trocar a própria senha, continue funcionando sem precisar logar de novo.
+      const freshToken = generateToken({
+        userId: req.user.userId,
+        tenantId: req.user.tenantId,
+        role: req.user.role,
+        email: req.user.email,
+        name: req.user.name
+      });
+
+      res.json({ message: 'Sua senha foi alterada com sucesso!', token: freshToken });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;
       console.error('[AuthController.updateProfilePassword] Erro:', err);
@@ -1422,9 +1445,9 @@ export class AuthController {
         return;
       }
 
-      // Atualiza a senha do usuário
+      // Atualiza a senha do usuário e invalida sessões (tokens JWT) anteriores, apenas deste usuário.
       const hashedPassword = await hashPassword(newPassword.trim());
-      db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(hashedPassword, user.id);
+      db.prepare("UPDATE users SET password_hash = ?, session_version = session_version + 1, updated_at = datetime('now') WHERE id = ?").run(hashedPassword, user.id);
 
       logAudit(req, 'RESET_PASSWORD_PUBLIC', 'users', user.id);
 

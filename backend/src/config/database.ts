@@ -315,6 +315,9 @@ export function initializeDatabase(): void {
     addColIfMissing('clinic_users', 'zemda_body_enabled', 'INTEGER DEFAULT 0');
     addColIfMissing('tenants', 'manager_profession', 'TEXT');
     addColIfMissing('tenants', 'manager_practice_areas', 'TEXT');
+    // Versão de sessão por usuário: incrementada quando o próprio usuário troca a senha,
+    // invalidando tokens JWT emitidos antes da troca sem afetar outros usuários da clínica.
+    addColIfMissing('users', 'session_version', 'INTEGER NOT NULL DEFAULT 0');
 
     // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
     addColIfMissing('appointments', 'insurance_id', 'TEXT');
