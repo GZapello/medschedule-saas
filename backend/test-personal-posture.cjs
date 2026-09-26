@@ -32,7 +32,12 @@ const posture={version:1,views:{front:{fileId:'',guides:true,strokes:[{tool:'pen
  check((await call('compareAssessments',{}, {id:current.data.id,compareId:otherAssessment.data.id})).status===400,'Cross-patient comparison rejected');
  const list=await call('listAssessments',{}, {studentId:patient});const row=list.data.assessments.find(a=>a.id===baseline.data.id);check(row.has_posture&&!('posture_json' in row),'List stays lightweight without vectors');
  const before=db.prepare('SELECT posture_json FROM personal_assessments WHERE id=?').get(baseline.data.id);initializeDatabase();assert.deepEqual(db.prepare('SELECT posture_json FROM personal_assessments WHERE id=?').get(baseline.data.id),before);check(true,'Idempotent migration preserves posture');
- check((await call('status',{}, {},{},'posture-test',ai)).data.available===false,'AI unavailable without configured real storage/model');
+ delete process.env.GEMINI_API_KEY; delete process.env.GOOGLE_API_KEY;
+ delete process.env.PERSONAL_POSTURE_AI_MODEL; delete process.env.GEMINI_MODEL;
+ const initialStatus=(await call('status',{}, {},{},'posture-test',ai)).data;
+ check(initialStatus.available===false,'AI unavailable without configured real storage/model');
+ check(initialStatus.missing.apiKey===true&&initialStatus.missing.model===true&&initialStatus.missing.r2===true,'Status reports missing apiKey, model and r2 separately');
+ check(initialStatus.reason.includes('chave Gemini')&&initialStatus.reason.includes('modelo Gemini')&&initialStatus.reason.includes('armazenamento privado R2'),'Status reason details all missing components');
  check((await call('analyze',{patient_id:patient,photos:[]},{},{},'posture-test',ai)).status===503,'Unconfigured AI never fabricates suggestions');
 
 
@@ -41,7 +46,13 @@ const posture={version:1,views:{front:{fileId:'',guides:true,strokes:[{tool:'pen
  const kept=db.prepare('SELECT weight,body_fat_percentage,assessment_date FROM personal_assessments WHERE id=?').get(baseline.data.id);check(kept.weight===77&&kept.body_fat_percentage===19&&kept.assessment_date==='2025-02-01','Postural edit preserves physical metrics and persists date');
  const badPhoto=await call('updateAssessment',{posture:{...posture,views:{front:{...posture.views.front,fileId:'foreign-image'}}}},{id:baseline.data.id});check(badPhoto.status===400,'Postural image references require patient ownership');
  const {r2StorageService:storage}=require('./dist/services/r2-storage.service');
- Object.defineProperty(storage,'isConfiguredClient',{value:true});process.env.R2_MOCK_STORAGE='false';process.env.GEMINI_API_KEY='test-only';process.env.PERSONAL_POSTURE_AI_MODEL='test-model';
+ Object.defineProperty(storage,'isConfiguredClient',{value:true});process.env.R2_MOCK_STORAGE='false';process.env.GEMINI_API_KEY='test-only';
+ process.env.GEMINI_MODEL='fallback-gemini-model';
+ const geminiModelStatus=(await call('status',{}, {},{},'posture-test',ai)).data;
+ check(geminiModelStatus.available===true,'AI available with GEMINI_MODEL fallback when PERSONAL_POSTURE_AI_MODEL is absent');
+ process.env.PERSONAL_POSTURE_AI_MODEL='test-model';
+ const overrideStatus=(await call('status',{}, {},{},'posture-test',ai)).data;
+ check(overrideStatus.available===true,'AI available with PERSONAL_POSTURE_AI_MODEL override');
  check((await call('analyze',{patient_id:patient,photos:[{view:'front',file_id:'missing'}]},{},{},'posture-test',ai)).status===400,'AI rejects missing or foreign attachment before fetching');
  check((await call('analyze',{patient_id:patient,photos:[null]},{},{},'posture-test',ai)).status===400,'Malformed AI photo body rejected without exception');
  check((await call('analyze',{patient_id:patient,photos:Array(5).fill({view:'front',file_id:'photo'})},{},{},'posture-test',ai)).status===400,'AI caps image count');

@@ -52,7 +52,7 @@ export default function PersonalPostureEditor({value,onChange,photos,patientId,o
       </aside>
     </div>
     <div className="border-t pt-3 space-y-2"><button type="button" disabled={busy||!ai.available||!photos.some(p=>p.fileId)||value.observations.length>=180} onClick={analyze} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold disabled:opacity-40">{busy?'Analisando…':'Analisar postura com IA'}</button>
-      <p className="text-[11px] text-slate-500">{ai.available?'Ao solicitar, as fotos serão enviadas à IA configurada. Sugestões visuais para revisão profissional; não constituem diagnóstico. Nenhuma análise é automática.':ai.reason||'Verificando disponibilidade da IA…'}</p>
+      <p className="text-[11px] text-slate-500">{ai.available?(photos.some(p=>p.fileId)?'Ao solicitar, as fotos serão enviadas à IA configurada. Sugestões visuais para revisão profissional; não constituem diagnóstico. Nenhuma análise é automática.':'Adicione pelo menos uma foto corporal para habilitar a análise com IA.'):ai.reason||'Verificando disponibilidade da IA…'}</p>
       {message&&<p role="status" className="text-xs text-indigo-800">{message}</p>}
     </div>
   </section>;
