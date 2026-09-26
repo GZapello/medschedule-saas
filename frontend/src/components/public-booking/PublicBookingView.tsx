@@ -520,7 +520,14 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
                 </div>
               </div>
 
-              <div className="pt-4 flex justify-between">
+              <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+                Ao confirmar, seus dados serão compartilhados com a clínica para viabilizar o atendimento, conforme a{' '}
+                <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">
+                  Política de Privacidade
+                </a>.
+              </p>
+
+              <div className="pt-2 flex justify-between">
                 <button
                   onClick={() => setStep(3)}
                   className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"

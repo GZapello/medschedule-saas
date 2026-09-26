@@ -39,7 +39,11 @@
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-QFFJ7Y25ML"></script>
     <script>
       gtag('js', new Date());
-      gtag('config', 'G-QFFJ7Y25ML');
+      // send_page_view: false — a própria aplicação envia page_view manualmente com o caminho
+      // saneado (ver trackPageView em App.tsx/analytics.ts), sem query string nem tokens. O
+      // pageview automático do GA enviaria a URL bruta da página, inclusive em rotas com token
+      // (ex: /convite/:clinica/:token, /verificar-documento/:token).
+      gtag('config', 'G-QFFJ7Y25ML', { send_page_view: false });
       gtag('set', {
         anonymize_ip: true,
         restricted_data_processing: true

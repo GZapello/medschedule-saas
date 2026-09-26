@@ -513,7 +513,14 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
                     </div>
                   </div>
 
-                  <div className="pt-4 flex gap-3">
+                  <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+                    Ao confirmar, seus dados serão compartilhados com a clínica para viabilizar o atendimento, conforme a{' '}
+                    <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-300">
+                      Política de Privacidade
+                    </a>.
+                  </p>
+
+                  <div className="pt-2 flex gap-3">
                     <button
                       type="button"
                       onClick={() => setStep(1)}

@@ -2,7 +2,7 @@
 
 > **Isto não é parecer jurídico.** É um levantamento técnico do que o código faz hoje, com a evidência em `arquivo:linha`, comparado com os pontos da LGPD (Lei 13.709/2018) mais relevantes para um SaaS de saúde. Antes de tratar dados reais de pacientes em escala, revise com um advogado especializado em proteção de dados.
 >
-> Levantamento feito em 24/09/2026 sobre o código da branch `melhorias-infra`.
+> Levantamento feito em 24/09/2026 sobre o código da branch `melhorias-infra`. Atualizado em 26/09/2026: itens marcados "✅ (26/09)" foram resolvidos e já estão na `main`; o restante da tabela permanece como no levantamento original.
 
 ## Contexto que muda tudo
 
@@ -30,21 +30,12 @@
 | # | Item | Estado | Evidência / observação | Prioridade |
 |---|---|---|---|---|
 | 1.1 | Encarregado (DPO) com **identidade e contato públicos** (art. 41, §1º) | ⚠️ | Há só os e-mails `privacidade@` e `dpo@zemda.com.br` (`PrivacyPolicyView.tsx:280-286`), sem o nome do encarregado. Esses e-mails existem e alguém lê? | P1 |
-| 1.2 | Política de privacidade **fiel ao que o sistema faz** | ❌ | Ela afirma quatro coisas que o sistema não faz. Veja o quadro abaixo desta tabela | **P0** |
-| 1.3 | **Lista de suboperadores** na política e no contrato | ❌ | A política cita só hospedagem, Asaas e GA4 (`PrivacyPolicyView.tsx:198-203`). Faltam Google Gemini, Google (voz no navegador), Resend, Cloudflare R2, Meta/WhatsApp e Railway | **P0** |
+| 1.2 | Política de privacidade **fiel ao que o sistema faz** | ✅ (26/09) | As quatro afirmações falsas foram corrigidas (`PrivacyPolicyView.tsx`): "ponta a ponta" e "logs imutáveis" removidos, a descrição da IA agora reflete a minimização de identificadores implementada (item 3.1), e "backups automatizados" passou a ser verdade (item 5.4) | — |
+| 1.3 | **Lista de suboperadores** na política e no contrato | ✅ (26/09) | `PrivacyPolicyView.tsx`, seção 5, agora lista Railway, Cloudflare R2, Google Gemini, Resend, Meta/WhatsApp, além de Asaas e GA4 | — |
 | 1.4 | **Contrato de operador (DPA)** entre o Zemda e cada clínica: instruções, sigilo, suboperadores, devolução/eliminação no fim do contrato, cooperação em incidentes | ❌ | Não há documento específico. Não verifiquei se os Termos de Uso cobrem isso | P1 |
 | 1.5 | **Registro das operações de tratamento** (ROPA, art. 37) | ❌ | Não existe. Os dados de saúde estão espalhados em cerca de 150 tabelas | P1 |
 | 1.6 | **Relatório de Impacto (RIPD)**, recomendado para dados sensíveis em larga escala (art. 38) | ❌ | Não existe | P2 |
-| 1.7 | **Plano de resposta a incidentes**: comunicar ANPD e titulares em até **3 dias úteis** (art. 48; Resolução CD/ANPD nº 15/2024) | ❌ | Nenhum documento ou procedimento. Veja a seção 9 | **P0** |
-
-**Quadro 1.2: afirmações da política de privacidade que não correspondem ao sistema**
-
-| O que a política afirma | Onde | O que acontece de fato |
-|---|---|---|
-| "Criptografia de ponta a ponta" | `PrivacyPolicyView.tsx:200` | Não existe. Há TLS no transporte, e o banco é um arquivo em texto claro |
-| "Backups programados automatizados" | `PrivacyPolicyView.tsx:230` | Não existiam. Passam a existir quando a branch for para produção (`docs/BACKUP.md`) |
-| "Logs de auditoria imutáveis" de **todos** os acessos a prontuários | `PrivacyPolicyView.tsx:142` | Muitas leituras não são registradas (seção 6), e o log pode ser apagado |
-| IA faz "processamento efêmero para formatação de texto" | `PrivacyPolicyView.tsx:145` | O chat envia o prontuário inteiro, com CPF (seção 3) |
+| 1.7 | **Plano de resposta a incidentes**: comunicar ANPD e titulares em até **3 dias úteis** (art. 48; Resolução CD/ANPD nº 15/2024) | ✅ (26/09) | Roteiro escrito em `docs/INCIDENTE.md` | — |
 
 ## 2. Bases legais e consentimento
 
@@ -52,17 +43,17 @@
 |---|---|---|---|---|
 | 2.1 | Registro do aceite de termos e política, com versão, data, IP e user-agent | ✅ | `legal_acceptances` (`schema.sql:615-628`), gravado em `auth.controller.ts:536-548`. Novo aceite é pedido quando a versão muda (`CURRENT_TERMS_VERSION`, `database.ts:20`) | — |
 | 2.2 | Base legal para dados de saúde: tutela da saúde (art. 11, II, "f") | ⚠️ | É a base adequada para o atendimento. Deve estar explícita na política e no DPA | P1 |
-| 2.3 | **Crianças: autorização do responsável** (art. 14) | ❌ | `guardians.authorization_signed` é **sempre gravado como 1**: `g.authorizationSigned ? 1 : 1` (`patient.controller.ts:225`), valor fixo no update (`:357`) e no agendamento público. O sistema registra uma autorização que nunca foi coletada. Mesmo que a base seja a tutela da saúde (Enunciado CD/ANPD nº 1/2023), um registro inverídico é um problema | **P0** |
+| 2.3 | **Crianças: autorização do responsável** (art. 14) | ✅ (26/09) | Corrigido: só grava autorização quando de fato informada; edição preserva o valor já registrado por responsável; agendamento público grava como pendente. **Ressalva:** todo responsável cadastrado antes de 26/09 continua com o valor antigo (1); recomenda-se pedir reconfirmação às clínicas — decisão do dono do produto, não alterada automaticamente | — |
 | 2.4 | TCLE / consentimentos clínicos com assinatura, CPF, IP e hash | ✅ | `patient_consents` (`patient-clinical.controller.ts:803-830`) | — |
 | 2.5 | **Revogação** de consentimento (art. 8º, §5º) | ❌ | Não há rota para revogar `patient_consents` (`routes/index.ts:710-711`) | P1 |
-| 2.6 | Cookies e analytics só com consentimento | ⚠️ | O Meta Pixel está bem restrito (consentimento, páginas públicas, sem query string; `metaPixel.ts`). O GA4 usa Consent Mode com tudo `denied` por padrão, mas o `gtag.js` carrega em **todas** as páginas, inclusive no app logado, e `gtag('config', …)` roda sem `send_page_view: false` (`frontend/index.html:39-42`). A visualização automática de página envia a URL completa, e há rotas com token no caminho (`/convite/:clinica/:token`, `/verificar-documento/:token`) | P1 |
-| 2.7 | Aviso de privacidade no **agendamento público** (paciente sem conta) | ❌ | `POST /v1/public/appointments` coleta nome, telefone e e-mail sem apresentar aviso ou link da política | P1 |
+| 2.6 | Cookies e analytics só com consentimento | ✅ (26/09) | `frontend/index.html` agora usa `send_page_view: false`; o app já enviava `page_view` manualmente com caminho saneado (`trackPageView`), então o pageview automático (que enviava a URL bruta, inclusive com token) foi desligado. O gtag.js ainda carrega em toda página, mas sem consentimento nada é enviado (Consent Mode) | — |
+| 2.7 | Aviso de privacidade no **agendamento público** (paciente sem conta) | ✅ (26/09) | `PublicBookingView.tsx` e `PublicProfessionalBookingView.tsx` agora mostram um aviso com link para `/privacidade` antes do botão de confirmação | — |
 
 ## 3. IA, transferência internacional e suboperadores
 
 | # | Item | Estado | Evidência / observação | Prioridade |
 |---|---|---|---|---|
-| 3.1 | **Minimização no envio ao Google Gemini** | ❌ | O chat de IA monta o contexto com **nome, telefone, e-mail, CPF**, contato de emergência, observações administrativas, alergias, medicamentos, até 10 evoluções, exames e anamneses completas (`ai.controller.ts:1358-1440`). Resumos e relatórios mandam o nome do paciente (`gemini.service.ts:250, 298`). Não há pseudonimização. **Primeiro passo simples:** tirar CPF, telefone, e-mail e contato de emergência do contexto, porque a IA não precisa deles, e trocar o nome por "Paciente" | **P0** |
+| 3.1 | **Minimização no envio ao Google Gemini** | ✅ (26/09) | CPF, telefone, e-mail, contato de emergência e observações administrativas não são mais enviados; o nome vira "Paciente"/"Aluno(a)" ou um marcador reinserido localmente na resposta. Cobertura: chat clínico, resumo de consulta, organização de evolução, relatórios de TO/Fono e assistente do ZemdaPersonal. Teste automatizado (`test-ai-context-minimization.cjs`) intercepta as chamadas reais ao Gemini e confirma a ausência desses dados | — |
 | 3.2 | Chave do Gemini em **plano pago** | ❓ | No plano gratuito da API, os termos do Google permitem usar o conteúdo para melhorar produtos, inclusive com revisão humana. **Confirme no console do Google** que a conta é paga | **P0** (verificar) |
 | 3.3 | **Opção por clínica** para ligar/desligar a IA, com aviso ao profissional | ❌ | Não existe (busca por `ai_enabled`, `allow_ai`, `ai_consent` sem resultado). Hoje só o RBAC limita o acesso | P1 |
 | 3.4 | Ditado por voz (`webkitSpeechRecognition`) | ⚠️ | No Chrome, o áudio da consulta é processado nos servidores do Google (`frontend/src/hooks/useSpeechRecognition.ts`). Nada informa isso ao usuário | P1 |
@@ -88,12 +79,12 @@
 | 5.1 | Segredos fora do código e sem valores padrão | ✅ | Corrigido em `e77ee71`. O servidor não sobe sem `JWT_SECRET` e `ZEMDA_FILES_SIGNING_SECRET`. O backdoor `admin.middleware.ts` foi removido | — |
 | 5.2 | Contas padrão com senha conhecida | ✅ | Só existem com `SEED_DEMO_DATA=true` (`seed.ts`). Nunca ligar em produção | — |
 | 5.3 | CORS restrito, cabeçalhos de segurança (helmet), rate limiting | ✅ | `server.ts`. O login tem limite de 20 tentativas a cada 15 min por IP | — |
-| 5.4 | **Backup criptografado e testado** | ✅* | *Nesta branch (`docs/BACKUP.md`). Só vale depois do deploy e de configurar `BACKUP_ENCRYPTION_KEY` + R2 | **P0** (ativar) |
-| 5.5 | **Monitoramento de erros** | ✅* | *Nesta branch (`docs/MONITORAMENTO.md`). Requer `ERROR_ALERT_EMAILS` | **P0** (ativar) |
+| 5.4 | **Backup criptografado e testado** | ✅ código / ⚠️ produção | Em produção desde 26/09 (`docs/BACKUP.md`), mas só protege de verdade depois de configurar `BACKUP_ENCRYPTION_KEY` no Railway (ainda pendente) | **P0** (configurar no Railway) |
+| 5.5 | **Monitoramento de erros** | ✅ código / ⚠️ produção | Em produção desde 26/09 (`docs/MONITORAMENTO.md`), mas só avisa alguém depois de configurar `ERROR_ALERT_EMAILS` no Railway (ainda pendente) | **P0** (configurar no Railway) |
 | 5.6 | Política de senha | ❌ | Mínimo de **6 caracteres**, sem mais regras (`auth.controller.ts:746, 993, 1257`; `free-trial.controller.ts:403`). Para quem acessa prontuários, recomenda-se **mínimo de 10–12 caracteres** e checagem contra senhas vazadas | P1 |
 | 5.7 | **Segundo fator (2FA)** para administradores e profissionais | ❌ | Não existe | P1 |
 | 5.8 | Trocar ou redefinir a senha **derruba as outras sessões** | ❌ | `session_version` é por clínica e só muda quando a clínica é bloqueada (`tenant.controller.ts:701`). Um token roubado continua válido por até 7 dias | P1 |
-| 5.9 | **Controle de acesso a arquivos** (anexos clínicos) | ❌ | O download e a exclusão de anexos não verificam o perfil: a recepção consegue baixar e **apagar de vez** exames e fotos clínicas, sem auditoria (`file.controller.ts:694-730`) | **P0** |
+| 5.9 | **Controle de acesso a arquivos** (anexos clínicos) | ✅ (26/09) | Anexos clínicos (com `patient_id` ou sob `clinics/{id}/patients/...`) agora exigem `clinic_admin` ou `professional`; recepção/secretaria/financeiro/assistente recebem 403. Visualização, envio e exclusão de anexos clínicos passaram a gerar auditoria (`file.controller.ts`) | — |
 | 5.10 | JWT fora da URL | ⚠️ | A impressão do prontuário abre `?token=<JWT>` (`ClinicalRecordsView.tsx:180-182`), que fica no histórico do navegador. O log do servidor **deixou de gravar query string** nesta branch (`server.ts`) | P1 |
 | 5.11 | Token no navegador e CSP | ⚠️ | O JWT fica em `localStorage` (`AuthContext.tsx:99`), e o CSP está desligado (`server.ts`). Um XSS teria acesso total à sessão | P2 |
 | 5.12 | Rascunhos clínicos no navegador apagados no logout | ❌ | O autosave grava rascunhos de prontuário em `localStorage` (`useClinicalAutosave.ts:156`, `PsychologyWorkspace.tsx:260`), e o logout não limpa (`AuthContext.tsx:126-130`). Isso é um risco em computador compartilhado de clínica | P1 |
@@ -133,33 +124,18 @@
 | # | Item | Estado | Evidência / observação | Prioridade |
 |---|---|---|---|---|
 | 9.1 | Detecção | ⚠️ | Os alertas de erro por e-mail entram nesta branch. Não há alerta de comportamento suspeito, como muitos downloads ou acessos fora do padrão | P2 |
-| 9.2 | **Plano de resposta escrito** | ❌ | Veja o roteiro mínimo abaixo | **P0** |
-| 9.3 | Capacidade de **restaurar** após incidente (ransomware, exclusão) | ✅* | *Com o backup ativado (5.4) e testado mensalmente | **P0** (ativar) |
-
-**Roteiro mínimo de resposta a incidente.** Transforme isto num documento de uma página:
-
-1. **Conter:** trocar os segredos afetados (`JWT_SECRET` derruba todas as sessões), bloquear contas e revogar chaves de API.
-2. **Avaliar:** o que vazou, de quais clínicas e titulares, desde quando. A trilha de auditoria e os logs do Railway ajudam.
-3. **Comunicar:**
-   - O Zemda, como operador, avisa **as clínicas afetadas** imediatamente.
-   - A controladora comunica **a ANPD e os titulares em até 3 dias úteis** quando houver risco ou dano relevante (Resolução CD/ANPD nº 15/2024). Dados de saúde e de crianças costumam se enquadrar nisso.
-4. **Registrar** o incidente, mesmo se não for comunicado: a norma exige manter registro.
-5. **Corrigir** a causa raiz e revisar este checklist.
+| 9.2 | **Plano de resposta escrito** | ✅ (26/09) | `docs/INCIDENTE.md`: contenção, avaliação, comunicação (Zemda→clínica e clínica→ANPD/titulares em até 3 dias úteis), registro e correção | — |
+| 9.3 | Capacidade de **restaurar** após incidente (ransomware, exclusão) | ✅ código / ⚠️ produção | Depende de `BACKUP_ENCRYPTION_KEY` estar configurada no Railway (item 5.4) e de testar a restauração mensalmente | **P0** (configurar no Railway) |
 
 ---
 
 ## Ordem sugerida de ataque
 
-1. **Esta semana (P0 rápidos, sem desenvolvimento pesado):**
-   - ativar backup e alertas em produção (5.4, 5.5, 9.3);
+1. **Ainda pendente, sem desenvolvimento (só configuração/verificação):**
+   - configurar `BACKUP_ENCRYPTION_KEY` e `ERROR_ALERT_EMAILS` no Railway (5.4, 5.5, 9.3);
    - confirmar que o Gemini é plano pago (3.2);
-   - corrigir a política de privacidade: tirar "ponta a ponta", "imutáveis" e "efêmero" e listar os suboperadores (1.2, 1.3);
-   - escrever o plano de incidente (1.7, 9.2).
-2. **P0 de código:**
-   - tirar CPF, telefone, e-mail e contato de emergência do contexto da IA e pseudonimizar o nome (3.1);
-   - parar de gravar `authorization_signed = 1` sem coleta real (2.3);
-   - exigir perfil clínico para baixar e apagar anexos clínicos, com auditoria (5.9).
-3. **P1:**
+   - decidir o que fazer com os `guardians.authorization_signed = 1` cadastrados antes de 26/09 (2.3).
+2. **P1 (código):**
    - exportação de dados por paciente e por clínica (4.1);
    - bloqueio/anonimização de paciente respeitando os 20 anos (4.3);
    - expurgo de clínica que preserve auditoria e aceites e entregue os dados antes (4.4);
@@ -167,13 +143,23 @@
    - derrubar sessões ao trocar a senha (5.8);
    - auditoria de leituras e falhas de login (6.2, 6.3);
    - DPA com as clínicas (1.4) e ROPA (1.5).
-4. **P2:** o restante, como melhoria contínua.
+3. **P2:** o restante, como melhoria contínua.
 
-## Já resolvido nas últimas mudanças
+## Já resolvido
 
+**Antes de 24/09:** nada — este era o primeiro levantamento.
+
+**24–26/09/2026 (já na `main`):**
 - Segredos hardcoded e backdoor removidos; o servidor falha se os segredos não estiverem configurados.
 - Contas com senha padrão não são mais criadas em produção.
 - CORS restrito, helmet e rate limiting.
-- Backup automático criptografado com cópia fora do Railway (nesta branch).
-- Alerta de erros de produção por e-mail, sem dados pessoais (nesta branch).
-- Query string (com `?token=`) fora dos logs do servidor (nesta branch).
+- Backup automático criptografado com cópia fora do Railway (código pronto; falta configurar a chave no Railway).
+- Alerta de erros de produção por e-mail, sem dados pessoais (código pronto; falta configurar os e-mails no Railway).
+- Query string (com `?token=`) fora dos logs do servidor.
+- Política de privacidade corrigida (sem afirmações falsas) e com a lista completa de suboperadores.
+- Plano de resposta a incidentes escrito (`docs/INCIDENTE.md`).
+- Autorização do responsável por menores só é gravada quando realmente informada.
+- Dados enviados à IA (Google Gemini) minimizados: CPF, telefone, e-mail, contato de emergência e observações administrativas removidos; nome trocado por marcador neutro.
+- Acesso a anexos clínicos restrito a gestor/profissional, com auditoria.
+- GA4 sem pageview automático (a aplicação já envia manualmente, com caminho saneado).
+- Aviso de privacidade no agendamento público, com link para a política.

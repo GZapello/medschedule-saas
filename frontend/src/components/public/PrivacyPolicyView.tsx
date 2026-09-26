@@ -139,10 +139,10 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
                   ✓ <strong>Isolamento Multi-Tenant Estrito:</strong> Cada clínica possui segregação lógica intransponível no banco de dados. Os dados clínicos de uma clínica jamais são acessados por usuários de outros estabelecimentos.
                 </p>
                 <p>
-                  ✓ <strong>Sigilo e Auditabilidade Permanente:</strong> Todos os acessos a prontuários, evoluções e anamneses geram logs de auditoria imutáveis com carimbo de data, hora e identificação do usuário profissional responsável, atendendo às determinações dos conselhos federais (CFM, COFFITO, CFO, CFP, CFN, CFFa).
+                  ✓ <strong>Sigilo e Auditabilidade:</strong> As principais ações e acessos a prontuários, evoluções e anamneses geram registros de auditoria com carimbo de data, hora e identificação do usuário profissional responsável, atendendo às determinações dos conselhos federais (CFM, COFFITO, CFO, CFP, CFN, CFFa). Estamos ampliando a cobertura desses registros para incluir progressivamente todas as leituras de dados sensíveis.
                 </p>
                 <p>
-                  ✓ <strong>Não Utilização para Treinamento de Modelos Públicos:</strong> Informações de pacientes, prontuários ou dados clínicos <strong>nunca são compartilhados com redes sociais, brokers de dados nem utilizados para treinar modelos abertos de inteligência artificial</strong>. O recurso de IA Zemda realiza processamento efêmero para formatação de texto apenas quando solicitado expressamente pelo profissional, sem retenção permanente externa.
+                  ✓ <strong>Não Utilização para Treinamento de Modelos Públicos:</strong> Informações de pacientes, prontuários ou dados clínicos <strong>nunca são compartilhados com redes sociais nem com brokers de dados</strong>. Quando o profissional utiliza o assistente de IA Zemda (organização de evolução clínica, resumos de consulta, geração de relatórios), identificadores diretos do paciente — nome, CPF, telefone, e-mail, contato de emergência e observações administrativas — são removidos antes do envio ao provedor de IA (Google Gemini), que processa apenas o conteúdo clínico necessário para a tarefa solicitada, sem retenção para treinamento de modelos.
                 </p>
               </div>
             </section>
@@ -195,11 +195,15 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
               <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
                 <span className="text-teal-600 font-mono">5.</span> Compartilhamento com Fornecedores Essenciais
               </h2>
-              <p>O Zemda não comercializa dados pessoais. O compartilhamento restringe-se a operadores e prestadores indispensáveis à prestação do serviço:</p>
+              <p>O Zemda não comercializa dados pessoais. O compartilhamento restringe-se a operadores e prestadores indispensáveis à prestação do serviço, todos localizados fora do Brasil e sujeitos a mecanismos de transferência internacional previstos na LGPD:</p>
               <ul className="list-disc pl-6 space-y-1 text-slate-600 text-xs">
-                <li><strong>Provedores de Hospedagem e Nuvem:</strong> Servidores protegidos com criptografia de ponta a ponta e redundância;</li>
-                <li><strong>Asaas Instituição de Pagamento:</strong> Processamento seguro de assinaturas e faturas bancárias;</li>
-                <li><strong>Google Analytics (GA4):</strong> Métricas estatísticas totalmente anônimas, ativadas apenas com consentimento prévio do usuário e sem nenhum dado clínico;</li>
+                <li><strong>Railway (Hospedagem):</strong> Infraestrutura de servidor da aplicação, com comunicação criptografada via TLS/HTTPS;</li>
+                <li><strong>Cloudflare R2:</strong> Armazenamento de arquivos e imagens (exames, fotos de avaliação, documentos), com URLs de acesso temporárias e assinadas;</li>
+                <li><strong>Google Gemini (Inteligência Artificial):</strong> Processa conteúdo clínico submetido pelo profissional ao assistente de IA, com identificadores diretos do paciente removidos previamente (ver seção 2);</li>
+                <li><strong>Resend:</strong> Envio de e-mails transacionais (verificação de cadastro, notificações, recuperação de senha);</li>
+                <li><strong>Meta (WhatsApp Cloud API):</strong> Envio de lembretes de consulta via WhatsApp, quando habilitado pela clínica;</li>
+                <li><strong>Asaas Instituição de Pagamento:</strong> Processamento seguro de assinaturas e faturas bancárias dos gestores de clínica; não recebe dados de pacientes;</li>
+                <li><strong>Google Analytics (GA4):</strong> Métricas estatísticas de uso, ativadas apenas com consentimento prévio do usuário e sem dado clínico;</li>
                 <li><strong>Autoridades Públicas:</strong> Exclusivamente mediante ordem judicial fundamentada ou estrita determinação legal.</li>
               </ul>
             </section>
@@ -227,7 +231,7 @@ export const PrivacyPolicyView: React.FC<PrivacyPolicyViewProps> = ({
                 <li>Criptografia de comunicações via TLS/HTTPS em 100% das conexões web e desktop;</li>
                 <li>Armazenamento de senhas sob hash criptográfico robusto irreversível;</li>
                 <li>Isolamento de privilégios de acesso por papéis (RBAC);</li>
-                <li>Backups programados automatizados e registros detalhados de auditoria.</li>
+                <li>Backups automatizados, criptografados e armazenados fora do servidor principal, e registros de auditoria das principais ações realizadas na plataforma.</li>
               </ul>
             </section>
 
