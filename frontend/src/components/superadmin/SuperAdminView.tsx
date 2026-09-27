@@ -37,7 +37,28 @@ export const SuperAdminView: React.FC = () => {
   const { showToast } = useToast();
 
   // Navegação Principal do SuperAdmin
-  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory'>('tenants');
+  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory'>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const s = params.get('section');
+      if (s && ['tenants', 'professions', 'categories', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory'].includes(s)) {
+        return s as any;
+      }
+    } catch {}
+    return 'tenants';
+  });
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const params = new URLSearchParams(window.location.search);
+      const s = params.get('section');
+      if (s && ['tenants', 'professions', 'categories', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory'].includes(s)) {
+        setMainSection(s as any);
+      }
+    };
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
+  }, []);
 
   // Clínicas
   const [metrics, setMetrics] = useState<any>(null);

@@ -1006,6 +1006,25 @@ export function initializeDatabase(): void {
       CREATE INDEX IF NOT EXISTS idx_user_onboarding_tenant ON user_onboarding (tenant_id);
     `);
 
+    // Tabela de Notificações Administrativas do Sistema ao SuperAdmin
+    rawDb.exec(`
+      CREATE TABLE IF NOT EXISTS admin_notification_logs (
+        id TEXT PRIMARY KEY,
+        notification_type TEXT NOT NULL CHECK(notification_type IN ('NEW_USER', 'TRIAL_STARTED', 'SUPPORT_TICKET_CREATED')),
+        recipient TEXT NOT NULL,
+        related_entity_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('PENDING', 'SENT', 'FAILED', 'SKIPPED_SANDBOX', 'SKIPPED_DUPLICATE', 'SKIPPED_NO_PROVIDER')),
+        provider_message_id TEXT,
+        error TEXT,
+        sent_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_notif_unique 
+        ON admin_notification_logs (notification_type, related_entity_id);
+      CREATE INDEX IF NOT EXISTS idx_admin_notif_type_created 
+        ON admin_notification_logs (notification_type, created_at);
+    `);
+
     // Assegura que a lista detalhada de profissões de saúde e administração exista no banco
     const allDetailedProfessions = [
       // Saúde

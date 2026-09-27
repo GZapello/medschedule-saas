@@ -67,6 +67,13 @@ export const SupportTicketsView: React.FC = () => {
 
   useEffect(() => {
     fetchTickets();
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlTicketId = params.get('ticketId');
+      if (urlTicketId) {
+        loadTicketDetails(urlTicketId);
+      }
+    } catch {}
   }, [filterStatus, filterPriority]);
 
   const loadTicketDetails = async (ticketId: string) => {

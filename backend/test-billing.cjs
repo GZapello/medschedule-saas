@@ -5,6 +5,7 @@ process.env.DATABASE_PATH=path.join(root,'test.sqlite');
 process.env.ASAAS_ENV='sandbox';process.env.ASAAS_API_URL='https://api-sandbox.asaas.com/v3';
 process.env.ASAAS_API_KEY='$aact_hmlg_test_only';process.env.ASAAS_WEBHOOK_TOKEN='local-test-webhook-token-not-a-secret-12345';process.env.APP_URL='https://zemda.test';
 process.env.EMAIL_OTP_SECRET='local-test-otp-secret-must-be-long-enough-12345';
+process.env.JWT_SECRET='local-test-jwt-secret-must-be-long-enough-12345';
 const jwt=require('jsonwebtoken');
 const {db,initializeDatabase}=require('./dist/config/database');initializeDatabase();initializeDatabase();
 const {generateToken}=require('./dist/utils/jwt');

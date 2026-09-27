@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { EmailService } from '../services/email.service';
+import { AdminNotificationService } from '../services/admin-notification.service';
 import { buildZemdaEmailLayout } from '../services/email-template.service';
 
 function buildTicketMessageEmail({
@@ -236,47 +237,27 @@ export class SupportController {
 
       logAudit(req, 'CREATE_SUPPORT_TICKET', 'support_tickets', ticketId, { title, priority });
 
-      // Notificação imediata por e-mail para a equipe de suporte
+      // Notificação administrativa automática por e-mail para o SuperAdmin
       try {
-        const superadmin = db.prepare("SELECT email FROM users WHERE role = 'superadmin' LIMIT 1").get() as any;
-        const adminEmail = superadmin?.email || process.env.SUPPORT_EMAIL || 'suporte@zemda.com.br';
-        if (adminEmail) {
-          const tenant = tenantId ? db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId) as any : null;
-          const clinicName = tenant?.name || 'Clínica Geral';
-          const roleLabels: Record<string, string> = {
-            superadmin: 'SuperAdmin',
-            clinic_admin: 'Administrador da Clínica',
-            professional: 'Profissional de Saúde',
-            receptionist: 'Recepcionista',
-            patient: 'Paciente / Aluno'
-          };
-          const senderRoleLabel = roleLabels[user.role] || user.role || 'Usuário';
-          const formattedDate = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-          const appBaseUrl = process.env.FRONTEND_URL || 'https://app.zemda.com.br';
-          const ticketDirectUrl = `${appBaseUrl}/?view=support&ticketId=${ticketId}`;
-          const snippet = description.trim().length > 180 ? `${description.trim().slice(0, 180)}...` : description.trim();
+        const tenant = tenantId ? db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId) as any : null;
+        const clinicName = tenant?.name || 'Clínica Geral';
 
-          const emailHtml = buildTicketMessageEmail({
-            ticketId,
-            clinicName,
-            senderName: user.name || 'Usuário',
-            senderRoleLabel,
-            title: title.trim(),
-            snippet,
-            formattedDate,
-            ticketDirectUrl,
-            recipientName: 'Equipe de Suporte',
-            isReplyFromSupport: false
-          });
-
-          EmailService.sendCustomEmail(
-            adminEmail,
-            `[Suporte] Novo chamado #${ticketId}: ${title.trim()}`,
-            emailHtml
-          ).catch(e => console.error('[SupportEmail] Erro ao notificar novo chamado:', e));
-        }
+        void AdminNotificationService.notifySupportTicketCreated({
+          ticketId,
+          title: title.trim(),
+          category,
+          priority,
+          userName: user.name || 'Usuário',
+          clinicName,
+          userEmail: user.email || (req as any).userEmail,
+          createdAt: new Date(),
+          description: description.trim(),
+          tenantId,
+          userId: user.userId,
+          isSandboxSession: (req as any).isSandboxSession
+        }).catch(e => console.error('[SupportController.create] Erro ao notificar SuperAdmin de novo chamado:', e));
       } catch (e) {
-        console.error('[SupportEmail] Erro no disparo de novo chamado:', e);
+        console.error('[SupportController.create] Erro no disparo de notificação de chamado:', e);
       }
 
       res.status(201).json({

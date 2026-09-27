@@ -7,6 +7,7 @@ import { generateToken } from '../utils/jwt';
 import { logAudit } from '../middlewares/audit.middleware';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { ensureDefaultClinicService } from '../services/default-service.service';
+import { AdminNotificationService } from '../services/admin-notification.service';
 
 const VALID_PERIODS: Record<number, string> = {
   7: '7 dias',
@@ -691,6 +692,17 @@ export class FreeTrialController {
         durationDays: result.durationDays,
         trialEndAt: result.trialEndAt
       });
+
+      void AdminNotificationService.notifyNewUser({
+        userId: result.user.id,
+        name: result.user.name,
+        email: result.user.email,
+        professionName: result.user.profession_name,
+        clinicName: result.tenant.name,
+        role: 'clinic_admin',
+        createdAt: new Date(),
+        tenantId: result.tenant.id
+      }).catch(err => console.error('[FreeTrialController.activate] Erro ao notificar SuperAdmin de novo usuário:', err));
 
       res.status(200).json({
         success: true,

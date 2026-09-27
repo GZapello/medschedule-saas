@@ -7,6 +7,7 @@ process.env.DATABASE_PATH = path.resolve(__dirname, 'test_r2_storage.db');
 process.env.JWT_SECRET = 'test-secret-r2-files-123';
 process.env.PORT = '3099';
 process.env.R2_MOCK_STORAGE = 'true'; // Garante ambiente de teste offline confiável
+process.env.ZEMDA_FILES_SIGNING_SECRET = 'test-signing-secret-r2-1234567890';
 
 if (fs.existsSync(process.env.DATABASE_PATH)) {
   fs.unlinkSync(process.env.DATABASE_PATH);

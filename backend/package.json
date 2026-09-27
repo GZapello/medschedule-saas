@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').copyFileSync('src/config/schema.sql', 'dist/config/schema.sql')\"",
     "start": "node dist/server.js",
     "backup": "node dist/scripts/backup-cli.js",
     "test": "npm run build && node run-tests.cjs",

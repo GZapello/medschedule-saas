@@ -11,6 +11,7 @@ import { globalAudit, purgeClinic, purgeTenantCompletely } from '../services/cli
 import { ensureDefaultClinicService } from '../services/default-service.service';
 import { EmailService } from '../services/email.service';
 import { TrialNotificationService } from '../services/trial-notification.service';
+import { AdminNotificationService } from '../services/admin-notification.service';
 import { CapabilityService } from '../services/capability.service';
 import { MedicalTreeService } from '../services/medical-tree.service';
 import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
@@ -531,6 +532,33 @@ export class TenantController {
         zemdaPersonalEnabled: modFlags.zemda_personal_enabled === 1,
         zemdaMedEnabled: modFlags.zemda_med_enabled === 1
       };
+
+      // Disparo automático e não-bloqueante de notificações administrativas ao SuperAdmin
+      void AdminNotificationService.notifyNewUser({
+        userId,
+        name: responsibleName,
+        email: cleanEmail,
+        professionName: resolvedProfName,
+        clinicName,
+        role: 'clinic_admin',
+        createdAt: new Date(),
+        tenantId
+      }).catch(err => console.error('[TenantController.registerPublic] Erro na notificação de novo usuário:', err));
+
+      if (startTrial) {
+        void AdminNotificationService.notifyTrialStarted({
+          tenantId,
+          clinicName,
+          responsibleName,
+          email: cleanEmail,
+          professionName: resolvedProfName,
+          planName: 'Zemda Solo',
+          startedAt: trialStartedAt,
+          endsAt: trialEndsAt,
+          trialDays: 7,
+          userId
+        }).catch(err => console.error('[TenantController.registerPublic] Erro na notificação de início de trial:', err));
+      }
 
       res.status(201).json({
         message: startTrial

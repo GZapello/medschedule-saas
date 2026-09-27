@@ -2,6 +2,7 @@ import { db } from '../config/database';
 import { randomUUID } from 'crypto';
 import { AsaasService, AsaasError } from './asaas.service';
 import { TrialNotificationService } from './trial-notification.service';
+import { AdminNotificationService } from './admin-notification.service';
 
 export const SOLO_TRIAL_DAYS = 7;
 const BILLING_CYCLE = 'MONTHLY';
@@ -380,6 +381,19 @@ export class BillingService {
       if (recipientEmail) {
         void TrialNotificationService.notifyTrialStarted(clinicId, recipientEmail, recipientName, trialEndsAt);
       }
+
+      void AdminNotificationService.notifyTrialStarted({
+        tenantId: clinicId,
+        clinicName: tenant.name,
+        responsibleName: tenant.responsible_name || tenant.name,
+        email: recipientEmail || tenant.email,
+        professionName: tenant.responsible_profession,
+        planName: 'Zemda Solo',
+        startedAt: trialStartedAt,
+        endsAt: trialEndsAt,
+        trialDays: 7,
+        userId
+      }).catch(err => console.error('[BillingService.startSoloTrial] Erro ao notificar SuperAdmin de início de trial:', err));
 
       return {
         success: true,

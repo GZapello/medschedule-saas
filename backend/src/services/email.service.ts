@@ -530,23 +530,38 @@ export class EmailService {
    * Envia e-mail customizado utilizando o layout oficial do Zemda.
    */
   static async sendCustomEmail(to: string | string[], subject: string, html: string): Promise<boolean> {
+    const res = await this.sendEmailRaw({ to, subject, html });
+    return res.success;
+  }
+
+  /**
+   * Despacha e-mail via Resend retornando status detalhado, messageId do provedor e mensagens de erro.
+   */
+  static async sendEmailRaw(options: {
+    to: string | string[];
+    subject: string;
+    html: string;
+  }): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const resend = this.getResendClient();
     if (!resend) {
-      console.warn('[EmailService.sendCustomEmail] Resend API key ausente, envio simulado.');
-      return false;
+      console.warn('[EmailService.sendEmailRaw] Resend API key ausente, envio suprimido.');
+      return { success: false, error: 'RESEND_API_KEY_MISSING' };
     }
     try {
       const result = await resend.emails.send({
         from: this.getFromAddress(),
         replyTo: this.getReplyToAddress(),
-        to,
-        subject,
-        html
+        to: options.to,
+        subject: options.subject,
+        html: options.html
       });
-      return !result.error;
-    } catch (err) {
-      console.error('[EmailService.sendCustomEmail] Erro ao enviar:', err);
-      return false;
+      if (result.error) {
+        return { success: false, error: result.error.message || 'Erro ao enviar via Resend' };
+      }
+      return { success: true, messageId: result.data?.id };
+    } catch (err: any) {
+      console.error('[EmailService.sendEmailRaw] Erro ao enviar:', err);
+      return { success: false, error: err?.message || 'Erro inesperado no envio de e-mail' };
     }
   }
 }

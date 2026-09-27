@@ -11,6 +11,7 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { EmailService } from '../services/email.service';
+import { AdminNotificationService } from '../services/admin-notification.service';
 import { CapabilityService } from '../services/capability.service';
 
 export class AuthController {
@@ -729,6 +730,17 @@ export class AuthController {
         practiceAreas
       });
 
+      void AdminNotificationService.notifyNewUser({
+        userId,
+        name,
+        email: cleanEmail,
+        professionName: professionName || null,
+        clinicName: tenant.name,
+        role: userRole,
+        createdAt: new Date(),
+        tenantId
+      }).catch(err => console.error('[AuthController.register] Erro ao notificar SuperAdmin:', err));
+
       res.status(201).json({
         message: `Solicitação de acesso enviada com sucesso para a clínica "${tenant.name}"! Sua conta foi criada e está com status "Aguardando aprovação". O gestor da clínica analisará seus dados para liberar seu acesso.`,
         status: 'pending',
@@ -1355,6 +1367,17 @@ export class AuthController {
         role: userRole,
         email: cleanEmail
       });
+
+      void AdminNotificationService.notifyNewUser({
+        userId,
+        name: finalName,
+        email: cleanEmail,
+        professionName: canonicalProfessionName,
+        clinicName: inviteData.clinic_name,
+        role: userRole,
+        createdAt: new Date(),
+        tenantId
+      }).catch(err => console.error('[AuthController.completeInviteRegistration] Erro ao notificar SuperAdmin:', err));
 
       res.status(201).json({
         message: `Cadastro concluído com sucesso na clínica ${inviteData.clinic_name}!`,
