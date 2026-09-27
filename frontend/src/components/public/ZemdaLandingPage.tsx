@@ -76,7 +76,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
                   <a className="zl-link" href="#profissoes">Conhecer os módulos <ArrowDown size={16} /></a>
                 </div>
                 <div className="zl-hero-trial-copy">
-                  <p className="zl-hero-trial-highlight">Crie sua conta em 2 minutos e teste os principais recursos do Zemda por 7 dias grátis.</p>
+                  <p className="zl-hero-trial-highlight">Faça sua conta em 2 minutos. Teste o Zemda grátis por 7 dias.</p>
                   <p className="zl-hero-trial-sub">Sem compromisso.</p>
                 </div>
                 <p className="zl-small">Feito para consultórios médicos, profissionais de saúde, equipes e clínicas multiprofissionais.</p>

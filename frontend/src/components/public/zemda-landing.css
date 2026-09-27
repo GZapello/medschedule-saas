@@ -245,3 +245,20 @@
 .zl-feature-trigger[aria-expanded=true] svg { transform:rotate(180deg); }
 .zl-resource-map .zl-feature-explanation { padding:14px 18px 18px; color:var(--zl-muted); font-size:12px; line-height:1.8; border-top:1px solid var(--zl-line); }
 @media (max-width:540px) { .zl-feature-trigger { padding:13px; } .zl-resource-map .zl-feature-explanation { padding:12px 13px 15px; } }
+
+/* Put the trial action within the first mobile screen, directly after the headline. */
+@media (max-width:540px) {
+  .zl-hero { padding-top:16px; }
+  .zl-hero-top { margin-bottom:14px; }
+  .zl-hero-badges { gap:7px; }
+  .zl-hero h1 { font-size:clamp(31px,8.4vw,36px); line-height:1.08; }
+  .zl-hero-grid { gap:16px; }
+  .zl-hero-copy { display:flex; flex-direction:column; }
+  .zl-hero .zl-actions { order:1; gap:8px; }
+  .zl-hero .zl-actions .zl-button { width:100%; min-height:56px; font-size:16px; font-weight:750; box-shadow:0 8px 20px #0f766e2b; }
+  .zl-hero-trial-copy { order:2; margin-top:10px; gap:2px; text-align:center; }
+  .zl-hero-trial-highlight { font-size:15px!important; line-height:1.4!important; }
+  .zl-hero-trial-sub { font-size:12px!important; }
+  .zl-hero-copy>p:first-child { order:3; margin-top:24px; margin-bottom:0; }
+  .zl-hero-copy>.zl-small { order:4; }
+}
