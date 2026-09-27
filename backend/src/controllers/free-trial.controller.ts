@@ -720,4 +720,219 @@ export class FreeTrialController {
       });
     }
   }
+
+  /**
+   * Alteração manual da validade de um teste grátis (Exclusivo SuperAdmin)
+   * Permite prorrogar, reduzir ou definir manualmente o vencimento de um trial individual já existente.
+   */
+  static async updateValidity(req: Request, res: Response): Promise<void> {
+    try {
+      if (req.user?.role !== 'superadmin') {
+        res.status(403).json({ error: 'Acesso negado. Recurso exclusivo do Administrador da Plataforma.' });
+        return;
+      }
+
+      const { id } = req.params;
+      const { newEndsAt } = req.body;
+
+      if (!id || typeof id !== 'string') {
+        res.status(400).json({ error: 'Identificador do teste não fornecido.' });
+        return;
+      }
+
+      if (!newEndsAt || typeof newEndsAt !== 'string') {
+        res.status(400).json({ error: 'A nova data de validade é obrigatória.' });
+        return;
+      }
+
+      const newDate = parseIsoDate(newEndsAt) || new Date(newEndsAt);
+      if (isNaN(newDate.getTime())) {
+        res.status(400).json({ error: 'Formato de data e hora inválido.' });
+        return;
+      }
+
+      const newEndsAtIso = newDate.toISOString();
+      const newEndDay = newEndsAtIso.slice(0, 10);
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const isFuture = newDate.getTime() > now.getTime();
+
+      // Localiza o registro em trial_history ou free_trials
+      const trialHist = db.prepare(`
+        SELECT * FROM trial_history 
+        WHERE id = ? OR tenant_id = ? OR subscription_id = ?
+        ORDER BY created_at DESC LIMIT 1
+      `).get(id, id, id) as any;
+
+      const freeTrial = db.prepare(`
+        SELECT * FROM free_trials 
+        WHERE id = ? OR tenant_id = ?
+        ORDER BY created_at DESC LIMIT 1
+      `).get(id, id) as any;
+
+      if (!trialHist && !freeTrial) {
+        res.status(404).json({ error: 'Registro de teste grátis não localizado.' });
+        return;
+      }
+
+      let tenantId: string | null = null;
+      let previousEndsAt: string | null = null;
+      let clinicName = '';
+
+      if (trialHist) {
+        tenantId = trialHist.tenant_id;
+        previousEndsAt = trialHist.ends_at;
+      }
+      if (freeTrial) {
+        if (!tenantId) tenantId = freeTrial.tenant_id;
+        if (!previousEndsAt) previousEndsAt = freeTrial.trial_end_at;
+        if (!clinicName) clinicName = freeTrial.target_name;
+      }
+
+      if (tenantId) {
+        const tenantRow = db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId) as any;
+        if (tenantRow?.name) {
+          clinicName = tenantRow.name;
+        }
+      }
+
+      // Transação atômica síncrona
+      db.transaction(() => {
+        // 1. Atualiza trial_history
+        if (trialHist) {
+          const nextThStatus = trialHist.status === 'CONVERTED' ? 'CONVERTED' : (isFuture ? 'ACTIVE' : 'EXPIRED');
+          db.prepare(`
+            UPDATE trial_history
+            SET ends_at = ?, status = ?, updated_at = ?
+            WHERE id = ?
+          `).run(newEndsAtIso, nextThStatus, nowIso, trialHist.id);
+        } else if (tenantId) {
+          const anyTh = db.prepare('SELECT id, status FROM trial_history WHERE tenant_id = ?').get(tenantId) as any;
+          if (anyTh) {
+            const nextThStatus = anyTh.status === 'CONVERTED' ? 'CONVERTED' : (isFuture ? 'ACTIVE' : 'EXPIRED');
+            db.prepare(`
+              UPDATE trial_history
+              SET ends_at = ?, status = ?, updated_at = ?
+              WHERE id = ?
+            `).run(newEndsAtIso, nextThStatus, nowIso, anyTh.id);
+          }
+        }
+
+        // 2. Atualiza free_trials
+        if (freeTrial) {
+          const nextFtStatus = isFuture ? (freeTrial.activated_at ? 'active' : freeTrial.status) : 'used';
+          db.prepare(`
+            UPDATE free_trials
+            SET trial_end_at = ?, status = ?, updated_at = ?
+            WHERE id = ?
+          `).run(newEndsAtIso, nextFtStatus, nowIso, freeTrial.id);
+        } else if (tenantId) {
+          const anyFt = db.prepare('SELECT id, activated_at, status FROM free_trials WHERE tenant_id = ?').get(tenantId) as any;
+          if (anyFt) {
+            const nextFtStatus = isFuture ? (anyFt.activated_at ? 'active' : anyFt.status) : 'used';
+            db.prepare(`
+              UPDATE free_trials
+              SET trial_end_at = ?, status = ?, updated_at = ?
+              WHERE id = ?
+            `).run(newEndsAtIso, nextFtStatus, nowIso, anyFt.id);
+          }
+        }
+
+        // 3. Atualiza subscriptions vinculada à clínica
+        if (tenantId) {
+          const sub = db.prepare(`
+            SELECT * FROM subscriptions 
+            WHERE (clinic_id = ? OR tenant_id = ?) AND is_current = 1
+            LIMIT 1
+          `).get(tenantId, tenantId) as any;
+
+          if (sub) {
+            const subStatusUpper = String(sub.status || '').toUpperCase();
+            // Somente altera status se for TRIAL ou TRIAL_EXPIRED (não altera planos pagos ACTIVE)
+            if (['TRIAL', 'TRIAL_EXPIRED'].includes(subStatusUpper)) {
+              const newSubStatus = isFuture ? 'TRIAL' : 'TRIAL_EXPIRED';
+              db.prepare(`
+                UPDATE subscriptions
+                SET trial_ends_at = ?, current_period_end = ?, status = ?, updated_at = ?
+                WHERE id = ?
+              `).run(newEndsAtIso, newEndDay, newSubStatus, nowIso, sub.id);
+
+              // Registro de auditoria na tabela subscription_audit
+              db.prepare(`
+                INSERT INTO subscription_audit (
+                  id, clinic_id, subscription_id, user_id, action, previous_status, next_status, details_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                uuidv4(),
+                tenantId,
+                sub.id,
+                req.user?.userId || null,
+                isFuture ? 'TRIAL_VALIDITY_EXTENDED' : 'TRIAL_VALIDITY_REDUCED',
+                sub.status,
+                newSubStatus,
+                JSON.stringify({
+                  previousEndsAt,
+                  newEndsAt: newEndsAtIso,
+                  superAdminId: req.user?.userId,
+                  superAdminEmail: req.user?.email,
+                  isFuture
+                })
+              );
+            }
+          }
+
+          // Se prorrogado para data futura: garantir que a clínica e o gestor possam operar normalmente
+          if (isFuture) {
+            db.prepare(`
+              UPDATE tenants 
+              SET status = 'active', billing_required = 1, updated_at = ? 
+              WHERE id = ?
+            `).run(nowIso, tenantId);
+
+            db.prepare(`
+              UPDATE users 
+              SET status = 'active', updated_at = ? 
+              WHERE tenant_id = ? AND role = 'clinic_admin' AND status = 'pending'
+            `).run(nowIso, tenantId);
+
+            db.prepare(`
+              UPDATE clinic_users 
+              SET status = 'active' 
+              WHERE tenant_id = ? AND is_manager = 1 AND status = 'pending'
+            `).run(tenantId);
+          }
+        }
+      })();
+
+      // 4. Log de auditoria geral do sistema (SuperAdmin)
+      logAudit(req, 'UPDATE_TRIAL_VALIDITY', 'trials', id, {
+        tenantId,
+        clinicName,
+        previousEndsAt,
+        newEndsAt: newEndsAtIso,
+        isFuture,
+        superAdminId: req.user?.userId,
+        superAdminEmail: req.user?.email,
+        timestamp: nowIso
+      });
+
+      res.status(200).json({
+        success: true,
+        message: isFuture
+          ? 'Validade do teste prorrogada com sucesso!'
+          : 'Validade do teste atualizada com sucesso (teste expirado).',
+        trial: {
+          id,
+          tenantId,
+          clinicName,
+          previousEndsAt,
+          newEndsAt: newEndsAtIso,
+          isFuture
+        }
+      });
+    } catch (err: any) {
+      console.error('[FreeTrialController.updateValidity] Erro ao alterar validade:', err);
+      res.status(500).json({ error: 'Erro interno ao alterar a validade do teste grátis.' });
+    }
+  }
 }

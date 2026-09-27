@@ -198,6 +198,9 @@ api.post('/v1/admin/tenants/:id/delete-permanently', requireRole('superadmin'), 
 // Gestão de Testes Grátis (Exclusivo SuperAdmin SaaS)
 api.post('/v1/admin/free-trials', requireRole('superadmin'), FreeTrialController.create);
 api.get('/v1/admin/free-trials', requireRole('superadmin'), FreeTrialController.listAll);
+api.patch(['/v1/admin/free-trials/:id/validity', '/admin/free-trials/:id/validity'], requireRole('superadmin'), FreeTrialController.updateValidity);
+api.patch(['/v1/admin/trials/:id/validity', '/admin/trials/:id/validity'], requireRole('superadmin'), FreeTrialController.updateValidity);
+api.patch(['/v1/admin/solo-trials/:id/validity', '/admin/solo-trials/:id/validity'], requireRole('superadmin'), FreeTrialController.updateValidity);
 api.delete('/v1/admin/free-trials/:id/revoke', requireRole('superadmin'), FreeTrialController.revoke);
 api.delete('/v1/admin/free-trials/:id', requireRole('superadmin'), FreeTrialController.deletePermanent);
 

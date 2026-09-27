@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -20,6 +21,14 @@ import {
   RefreshCw,
   Trash2
 } from 'lucide-react';
+
+interface ValidityModalData {
+  id: string;
+  clinicName: string;
+  startedAt: string;
+  currentEndsAt: string;
+  type: 'solo' | 'custom';
+}
 
 interface FreeTrialItem {
   id: string;
@@ -133,6 +142,12 @@ export const FreeTrialsAdminView: React.FC = () => {
   // Modal de Exclusão Definitiva
   const [deletingTrial, setDeletingTrial] = useState<FreeTrialItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Modal de Alteração de Validade
+  const [validityModalData, setValidityModalData] = useState<ValidityModalData | null>(null);
+  const [selectedNewEnd, setSelectedNewEnd] = useState<string>('');
+  const [savingValidity, setSavingValidity] = useState(false);
+  const [showPastConfirmModal, setShowPastConfirmModal] = useState(false);
 
   const loadSoloTrials = async () => {
     try {
@@ -277,6 +292,88 @@ export const FreeTrialsAdminView: React.FC = () => {
       });
     } catch {
       return dateStr;
+    }
+  };
+
+  const toDateTimeLocal = (isoStr: string): string => {
+    if (!isoStr) return '';
+    try {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '';
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const y = d.getFullYear();
+      const m = pad(d.getMonth() + 1);
+      const day = pad(d.getDate());
+      const h = pad(d.getHours());
+      const min = pad(d.getMinutes());
+      return `${y}-${m}-${d}T${h}:${min}`;
+    } catch {
+      return '';
+    }
+  };
+
+  const handleOpenValidityModal = (data: ValidityModalData) => {
+    setValidityModalData(data);
+    setShowPastConfirmModal(false);
+    // Se o término atual for futuro, usar como base; se já expirou, usar agora
+    const currentEnd = new Date(data.currentEndsAt);
+    const now = new Date();
+    const base = currentEnd.getTime() > now.getTime() ? currentEnd : now;
+    // Padrão sugerido inicial: +7 dias
+    const initialNewDate = new Date(base.getTime() + 7 * 24 * 60 * 60 * 1000);
+    setSelectedNewEnd(initialNewDate.toISOString());
+  };
+
+  const handleQuickAddDays = (days: number) => {
+    if (!validityModalData) return;
+    setShowPastConfirmModal(false);
+    const currentEnd = new Date(validityModalData.currentEndsAt);
+    const now = new Date();
+    const base = currentEnd.getTime() > now.getTime() ? currentEnd : now;
+    const nextDate = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+    setSelectedNewEnd(nextDate.toISOString());
+  };
+
+  const handleDateTimeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.value) return;
+    const d = new Date(e.target.value);
+    if (!isNaN(d.getTime())) {
+      setSelectedNewEnd(d.toISOString());
+      setShowPastConfirmModal(false);
+    }
+  };
+
+  const handleSaveValidityClick = () => {
+    if (!validityModalData || !selectedNewEnd) return;
+    const isPast = new Date(selectedNewEnd).getTime() <= Date.now();
+    if (isPast && !showPastConfirmModal) {
+      setShowPastConfirmModal(true);
+      return;
+    }
+    void executeSaveValidity();
+  };
+
+  const executeSaveValidity = async () => {
+    if (!validityModalData || !selectedNewEnd) return;
+    try {
+      setSavingValidity(true);
+      await ApiClient.patch(`/v1/admin/trials/${validityModalData.id}/validity`, {
+        newEndsAt: selectedNewEnd
+      });
+
+      showToast('Validade do teste atualizada com sucesso!', 'success');
+      setValidityModalData(null);
+      setShowPastConfirmModal(false);
+
+      // Atualização imediata dos dados na tela e cards de métricas
+      await Promise.all([
+        loadSoloTrials(),
+        loadTrials()
+      ]);
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar validade do teste', 'error');
+    } finally {
+      setSavingValidity(false);
     }
   };
 
@@ -506,7 +603,7 @@ export const FreeTrialsAdminView: React.FC = () => {
                     <th className="py-3 px-4">Término</th>
                     <th className="py-3 px-4 text-center">Dias Restantes</th>
                     <th className="py-3 px-4 text-center">Status</th>
-                    <th className="py-3 px-4 text-right">Contato</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -606,15 +703,33 @@ export const FreeTrialsAdminView: React.FC = () => {
                             )}
                           </td>
 
-                          {/* 7. Contato */}
+                          {/* 7. Ações */}
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <a
-                              href={`mailto:${trial.email}?subject=Acompanhamento%20Zemda%20Solo%20-%20${encodeURIComponent(trial.clinic_name)}`}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-800 rounded-xl transition font-bold text-xs cursor-pointer border border-slate-200"
-                            >
-                              <Mail className="w-3.5 h-3.5" />
-                              Contatar
-                            </a>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenValidityModal({
+                                  id: trial.id,
+                                  clinicName: trial.clinic_name,
+                                  startedAt: trial.started_at,
+                                  currentEndsAt: trial.ends_at,
+                                  type: 'solo'
+                                })}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl transition font-bold text-xs cursor-pointer shadow-xs"
+                                title="Alterar validade do teste"
+                              >
+                                <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                                <span>Alterar validade</span>
+                              </button>
+                              <a
+                                href={`mailto:${trial.email}?subject=Acompanhamento%20Zemda%20Solo%20-%20${encodeURIComponent(trial.clinic_name)}`}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-teal-50 text-slate-700 hover:text-teal-800 rounded-xl transition font-bold text-xs cursor-pointer border border-slate-200"
+                                title="Enviar e-mail de contato"
+                              >
+                                <Mail className="w-3.5 h-3.5" />
+                                <span>Contatar</span>
+                              </a>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -952,13 +1067,32 @@ export const FreeTrialsAdminView: React.FC = () => {
                           )}
 
                           {!isPending && (
-                            <button
-                              onClick={() => handleCopyLink(trial.token)}
-                              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
-                              title="Copiar link original"
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
+                            <>
+                              {trial.trial_end_at && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenValidityModal({
+                                    id: trial.id,
+                                    clinicName: trial.tenant_name || trial.target_name,
+                                    startedAt: trial.activated_at || trial.created_at,
+                                    currentEndsAt: trial.trial_end_at!,
+                                    type: 'custom'
+                                  })}
+                                  className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                                  title="Alterar validade do teste"
+                                >
+                                  <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                                  <span>Alterar validade</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleCopyLink(trial.token)}
+                                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
+                                title="Copiar link original"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
 
                           <button
@@ -1327,6 +1461,190 @@ export const FreeTrialsAdminView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* ========================================================================= */}
+      {/* MODAL: ALTERAR VALIDADE DO TESTE (SUPERADMIN) */}
+      {/* ========================================================================= */}
+      {validityModalData && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/20 rounded-xl border border-amber-500/30 text-amber-400">
+                  <Calendar className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black tracking-tight">ALTERAR VALIDADE DO TESTE</h3>
+                  <p className="text-xs text-slate-400">Prorrogar, reduzir ou definir vencimento manual</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setValidityModalData(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Informações da Clínica */}
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Clínica:</span>
+                  <div className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                    <Building2 className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>{validityModalData.clinicName}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-slate-200/70">
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Início:</span>
+                    <span className="text-xs font-semibold text-slate-700 mt-0.5 block">{formatDate(validityModalData.startedAt)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Término atual:</span>
+                    <span className="text-xs font-semibold text-slate-700 mt-0.5 block">{formatDate(validityModalData.currentEndsAt)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Nova validade */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2">
+                    Nova validade:
+                  </label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {[
+                      { days: 1, label: '+1 dia' },
+                      { days: 3, label: '+3 dias' },
+                      { days: 7, label: '+7 dias' },
+                      { days: 15, label: '+15 dias' },
+                      { days: 30, label: '+30 dias' }
+                    ].map(opt => {
+                      const currentEnd = new Date(validityModalData.currentEndsAt);
+                      const now = new Date();
+                      const base = currentEnd.getTime() > now.getTime() ? currentEnd : now;
+                      const targetDate = new Date(base.getTime() + opt.days * 24 * 60 * 60 * 1000);
+                      const isSelected = selectedNewEnd && Math.abs(new Date(selectedNewEnd).getTime() - targetDate.getTime()) < 2000;
+
+                      return (
+                        <button
+                          key={opt.days}
+                          type="button"
+                          onClick={() => handleQuickAddDays(opt.days)}
+                          className={`py-2 px-1 rounded-xl text-xs font-extrabold border transition-all cursor-pointer flex items-center justify-center ${
+                            isSelected
+                              ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-xs ring-2 ring-amber-400/40'
+                              : 'bg-white hover:bg-amber-50/60 text-slate-700 border-slate-200 hover:border-amber-300'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Selecionar nova data e hora */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                    ou Selecionar nova data e hora:
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={toDateTimeLocal(selectedNewEnd)}
+                    onChange={handleDateTimeInputChange}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Preview antes de confirmar */}
+              {selectedNewEnd && (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Resumo antes de confirmar:
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+                    <div>
+                      <span className="text-xs text-slate-500 block">Novo término:</span>
+                      <span className="text-sm font-extrabold text-slate-900">{formatDate(selectedNewEnd)}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-500 block">Dias restantes:</span>
+                      {new Date(selectedNewEnd).getTime() > Date.now() ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black bg-teal-100 text-teal-800 border border-teal-300">
+                          {Math.ceil((new Date(selectedNewEnd).getTime() - Date.now()) / (24 * 60 * 60 * 1000))} {Math.ceil((new Date(selectedNewEnd).getTime() - Date.now()) / (24 * 60 * 60 * 1000)) === 1 ? 'dia' : 'dias'}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">
+                          0 dias (expiração imediata)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Alerta de confirmação extra se a data for no passado */}
+              {showPastConfirmModal && (
+                <div className="p-3.5 bg-rose-50 border border-rose-300 rounded-2xl text-xs text-rose-900 space-y-2 animate-in fade-in duration-150">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-950">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Esta data fará o teste expirar imediatamente. Deseja continuar?</span>
+                  </div>
+                  <p className="text-[11px] text-rose-800 leading-relaxed">
+                    A data selecionada é anterior ou igual ao momento atual. Se confirmar, o teste grátis será encerrado imediatamente.
+                  </p>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowPastConfirmModal(false)}
+                      className="px-3 py-1.5 bg-white border border-rose-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={executeSaveValidity}
+                      disabled={savingValidity}
+                      className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                    >
+                      {savingValidity ? 'Salvando...' : 'Confirmar Expiração'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Ações */}
+              {!showPastConfirmModal && (
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setValidityModalData(null)}
+                    disabled={savingValidity}
+                    className="px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveValidityClick}
+                    disabled={savingValidity || !selectedNewEnd}
+                    className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer text-xs disabled:opacity-50"
+                  >
+                    {savingValidity ? 'Salvando...' : 'Salvar nova validade'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
