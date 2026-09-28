@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Payment } from '../../types';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { EmptyState } from '../common/EmptyState';
 import {
   DollarSign,
   CheckCircle2,
@@ -173,6 +174,13 @@ export const FinancialView: React.FC = () => {
     }
   };
 
+  const openNewPaymentModal = () => {
+    setPatientId('');
+    setAmount('');
+    setNotes('');
+    setShowModal(true);
+  };
+
   const formatCurrency = (val: number) => {
     return Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
@@ -212,12 +220,7 @@ export const FinancialView: React.FC = () => {
             <Download className="w-4 h-4" /> Exportar CSV
           </button>
           <button
-            onClick={() => {
-              setPatientId('');
-              setAmount('');
-              setNotes('');
-              setShowModal(true);
-            }}
+            onClick={openNewPaymentModal}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
           >
             <Plus className="w-4 h-4" /> Novo Recebimento
@@ -335,8 +338,25 @@ export const FinancialView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {payments.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
-                        Nenhum lançamento encontrado.
+                      <td colSpan={6}>
+                        {statusFilter !== 'all' || methodFilter !== 'all' ? (
+                          <EmptyState
+                            icon={Filter}
+                            title="Nenhum lançamento encontrado"
+                            description="Ajuste os filtros de status ou forma de pagamento para localizar a transação desejada."
+                          />
+                        ) : (
+                          <EmptyState
+                            icon={DollarSign}
+                            title="Nenhum lançamento financeiro ainda"
+                            description="Registre recebimentos por PIX, cartão ou dinheiro para acompanhar o fluxo de caixa da clínica."
+                            action={{
+                              label: 'Novo Recebimento',
+                              onClick: openNewPaymentModal,
+                              icon: Plus
+                            }}
+                          />
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -485,22 +505,22 @@ export const FinancialView: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
+              <div className="space-y-1">
+                <div className="flex justify-center">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-bold text-xs">
                     Caixa Fechado
                   </span>
-                  <h3 className="text-lg font-bold text-slate-900 mt-1">Nenhum caixa aberto no momento</h3>
-                  <p className="text-xs text-slate-500">
-                    Abra uma nova sessão de caixa informando o fundo de troco para iniciar os recebimentos do dia.
-                  </p>
                 </div>
-                <button
-                  onClick={() => setShowOpenCashModal(true)}
-                  className="flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all"
-                >
-                  <Plus className="w-4 h-4" /> Abrir Caixa
-                </button>
+                <EmptyState
+                  icon={Banknote}
+                  title="Nenhum caixa aberto no momento"
+                  description="Abra uma nova sessão de caixa informando o fundo de troco para iniciar os recebimentos do dia."
+                  action={{
+                    label: 'Abrir Caixa',
+                    onClick: () => setShowOpenCashModal(true),
+                    icon: Plus
+                  }}
+                />
               </div>
             )}
           </div>
@@ -525,8 +545,12 @@ export const FinancialView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {cashHistory.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-slate-400">
-                        Nenhum histórico de caixa arquivado.
+                      <td colSpan={6}>
+                        <EmptyState
+                          icon={Clock}
+                          title="Nenhum histórico de caixa arquivado"
+                          description="Fechamentos de caixa anteriores aparecerão aqui, com o resumo de abertura, conferência e eventuais diferenças."
+                        />
                       </td>
                     </tr>
                   ) : (

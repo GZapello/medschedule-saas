@@ -22,6 +22,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { InventoryItem, InventoryMovement } from '../../types';
+import { EmptyState } from '../common/EmptyState';
 
 export const InventoryView: React.FC = () => {
   const { showToast } = useToast();
@@ -394,9 +395,24 @@ export const InventoryView: React.FC = () => {
             {loading ? (
               <div className="p-8 text-center text-xs text-slate-400">Carregando itens de estoque...</div>
             ) : items.length === 0 ? (
-              <div className="p-12 text-center text-xs text-slate-400">
-                Nenhum item de estoque encontrado.
-              </div>
+              search || filterAlert || filterCategory ? (
+                <EmptyState
+                  icon={Search}
+                  title="Nenhum item encontrado"
+                  description="Ajuste o termo de busca ou os filtros de categoria/alerta para encontrar o item desejado."
+                />
+              ) : (
+                <EmptyState
+                  icon={Package}
+                  title="Nenhum item cadastrado no estoque"
+                  description="Cadastre insumos, medicamentos, materiais e equipamentos para controlar entradas, saídas e alertas de validade em tempo real."
+                  action={isClinicAdmin ? {
+                    label: 'Cadastrar Item de Estoque',
+                    onClick: openNewModal,
+                    icon: Plus
+                  } : undefined}
+                />
+              )
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
@@ -517,9 +533,16 @@ export const InventoryView: React.FC = () => {
         /* Tab Histórico de Movimentações */
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           {movements.length === 0 ? (
-            <div className="p-12 text-center text-xs text-slate-400">
-              Nenhuma movimentação registrada no estoque.
-            </div>
+            <EmptyState
+              icon={History}
+              title="Nenhuma movimentação registrada"
+              description="Entradas, saídas e ajustes de estoque aparecem aqui assim que forem lançados a partir de um item cadastrado."
+              action={{
+                label: 'Ver Itens de Estoque',
+                onClick: () => setActiveTab('items'),
+                icon: Package
+              }}
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
