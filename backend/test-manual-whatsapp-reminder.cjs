@@ -19,7 +19,7 @@ async function runTests() {
     buildWhatsAppReminderMessage,
     generateWhatsAppUrl
   } = require('./dist/utils/phone.utils');
-  const { WhatsAppCloudService } = require('./dist/services/whatsapp-cloud.service');
+  const { WhatsAppService } = require('./dist/services/whatsapp.service');
 
   // ==========================================
   // TESTE 1: Limpeza, Validação e Normalização de Telefones
@@ -132,8 +132,8 @@ async function runTests() {
   // ==========================================
   // TESTE 5: Verificação de Status da Integração Central
   // ==========================================
-  console.log('\n[5] Testando WhatsAppCloudService.isConnected()...');
-  const connected = WhatsAppCloudService.isConnected();
+  console.log('\n[5] Testando WhatsAppService.isConnected()...');
+  const connected = WhatsAppService.isConnected();
   console.log(`ℹ️ Status atual da conexão oficial: ${connected ? 'Conectado' : 'Desconectado (utilizando fallback seguro)'}`);
 
   // ==========================================

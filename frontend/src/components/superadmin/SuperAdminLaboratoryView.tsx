@@ -197,7 +197,7 @@ export const SuperAdminLaboratoryView: React.FC = () => {
             <CheckCircle2 className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <div className="text-[11px] font-bold text-slate-900 truncate">WhatsApp Cloud</div>
+            <div className="text-[11px] font-bold text-slate-900 truncate">WhatsApp (Infobip)</div>
             <div className="text-[10px] text-slate-500 font-medium">100% Interceptado</div>
           </div>
         </div>

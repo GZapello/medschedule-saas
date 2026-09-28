@@ -49,7 +49,7 @@ import { PsychopedagogyController } from '../controllers/psychopedagogy.controll
 import { PsychologyController } from '../controllers/psychology.controller';
 import { ExternalTestsController } from '../controllers/external-tests.controller';
 import { EmailVerificationController } from '../controllers/email-verification.controller';
-import { WhatsAppCloudController } from '../controllers/whatsapp-cloud.controller';
+import { InfobipController } from '../controllers/infobip.controller';
 import { ClinicalDraftController } from '../controllers/clinical-draft.controller';
 import { CapabilityController } from '../controllers/capability.controller';
 import { MedicalController } from '../controllers/medical.controller';
@@ -284,7 +284,7 @@ api.put('/v1/appointments/:id/status', requireTenant, AppointmentController.upda
 api.put('/v1/appointments/:id/reschedule', requireTenant, AppointmentController.reschedule);
 api.post('/v1/appointments/:id/whatsapp-reminder', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.sendWhatsAppReminder);
 api.get('/v1/appointments/:id/communications', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), AppointmentController.getCommunications);
-api.get('/v1/whatsapp/status', requireTenant, WhatsAppCloudController.getClientStatus);
+api.get('/v1/whatsapp/status', requireTenant, InfobipController.getClientStatus);
 api.get('/v1/slots/available', requireTenant, SlotController.getAvailableSlots);
 
 // Prontuário & Evolução Clínica (Restrito estritamente a Profissionais e Admins Clínicos - LGPD)
@@ -863,17 +863,10 @@ api.get('/v1/external-tests', requireTenant, ExternalTestsController.list);
 api.post('/v1/external-tests', requireTenant, ExternalTestsController.save);
 api.delete('/v1/external-tests/:id', requireTenant, ExternalTestsController.delete);
 
-// WhatsApp Business Cloud API — Infraestrutura Central Oficial Zemda (Exclusivo SuperAdmin do SaaS)
-api.get('/v1/admin/whatsapp-cloud/config', requireRole('superadmin'), WhatsAppCloudController.getConfig);
-api.get('/v1/admin/whatsapp-cloud/status', requireRole('superadmin'), WhatsAppCloudController.getStatus);
-api.post('/v1/admin/whatsapp-cloud/exchange-code', requireRole('superadmin'), WhatsAppCloudController.exchangeCode);
-api.post('/v1/admin/whatsapp-cloud/disconnect', requireRole('superadmin'), WhatsAppCloudController.disconnect);
-
-// Aliases protegidos: bloqueio estrito para qualquer papel não-superadmin
-api.get('/v1/whatsapp-cloud/config', requireRole('superadmin'), WhatsAppCloudController.getConfig);
-api.get('/v1/whatsapp-cloud/status', requireRole('superadmin'), WhatsAppCloudController.getStatus);
-api.post('/v1/whatsapp-cloud/exchange-code', requireRole('superadmin'), WhatsAppCloudController.exchangeCode);
-api.post('/v1/whatsapp-cloud/disconnect', requireRole('superadmin'), WhatsAppCloudController.disconnect);
+// WhatsApp Infobip API — Infraestrutura Central Oficial Zemda (Exclusivo SuperAdmin do SaaS)
+api.get('/v1/admin/integrations/infobip/status', requireRole('superadmin'), InfobipController.getStatus);
+api.post('/v1/admin/integrations/infobip/test', requireRole('superadmin'), InfobipController.sendTest);
+api.post('/api/admin/integrations/infobip/test', requireRole('superadmin'), InfobipController.sendTest);
 
 // ==========================================
 // CAPABILITIES & RECURSOS PROFISSIONAIS ("Meus Recursos")

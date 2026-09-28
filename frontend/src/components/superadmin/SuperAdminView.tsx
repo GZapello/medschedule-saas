@@ -29,7 +29,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { FreeTrialsAdminView } from './FreeTrialsAdminView';
-import { WhatsAppEmbeddedSignup } from '../settings/WhatsAppEmbeddedSignup';
+import { InfobipWhatsAppAdmin } from './InfobipWhatsAppAdmin';
 import { SuperAdminLaboratoryView } from './SuperAdminLaboratoryView';
 
 export const SuperAdminView: React.FC = () => {
@@ -518,7 +518,7 @@ export const SuperAdminView: React.FC = () => {
             }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            WhatsApp Central
+            WhatsApp (Infobip)
           </button>
 
           <button
@@ -541,7 +541,7 @@ export const SuperAdminView: React.FC = () => {
       {mainSection === 'subscriptions' && <GlobalBillingView />}
       {mainSection === 'integrations' && <GlobalBillingView integration />}
       {mainSection === 'free_trials' && <FreeTrialsAdminView />}
-      {mainSection === 'whatsapp' && <WhatsAppEmbeddedSignup />}
+      {mainSection === 'whatsapp' && <InfobipWhatsAppAdmin />}
       {mainSection === 'laboratory' && <SuperAdminLaboratoryView />}
       {mainSection === 'tenants' && (
         <div className="space-y-6">

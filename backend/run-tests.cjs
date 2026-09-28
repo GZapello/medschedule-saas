@@ -48,8 +48,9 @@ for (const file of testFiles) {
     DATABASE_PATH: path.join(tmpDir, 'test.sqlite'),
     JWT_SECRET: process.env.JWT_SECRET || 'test-only-jwt-secret-nao-usar-em-producao',
     ZEMDA_FILES_SIGNING_SECRET: process.env.ZEMDA_FILES_SIGNING_SECRET || 'test-only-files-signing-secret',
-    EMAIL_OTP_SECRET: process.env.EMAIL_OTP_SECRET || 'test-only-otp-secret-precisa-ser-longo-o-bastante',
-    WHATSAPP_TOKEN_ENCRYPTION_KEY: process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || 'test-only-whatsapp-encryption-key',
+    INFOBIP_API_KEY: process.env.INFOBIP_API_KEY || 'test-only-infobip-api-key',
+    INFOBIP_BASE_URL: process.env.INFOBIP_BASE_URL || 'https://test.api.infobip.com',
+    INFOBIP_WHATSAPP_SENDER: process.env.INFOBIP_WHATSAPP_SENDER || '5511999999999',
     APP_URL: process.env.APP_URL || 'https://zemda.test',
     R2_MOCK_STORAGE: process.env.R2_MOCK_STORAGE || 'true'
   };

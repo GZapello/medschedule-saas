@@ -6,7 +6,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { NotificationService } from '../services/notification.service';
-import { WhatsAppCloudService } from '../services/whatsapp-cloud.service';
+import { WhatsAppService } from '../services/whatsapp.service';
 import { isValidPhoneNumber, normalizePhoneWithDDI, buildWhatsAppReminderMessage } from '../utils/phone.utils';
 
 export function validateClinicBusinessHours(tenantId: string, startTime: string, endTime: string): { valid: boolean; error?: string } {
@@ -961,18 +961,18 @@ export class AppointmentController {
         return;
       }
 
-      // 3. Tentativa de envio oficial via Meta WhatsApp Cloud API
-      const isOfficialConnected = WhatsAppCloudService.isConnected();
+      // 3. Tentativa de envio oficial via Infobip WhatsApp
+      const isOfficialConnected = WhatsAppService.isConnected();
       if (!isOfficialConnected) {
         res.status(400).json({
           success: false,
-          error: 'A integração oficial com a API do WhatsApp não está conectada no sistema.',
+          error: 'A integração oficial com a API do WhatsApp (Infobip) não está conectada no sistema.',
           canFallback: true
         });
         return;
       }
 
-      const sendResult = await WhatsAppCloudService.sendTextMessage({
+      const sendResult = await WhatsAppService.sendTextMessage({
         recipientPhone: normalizedPhone,
         messageText: finalMessage
       });
@@ -995,12 +995,12 @@ export class AppointmentController {
           finalMessage,
           userId,
           userName,
-          sendResult.error || 'Erro no envio da Meta Cloud API'
+          sendResult.error || 'Erro no envio da API Infobip'
         );
 
         res.status(502).json({
           success: false,
-          error: sendResult.error || 'Falha ao enviar mensagem pela Meta Cloud API',
+          error: sendResult.error || 'Falha ao enviar mensagem pela API do WhatsApp',
           canFallback: true
         });
         return;
@@ -1030,7 +1030,7 @@ export class AppointmentController {
       logAudit(req, 'WHATSAPP_REMINDER_SENT', 'appointments', appt.id, {
         recipient: normalizedPhone,
         sent_by: userName,
-        channel: 'whatsapp_cloud_official',
+        channel: 'whatsapp_infobip_official',
         message_id: sendResult.messageId
       });
 
@@ -1038,7 +1038,7 @@ export class AppointmentController {
         success: true,
         mode: 'official',
         messageId: sendResult.messageId,
-        message: 'Lembrete enviado com sucesso via WhatsApp Cloud API!'
+        message: 'Lembrete enviado com sucesso via WhatsApp!'
       });
     } catch (err: any) {
       console.error('[AppointmentController.sendWhatsAppReminder] Erro:', err);
