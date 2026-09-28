@@ -196,6 +196,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },
         { id: 'manage-clinic', label: 'Gerenciar Clínica', icon: Building2, visible: isClinicAdmin },
         { id: 'my-resources', label: 'Meus Recursos', icon: Sliders, visible: isProfessional || isClinicAdmin },
+        // Quem não vê "Meus Recursos" (ex.: recepção) perderia todo acesso à Central de Chamados,
+        // já que ela só é alcançável por um botão dentro daquela tela — mantém uma entrada direta
+        // só para esses papéis, sem duplicar o caminho para quem já chega lá via Meus Recursos.
+        { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: !(isProfessional || isClinicAdmin) },
       ]
     }
   ];
