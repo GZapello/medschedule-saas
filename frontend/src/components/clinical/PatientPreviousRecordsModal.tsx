@@ -1,3 +1,4 @@
+import { anatomicalModuleLabel } from '../../utils/anatomicalModuleLabel';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -237,7 +238,7 @@ export const PatientPreviousRecordsModal: React.FC<PatientPreviousRecordsModalPr
                       <span className="truncate">{rec.professional_name || 'Profissional'}</span>
                       {rec.specialty_or_module && (
                         <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium">
-                          {rec.specialty_or_module}
+                          {anatomicalModuleLabel(rec.specialty_or_module)}
                         </span>
                       )}
                     </div>
@@ -267,7 +268,7 @@ export const PatientPreviousRecordsModal: React.FC<PatientPreviousRecordsModalPr
                     <div className="flex items-center gap-2">
                       {selectedRecord.specialty_or_module && (
                         <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                          {selectedRecord.specialty_or_module}
+                          {anatomicalModuleLabel(selectedRecord.specialty_or_module)}
                         </span>
                       )}
                       {selectedRecord.is_sealed === 1 || selectedRecord.sealed_at ? (

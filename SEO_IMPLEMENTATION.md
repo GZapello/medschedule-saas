@@ -60,7 +60,7 @@ Os equivalentes de robots.txt e sitemap.xml continuam existindo no build: agora 
 | ZemdaOdonto | /sistema-para-dentistas |
 | ZemdaTO | /sistema-para-terapeutas-ocupacionais |
 | ZemdaPersonal | /sistema-para-personal-trainers |
-| ZemdaBody, módulo transversal | /mapa-corporal-clinico |
+| Zemda360, módulo transversal | /mapa-corporal-clinico |
 | Como organizar a agenda para reduzir faltas | /blog/como-reduzir-faltas-de-pacientes |
 | Prontuário eletrônico ou papel | /blog/prontuario-eletronico-vs-papel |
 | Gestão de clínica multiprofissional | /blog/gestao-de-clinica-multiprofissional |

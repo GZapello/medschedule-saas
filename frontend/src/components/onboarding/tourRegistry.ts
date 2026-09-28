@@ -643,9 +643,9 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
       },
       {
         id: 'fisio_pain',
-        target: '[data-tour="tab-pain_zemdabody"]',
+        target: '[data-tour="tab-pain_zemda360"]',
         route: 'zemda-fisio',
-        title: 'Mapa da Dor & ZemdaBody',
+        title: 'Mapa da Dor & Zemda360',
         description: 'Localização anatômica precisa da dor (EVA) integrada ao mapa corporal.',
         position: 'bottom'
       },
@@ -843,7 +843,7 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
     ]
   },
 
-  // ZemdaBody
+  // Zemda360
   zemda_body: {
     id: 'zemda_body',
     name: 'Zemda360 • Mapeamento Visual & Anatômico',
@@ -852,7 +852,7 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
       {
         id: 'body_canvas',
         target: '[data-tour="body-canvas-container"]',
-        route: 'zemda-body',
+        route: 'zemda360',
         title: 'Modelo Anatômico 360°',
         description: 'Alterne entre visão anterior, posterior, lateral e modelos anatômicos masculino e feminino.',
         position: 'bottom'
@@ -860,7 +860,7 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
       {
         id: 'body_tools',
         target: '[data-tour="body-tool-selector"]',
-        route: 'zemda-body',
+        route: 'zemda360',
         title: 'Seleção, Caneta e Borracha',
         description: 'Use a ferramenta de seleção para áreas anatômicas ou a caneta colorida para desenhar traços manuais.',
         position: 'bottom',
@@ -869,7 +869,7 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
       {
         id: 'body_plans',
         target: '[data-tour="body-section-selector"]',
-        route: 'zemda-body',
+        route: 'zemda360',
         title: 'Antropometria & Plano Terapêutico',
         description: 'Associe medidas corporais e condutas terapêuticas diretamente aos pontos selecionados.',
         position: 'bottom',

@@ -91,8 +91,8 @@ export class PersonalAIController {
             LIMIT 4
           `).all(studentId, tenantId) as any[];
 
-          // Queixas ou marcações de dor do ZemdaBody se existirem
-          let bodyIssues = 'Nenhuma dor ou lesão mapeada no ZemdaBody.';
+          // Queixas ou marcações de dor do Zemda360 se existirem
+          let bodyIssues = 'Nenhuma dor ou lesão mapeada no Zemda360.';
           try {
             const bodyRecord = db.prepare(`
               SELECT notes, findings_json FROM body_assessments

@@ -1,9 +1,10 @@
+import { anatomicalModuleLabel } from '../../utils/anatomicalModuleLabel';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Patient } from '../../types';
-import { ZemdaBodyModal } from './ZemdaBodyModal';
+import { Zemda360Modal } from './Zemda360Modal';
 import { AnatomicalRecordPreview } from './AnatomicalRecordPreview';
 import { anatomicalLabel as getRegionLabel } from './anatomicalRegions';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
@@ -132,7 +133,7 @@ function parseAssessmentNotes(rawNotes?: string | null): ExtractedAssessmentData
   return result;
 }
 
-export const ZemdaBodyRecordsView: React.FC = () => {
+export const Zemda360RecordsView: React.FC = () => {
   const { clientTermLabel } = useAuth();
   const { showToast } = useToast();
 
@@ -399,7 +400,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
                         </span>
 
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          Módulo: {item.module || 'Geral'}
+                          Módulo: {anatomicalModuleLabel(item.module || 'Geral')}
                         </span>
 
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 capitalize">
@@ -536,7 +537,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
                         <div>
                           <span className="text-slate-400 block">Módulo Clínico</span>
                           <span className="font-semibold text-slate-800">
-                            {detailsAssessment.module || 'Geral'}
+                            {anatomicalModuleLabel(detailsAssessment.module || 'Geral')}
                           </span>
                         </div>
                         <div>
@@ -705,7 +706,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
 
       {/* Modal de Visualização ou Edição */}
       {viewingAssessment && (
-        <ZemdaBodyModal
+        <Zemda360Modal
           isOpen={!!viewingAssessment}
           onClose={() => {
             setViewingAssessment(null);
@@ -725,7 +726,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
 
       {/* Modal de Nova Avaliação */}
       {creatingNew && selectedPatient && (
-        <ZemdaBodyModal
+        <Zemda360Modal
           isOpen={creatingNew}
           onClose={() => {
             setCreatingNew(false);

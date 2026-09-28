@@ -49,7 +49,7 @@ import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
 import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
 import { OdontogramCanvas, OdontogramData } from '../dentistry/OdontogramCanvas';
-import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
+import { Zemda360Modal } from '../zemda360/Zemda360Modal';
 
 interface QuickConsultationModalProps {
   appointment: {
@@ -71,7 +71,7 @@ interface QuickConsultationModalProps {
   moduleType?: string;
   onClose: () => void;
   onFinished: () => void;
-  onOpenZemdaBody?: () => void;
+  onOpenZemda360?: () => void;
   onOpenSpecializedModule?: () => void;
   specializedModuleName?: string;
 }
@@ -81,7 +81,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   moduleType,
   onClose,
   onFinished,
-  onOpenZemdaBody,
+  onOpenZemda360,
   onOpenSpecializedModule,
   specializedModuleName
 }) => {
@@ -95,14 +95,14 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     isSpeechTherapist,
     isPsychopedagogue,
     isZemdaPP,
-    isZemdaBody,
+    isZemda360,
     currentUser,
     hasCapability
   } = useAuth();
   const { showToast } = useToast();
 
   const effectiveModule = (moduleType && moduleType !== 'general' ? moduleType : undefined) ||
-    (appointment.clinical_module && appointment.clinical_module !== 'general' && appointment.clinical_module !== 'ZemdaBody' ? appointment.clinical_module : undefined);
+    (appointment.clinical_module && appointment.clinical_module !== 'general' && !['ZemdaBody','Zemda360'].includes(appointment.clinical_module) ? appointment.clinical_module : undefined);
 
   const isAppointmentPP =
     effectiveModule === 'ZemdaPP' ||
@@ -193,7 +193,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
     undefined
   );
 
-  const [showZemdaBodyModal, setShowZemdaBodyModal] = useState<boolean>(false);
+  const [showZemda360Modal, setShowZemda360Modal] = useState<boolean>(false);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
   // Campos clínicos
@@ -916,15 +916,15 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               <span>Ver Prontuários Anteriores</span>
             </button>
 
-            {/* Botão de Acesso Rápido ao ZemdaBody (apenas quando autorizado pelo gestor) */}
-            {isZemdaBody && (
+            {/* Botão de Acesso Rápido ao Zemda360 (apenas quando autorizado pelo gestor) */}
+            {isZemda360 && (
               <button
                 type="button"
                 onClick={() => {
-                  if (onOpenZemdaBody) {
-                    onOpenZemdaBody();
+                  if (onOpenZemda360) {
+                    onOpenZemda360();
                   } else {
-                    setShowZemdaBodyModal(true);
+                    setShowZemda360Modal(true);
                   }
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-teal-600 hover:bg-teal-500 text-white shadow-xs transition-colors cursor-pointer"
@@ -2107,11 +2107,11 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         </div>
       )}
 
-      {/* Modal do ZemdaBody */}
-      {showZemdaBodyModal && (
-        <ZemdaBodyModal
-          isOpen={showZemdaBodyModal}
-          onClose={() => setShowZemdaBodyModal(false)}
+      {/* Modal do Zemda360 */}
+      {showZemda360Modal && (
+        <Zemda360Modal
+          isOpen={showZemda360Modal}
+          onClose={() => setShowZemda360Modal(false)}
           patientId={appointment.patient_id}
           patientName={patientName}
           appointmentId={appointment.id}

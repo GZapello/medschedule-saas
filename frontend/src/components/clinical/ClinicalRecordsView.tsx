@@ -1,5 +1,5 @@
 import { ClinicalSnapshot } from './ClinicalSnapshot';
-import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
+import { Zemda360Modal } from '../zemda360/Zemda360Modal';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -60,7 +60,7 @@ export const ClinicalRecordsView: React.FC = () => {
   const [editIsSealed, setEditIsSealed] = useState<boolean>(false);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
-  // ZemdaBody - Mapas Corporais Vinculados ao Prontuário
+  // Zemda360 - Mapas Corporais Vinculados ao Prontuário
   const [patientBodyAssessments, setPatientBodyAssessments] = useState<any[]>([]);
   const [viewingBodyAssessment, setViewingBodyAssessment] = useState<any | null>(null);
 
@@ -394,7 +394,7 @@ export const ClinicalRecordsView: React.FC = () => {
 
                         <ClinicalSnapshot record={r} />
 
-                        {/* ZEMDABODY INTEGRADO AO PRONTUÁRIO */}
+                        {/* ZEMDA360 INTEGRADO AO PRONTUÁRIO */}
                         {(() => {
                           const bodyAss = patientBodyAssessments.find(
                             ba => (r.appointment_id && ba.appointment_id === r.appointment_id)
@@ -843,9 +843,9 @@ export const ClinicalRecordsView: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL ZEMDABODY (VISUALIZAR MAPA CORPORAL HISTÓRICO) */}
+      {/* MODAL ZEMDA360 (VISUALIZAR MAPA CORPORAL HISTÓRICO) */}
       {viewingBodyAssessment && (
-        <ZemdaBodyModal
+        <Zemda360Modal
           isOpen={!!viewingBodyAssessment}
           onClose={() => setViewingBodyAssessment(null)}
           patientId={viewingBodyAssessment.patient_id}

@@ -15,7 +15,7 @@ const DashboardView = lazyWithRetry(() => import('./components/dashboard/Dashboa
 const CalendarView = lazyWithRetry(() => import('./components/calendar/CalendarView').then(module => ({ default: module.CalendarView })), 'CalendarView');
 const PatientsView = lazyWithRetry(() => import('./components/patients/PatientsView').then(module => ({ default: module.PatientsView })), 'PatientsView');
 const ClinicalRecordsView = lazyWithRetry(() => import('./components/clinical/ClinicalRecordsView').then(module => ({ default: module.ClinicalRecordsView })), 'ClinicalRecordsView');
-const ZemdaBodyRecordsView = lazyWithRetry(() => import('./components/zemda-body/ZemdaBodyRecordsView').then(module => ({ default: module.ZemdaBodyRecordsView })), 'ZemdaBodyRecordsView');
+const Zemda360RecordsView = lazyWithRetry(() => import('./components/zemda360/Zemda360RecordsView').then(module => ({ default: module.Zemda360RecordsView })), 'Zemda360RecordsView');
 const ZemdaPersonalView = lazyWithRetry(() => import('./components/personal/ZemdaPersonalView').then(module => ({ default: module.ZemdaPersonalView })), 'ZemdaPersonalView');
 const PhysiotherapyWorkspace = lazyWithRetry(() => import('./components/physiotherapy/PhysiotherapyWorkspace').then(module => ({ default: module.PhysiotherapyWorkspace })), 'PhysiotherapyWorkspace');
 const DentistryWorkspace = lazyWithRetry(() => import('./components/dentistry/DentistryWorkspace').then(module => ({ default: module.DentistryWorkspace })), 'DentistryWorkspace');
@@ -122,7 +122,7 @@ export const VIEW_TO_PATH: Record<string, string> = {
   calendar: '/agenda',
   patients: '/pacientes',
   clinical: '/atendimentos',
-  'zemda-body': '/mapa-corporal',
+  'zemda360': '/zemda360',
   'zemda-med': '/zemda-med',
   'zemda-personal': '/zemda-personal',
   'zemda-fisio': '/zemda-fisio',
@@ -155,7 +155,9 @@ export const PATH_TO_VIEW: Record<string, string> = {
   '/agenda': 'calendar',
   '/pacientes': 'patients',
   '/atendimentos': 'clinical',
-  '/mapa-corporal': 'zemda-body',
+  '/mapa-corporal': 'zemda360',
+  '/zemda-body': 'zemda360',
+  '/zemda360': 'zemda360',
   '/zemda-med': 'zemda-med',
   '/zemda-personal': 'zemda-personal',
   '/zemda-fisio': 'zemda-fisio',
@@ -253,7 +255,8 @@ const AppContent: React.FC = () => {
   const getInitialRoute = () => {
     const parsed = parseRouteFromPath(window.location.pathname);
     if (parsed) return parsed;
-    const saved = sessionStorage.getItem('activeView');
+    const stored = sessionStorage.getItem('activeView');
+    const saved = stored === 'zemda-body' ? 'zemda360' : stored;
     if (saved && (VIEW_TO_PATH[saved] || PATH_TO_VIEW[`/${saved}`])) {
       return { view: saved };
     }
@@ -264,7 +267,14 @@ const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [subRouteId, setSubRouteId] = useState<string | null>(initialRoute.subId || null);
 
+  useEffect(() => {
+    if (['/zemda-body','/mapa-corporal'].includes(window.location.pathname.replace(/\/+$/, ''))) {
+      window.history.replaceState({}, '', '/zemda360' + window.location.search + window.location.hash);
+    }
+  }, []);
+
   const handleNavigateView = (view: string, subId?: string | null) => {
+    if (view === 'zemda-body') view = 'zemda360';
     if ((view === 'superadmin' || view === 'audit') && currentUserRef.current?.role !== 'superadmin') {
       return;
     }
@@ -1105,7 +1115,7 @@ const AppContent: React.FC = () => {
             )
           )}
 
-          {currentView === 'zemda-body' && <ZemdaBodyRecordsView />}
+          {currentView === 'zemda360' && <Zemda360RecordsView />}
 
           {currentView === 'zemda-personal' && (
             (isPersonalTrainer || isZemdaPersonal || currentUser?.commercialModule === 'ZemdaPersonal' || hasCapability('TRAINING_PRESCRIBE') || hasCapability('PHYSICAL_ASSESSMENT') || isSuperAdmin) ? (

@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
-import { ZemdaBodyWorkspace } from './ZemdaBodyWorkspace';
+import { Zemda360Workspace } from './Zemda360Workspace';
 import { X, Activity, User, ShieldCheck } from 'lucide-react';
 
-interface ZemdaBodyModalProps {
+interface Zemda360ModalProps {
   isOpen: boolean;
   onClose: () => void;
   patientId: string;
@@ -18,7 +18,7 @@ interface ZemdaBodyModalProps {
   readOnly?: boolean;
 }
 
-export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
+export const Zemda360Modal: React.FC<Zemda360ModalProps> = ({
   isOpen,
   onClose,
   patientId,
@@ -83,7 +83,7 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
 
         {/* Conteúdo do Workspace */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          <ZemdaBodyWorkspace
+          <Zemda360Workspace
             key={`${patientId}:${assessmentId || appointmentId || 'new'}`}
             registerSave={save=>{saveRef.current=save;}}
             patientId={patientId}

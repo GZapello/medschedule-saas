@@ -586,7 +586,7 @@ api.post('/v1/digital-signatures/validate', requireTenant, DigitalCertificateCon
 api.get('/v1/digital-signatures/:id', requireTenant, DigitalCertificateController.getSignature);
 
 // ==========================================
-// MÓDULO CLÍNICO ZEMDABODY (MAPA CORPORAL & CANETA CLÍNICA)
+// MÓDULO CLÍNICO ZEMDA360 (MAPA CORPORAL & CANETA CLÍNICA)
 // ==========================================
 api.get('/v1/body-assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listByPatient);
 api.get('/v1/body-assessments/appointment/:appointmentId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.getByAppointment);

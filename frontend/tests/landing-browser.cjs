@@ -20,7 +20,7 @@ async function main() {
     assert.ok(!(await page.locator('body').innerText()).includes('Um só Zemda.'));
     const previewCases = [
       ['med', 'ZemdaMed', 'Especialidades e acompanhamento longitudinal'],
-      ['body', 'ZemdaBody', 'Marcações por região e desenhos'],
+      ['zemda360', 'Zemda360', 'Marcações por região e desenhos'],
       ['fono', 'ZemdaFono', 'Audiologia e audiograma'],
       ['psico', 'ZemdaPsico', 'Testes externos e laudos'],
       ['odonto', 'ZemdaOdonto', 'Periodontograma'],
@@ -28,10 +28,11 @@ async function main() {
       ['fisio', 'ZemdaFisio', 'Goniometria e força muscular'],
       ['to', 'ZemdaTO', 'Perfil sensorial'],
       ['personal', 'ZemdaPersonal', 'Fichas e relatórios em PDF'],
+      ['estetic', 'ZemdaEstetic', 'Fotos e antes/depois'],
       ['pp', 'ZemdaPP', 'Plano de intervenção (PIP)']
     ];
     const selector=page.getByRole('combobox',{name:'Escolha sua área'});
-    assert.equal(await selector.locator('option').count(),10);
+    assert.equal(await selector.locator('option').count(),11);
     for (const width of [320,360,390,640,768,1024,1440]) {
       await page.setViewportSize({width,height:1000});
       const overflow=await page.evaluate(() => ({width:innerWidth,scroll:document.documentElement.scrollWidth}));
@@ -56,11 +57,12 @@ async function main() {
         focusTexts.add(await page.locator('.zl-module-focus').innerText());
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Overflow: ${name} at ${width}`);
       }
-      assert.equal(icons.size,10); assert.equal(descriptions.size,10); assert.equal(focusTexts.size,10);
+      assert.equal(icons.size,11); assert.equal(descriptions.size,11); assert.equal(focusTexts.size,11);
+      await selector.selectOption('zemda360');
       assert.ok((await page.locator('#product-view .zl-eyebrow').textContent()).includes('Módulo Transversal'));
       await selector.focus(); await selector.press('Home');
-      assert.equal(await selector.inputValue(),'med');
-      console.log(`Responsive ${width}px and all 10 specialty previews: OK`);
+      assert.equal(await selector.inputValue(),'estetic');
+      console.log(`Responsive ${width}px and all 11 specialty previews: OK`);
     }
     for(const name of ['Agenda','Prontuário','Especialidade','Financeiro','Dashboard']) {
       const button=page.locator('.zl-view-picker').getByRole('button',{name,exact:true});
@@ -73,7 +75,7 @@ async function main() {
     await page.locator('.zl-view-picker').getByRole('button',{name:'Especialidade',exact:true}).click();
     assert.equal(await selector.inputValue(),'psico');
     await selector.selectOption('fono');
-    for(const id of ['odonto','to','personal']) {
+    for(const id of ['estetic']) {
       await page.locator(`.zl-module-${id} a`).click();
       assert.ok(await page.evaluate(() => {const r=document.getElementById('produto').getBoundingClientRect();return r.top>=0&&r.top<innerHeight;}));
       assert.equal(await selector.inputValue(), id);
@@ -81,11 +83,11 @@ async function main() {
     await page.getByRole('link',{name:'Conhecer módulo ZemdaFono',exact:true}).click();
     assert.equal(await page.locator('html').getAttribute('data-test-action'),'sistema-para-fonoaudiologos');
     const heroText = await page.locator('.zl-hero').innerText();
-    assert.ok(heroText.includes('7 dias grátis no Zemda Solo. Sem compromisso.'));
-    assert.ok(heroText.includes('suporte@zemda.com.br'));
+    assert.ok(heroText.includes('Teste o Zemda grátis por 7 dias.'));
+    assert.ok(heroText.includes('Sem compromisso.'));
     await page.locator('.zl-hero').getByRole('button',{name:'Testar grátis por 7 dias',exact:true}).click();
     assert.equal(await page.locator('html').getAttribute('data-test-action'),'register');
-    await page.locator('.zl-final').getByRole('button',{name:'Entrar no Zemda',exact:true}).click();
+    await page.getByRole('button',{name:'Entrar',exact:true}).first().click();
     assert.equal(await page.locator('html').getAttribute('data-test-action'),'login');
     const faq=page.locator('.zl-faq details').first(); await faq.locator('summary').click();
     assert.ok(await faq.evaluate(el=>el.open)); await faq.locator('summary').press('Enter');
@@ -97,6 +99,9 @@ async function main() {
     const broken=await page.locator('a[href*="#"]').evaluateAll(links=>links.filter(a=>a.hash&&(!a.pathname||a.pathname==='/')).filter(a=>!document.getElementById(a.hash.slice(1))).map(a=>a.href));
     assert.deepEqual(broken,[]);
     const text=await page.locator('body').innerText();
+    assert.ok(!/ZemdaBody/i.test(text));
+    await page.goto(base+'/#zemdabody');
+    await page.locator('#zemda360').waitFor();
     assert.ok(!/SaaS|100%|mais escolhido|gerente de conta|Android|ponta a ponta/i.test(text));
     if(out) {
       fs.mkdirSync(out,{recursive:true});
@@ -107,7 +112,7 @@ async function main() {
       await page.setViewportSize({width:390,height:844}); await page.evaluate(()=>scrollTo(0,0));
       await page.screenshot({path:path.join(out,'zemda-mobile.png'),fullPage:true});
       await page.screenshot({path:path.join(out,'zemda-hero-mobile.png')});
-      await selector.selectOption('body');
+      await selector.selectOption('zemda360');
       await page.locator('#produto').screenshot({path:path.join(out,'zemda-demo-mobile.png'),style:'header.sticky, .zl-skip { visibility:hidden !important; }'});
       await page.setViewportSize({width:1440,height:1000});
       await selector.selectOption('psico');

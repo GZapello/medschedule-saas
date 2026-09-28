@@ -77,7 +77,7 @@ export class TenantController {
       const resolvedBoardLabel = req.body.registrationType || req.body.managerRegistrationType || matchedCatalogProf?.boardLabel || 'Registro';
       const managerPracticeAreas = req.body.managerPracticeAreas || req.body.practiceAreas || null;
       const managerRegistrationNumber = req.body.managerRegistrationNumber || req.body.registrationNumber || null;
-      const zemdaBodyEnabled = req.body.zemdaBodyEnabled;
+      const zemda360Enabled = req.body.zemda360Enabled ?? req.body.zemdaBodyEnabled;
 
       const professionResolution = resolveCanonicalProfession({
         id: resolvedProfId,
@@ -521,7 +521,8 @@ export class TenantController {
         termsVersionAccepted: CURRENT_TERMS_VERSION,
         privacyVersionAccepted: CURRENT_PRIVACY_VERSION,
         permissions: [],
-        zemdaBodyEnabled: true,
+        zemda360Enabled: true,
+        zemdaBodyEnabled: true, // Legacy API alias.
         zemdaFisioEnabled: modFlags.zemda_fisio_enabled === 1,
         zemdaOdontoEnabled: modFlags.zemda_odonto_enabled === 1,
         zemdaNutriEnabled: modFlags.zemda_nutri_enabled === 1,

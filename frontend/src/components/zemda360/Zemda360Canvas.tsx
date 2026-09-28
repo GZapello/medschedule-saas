@@ -35,7 +35,7 @@ export interface BodyMarkerItem {
 
 export type BodyViewMode = 'all' | 'front' | 'back' | 'left' | 'right';
 
-export interface ZemdaBodyCanvasProps {
+export interface Zemda360CanvasProps {
   bodyModel?: 'female' | 'male';
   selectedRegions?: string[];
   onToggleRegion?: (regionId: string) => void;
@@ -75,7 +75,7 @@ function distToSegment(
   return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
 }
 
-export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
+export const Zemda360Canvas: React.FC<Zemda360CanvasProps> = ({
   bodyModel = 'male',
   selectedRegions = [],
   onToggleRegion = () => {},

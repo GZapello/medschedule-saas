@@ -1,4 +1,4 @@
-import type { BodyStroke } from './ZemdaBodyCanvas';
+import type { BodyStroke } from './Zemda360Canvas';
 import { LEGACY_TO_CANONICAL } from './anatomicalRegions';
 export type MapType = 'BODY' | 'FACE';
 export type SexVariant = 'female' | 'male';

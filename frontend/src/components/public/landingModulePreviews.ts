@@ -11,6 +11,18 @@ export interface LandingModulePreview {
 /** Public highlights verified against the clinical workspaces, not a feature roadmap. */
 export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
   {
+    id: 'estetic', name: 'ZemdaEstetic', area: 'Estética facial, corporal e capilar',
+    description: 'Estética facial, corporal e capilar em um só ambiente.',
+    features: ['Avaliações e planejamento', 'Procedimentos, evolução e retornos', 'Fotos e antes/depois', 'Histórico e integração com Zemda360'],
+    featureDescriptions: [
+      'Organize avaliações e planos nas áreas facial, corporal e capilar, conforme suas permissões.',
+      'Registre procedimentos realizados, evolução e retornos para acompanhamento.',
+      'Cadastre fotografias por URL e compare pares de antes e depois no acompanhamento.',
+      'Consulte o histórico e acesse a Face ou o Corpo do Zemda360, a ferramenta anatômica compartilhada do ecossistema.'
+    ],
+    focus: 'Avaliação, planejamento, fotografias, procedimentos, evolução e acompanhamento integrados ao Zemda360.'
+  },
+  {
     id: 'med', name: 'ZemdaMed', area: 'Medicina',
     description: 'Prontuário médico, acompanhamento clínico, exames, prescrições e recursos adaptados às diferentes áreas médicas.',
     features: [
@@ -19,7 +31,7 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
       'Exames, medicamentos e prescrições',
       'Especialidades e acompanhamento longitudinal',
       'Documentos médicos e encaminhamentos',
-      'Integração com ZemdaBody'
+      'Integração com Zemda360'
     ],
     featureDescriptions: [
       'Estruture a anamnese, hipóteses diagnósticas e histórico clínico completo do paciente com rapidez e segurança.',
@@ -32,21 +44,21 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
     focus: 'Prontuário médico longitudinal, prescrições, documentos e integração com mapa corporal no mesmo ambiente.'
   },
   {
-    id: 'body', name: 'ZemdaBody', area: 'Módulo transversal',
-    description: 'Registre regiões corporais, marque achados clínicos e acompanhe visualmente a evolução do paciente ao longo dos atendimentos.',
+    id: 'zemda360', name: 'Zemda360', area: 'Módulo transversal',
+    description: 'Mapeamento anatômico visual integrado ao prontuário, com Corpo e Face.',
     features: [
-      'Mapa corporal interativo',
+      'Mapa corporal e facial interativo',
       'Vistas frontais, posteriores e laterais',
       'Marcações por região e desenhos',
       'Registros vinculados ao atendimento'
     ],
     featureDescriptions: [
-      'Explore regiões do corpo para organizar o registro visual da avaliação e exames.',
+      'Explore regiões do corpo e da face para organizar o registro visual da avaliação e exames.',
       'Consulte as vistas frontal, posterior e laterais do modelo anatômico interativo.',
       'Selecione regiões corporais e registre marcações, achados e notas clínicas.',
       'Mantenha a avaliação corporal relacionada ao paciente e ao atendimento correspondente.'
     ],
-    focus: 'Recurso transversal de mapa corporal compartilhado entre medicina e especialidades multiprofissionais.'
+    focus: 'Ferramenta compartilhada de mapeamento anatômico compartilhado entre medicina e especialidades multiprofissionais.'
   },
   {
     id: 'fono', name: 'ZemdaFono', area: 'Fonoaudiologia',
@@ -99,7 +111,7 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
   {
     id: 'fisio', name: 'ZemdaFisio', area: 'Fisioterapia',
     description: 'Avaliação funcional e planejamento do acompanhamento fisioterapêutico.',
-    features: ['Avaliação cinético-funcional', 'Goniometria e força muscular', 'Mapa corporal com ZemdaBody', 'Plano terapêutico'],
+    features: ['Avaliação cinético-funcional', 'Goniometria e força muscular', 'Mapa corporal com Zemda360', 'Plano terapêutico'],
     featureDescriptions: [
       "Documente a avaliação do movimento e da função para orientar o acompanhamento fisioterapêutico.",
       "Registre a amplitude de movimento e a avaliação de força muscular.",

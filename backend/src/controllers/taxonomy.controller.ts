@@ -165,7 +165,7 @@ export class TaxonomyController {
           registrationType: p.registration_board_label
         });
         const primaryModule = resolution.commercialModule;
-        const modules = primaryModule ? [primaryModule, 'ZemdaBody'] : ['Recursos gerais do Zemda', 'ZemdaBody'];
+        const modules = primaryModule ? [primaryModule, 'Zemda360'] : ['Recursos gerais do Zemda', 'Zemda360'];
         const accessLabel = modules.join(' + ');
         const displayOption = `${p.name} — ${accessLabel}`;
         const isAdministrative = resolution.taxonomyCategory === 'ADMINISTRATIVE' || p.category_is_clinical === 0 || p.category_id === 'cat-admin';

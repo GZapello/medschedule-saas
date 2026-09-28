@@ -24,6 +24,7 @@ const moduleIcons: Record<string, LucideIcon> = {
   fisio: Activity,
   to: Heart,
   personal: Dumbbell,
+  estetic: Sparkles,
   pp: GraduationCap
 };
 const Bullets = ({ items }: { items: string[] }) => <ul className="zl-bullets">{items.map(item => <li key={item}><Check aria-hidden="true" size={16} /><span>{item}</span></li>)}</ul>;
@@ -33,7 +34,8 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
   // Preserve direct links from SEO pages and the old public landing anchors.
   useEffect(() => {
     const scrollToHash = () => {
-      const id = window.location.hash.slice(1);
+      const hash = window.location.hash.slice(1);
+      const id = hash === 'zemdabody' ? 'zemda360' : hash;
       if (id) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView());
     };
     scrollToHash();
@@ -98,7 +100,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
 
       <RevealSection id="profissoes" className="zl-section zl-tinted"><div className="zl-container">
         <RevealItem distancePx={16} durationMs={550}><Heading label="Ecossistema profissional" title="Ferramentas específicas para sua profissão.">Avalie, registre e acompanhe cada atendimento com os recursos da sua área.</Heading></RevealItem>
-        <RevealItem distancePx={18} delayMs={100} durationMs={600}><article id="zemdabody" className="zl-body"><span className="zl-body-symbol"><Crosshair size={48} strokeWidth={1.3} /></span><div><span className="zl-eyebrow">Módulo transversal</span><h3>ZemdaBody</h3><p>Registre regiões corporais, marque achados clínicos e acompanhe visualmente a evolução do paciente ao longo dos atendimentos. Um recurso compartilhado entre a medicina e as especialidades multiprofissionais.</p></div><div className="zl-body-tags"><span>Mapa corporal e acompanhamento visual</span><span>Vistas anatômicas</span><span>Marcações e evolução</span></div></article></RevealItem>
+        <RevealItem distancePx={18} delayMs={100} durationMs={600}><article id="zemda360" className="zl-body"><span className="zl-body-symbol"><Crosshair size={48} strokeWidth={1.3} /></span><div><span className="zl-eyebrow">Módulo transversal</span><h3>Zemda360</h3><p>Mapeamento corporal e facial integrado ao atendimento. Selecione regiões e articulações, desenhe e consulte registros vinculados ao paciente. Uma ferramenta compartilhada entre as áreas autorizadas, incluindo o ZemdaEstetic.</p></div><div className="zl-body-tags"><span>Mapeamento anatômico visual</span><span>Vistas anatômicas</span><span>Marcações e evolução</span></div></article></RevealItem>
         <div className="zl-modules">{LANDING_MODULES.map((module, index) => { const Icon = moduleIcons[module.id] || Stethoscope; return <RevealItem key={module.id} distancePx={18} delayMs={(index % 4) * 60} durationMs={600} className="zl-full-height"><article id={`modulo-${module.id}`} className={`zl-module zl-module-${module.id}`}><span className="zl-module-icon"><Icon size={23} /></span><p className="zl-profession">{module.profession}</p><h3>{module.name}</h3><Bullets items={module.features} /><a href={moduleHref(module)} onClick={event => navigateModule(event, module)} className="zl-module-link" aria-label={`Conhecer módulo ${module.name}`}>Conhecer módulo <ArrowRight size={16} /></a></article></RevealItem>; })}</div>
       </div></RevealSection>
 
@@ -145,10 +147,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
             <span className="zl-eyebrow">Zemda</span>
             <h3 style={{ fontSize: '1.75rem', marginBottom: '0.75rem' }}>Tudo o que sua rotina precisa</h3>
             <p style={{ maxWidth: '640px', margin: '0 auto 1.5rem', color: '#475569', fontSize: '0.95rem', lineHeight: '1.6' }}>
-              Prontuário eletrônico especializado para cada área da saúde, agenda inteligente, mapa corporal ZemdaBody, gestão financeira, emissão de documentos e suporte dedicado.
+              Prontuário eletrônico especializado para cada área da saúde, agenda inteligente, mapeamento anatômico Zemda360, gestão financeira, emissão de documentos e suporte dedicado.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', textAlign: 'left', marginBottom: '2rem' }}>
-              <Bullets items={['Prontuário especializado por profissão', 'Agenda com confirmações automáticas', 'Mapa anatômico interativo ZemdaBody']} />
+              <Bullets items={['Prontuário especializado por profissão', 'Agenda com confirmações automáticas', 'Mapa anatômico interativo Zemda360']} />
               <Bullets items={['Controle financeiro e relatórios', 'Prescrições, atestados e laudos', 'Segurança total e conformidade com LGPD']} />
             </div>
             <button

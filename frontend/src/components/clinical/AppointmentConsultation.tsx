@@ -12,7 +12,7 @@ import { PhysiotherapyWorkspace } from '../physiotherapy/PhysiotherapyWorkspace'
 import { ZemdaMedWorkspace } from '../medical/ZemdaMedWorkspace';
 import { ZemdaPersonalView } from '../personal/ZemdaPersonalView';
 import { QuickConsultationModal } from './QuickConsultationModal';
-import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
+import { Zemda360Workspace } from '../zemda360/Zemda360Workspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
 import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell } from 'lucide-react';
 
@@ -46,7 +46,7 @@ export function AppointmentConsultation({
     isZemdaFisio,
     isPersonalTrainer,
     isZemdaPersonal,
-    isZemdaBody,
+    isZemda360,
     currentUser,
     hasCapability
   } = useAuth();
@@ -67,14 +67,14 @@ export function AppointmentConsultation({
 
   const effectiveModuleType =
     (status?.moduleType && status.moduleType !== 'general' ? status.moduleType : undefined) ||
-    (appointment.clinical_module && appointment.clinical_module !== 'ZemdaBody' && appointment.clinical_module !== 'general' ? appointment.clinical_module : undefined) ||
-    (initialModuleType && initialModuleType !== 'ZemdaBody' && initialModuleType !== 'general' ? initialModuleType : undefined) ||
+    (appointment.clinical_module && !['ZemdaBody','Zemda360'].includes(appointment.clinical_module) && appointment.clinical_module !== 'general' ? appointment.clinical_module : undefined) ||
+    (initialModuleType && !['ZemdaBody','Zemda360'].includes(initialModuleType) && initialModuleType !== 'general' ? initialModuleType : undefined) ||
     deducedModuleFromProfession ||
     (status?.moduleType === 'general' ? 'general' : undefined) ||
     'general';
 
   // FLUXO DE ATENDIMENTO: "Iniciar atendimento" DEVE SEMPRE abrir o Prontuário / Evolução Clínica primeiro ('records')
-  const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda_body'>('records');
+  const [activeTab, setActiveTab] = useState<'records' | 'specialized' | 'zemda360'>('records');
 
   useEffect(() => {
     ApiClient.get(`/v1/appointments/${appointment.id}/completion`)
@@ -131,8 +131,8 @@ export function AppointmentConsultation({
     effectiveModuleType === 'general' ? GeneralClinicalWorkspace :
     null;
 
-  // Se o profissional estiver visualizando o ZemdaBody dentro do mesmo atendimento:
-  if (activeTab === 'zemda_body') {
+  // Se o profissional estiver visualizando o Zemda360 dentro do mesmo atendimento:
+  if (activeTab === 'zemda360') {
     return (
       <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
         {/* Barra superior de alternância */}
@@ -179,7 +179,7 @@ export function AppointmentConsultation({
 
         {/* Área do Workspace */}
         <div className="p-4 sm:p-6 max-w-6xl mx-auto w-full flex-1">
-          <ZemdaBodyWorkspace
+          <Zemda360Workspace
             patientId={appointment.patient_id}
             appointmentId={appointment.id}
             professionalId={appointment.professional_id}
@@ -220,10 +220,10 @@ export function AppointmentConsultation({
               >
                 <Dumbbell className="w-3.5 h-3.5" /> ZemdaPersonal
               </button>
-              {isZemdaBody && (
+              {isZemda360 && (
                 <button
                   type="button"
-                  onClick={() => setActiveTab('zemda_body')}
+                  onClick={() => setActiveTab('zemda360')}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer"
                 >
                   <Activity className="w-3.5 h-3.5" /> Zemda360
@@ -268,10 +268,10 @@ export function AppointmentConsultation({
             >
               <Stethoscope className="w-3.5 h-3.5" /> Módulo Clínico
             </button>
-            {isZemdaBody && (
+            {isZemda360 && (
               <button
                 type="button"
-                onClick={() => setActiveTab('zemda_body')}
+                onClick={() => setActiveTab('zemda360')}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer"
               >
                 <Activity className="w-3.5 h-3.5" /> Zemda360
@@ -289,7 +289,7 @@ export function AppointmentConsultation({
     );
   }
 
-  // Padrão: Prontuário / QuickConsultationModal com acesso ao Módulo Especializado e ZemdaBody
+  // Padrão: Prontuário / QuickConsultationModal com acesso ao Módulo Especializado e Zemda360
   return (
     <>
       <QuickConsultationModal
@@ -300,7 +300,7 @@ export function AppointmentConsultation({
         moduleType={effectiveModuleType || 'general'}
         onClose={onClose}
         onFinished={onFinished}
-        onOpenZemdaBody={isZemdaBody ? () => setActiveTab('zemda_body') : undefined}
+        onOpenZemda360={isZemda360 ? () => setActiveTab('zemda360') : undefined}
         onOpenSpecializedModule={Workspace ? () => setActiveTab('specialized') : undefined}
         specializedModuleName={
           effectiveModuleType === 'ZemdaMed' ? 'ZemdaMed' :

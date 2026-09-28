@@ -37,7 +37,7 @@ export class DocumentsController {
 
     let moduleType = resolveClinicalModule(appt, req.tenantId);
     if (!moduleType) {
-      const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' AND module_type != 'general' LIMIT 1").get(appt.id, req.tenantId) as { module_type?: string } | undefined;
+      const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') AND module_type != 'general' LIMIT 1").get(appt.id, req.tenantId) as { module_type?: string } | undefined;
       if (existingRec?.module_type) {
         moduleType = existingRec.module_type;
       }
@@ -541,7 +541,7 @@ export class DocumentsController {
           });
           return;
         }
-        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(appointmentId, tenantId) as { module_type?: string } | undefined;
+        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') LIMIT 1").get(appointmentId, tenantId) as { module_type?: string } | undefined;
         if (existingRec?.module_type && existingRec.module_type !== evolution.moduleType) {
           res.status(409).json({
             error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
@@ -653,7 +653,7 @@ export class DocumentsController {
       // Inicia transação atômica
       db.exec('BEGIN IMMEDIATE');
 
-      db.prepare("UPDATE appointments SET clinical_module = COALESCE(NULLIF(clinical_module, 'ZemdaBody'), ?) WHERE id=? AND tenant_id=?")
+      db.prepare("UPDATE appointments SET clinical_module = COALESCE(NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360'), ?) WHERE id=? AND tenant_id=?")
         .run(appt.clinical_module || evolution?.moduleType || null, appointmentId, tenantId);
 
       if (!saved) {

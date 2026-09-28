@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BodyRegionDef } from './bodyRegionsData';
-import { BodyMarkerItem } from './ZemdaBodyCanvas';
+import { BodyMarkerItem } from './Zemda360Canvas';
 import {
   X,
   Activity,
@@ -19,7 +19,7 @@ import {
   Sliders
 } from 'lucide-react';
 
-interface ZemdaBodyPanelProps {
+interface Zemda360PanelProps {
   region: BodyRegionDef | null;
   module?: string;
   markers: BodyMarkerItem[];
@@ -29,7 +29,7 @@ interface ZemdaBodyPanelProps {
   readOnly?: boolean;
 }
 
-export const ZemdaBodyPanel: React.FC<ZemdaBodyPanelProps> = ({
+export const Zemda360Panel: React.FC<Zemda360PanelProps> = ({
   region,
   module = 'general',
   markers,

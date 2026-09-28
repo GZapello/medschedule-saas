@@ -41,8 +41,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { PatientSearchSelect, PatientSearchResult } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
-import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
-import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
+import { Zemda360Modal } from '../zemda360/Zemda360Modal';
+import { Zemda360Workspace } from '../zemda360/Zemda360Workspace';
 
 export type EsteticArea = 'FACIAL' | 'CORPORAL' | 'CAPILAR';
 
@@ -1934,7 +1934,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
                     {/* Canvas do Zemda360 embutido */}
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                      <ZemdaBodyWorkspace
+                      <Zemda360Workspace
                         key={`${selectedPatientId}:${activeArea}`}
                         patientId={selectedPatientId}
                         initialMapType={areaTheme.mapType}
@@ -2904,7 +2904,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       )}
 
       {/* Modal: Zemda360 em Tela Cheia */}
-      <ZemdaBodyModal
+      <Zemda360Modal
         isOpen={isZemda360ModalOpen}
         onClose={() => setIsZemda360ModalOpen(false)}
         patientId={selectedPatientId}

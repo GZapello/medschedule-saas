@@ -213,11 +213,11 @@ export const ALL_CLINICAL_MODULES: Record<string, ClinicalModuleOption> = {
       iconColor: 'text-indigo-600'
     }
   },
-  ZemdaBody: {
-    id: 'ZemdaBody' as any,
+  Zemda360: {
+    id: 'Zemda360' as any,
     name: 'Zemda360',
-    badge: 'Mapa Corporal',
-    profession: 'Avaliação Corporal & Caneta Clínica',
+    badge: 'Mapa Anatômico',
+    profession: 'Mapeamento Corporal e Facial',
     description: 'Mapa anatômico interativo com caneta clínica, escala de dor EVA e marcadores por região.',
     icon: Activity,
     colorTheme: {
@@ -259,7 +259,8 @@ export function getModuleForProfession(auth: {
   currentTenant?: any;
 }): 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general' {
   // 1. Prioridade absoluta: commercialModule do usuário vindo do backend/AuthContext
-  const commModule = auth.currentUser?.commercialModule;
+  const legacyModule = auth.currentUser?.commercialModule;
+  const commModule = legacyModule === 'ZemdaBody' ? 'Zemda360' : legacyModule;
   if (commModule && commModule in ALL_CLINICAL_MODULES) {
     return commModule as any;
   }

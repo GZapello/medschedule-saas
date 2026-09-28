@@ -38,6 +38,8 @@ export interface User {
   zemdaPersonalEnabled?: boolean;
   zemdaMedEnabled?: boolean;
   zemdaEsteticEnabled?: boolean;
+  zemda360Enabled?: boolean;
+  /** Legacy auth response alias. */
   zemdaBodyEnabled?: boolean;
   commercialModule?: string;
   clinicalWorkspace?: string | null;

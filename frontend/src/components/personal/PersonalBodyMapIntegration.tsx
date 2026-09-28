@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ZemdaBodyCanvas } from '../zemda-body/ZemdaBodyCanvas';
+import { Zemda360Canvas } from '../zemda360/Zemda360Canvas';
 import { Workout, WorkoutExercise } from './types';
 import { Flame, Eye, Info, Layers, Dumbbell } from 'lucide-react';
 
@@ -155,9 +155,9 @@ export const PersonalBodyMapIntegration: React.FC<PersonalBodyMapIntegrationProp
         </div>
       </div>
 
-      {/* Canvas Anatômico ZemdaBody com Overlay de Heatmap */}
+      {/* Canvas Anatômico Zemda360 com Overlay de Heatmap */}
       <div className="bg-slate-950/5 rounded-3xl p-4 border border-slate-200">
-        <ZemdaBodyCanvas
+        <Zemda360Canvas
           initialViewMode={activeViewMode}
           readOnly={true}
           volumeHeatmap={volumeHeatmap}

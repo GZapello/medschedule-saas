@@ -4,7 +4,7 @@
  * Regra:
  * A fonte primária de verdade é o profession_id / profession_name do profissional.
  * Apenas UM módulo profissional primário pode estar ativo por vez.
- * ZemdaBody é complementar universal e não concorre com os módulos de nicho.
+ * Zemda360 é complementar universal e não concorre com os módulos de nicho.
  */
 
 export type ZemdaModule =

@@ -33,7 +33,7 @@ export function resolveClinicalModule(appointmentOrProf: any, tenantId: any, may
   if (isPrimaryClinicalModule(appointment.clinical_module)) return appointment.clinical_module;
   if (appointment.clinical_module === 'general') return 'general';
 
-  const record = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' ORDER BY created_at LIMIT 1")
+  const record = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') ORDER BY created_at LIMIT 1")
     .get(appointment.id, effectiveTenantId) as any;
   if (record?.module_type && (isPrimaryClinicalModule(record.module_type) || record.module_type === 'general')) {
     return record.module_type;
@@ -59,7 +59,7 @@ export function resolveClinicalModule(appointmentOrProf: any, tenantId: any, may
       }
     }
 
-    if (appointment.clinical_module === 'ZemdaBody') return 'general';
+    if (['ZemdaBody', 'Zemda360'].includes(appointment.clinical_module)) return 'general';
   }
-  return appointment.clinical_module === 'ZemdaBody' ? 'general' : null;
+  return ['ZemdaBody', 'Zemda360'].includes(appointment.clinical_module) ? 'general' : null;
 }

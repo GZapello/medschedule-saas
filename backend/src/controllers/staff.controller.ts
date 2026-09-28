@@ -312,8 +312,8 @@ export class StaffController {
         return;
       }
 
-      // Remove seleções manuais de módulos gerenciados automaticamente (ZemdaPersonal e ZemdaBody)
-      const sanitizedPermissions = permissions.filter((p: string) => p !== 'access_zemda_personal' && p !== 'access_zemda_body');
+      // Remove seleções manuais de módulos gerenciados automaticamente (ZemdaPersonal e Zemda360)
+      const sanitizedPermissions = permissions.filter((p: string) => p !== 'access_zemda_personal' && p !== 'access_zemda_body' && p !== 'access_zemda360');
 
       // Verifica se a profissão canônica do usuário é Personal Trainer / Ed. Física
       const profRow = db.prepare('SELECT profession_id, profession_name FROM professionals WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
@@ -326,7 +326,7 @@ export class StaffController {
       }
 
       const permsJson = JSON.stringify(sanitizedPermissions);
-      const zemdaBodyActive = 1; // Universal para profissionais e equipe clínica
+      const zemda360Active = 1; // Universal para profissionais e equipe clínica
       const zemdaPersonalActive = resolution.commercialModule === 'ZemdaPersonal' ? 1 : 0;
       const userRole = user.role || 'professional';
       db.prepare(`
@@ -336,7 +336,7 @@ export class StaffController {
           permissions_json = excluded.permissions_json,
           zemda_body_enabled = excluded.zemda_body_enabled,
           zemda_personal_enabled = excluded.zemda_personal_enabled
-      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, userRole, permsJson, zemdaBodyActive, zemdaPersonalActive);
+      `).run('cu-' + uuidv4().slice(0, 8), tenantId, id, userRole, permsJson, zemda360Active, zemdaPersonalActive);
 
       logAudit(req, 'UPDATE_STAFF_PERMISSIONS', 'users', id, { permissionsCount: permissions.length });
       res.json({ message: 'Permissões do funcionário atualizadas com sucesso' });

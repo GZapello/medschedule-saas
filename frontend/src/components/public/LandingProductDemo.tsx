@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import {
   Activity, Apple, ArrowRight, Brain, CalendarDays, ChevronDown, CircleDot, Crosshair,
   DollarSign, Dumbbell, FileText, GraduationCap, Heart, LayoutDashboard,
-  Layers3, Mic, Network, Smile, Stethoscope, Users, type LucideIcon
+  Layers3, Sparkles, Mic, Network, Smile, Stethoscope, Users, type LucideIcon
 } from 'lucide-react';
 import { LANDING_MODULE_PREVIEWS, type LandingModulePreview } from './landingModulePreviews';
 
 const moduleIcons: Record<string, LucideIcon> = {
-  med: Stethoscope, body: Crosshair, fono: Mic, psico: Brain, odonto: Smile,
+  med: Stethoscope, zemda360: Crosshair, estetic: Sparkles, fono: Mic, psico: Brain, odonto: Smile,
   nutri: Apple, fisio: Activity, to: Heart, personal: Dumbbell, pp: GraduationCap
 };
 const views = [
@@ -123,7 +123,7 @@ export const LandingProductDemo: React.FC = () => {
                   >
                     {LANDING_MODULE_PREVIEWS.map(item => (
                       <option key={item.id} value={item.id}>
-                        {item.name} — {item.id === 'body' ? 'Mapa corporal e acompanhamento visual' : item.area}
+                        {item.name} — {item.id === 'zemda360' ? 'Mapeamento corporal e facial' : item.area}
                       </option>
                     ))}
                   </select>
@@ -133,7 +133,7 @@ export const LandingProductDemo: React.FC = () => {
                 {LANDING_MODULE_PREVIEWS.map(item => {
                   const ChipIcon = moduleIcons[item.id];
                   const isSelected = activeModuleId === item.id;
-                  const isTransversal = item.id === 'body';
+                  const isTransversal = item.id === 'zemda360';
                   return (
                     <button
                       key={item.id}
@@ -158,7 +158,7 @@ export const LandingProductDemo: React.FC = () => {
             <div className="zl-product-copy">
               <span className="zl-icon"><Icon size={25} aria-hidden="true" /></span>
               <span className="zl-eyebrow">
-                {isSpecialty ? (module.id === 'body' ? 'Módulo Transversal · Mapa corporal e acompanhamento visual' : module.area) : view.name}
+                {isSpecialty ? (module.id === 'zemda360' ? 'Módulo Transversal · Mapeamento corporal e facial' : module.area) : view.name}
               </span>
               <h2>{isSpecialty ? module.name : view.heading}</h2>
               <p>{isSpecialty ? module.description : view.description}</p>

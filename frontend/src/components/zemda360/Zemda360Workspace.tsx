@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
-import { ZemdaBodyCanvas, BodyStroke } from './ZemdaBodyCanvas';
+import { Zemda360Canvas, BodyStroke } from './Zemda360Canvas';
 import { anatomicalLabel as getRegionLabel, canonicalRegion, bodyAnatomicalRegions, REGION_TAXONOMY, FACE_VIEWS } from './anatomicalRegions';
 import { AnatomicalMapCanvas } from './AnatomicalMapCanvas';
 import { AnatomicalRegionPanel } from './AnatomicalRegionPanel';
@@ -26,7 +26,7 @@ import {
   ClipboardList
 } from 'lucide-react';
 
-interface ZemdaBodyWorkspaceProps {
+interface Zemda360WorkspaceProps {
   patientId: string;
   initialAssessmentId?: string;
   appointmentId?: string;
@@ -40,7 +40,7 @@ interface ZemdaBodyWorkspaceProps {
   registerSave?: (save: () => Promise<boolean>) => void;
 }
 
-export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
+export const Zemda360Workspace: React.FC<Zemda360WorkspaceProps> = ({
   patientId,
   initialAssessmentId,
   appointmentId,

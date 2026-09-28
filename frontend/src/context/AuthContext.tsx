@@ -38,7 +38,7 @@ interface AuthContextType {
   isZemdaMed: boolean;
   isEsthetician: boolean;
   isZemdaEstetic: boolean;
-  isZemdaBody: boolean;
+  isZemda360: boolean;
   commercialModule: string | null;
   clinicalWorkspace: string | null;
   taxonomyCategory?: string;
@@ -450,8 +450,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     capabilities.some(c => c.startsWith('ESTETIC_'))
   );
 
-  // ZemdaBody: Módulo transversal automático para TODOS os profissionais clínicos e gestores ativos da clínica
-  const isZemdaBody = isEligibleStaff;
+  // Zemda360: Módulo transversal automático para TODOS os profissionais clínicos e gestores ativos da clínica
+  const isZemda360 = isEligibleStaff;
 
   const commercialModule = activeModule || currentUser?.commercialModule || null;
 
@@ -508,7 +508,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaMed,
         isEsthetician,
         isZemdaEstetic,
-        isZemdaBody,
+        isZemda360,
         commercialModule,
         clinicalWorkspace: currentUser?.clinicalWorkspace ?? null,
         taxonomyCategory: currentUser?.taxonomyCategory,

@@ -265,7 +265,7 @@ export class AuthController {
         hasEsteticArea ||
         hasEsteticCap
       );
-      const zemdaBodyEnabled = user.role !== 'superadmin' && (
+      const zemda360Enabled = user.role !== 'superadmin' && (
         user.role === 'clinic_admin' || user.role === 'professional'
       );
 
@@ -315,7 +315,8 @@ export class AuthController {
           zemdaPersonalEnabled,
           zemdaEsteticEnabled: !!zemdaEsteticEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
-          zemdaBodyEnabled,
+          zemda360Enabled,
+          zemdaBodyEnabled: zemda360Enabled, // Legacy API clients retain access.
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
           clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,
           taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,
@@ -477,7 +478,7 @@ export class AuthController {
         hasEsteticArea ||
         hasEsteticCap
       );
-      const zemdaBodyEnabled = user.role !== 'superadmin' && (
+      const zemda360Enabled = user.role !== 'superadmin' && (
         user.role === 'clinic_admin' || user.role === 'professional'
       );
 
@@ -526,7 +527,8 @@ export class AuthController {
           zemdaPersonalEnabled,
           zemdaEsteticEnabled: !!zemdaEsteticEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
-          zemdaBodyEnabled,
+          zemda360Enabled,
+          zemdaBodyEnabled: zemda360Enabled, // Legacy API clients retain access.
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
           clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,
           taxonomyCategory: professionResolution.taxonomyCategory || computedCaps?.taxonomyCategory || null,

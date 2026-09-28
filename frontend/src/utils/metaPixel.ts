@@ -19,7 +19,7 @@ const publicPaths = new Set(['/', '/planos', '/sistema-para-clinicas', '/sistema
   '/sistema-para-psicologos', '/sistema-para-fonoaudiologos', '/sistema-para-fisioterapeutas',
   '/sistema-para-nutricionistas', '/sistema-para-psicopedagogos', '/agenda-online',
   '/prontuario', '/gestao-financeira', '/blog', '/termos-de-uso', '/privacidade']);
-const anchors = new Set(['', '#conteudo', '#inicio', '#como-funciona', '#profissoes', '#zemdabody',
+const anchors = new Set(['', '#conteudo', '#inicio', '#como-funciona', '#profissoes', '#zemdabody', '#zemda360',
   '#funcionalidades', '#agenda', '#autosave', '#documentos', '#gestao', '#ia', '#seguranca', '#planos', '#faq']);
 function safeUrl(url: URL): boolean {
   return url.protocol === 'https:' && ['zemda.com.br', 'www.zemda.com.br'].includes(url.hostname)

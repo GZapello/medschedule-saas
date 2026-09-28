@@ -2161,7 +2161,7 @@ export function initializeDatabase(): void {
       CREATE INDEX IF NOT EXISTS idx_fono_plans_patient ON fono_treatment_plans (tenant_id, patient_id);
 
       -- =========================================================================
-      -- 13. MÓDULO CLÍNICO ZEMDABODY (MAPA CORPORAL & CANETA CLÍNICA)
+      -- 13. MÓDULO CLÍNICO ZEMDA360 (MAPA CORPORAL & CANETA CLÍNICA)
       -- =========================================================================
       CREATE TABLE IF NOT EXISTS body_assessments (
         id TEXT PRIMARY KEY,
@@ -2239,7 +2239,7 @@ export function initializeDatabase(): void {
       );
       CREATE INDEX IF NOT EXISTS idx_body_strokes_drawing ON body_drawing_strokes (drawing_id);
 
-      -- Tabelas complementares do ZemdaBody: Avaliação Antropométrica e Plano Terapêutico
+      -- Tabelas complementares do Zemda360: Avaliação Antropométrica e Plano Terapêutico
       CREATE TABLE IF NOT EXISTS body_anthropometric_assessments (
         id TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL,

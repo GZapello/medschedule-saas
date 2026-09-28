@@ -169,7 +169,7 @@ function seedCapabilities(rawDb: DatabaseSync): void {
     { id: 'CORE_TIMELINE', category: 'CORE', name: 'Histórico e Linha do Tempo', description: 'Visualização cronológica 360° do paciente' },
 
     // BODY
-    { id: 'BODY_MAP', category: 'BODY', name: 'ZemdaBody (Mapa Corporal)', description: 'Mapeamento anatômico, marcações de queixas e histórico' },
+    { id: 'BODY_MAP', category: 'BODY', name: 'Zemda360 (Mapa Anatômico)', description: 'Mapeamento anatômico, marcações de queixas e histórico' },
 
     // ANTHROPOMETRY & COMPOSITION
     { id: 'ANTHROPOMETRY', category: 'ANTHROPOMETRY', name: 'Antropometria', description: 'Peso, altura, IMC, circunferências corporais e medidas' },
@@ -572,6 +572,7 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
 
   // Regras padrão de cada profissão (DEFAULT, OPTIONAL, HIDDEN)
   // 1. Fisioterapia
+  rawDb.prepare("UPDATE capabilities SET name = 'Zemda360 (Mapa Anatômico)' WHERE id = 'BODY_MAP' AND name LIKE 'ZemdaBody%'").run();
   const fisioDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'BODY_MAP', 'PAIN_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'FUNCTIONAL_ASSESSMENT', 'POSTURE_GAIT', 'FUNCTIONAL_TESTS', 'HOME_EXERCISES'];
   const fisioOptionals = ['ANTHROPOMETRY', 'BODY_COMPOSITION', 'PHYSICAL_ASSESSMENT', 'ADL_ASSESSMENT'];
   const fisioHiddens = ['ODONTO_SPECIFIC', 'AUDIOLOGY', 'MEDICAL_BASE', 'MEDICAL_NEURO', 'MEDICAL_VITAL_SIGNS'];

@@ -123,7 +123,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     | 'evolution'
     | 'anamnesis'
     | 'kinetic_functional'
-    | 'pain_zemdabody'
+    | 'pain_zemda360'
     | 'adm_goniometry'
     | 'muscle_strength'
     | 'posture_gait'
@@ -160,7 +160,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const [inspectionPalpation, setInspectionPalpation] = useState<string>('');
   const [functionalLimitations, setFunctionalLimitations] = useState<string>('');
 
-  // 4. Dor & ZemdaBody
+  // 4. Dor & Zemda360
   const [painScore, setPainScore] = useState<number>(0);
   const [painLocation, setPainLocation] = useState<string>('');
   const [painCharacteristics, setPainCharacteristics] = useState<string>('');
@@ -514,7 +514,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
             { id: 'evolution', label: '1. Evolução', icon: Activity },
             { id: 'anamnesis', label: '2. Anamnese', icon: FileText },
             { id: 'kinetic_functional', label: '3. Cinético-Funcional', icon: Sliders },
-            { id: 'pain_zemdabody', label: '4. Dor & ZemdaBody', icon: AlertCircle },
+            { id: 'pain_zemda360', label: '4. Dor & Zemda360', icon: AlertCircle },
             { id: 'adm_goniometry', label: '5. ADM / Goniometria', icon: Activity },
             { id: 'muscle_strength', label: '6. Força Oxford', icon: Dumbbell },
             { id: 'posture_gait', label: '7. Postura & Marcha', icon: User },
@@ -726,8 +726,8 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               </div>
             )}
 
-            {/* ABA 4: DOR & ZEMDABODY */}
-            {activeTab === 'pain_zemdabody' && (
+            {/* ABA 4: DOR & ZEMDA360 */}
+            {activeTab === 'pain_zemda360' && (
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b pb-3">
                   <AlertCircle className="w-4 h-4 text-rose-600" /> Avaliação da Dor & Mapa Corporal

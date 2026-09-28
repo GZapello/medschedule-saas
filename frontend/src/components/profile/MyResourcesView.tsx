@@ -1,3 +1,4 @@
+import { anatomicalModuleLabel } from '../../utils/anatomicalModuleLabel';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -210,7 +211,7 @@ export const MyResourcesView: React.FC = () => {
                 Autonomia Clínica Individual
               </span>
               <span className="text-xs px-2.5 py-1 rounded-full bg-white/10 text-white font-bold border border-white/10">
-                {data.commercialModule}
+                {anatomicalModuleLabel(data.commercialModule)}
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight">

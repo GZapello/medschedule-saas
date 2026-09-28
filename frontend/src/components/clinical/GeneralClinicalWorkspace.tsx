@@ -6,7 +6,7 @@ import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { ClinicalAutosaveIndicator } from './ClinicalAutosaveIndicator';
 import { FinishConsultationModal } from './FinishConsultationModal';
 import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
-import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
+import { Zemda360Modal } from '../zemda360/Zemda360Modal';
 import {
   FileText,
   Activity,
@@ -1142,7 +1142,7 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
       )}
 
       {showBodyMapModal && (patient?.id || appointment?.patient_id) && (
-        <ZemdaBodyModal
+        <Zemda360Modal
           isOpen={showBodyMapModal}
           onClose={() => setShowBodyMapModal(false)}
           patientId={patient?.id || appointment?.patient_id}

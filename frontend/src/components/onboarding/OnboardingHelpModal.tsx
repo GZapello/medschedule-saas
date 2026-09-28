@@ -26,7 +26,7 @@ export const OnboardingHelpModal: React.FC = () => {
     openShortcuts,
     availableModules,
     isPureAdmin,
-    isZemdaBody,
+    isZemda360,
     onboardingData
   } = useOnboarding();
 
@@ -209,8 +209,8 @@ export const OnboardingHelpModal: React.FC = () => {
               <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 shrink-0" />
             </button>
 
-            {/* 3. Mapa Corporal ZemdaBody (Transversal) */}
-            {isZemdaBody && (
+            {/* 3. Mapa Corporal Zemda360 (Transversal) */}
+            {isZemda360 && (
               <button
                 type="button"
                 onClick={() => {

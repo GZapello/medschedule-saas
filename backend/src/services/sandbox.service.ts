@@ -274,7 +274,8 @@ export class SandboxService {
       zemdaPsicoEnabled: flags.zemda_psico_enabled === 1,
       zemdaPPEnabled: flags.zemda_pp_enabled === 1,
       zemdaPersonalEnabled: flags.zemda_personal_enabled === 1,
-      zemdaBodyEnabled: true,
+      zemda360Enabled: true,
+        zemdaBodyEnabled: true, // Legacy API alias.
       isSandbox: true,
       sandboxSessionId: sessionId,
       sandboxPlanCode: planCode

@@ -91,7 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isEsthetician,
     isZemdaEstetic,
     hasCapability,
-    isZemdaBody,
+    isZemda360,
     commercialModule,
     clinicalWorkspace,
     clientTermLabel
@@ -120,10 +120,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           visible: isDoctor || isZemdaMed || commercialModule === 'ZemdaMed'
         },
         {
-          id: 'zemda-body',
-          label: 'Zemda360 (Mapeamento Anatômico)',
+          id: 'zemda360',
+          label: 'Zemda360',
           icon: Activity,
-          visible: isClinicAdmin || isZemdaBody
+          visible: isClinicAdmin || isZemda360
         },
         {
           id: 'zemda-fisio',

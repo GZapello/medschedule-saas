@@ -321,7 +321,7 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
     "slug": "sistema-para-fisioterapeutas",
     "path": "/sistema-para-fisioterapeutas",
     "title": "Sistema para Fisioterapeutas | ZemdaFisio",
-    "metaDescription": "Organize avaliações funcionais, ADM, escalas, plano terapêutico e evolução com o ZemdaFisio. Use o ZemdaBody para complementar o registro corporal.",
+    "metaDescription": "Organize avaliações funcionais, ADM, escalas, plano terapêutico e evolução com o ZemdaFisio. Use o Zemda360 para complementar o registro corporal.",
     "badge": "ZemdaFisio",
     "h1": "Da avaliação funcional à evolução com o ZemdaFisio",
     "h2": "Avaliação funcional e ADM",
@@ -336,7 +336,7 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
         "description": "Organize os instrumentos utilizados e as metas do acompanhamento. A evolução deve relacionar a intervenção, a resposta observada e as decisões do profissional, em vez de repetir somente o plano inicial."
       },
       {
-        "title": "Mapa corporal com ZemdaBody",
+        "title": "Mapa corporal com Zemda360",
         "description": "Complemente o texto com marcações por região e vistas anatômicas. O mapa facilita a localização visual do registro; não substitui o exame funcional nem a interpretação clínica."
       }
     ],
@@ -748,12 +748,12 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
   {
     "slug": "mapa-corporal-clinico",
     "path": "/mapa-corporal-clinico",
-    "title": "Mapa Corporal Clínico | ZemdaBody",
-    "metaDescription": "Mapa corporal clínico com vistas anatômicas, marcações por região e desenhos. Conheça o ZemdaBody para complementar avaliações e evolução em saúde.",
-    "badge": "ZemdaBody · módulo transversal",
-    "h1": "Mapa corporal clínico com o ZemdaBody",
+    "title": "Mapeamento Anatômico Corporal e Facial | Zemda360",
+    "metaDescription": "Mapeamento corporal e facial com vistas anatômicas, articulações, marcações por região e desenhos. Conheça o Zemda360 integrado ao atendimento.",
+    "badge": "Zemda360 · módulo transversal",
+    "h1": "Mapeamento corporal e facial com o Zemda360",
     "h2": "Localização visual de observações",
-    "summary": "O ZemdaBody é um módulo transversal para registro visual do corpo. Profissionais de diferentes áreas podem complementar o prontuário com localização de observações, marcações e desenhos, conforme os recursos e permissões disponíveis.",
+    "summary": "O Zemda360 é um ferramenta compartilhada para registro visual do corpo e da face. Profissionais de diferentes áreas podem complementar o prontuário com localização de observações, marcações e desenhos, conforme os recursos e permissões disponíveis.",
     "features": [
       {
         "title": "Localização visual de observações",

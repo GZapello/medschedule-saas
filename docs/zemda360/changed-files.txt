@@ -1,0 +1,81 @@
+M	SEO_IMPLEMENTATION.md
+M	backend/src/config/database.ts
+M	backend/src/config/modular-architecture.migration.ts
+M	backend/src/controllers/appointment.controller.ts
+M	backend/src/controllers/auth.controller.ts
+M	backend/src/controllers/body-assessment.controller.ts
+M	backend/src/controllers/clinical.controller.ts
+M	backend/src/controllers/documents.controller.ts
+M	backend/src/controllers/personal-ai.controller.ts
+M	backend/src/controllers/staff.controller.ts
+M	backend/src/controllers/taxonomy.controller.ts
+M	backend/src/controllers/tenant.controller.ts
+M	backend/src/routes/index.ts
+M	backend/src/seo/landingContent.ts
+M	backend/src/seo/preRender.ts
+M	backend/src/seo/seoRoutes.ts
+M	backend/src/services/sandbox.service.ts
+M	backend/src/types/registration-professions.ts
+M	backend/src/utils/clinical-module.ts
+M	backend/src/utils/profession-module.ts
+A	backend/test-zemda360-naming.cjs
+A	docs/zemda360/changed-files.txt
+A	docs/zemda360/landing-migration-report.md
+A	docs/zemda360/legacy-audit.md
+A	docs/zemda360/review/landing-mobile.png
+A	docs/zemda360/review/landing-modules.png
+M	frontend/src/App.tsx
+M	frontend/src/components/auth/CreateClinicModal.tsx
+M	frontend/src/components/auth/FreeTrialActivationView.tsx
+M	frontend/src/components/auth/RegistrationProfessionSelect.tsx
+M	frontend/src/components/billing/BillingView.tsx
+M	frontend/src/components/billing/billingBenefits.ts
+M	frontend/src/components/clinical/AppointmentConsultation.tsx
+M	frontend/src/components/clinical/ClinicalRecordsView.tsx
+M	frontend/src/components/clinical/GeneralClinicalWorkspace.tsx
+M	frontend/src/components/clinical/PatientPreviousRecordsModal.tsx
+M	frontend/src/components/clinical/QuickConsultationModal.tsx
+M	frontend/src/components/clinical/SelectConsultationModuleModal.tsx
+M	frontend/src/components/common/Sidebar.tsx
+M	frontend/src/components/estetic/ZemdaEsteticWorkspace.tsx
+M	frontend/src/components/onboarding/OnboardingContext.tsx
+M	frontend/src/components/onboarding/OnboardingHelpModal.tsx
+M	frontend/src/components/onboarding/tourRegistry.ts
+M	frontend/src/components/personal/PersonalBodyMapIntegration.tsx
+M	frontend/src/components/physiotherapy/PhysiotherapyWorkspace.tsx
+M	frontend/src/components/profile/MyResourcesView.tsx
+M	frontend/src/components/public/LandingProductDemo.tsx
+M	frontend/src/components/public/PublicFooter.tsx
+M	frontend/src/components/public/ZemdaLandingPage.tsx
+M	frontend/src/components/public/landingModulePreviews.ts
+D	frontend/src/components/zemda-body/FaceMapCanvas.tsx
+R060	frontend/src/components/zemda-body/AnatomicalMapCanvas.tsx	frontend/src/components/zemda360/AnatomicalMapCanvas.tsx
+R100	frontend/src/components/zemda-body/AnatomicalRecordPreview.tsx	frontend/src/components/zemda360/AnatomicalRecordPreview.tsx
+R100	frontend/src/components/zemda-body/AnatomicalRegionPanel.tsx	frontend/src/components/zemda360/AnatomicalRegionPanel.tsx
+R100	frontend/src/components/zemda-body/AnthropometricAssessmentView.tsx	frontend/src/components/zemda360/AnthropometricAssessmentView.tsx
+A	frontend/src/components/zemda360/FaceMapCanvas.tsx
+R100	frontend/src/components/zemda-body/TherapeuticPlanView.tsx	frontend/src/components/zemda360/TherapeuticPlanView.tsx
+R099	frontend/src/components/zemda-body/ZemdaBodyCanvas.tsx	frontend/src/components/zemda360/Zemda360Canvas.tsx
+R095	frontend/src/components/zemda-body/ZemdaBodyModal.tsx	frontend/src/components/zemda360/Zemda360Modal.tsx
+R099	frontend/src/components/zemda-body/ZemdaBodyPanel.tsx	frontend/src/components/zemda360/Zemda360Panel.tsx
+R098	frontend/src/components/zemda-body/ZemdaBodyRecordsView.tsx	frontend/src/components/zemda360/Zemda360RecordsView.tsx
+R099	frontend/src/components/zemda-body/ZemdaBodyWorkspace.tsx	frontend/src/components/zemda360/Zemda360Workspace.tsx
+R098	frontend/src/components/zemda-body/anatomicalDocument.ts	frontend/src/components/zemda360/anatomicalDocument.ts
+R100	frontend/src/components/zemda-body/anatomicalRegions.ts	frontend/src/components/zemda360/anatomicalRegions.ts
+R100	frontend/src/components/zemda-body/bodyRegionsData.ts	frontend/src/components/zemda360/bodyRegionsData.ts
+R100	frontend/src/components/zemda-body/data/region-taxonomy.json	frontend/src/components/zemda360/data/region-taxonomy.json
+R100	frontend/src/components/zemda-body/faceRegions.ts	frontend/src/components/zemda360/faceRegions.ts
+R100	frontend/src/components/zemda-body/useAnatomicalAssessment.ts	frontend/src/components/zemda360/useAnatomicalAssessment.ts
+M	frontend/src/context/AuthContext.tsx
+M	frontend/src/types/index.ts
+A	frontend/src/utils/anatomicalModuleLabel.ts
+M	frontend/src/utils/metaPixel.ts
+M	frontend/tests/landing-accordion-browser.cjs
+M	frontend/tests/landing-browser.cjs
+M	frontend/tests/registration-analytics.cjs
+M	frontend/tests/registration-plans-browser.cjs
+M	frontend/tests/registration-professions-browser.cjs
+A	frontend/tests/zemda360-naming-browser.cjs
+A	frontend/tests/zemda360-naming.html
+A	frontend/tests/zemda360-naming.tsx
+M	frontend/tests/zemda360.tsx
