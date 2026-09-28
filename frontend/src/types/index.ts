@@ -143,6 +143,14 @@ export interface Professional {
   phone?: string;
   schedules?: any[];
   blockedTimes?: any[];
+  /** Módulo Zemda derivado da profissão (ver backend/src/utils/profession-module.ts). Presente apenas
+   *  nas respostas públicas de agendamento (WS-D); null quando o profissional não tem profissão
+   *  cadastrada, ou ausente em endpoints que não computam esse campo. */
+  module?: string | null;
+  /** Reflete clinic_users.zemda_body_enabled; usado apenas como salvaguarda de compatibilidade caso
+   *  algum serviço um dia resolva para o módulo 'ZemdaBody' (hoje isso nunca ocorre — ver comentário
+   *  em profession-module.ts). */
+  zemda_body_enabled?: number | null;
 }
 
 export interface StaffMember {
@@ -184,6 +192,10 @@ export interface Service {
   min_lead_time_hours?: number;
   max_advance_days?: number;
   cancellation_policy?: string;
+  /** Módulo Zemda derivado de specialty_id -> profession_id (ver backend/src/utils/profession-module.ts).
+   *  Presente apenas nas respostas públicas de agendamento (WS-D); null quando o serviço não tem
+   *  especialidade/profissão associada (tratar como compatível com qualquer profissional). */
+  module?: string | null;
 }
 
 export interface Room {

@@ -7,7 +7,7 @@ import { hashPassword } from '../utils/password';
 import { logAudit } from '../middlewares/audit.middleware';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
-import { resolveProfessionModule, cleanPracticeAreasForNewProfession } from '../utils/profession-module';
+import { resolveProfessionModule, cleanPracticeAreasForNewProfession, deriveModuleFromProfessionRef } from '../utils/profession-module';
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
 
 export class ProfessionalController {
@@ -650,14 +650,17 @@ export class ProfessionalController {
       }
 
       const profRow = db.prepare(`
-        SELECT 
+        SELECT
           p.id, p.tenant_id, p.name, p.slug, p.photo_url, p.bio,
           p.registration_type, p.registration_number, p.practice_areas, p.gender,
+          p.profession_id,
           COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
-          prof.name as profession_name
+          prof.name as profession_name,
+          cu.zemda_body_enabled
         FROM professionals p
         LEFT JOIN specialties spec ON spec.id = p.specialty_id
         LEFT JOIN professions prof ON prof.id = p.profession_id
+        LEFT JOIN clinic_users cu ON cu.user_id = p.user_id AND cu.tenant_id = p.tenant_id
         WHERE p.slug = ? AND p.active = 1 AND p.public_booking_enabled = 1
       `).get(String(slug).trim().toLowerCase()) as any;
 
@@ -665,6 +668,9 @@ export class ProfessionalController {
         res.status(404).json({ error: 'Página pública do profissional não encontrada ou agendamento online desativado.' });
         return;
       }
+
+      // Módulo Zemda do profissional (usado para filtrar os serviços compatíveis abaixo — WS-D)
+      profRow.module = deriveModuleFromProfessionRef(profRow.profession_id, profRow.profession_name);
 
       // Busca dados públicos da clínica
       const tenantRow = db.prepare(`
@@ -680,25 +686,42 @@ export class ProfessionalController {
       }
 
       // Busca serviços do profissional (ou todos os ativos da clínica se não houver vinculação restrita)
+      // (specialty_id + join até profession adicionados apenas para computar `module` — WS-D)
       let services = db.prepare(`
         SELECT s.id, s.name, s.description,
                COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
                COALESCE(ps.custom_price, s.price) as price,
-               s.modality
+               s.modality, s.specialty_id,
+               spec.profession_id as specialty_profession_id,
+               sprof.name as specialty_profession_name
         FROM professional_services ps
         JOIN services s ON s.id = ps.service_id
+        LEFT JOIN specialties spec ON spec.id = s.specialty_id
+        LEFT JOIN professions sprof ON sprof.id = spec.profession_id
         WHERE ps.professional_id = ? AND s.active = 1
         ORDER BY s.name ASC
       `).all(profRow.id) as any[];
 
       if (!services || services.length === 0) {
         services = db.prepare(`
-          SELECT id, name, description, duration_minutes, price, modality
-          FROM services
-          WHERE tenant_id = ? AND active = 1
-          ORDER BY name ASC
+          SELECT s.id, s.name, s.description, s.duration_minutes, s.price, s.modality, s.specialty_id,
+                 spec.profession_id as specialty_profession_id,
+                 sprof.name as specialty_profession_name
+          FROM services s
+          LEFT JOIN specialties spec ON spec.id = s.specialty_id
+          LEFT JOIN professions sprof ON sprof.id = spec.profession_id
+          WHERE s.tenant_id = ? AND s.active = 1
+          ORDER BY s.name ASC
         `).all(profRow.tenant_id) as any[];
       }
+
+      services = services.map((s: any) => {
+        const { specialty_profession_id, specialty_profession_name, ...rest } = s;
+        return {
+          ...rest,
+          module: deriveModuleFromProfessionRef(specialty_profession_id, specialty_profession_name)
+        };
+      });
 
       res.json({
         professional: profRow,

@@ -869,6 +869,33 @@ export function resolveProfessionModule(input: ResolveProfessionInput): { module
 }
 
 /**
+ * Deriva o módulo Zemda comercial (ZemdaModule) a partir de uma referência de profissão (id/nome),
+ * sem exigir um registro completo de profissional/usuário.
+ *
+ * Usado pela API pública de agendamento (WS-D) para computar o campo `module` de SERVIÇOS
+ * (services.specialty_id -> specialties.profession_id -> aqui) e de PROFISSIONAIS
+ * (professionals.profession_id -> aqui), de forma que o wizard de agendamento público só ofereça
+ * profissionais compatíveis com o módulo do serviço escolhido.
+ *
+ * Retorna null quando não há profession_id (specialty_id nulo no serviço, ou profissional sem
+ * profissão cadastrada) — nesse caso o chamador deve tratar como "compatível com todos" para não
+ * quebrar agendamentos já configurados sem essa vinculação (comportamento anterior a essa filtragem).
+ *
+ * Nota sobre ZemdaBody: este helper NUNCA retorna 'ZemdaBody' porque esse valor não existe no tipo
+ * ZemdaModule nem é produzido por resolveCanonicalProfession — ZemdaBody é um complemento universal
+ * liberado a qualquer profissional/gestor clínico ativo (ver clinic_users.zemda_body_enabled e
+ * body-assessment.controller.ts:hasZemdaBodyAccess), não uma profissão/especialidade. Não há hoje
+ * nenhuma forma de um serviço "ser do módulo ZemdaBody" via specialty/profession.
+ */
+export function deriveModuleFromProfessionRef(
+  professionId?: string | null,
+  professionName?: string | null
+): ZemdaModule | null {
+  if (!professionId) return null;
+  return resolveCanonicalProfession({ id: professionId, name: professionName || null }).commercialModule;
+}
+
+/**
  * Remove menções a profissões incompatíveis de practice_areas antigas
  * para que não contaminem ou restaurem acessos residuais após a troca.
  */

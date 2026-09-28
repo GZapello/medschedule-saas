@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { AvailableSlot } from '../../types';
+import { isProfessionalCompatibleWithService } from '../../utils/moduleCompat';
 import {
   Calendar,
   Clock,
@@ -72,8 +73,12 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
         setTenant(data.tenant);
         const srvs = data.services || [];
         setServices(srvs);
-        if (srvs.length > 0) {
-          setSelectedService(srvs[0]);
+        // Só oferece, por padrão, um serviço compatível com o módulo do profissional (ver
+        // utils/moduleCompat.ts) — um profissional não deve exibir pré-selecionado um serviço de
+        // outro módulo clínico.
+        const compatibleSrvs = srvs.filter((s: any) => isProfessionalCompatibleWithService(s, data.professional || {}));
+        if (compatibleSrvs.length > 0) {
+          setSelectedService(compatibleSrvs[0]);
         }
       } catch (err: any) {
         showToast(err.message || 'Profissional não encontrado ou agendamento desativado', 'error');
@@ -85,6 +90,13 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
       loadProf();
     }
   }, [slug]);
+
+  // Serviços compatíveis com o módulo do profissional (o mesmo campo `module` computado pelo
+  // backend em getPublicProfile — um profissional não deve oferecer serviços de outro módulo).
+  const compatibleServices = useMemo(
+    () => (professional ? services.filter(s => isProfessionalCompatibleWithService(s, professional)) : services),
+    [services, professional]
+  );
 
   // Consulta slots disponíveis pela escala oficial quando muda data ou serviço
   useEffect(() => {
@@ -312,13 +324,18 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
                     </p>
                   </div>
 
-                  {/* Lista de Serviços */}
+                  {/* Lista de Serviços (apenas os compatíveis com o módulo do profissional) */}
                   <div className="space-y-2.5">
                     <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                       Serviços Disponíveis
                     </label>
+                    {compatibleServices.length === 0 ? (
+                      <div className="bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl p-6 text-center text-slate-400 text-sm">
+                        Nenhum serviço disponível para agendamento com este profissional no momento.
+                      </div>
+                    ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {services.map(srv => {
+                      {compatibleServices.map(srv => {
                         const isSelected = selectedService?.id === srv.id;
                         return (
                           <div
@@ -344,6 +361,7 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
                         );
                       })}
                     </div>
+                    )}
                   </div>
 
                   {/* Seletor de Data */}
