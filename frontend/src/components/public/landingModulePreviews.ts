@@ -19,7 +19,7 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
       'Exames, medicamentos e prescrições',
       'Especialidades e acompanhamento longitudinal',
       'Documentos médicos e encaminhamentos',
-      'Integração com ZemdaBody'
+      'Integração com Zemda360'
     ],
     featureDescriptions: [
       'Estruture a anamnese, hipóteses diagnósticas e histórico clínico completo do paciente com rapidez e segurança.',
@@ -27,26 +27,53 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
       'Organize prescrições medicamentosas, pedidos de exames laboratoriais e controle de laudos no prontuário.',
       'Recursos adaptados para Neurologia, Psiquiatria, Pediatria, Clínica Geral e diversas especialidades médicas.',
       'Emita atestados, receituários, relatórios e guias de encaminhamento com rastreabilidade e registro de autoria.',
-      'Mapeie achados clínicos, dores, dermatologia e procedimentos diretamente no mapa corporal interativo.'
+      'Mapeie achados clínicos, dores, dermatologia e procedimentos diretamente no mapa anatômico interativo Zemda360.'
     ],
-    focus: 'Prontuário médico longitudinal, prescrições, documentos e integração com mapa corporal no mesmo ambiente.'
+    focus: 'Prontuário médico longitudinal, prescrições, documentos e integração com mapa anatômico no mesmo ambiente.'
   },
   {
-    id: 'body', name: 'ZemdaBody', area: 'Módulo transversal',
-    description: 'Registre regiões corporais, marque achados clínicos e acompanhe visualmente a evolução do paciente ao longo dos atendimentos.',
+    id: 'body', name: 'Zemda360', area: 'Mapeamento Anatômico',
+    description: 'Mapeamento anatômico visual integrado ao atendimento.',
     features: [
-      'Mapa corporal interativo',
-      'Vistas frontais, posteriores e laterais',
-      'Marcações por região e desenhos',
-      'Registros vinculados ao atendimento'
+      'Mapeamento corporal',
+      'Mapeamento facial',
+      'Seleção de regiões anatômicas',
+      'Marcações com caneta e borracha',
+      'Observações por região',
+      'Histórico de avaliações'
     ],
     featureDescriptions: [
-      'Explore regiões do corpo para organizar o registro visual da avaliação e exames.',
-      'Consulte as vistas frontal, posterior e laterais do modelo anatômico interativo.',
-      'Selecione regiões corporais e registre marcações, achados e notas clínicas.',
-      'Mantenha a avaliação corporal relacionada ao paciente e ao atendimento correspondente.'
+      'Explore regiões do corpo para registrar achados clínicos e acompanhar a evolução visualmente.',
+      'Mapeamento facial detalhado com sobreposições anatômicas para estética, odontologia e procedimentos.',
+      'Selecione regiões anatômicas específicas em vistas anterior, posterior e lateral.',
+      'Desenhe com caneta colorida ou limpe com a borracha diretamente sobre o modelo anatômico.',
+      'Adicione notas e observações clínicas estruturadas por região anatômica.',
+      'Acompanhe a linha do tempo com o histórico comparativo das avaliações do paciente.'
     ],
-    focus: 'Recurso transversal de mapa corporal compartilhado entre medicina e especialidades multiprofissionais.'
+    focus: 'Mapeamento anatômico visual integrado ao atendimento, compartilhado entre medicina e especialidades.'
+  },
+  {
+    id: 'estetic', name: 'ZemdaEstetic', area: 'Estética',
+    description: 'Estética facial, corporal e capilar em um só ambiente.',
+    features: [
+      'Avaliação estética',
+      'Estética facial, corporal e capilar',
+      'Fotografias e acompanhamento',
+      'Planejamento e procedimentos',
+      'Evolução e retornos',
+      'Antes e depois',
+      'Integração com Zemda360'
+    ],
+    featureDescriptions: [
+      'Ficha de avaliação estética e anamnese estruturada para procedimentos faciais, corporais e capilares.',
+      'Prontuário unificado para protocolos personalizados de estética facial, corporal e terapia capilar.',
+      'Armazene fotos clínicas padronizadas com registro seguro de datas, ângulos e iluminação.',
+      'Planeje sessões, selecione produtos com rastreabilidade de lote e registre procedimentos realizados.',
+      'Documente a resposta aos tratamentos, condutas domiciliares e agende retornos de acompanhamento.',
+      'Compare fotos de evolução lado a lado para demonstrar resultados clínicos aos pacientes.',
+      'Mapeie pontos de aplicação, regiões anatômicas e procedimentos diretamente no Zemda360.'
+    ],
+    focus: 'Protocolos de estética facial, corporal e capilar com registros fotográficos, evolução clínica e mapeamento anatômico integrado.'
   },
   {
     id: 'fono', name: 'ZemdaFono', area: 'Fonoaudiologia',
@@ -99,11 +126,11 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
   {
     id: 'fisio', name: 'ZemdaFisio', area: 'Fisioterapia',
     description: 'Avaliação funcional e planejamento do acompanhamento fisioterapêutico.',
-    features: ['Avaliação cinético-funcional', 'Goniometria e força muscular', 'Mapa corporal com ZemdaBody', 'Plano terapêutico'],
+    features: ['Avaliação cinético-funcional', 'Goniometria e força muscular', 'Mapeamento anatômico com Zemda360', 'Plano terapêutico'],
     featureDescriptions: [
       "Documente a avaliação do movimento e da função para orientar o acompanhamento fisioterapêutico.",
       "Registre a amplitude de movimento e a avaliação de força muscular.",
-      "Localize regiões de dor e registre marcações corporais associadas ao atendimento.",
+      "Localize regiões de dor e registre marcações anatômicas associadas ao atendimento no Zemda360.",
       "Organize objetivos e condutas do plano de tratamento fisioterapêutico."
     ],
     focus: 'Registre a evolução e finalize cada atendimento com vínculo ao prontuário.'

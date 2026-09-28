@@ -80,6 +80,7 @@
 .zl-module:hover { transform:translateY(-3px); border-color:#89bbac; box-shadow:0 12px 24px -20px #26483e60; }
 .zl-module-icon { display:flex; align-items:center; justify-content:center; width:43px; height:43px; border-radius:12px; background:#ecf6f1; color:#2a7768; margin-bottom:23px; }
 .zl-module-med .zl-module-icon { background:#e8f4f8; color:#0e7490; }
+.zl-module-estetic .zl-module-icon { background:#fdf2f8; color:#be185d; }
 .zl-module-fono .zl-module-icon { background:#fff1f0; color:#aa6a68; }
 .zl-module-psico .zl-module-icon { background:#f3effa; color:#806499; }
 .zl-module-odonto .zl-module-icon { background:#eef4fd; color:#5d7eaa; }

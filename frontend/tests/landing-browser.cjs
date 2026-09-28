@@ -20,7 +20,8 @@ async function main() {
     assert.ok(!(await page.locator('body').innerText()).includes('Um só Zemda.'));
     const previewCases = [
       ['med', 'ZemdaMed', 'Especialidades e acompanhamento longitudinal'],
-      ['body', 'ZemdaBody', 'Marcações por região e desenhos'],
+      ['body', 'Zemda360', 'Mapeamento facial'],
+      ['estetic', 'ZemdaEstetic', 'Fotografias e acompanhamento'],
       ['fono', 'ZemdaFono', 'Audiologia e audiograma'],
       ['psico', 'ZemdaPsico', 'Testes externos e laudos'],
       ['odonto', 'ZemdaOdonto', 'Periodontograma'],
@@ -31,7 +32,7 @@ async function main() {
       ['pp', 'ZemdaPP', 'Plano de intervenção (PIP)']
     ];
     const selector=page.getByRole('combobox',{name:'Escolha sua área'});
-    assert.equal(await selector.locator('option').count(),10);
+    assert.equal(await selector.locator('option').count(),11);
     for (const width of [320,360,390,640,768,1024,1440]) {
       await page.setViewportSize({width,height:1000});
       const overflow=await page.evaluate(() => ({width:innerWidth,scroll:document.documentElement.scrollWidth}));
@@ -48,7 +49,7 @@ async function main() {
       for(const [id,name,feature] of previewCases) {
         await selector.selectOption(id);
         assert.equal(await page.locator('#product-view h2').innerText(),name);
-        const expectedLi = id === 'med' ? 6 : 4;
+        const expectedLi = id === 'med' ? 6 : (id === 'estetic' ? 7 : (id === 'body' ? 6 : 4));
         assert.equal(await page.locator('#product-view .zl-resource-map li').count(),expectedLi);
         await page.locator('#product-view').getByText(feature,{exact:true}).waitFor();
         icons.add(await page.locator('#product-view .zl-icon svg').getAttribute('class'));
@@ -56,11 +57,11 @@ async function main() {
         focusTexts.add(await page.locator('.zl-module-focus').innerText());
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Overflow: ${name} at ${width}`);
       }
-      assert.equal(icons.size,10); assert.equal(descriptions.size,10); assert.equal(focusTexts.size,10);
+      assert.equal(icons.size,11); assert.equal(descriptions.size,11); assert.equal(focusTexts.size,11);
       assert.ok((await page.locator('#product-view .zl-eyebrow').textContent()).includes('Módulo Transversal'));
       await selector.focus(); await selector.press('Home');
       assert.equal(await selector.inputValue(),'med');
-      console.log(`Responsive ${width}px and all 10 specialty previews: OK`);
+      console.log(`Responsive ${width}px and all 11 specialty previews: OK`);
     }
     for(const name of ['Agenda','Prontuário','Especialidade','Financeiro','Dashboard']) {
       const button=page.locator('.zl-view-picker').getByRole('button',{name,exact:true});

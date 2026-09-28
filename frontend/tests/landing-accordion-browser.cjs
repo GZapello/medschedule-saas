@@ -15,15 +15,15 @@ const base=process.env.TEST_BASE_URL || 'http://127.0.0.1:5178';
   await select.waitFor();
   assert.equal(await page.locator('.zl-layer-number').count(),0);
   assert.deepEqual(await page.locator('.zl-layers h3').allTextContents(),['Gestão','Atendimento','Especialidade']);
-  assert.ok(await page.evaluate(()=>Boolean(document.getElementById('zemdabody').compareDocumentPosition(document.querySelector('.zl-modules')) & Node.DOCUMENT_POSITION_FOLLOWING)));
-  assert.match(await page.locator('#zemdabody').innerText(),/MÓDULO TRANSVERSAL/);
+  assert.ok(await page.evaluate(()=>Boolean((document.getElementById('zemda360') || document.getElementById('zemdabody')).compareDocumentPosition(document.querySelector('.zl-modules')) & Node.DOCUMENT_POSITION_FOLLOWING)));
+  assert.match(await page.locator('#zemda360, #zemdabody').innerText(),/MÓDULO TRANSVERSAL/i);
   let navigations=0;page.on('framenavigated',()=>navigations++);
   for(const width of [320,768,1440]){
    await page.setViewportSize({width,height:1000});
-   for(const module of ['med','body','fono','psico','odonto','nutri','fisio','to','personal','pp']){
+   for(const module of ['med','body','estetic','fono','psico','odonto','nutri','fisio','to','personal','pp']){
     await select.selectOption(module);
     const triggers=page.locator('#product-view .zl-feature-trigger');
-    const count = module === 'med' ? 6 : 4;
+    const count = module === 'med' ? 6 : (module === 'estetic' ? 7 : (module === 'body' ? 6 : 4));
     assert.equal(await triggers.count(),count);
     assert.equal(await page.locator('.zl-feature-trigger[aria-expanded=true]').count(),0);
     for(let i=0;i<count;i++){
@@ -41,7 +41,7 @@ const base=process.env.TEST_BASE_URL || 'http://127.0.0.1:5178';
     await triggers.first().press('Space');
     assert.equal(await triggers.first().getAttribute('aria-expanded'),'true');
    }
-   console.log(`Accordion: 10 modules, exclusive expansion, keyboard and layout at ${width}px OK`);
+   console.log(`Accordion: 11 modules, exclusive expansion, keyboard and layout at ${width}px OK`);
   }
   await page.getByRole('tab',{name:'ZemdaPsico',exact:true}).click();
   assert.equal(await page.locator('.zl-feature-trigger[aria-expanded=true]').count(),0);
@@ -56,7 +56,7 @@ const base=process.env.TEST_BASE_URL || 'http://127.0.0.1:5178';
    const out=process.env.TEST_OUTPUT_DIR;fs.mkdirSync(out,{recursive:true});
    await select.selectOption('fono');await page.locator('.zl-feature-trigger').first().click();
    await page.locator('#produto').screenshot({path:path.join(out,'recursos-desktop.png'),style:'header.sticky,.zl-skip{visibility:hidden!important}'});
-   await page.locator('#profissoes').screenshot({path:path.join(out,'zemdabody-acima-da-grade.png'),style:'header.sticky,.zl-skip{visibility:hidden!important}'});
+   await page.locator('#profissoes').screenshot({path:path.join(out,'zemda360-acima-da-grade.png'),style:'header.sticky,.zl-skip{visibility:hidden!important}'});
    await page.setViewportSize({width:390,height:844});
    await select.selectOption('psico');await page.locator('.zl-feature-trigger').last().click();
    await page.locator('#produto').screenshot({path:path.join(out,'recursos-mobile.png'),style:'header.sticky,.zl-skip{visibility:hidden!important}'});

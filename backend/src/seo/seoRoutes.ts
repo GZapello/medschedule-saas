@@ -99,7 +99,8 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
       "/sistema-para-psicopedagogos",
       "/sistema-para-dentistas",
       "/sistema-para-terapeutas-ocupacionais",
-      "/sistema-para-personal-trainers"
+      "/sistema-para-personal-trainers",
+      "/sistema-para-estetica"
     ],
     "ctaHeadline": "Conheça os recursos na sua rotina",
     "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
@@ -321,7 +322,7 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
     "slug": "sistema-para-fisioterapeutas",
     "path": "/sistema-para-fisioterapeutas",
     "title": "Sistema para Fisioterapeutas | ZemdaFisio",
-    "metaDescription": "Organize avaliações funcionais, ADM, escalas, plano terapêutico e evolução com o ZemdaFisio. Use o ZemdaBody para complementar o registro corporal.",
+    "metaDescription": "Organize avaliações funcionais, ADM, escalas, plano terapêutico e evolução com o ZemdaFisio. Use o Zemda360 para complementar o mapeamento anatômico.",
     "badge": "ZemdaFisio",
     "h1": "Da avaliação funcional à evolução com o ZemdaFisio",
     "h2": "Avaliação funcional e ADM",
@@ -336,8 +337,8 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
         "description": "Organize os instrumentos utilizados e as metas do acompanhamento. A evolução deve relacionar a intervenção, a resposta observada e as decisões do profissional, em vez de repetir somente o plano inicial."
       },
       {
-        "title": "Mapa corporal com ZemdaBody",
-        "description": "Complemente o texto com marcações por região e vistas anatômicas. O mapa facilita a localização visual do registro; não substitui o exame funcional nem a interpretação clínica."
+        "title": "Mapeamento anatômico com Zemda360",
+        "description": "Complemente o texto com marcações por região e vistas anatômicas no Zemda360. O mapa facilita a localização visual do registro; não substitui o exame funcional nem a interpretação clínica."
       }
     ],
     "sections": [
@@ -746,14 +747,86 @@ const PROFESSIONAL_PAGES: RouteInput[] = [
     "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
   },
   {
+    "slug": "sistema-para-estetica",
+    "path": "/sistema-para-estetica",
+    "title": "Sistema para Clínicas de Estética | ZemdaEstetic",
+    "metaDescription": "Avaliação estética, fotos comparativas, planejamento de procedimentos e retornos com o ZemdaEstetic. Integrado ao mapeamento anatômico Zemda360.",
+    "badge": "ZemdaEstetic",
+    "h1": "Avaliação estética e procedimentos com o ZemdaEstetic",
+    "h2": "Avaliação estética facial, corporal e capilar",
+    "summary": "O acompanhamento em estética exige organização de protocolos, fotografias padronizadas e controle de procedimentos. O ZemdaEstetic reúne fichas de avaliação, comparativo de fotos e retornos, integrado ao mapeamento anatômico Zemda360.",
+    "features": [
+      {
+        "title": "Avaliação estética facial, corporal e capilar",
+        "description": "Estruture anamnese e fichas de avaliação específicas para tratamentos faciais, corporais e capilares com rapidez e segurança."
+      },
+      {
+        "title": "Fotografias e evolução antes e depois",
+        "description": "Armazene fotos clínicas padronizadas e compare a evolução dos tratamentos lado a lado para demonstrar resultados com clareza."
+      },
+      {
+        "title": "Planejamento e integração com Zemda360",
+        "description": "Planeje sessões, registre procedimentos realizados e mapeie regiões de aplicação no modelo anatômico interativo Zemda360."
+      }
+    ],
+    "sections": [
+      {
+        "heading": "Prontuário e continuidade do atendimento",
+        "paragraphs": [
+          "Relacione cada registro ao atendimento e revise o histórico antes de iniciar uma nova sessão. Documentos e anexos complementam a informação; registre autoria e contexto para facilitar a consulta posterior."
+        ],
+        "links": [
+          "/prontuario"
+        ]
+      },
+      {
+        "heading": "Agenda e organização administrativa",
+        "paragraphs": [
+          "Defina os serviços e acompanhe os horários disponíveis, confirmações, faltas e cancelamentos. Lembretes manuais e automáticos, quando configurados, apoiam a comunicação; não garantem comparecimento."
+        ],
+        "links": [
+          "/agenda-online"
+        ]
+      },
+      {
+        "heading": "Segurança e responsabilidades de acesso",
+        "paragraphs": [
+          "O acesso utiliza usuários e permissões e considera o isolamento por clínica. Conceda somente os acessos necessários a cada função e consulte a política de privacidade para conhecer o tratamento de dados."
+        ],
+        "links": [
+          "/privacidade"
+        ]
+      }
+    ],
+    "benefits": [],
+    "faqs": [
+      {
+        "question": "O módulo substitui a avaliação profissional?",
+        "answer": "Não. Os recursos organizam informações e apoiam o registro. A interpretação, a conduta e a revisão de documentos permanecem sob responsabilidade do profissional."
+      },
+      {
+        "question": "Como os módulos se relacionam com os planos?",
+        "answer": "O plano define o número de acessos. A profissão e as permissões definem as ferramentas disponíveis ao usuário. Consulte os planos e verifique os recursos adequados à sua rotina."
+      }
+    ],
+    "relatedLinks": [
+      "/agenda-online",
+      "/prontuario",
+      "/gestao-financeira",
+      "/mapa-corporal-clinico"
+    ],
+    "ctaHeadline": "Conheça os recursos na sua rotina",
+    "ctaSubheadline": "Consulte os planos e avalie o Zemda para organizar seus atendimentos."
+  },
+  {
     "slug": "mapa-corporal-clinico",
     "path": "/mapa-corporal-clinico",
-    "title": "Mapa Corporal Clínico | ZemdaBody",
-    "metaDescription": "Mapa corporal clínico com vistas anatômicas, marcações por região e desenhos. Conheça o ZemdaBody para complementar avaliações e evolução em saúde.",
-    "badge": "ZemdaBody · módulo transversal",
-    "h1": "Mapa corporal clínico com o ZemdaBody",
+    "title": "Mapeamento Anatômico Clínico | Zemda360",
+    "metaDescription": "Mapeamento anatômico clínico com vistas anatômicas, marcações por região e histórico de avaliações. Conheça o Zemda360 para complementar avaliações e evolução em saúde.",
+    "badge": "Zemda360 · módulo transversal",
+    "h1": "Mapeamento anatômico clínico com o Zemda360",
     "h2": "Localização visual de observações",
-    "summary": "O ZemdaBody é um módulo transversal para registro visual do corpo. Profissionais de diferentes áreas podem complementar o prontuário com localização de observações, marcações e desenhos, conforme os recursos e permissões disponíveis.",
+    "summary": "O Zemda360 é um módulo transversal para registro anatômico visual. Profissionais de diferentes áreas podem complementar o prontuário com localização de observações, marcações corporais e faciais e histórico de avaliações, conforme os recursos e permissões disponíveis.",
     "features": [
       {
         "title": "Localização visual de observações",
