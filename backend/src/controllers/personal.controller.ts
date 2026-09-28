@@ -6,6 +6,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { resolveCanonicalProfession } from '../utils/profession-module';
+import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 
 /**
  * Validação estrita de profissão:
@@ -177,6 +178,12 @@ export function hasPersonalAccess(req: Request): boolean {
   }
 
   return false;
+}
+
+export function hasPostureAccess(req: Request): boolean {
+  if (!req.user || !req.tenantId) return false;
+  if (req.user.role === 'superadmin') return false;
+  return hasPersonalAccess(req) || isPhysiotherapistOrClinicManager(req);
 }
 
 /**
@@ -1068,8 +1075,8 @@ export class PersonalController {
   // ==========================================
   static async listAssessments(req: Request, res: Response): Promise<void> {
     try {
-      if (!hasPersonalAccess(req)) {
-        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
         return;
       }
       const tenantId = req.tenantId!;
@@ -1086,7 +1093,7 @@ export class PersonalController {
         ORDER BY a.assessment_date DESC
       `).all(studentId, tenantId) as any[];
 
-      res.json({ assessments: assessments.map((a: any) => { const { posture_json, ...rest } = a; return { ...rest, has_posture: Boolean(posture_json) }; }) });
+      res.json({ assessments: assessments.map((a: any) => { const { posture_json, ...rest } = a; return { ...rest, has_posture: Boolean(posture_json), posture_summary: posture_json ? postureSummary(a) : null }; }) });
     } catch (err: any) {
       console.error('[PersonalController.listAssessments] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar avaliações físicas' });
@@ -1095,8 +1102,8 @@ export class PersonalController {
 
   static async getAssessment(req: Request, res: Response): Promise<void> {
     try {
-      if (!hasPersonalAccess(req)) {
-        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
         return;
       }
       const tenantId = req.tenantId!;
@@ -1130,8 +1137,8 @@ export class PersonalController {
 
   static async createAssessment(req: Request, res: Response): Promise<void> {
     try {
-      if (!hasPersonalAccess(req)) {
-        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
         return;
       }
       const tenantId = req.tenantId!;
@@ -1259,6 +1266,7 @@ export class PersonalController {
 
       validatePosturePhotoAccess(db, tenantId, b.patient_id, postureJson, b.photos);
 
+      const sourceModule = b.source_module || (isPhysiotherapistOrClinicManager(req) && !hasPersonalAccess(req) ? 'ZemdaFisio' : 'ZemdaPersonal');
       const assessmentId = 'pass-' + uuidv4().slice(0, 8);
       const assessmentDate = b.assessment_date || new Date().toISOString().split('T')[0];
 
@@ -1283,7 +1291,7 @@ export class PersonalController {
           vo2_max, vo2_method_type, vo2_protocol,
           strength_tests_json, muscular_endurance_tests_json,
           flexibility_wells_cm, flexibility_tests_json,
-          protocol, notes
+          protocol, source_module, notes
         ) VALUES (
           ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
@@ -1304,7 +1312,7 @@ export class PersonalController {
           ?, ?, ?,
           ?, ?,
           ?, ?,
-          ?, ?
+          ?, ?, ?
         )
       `).run(
         assessmentId, tenantId, b.patient_id, professionalId, assessmentDate,
@@ -1326,7 +1334,7 @@ export class PersonalController {
         b.vo2_max ? Number(b.vo2_max) : null, b.vo2_method_type || null, b.vo2_protocol || null,
         strengthTestsJson, muscularEnduranceTestsJson,
         b.flexibility_wells_cm ? Number(b.flexibility_wells_cm) : null, flexibilityTestsJson,
-        protocol, b.notes || null
+        protocol, sourceModule, b.notes || null
       );
 
       // Atualiza peso atual e altura no perfil do aluno
@@ -1350,7 +1358,7 @@ export class PersonalController {
       logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
       res.status(201).json({
         id: assessmentId,
-        assessment: { id: assessmentId },
+        assessment: { id: assessmentId, source_module: sourceModule },
         bmi,
         whr,
         whtr,
@@ -1371,8 +1379,8 @@ export class PersonalController {
 
   static async updateAssessment(req: Request, res: Response): Promise<void> {
     try {
-      if (!hasPersonalAccess(req)) {
-        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
         return;
       }
       const tenantId = req.tenantId!;
@@ -1388,13 +1396,14 @@ export class PersonalController {
 
       validatePosturePhotoAccess(db, tenantId, existing.patient_id, postureJson, b.photos);
 
-      if (b.weight !== undefined || b.height !== undefined || b.notes !== undefined || b.body_fat_percentage !== undefined) {
+      if (b.weight !== undefined || b.height !== undefined || b.notes !== undefined || b.body_fat_percentage !== undefined || b.source_module !== undefined) {
         db.prepare(`
           UPDATE personal_assessments
           SET weight = COALESCE(?, weight),
               height = COALESCE(?, height),
               body_fat_percentage = COALESCE(?, body_fat_percentage),
               notes = COALESCE(?, notes),
+              source_module = COALESCE(?, source_module),
               updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
         `).run(
@@ -1402,6 +1411,7 @@ export class PersonalController {
           b.height !== undefined ? Number(b.height) : null,
           b.body_fat_percentage !== undefined ? Number(b.body_fat_percentage) : null,
           b.notes !== undefined ? b.notes : null,
+          b.source_module !== undefined ? b.source_module : null,
           id, tenantId
         );
       }
@@ -1435,8 +1445,8 @@ export class PersonalController {
 
   static async deleteAssessment(req: Request, res: Response): Promise<void> {
     try {
-      if (!hasPersonalAccess(req)) {
-        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
         return;
       }
       const tenantId = req.tenantId!;
@@ -1460,8 +1470,8 @@ export class PersonalController {
 
   static async compareAssessments(req: Request, res: Response): Promise<void> {
     try {
-      if (!hasPersonalAccess(req)) {
-        res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
+      if (!hasPostureAccess(req)) {
+        res.status(403).json({ error: 'Acesso não autorizado' });
         return;
       }
       const tenantId = req.tenantId!;

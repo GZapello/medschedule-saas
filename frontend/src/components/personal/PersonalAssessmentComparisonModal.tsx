@@ -26,10 +26,11 @@ const PersonalPostureComparison = lazy(() => import('./PersonalPostureComparison
 interface PersonalAssessmentComparisonModalProps {
   isOpen: boolean;
   onClose: () => void;
-  student: Student;
-  assessmentsList: Assessment[];
+  student: Student | any;
+  assessmentsList: Assessment[] | any[];
   initialCurrentId?: string;
   initialPreviousId?: string;
+  postureOnly?: boolean;
 }
 
 export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentComparisonModalProps> = ({
@@ -38,7 +39,8 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
   student,
   assessmentsList,
   initialCurrentId,
-  initialPreviousId
+  initialPreviousId,
+  postureOnly = false
 }) => {
   const { showToast } = useToast();
 
@@ -46,10 +48,17 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
   const [previousId, setPreviousId] = useState(initialPreviousId || '');
   const [comparison, setComparison] = useState<AssessmentComparison | null>(null);
   const [loading, setLoading] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<'all' | 'composition' | 'perimeters' | 'skinfolds' | 'cardio' | 'photos' | 'posture'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'composition' | 'perimeters' | 'skinfolds' | 'cardio' | 'photos' | 'posture'>(postureOnly ? 'posture' : 'all');
 
   const requestVersion = useRef(0);
   useEffect(() => () => { requestVersion.current++; }, []);
+
+  useEffect(() => {
+    if (isOpen && postureOnly) {
+      setActiveCategory('posture');
+    }
+  }, [isOpen, postureOnly]);
+
   useEffect(() => {
     if (isOpen && assessmentsList.length >= 1) {
       const sorted = [...assessmentsList].sort(
@@ -195,10 +204,10 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-800">
-                Comparativo de Avaliações Físicas (Anterior × Atual)
+                {postureOnly ? 'Comparativo de Avaliação Postural' : 'Comparativo de Avaliações Físicas (Anterior × Atual)'}
               </h3>
               <p className="text-xs text-slate-500">
-                Aluno: <strong className="text-slate-700">{student.name}</strong> • Variações absolutas e percentuais.
+                {postureOnly ? 'Paciente: ' : 'Aluno: '}<strong className="text-slate-700">{student?.name || (student as any)?.full_name || '—'}</strong> • {postureOnly ? 'Evolução postural comparativa e referência inicial.' : 'Variações absolutas e percentuais.'}
               </p>
             </div>
           </div>
@@ -225,7 +234,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
             >
               {assessmentsList.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {dateLabel(a.assessment_date)} — {a.weight} kg, {a.body_fat_percentage}% fat ({a.protocol || 'Pollock'})
+                  {dateLabel(a.assessment_date)} {a.has_posture ? '• Avaliação Postural' : (a.weight ? `— ${a.weight} kg, ${a.body_fat_percentage}% fat` : '')} {a.source_module ? `(${a.source_module})` : ''}
                 </option>
               ))}
             </select>
@@ -242,7 +251,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
             >
               {assessmentsList.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {dateLabel(a.assessment_date)} — {a.weight} kg, {a.body_fat_percentage}% fat ({a.protocol || 'Pollock'})
+                  {dateLabel(a.assessment_date)} {a.has_posture ? '• Avaliação Postural' : (a.weight ? `— ${a.weight} kg, ${a.body_fat_percentage}% fat` : '')} {a.source_module ? `(${a.source_module})` : ''}
                 </option>
               ))}
             </select>
@@ -277,59 +286,72 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
           )}
         </div>
 
-        {/* Sub-abas de Categoria */}
-        <div className="px-6 py-2 border-b border-slate-200 bg-white flex items-center gap-1 overflow-x-auto">
-          <button
-            onClick={() => setActiveCategory('all')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
-              activeCategory === 'all' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Todas as Métricas
-          </button>
-          <button
-            onClick={() => setActiveCategory('composition')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
-              activeCategory === 'composition' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Composição & TAV
-          </button>
-          <button
-            onClick={() => setActiveCategory('perimeters')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
-              activeCategory === 'perimeters' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Perímetros (cm)
-          </button>
-          <button
-            onClick={() => setActiveCategory('skinfolds')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
-              activeCategory === 'skinfolds' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Dobras Cutâneas (mm)
-          </button>
-          <button
-            onClick={() => setActiveCategory('cardio')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
-              activeCategory === 'cardio' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Cardio & Funcional
-          </button>
-          <button
-            onClick={() => setActiveCategory('photos')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
-              activeCategory === 'photos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Fotos Comparativas
-          </button>
-        </div>
+        {!postureOnly ? (
+          <>
+            {/* Sub-abas de Categoria */}
+            <div className="px-6 py-2 border-b border-slate-200 bg-white flex items-center gap-1 overflow-x-auto">
+              <button
+                onClick={() => setActiveCategory('all')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+                  activeCategory === 'all' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Todas as Métricas
+              </button>
+              <button
+                onClick={() => setActiveCategory('composition')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+                  activeCategory === 'composition' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Composição & TAV
+              </button>
+              <button
+                onClick={() => setActiveCategory('perimeters')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+                  activeCategory === 'perimeters' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Perímetros (cm)
+              </button>
+              <button
+                onClick={() => setActiveCategory('skinfolds')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+                  activeCategory === 'skinfolds' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Dobras Cutâneas (mm)
+              </button>
+              <button
+                onClick={() => setActiveCategory('cardio')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+                  activeCategory === 'cardio' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Cardio & Funcional
+              </button>
+              <button
+                onClick={() => setActiveCategory('photos')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
+                  activeCategory === 'photos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                Fotos Comparativas
+              </button>
+            </div>
 
-        <button type="button" onClick={() => setActiveCategory('posture')} className="text-xs font-bold text-indigo-700 px-6 py-3 border-b text-left">Avaliação Postural • referência inicial e evolução</button>
+            <button type="button" onClick={() => setActiveCategory('posture')} className="text-xs font-bold text-indigo-700 px-6 py-3 border-b text-left">Avaliação Postural • referência inicial e evolução</button>
+          </>
+        ) : (
+          <div className="px-6 py-2.5 bg-indigo-50/60 border-b border-indigo-100 flex items-center justify-between">
+            <span className="text-xs font-bold text-indigo-900">
+              Análise Postural Comparativa (Linha de Base × Evolução)
+            </span>
+            <span className="text-[11px] text-indigo-600 font-medium">
+              Fotogrametria, vetorização e observações anatômicas
+            </span>
+          </div>
+        )}
 
         {/* Corpo Principal */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">

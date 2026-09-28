@@ -327,3 +327,24 @@ export function formatLaterality(side: string): string {
     default: return 'Linha Média / Central';
   }
 }
+
+export function normalizeRegionalSummary(res: any): RegionalSummaryItem[] {
+  if (!res) return [];
+  if (Array.isArray(res)) return res;
+  if (Array.isArray(res.summary)) return res.summary;
+  if (Array.isArray(res.data)) return res.data;
+  if (typeof res === 'object') {
+    return Object.values(res)
+      .filter((item: any) => item && typeof item === 'object' && typeof item.region_id === 'string')
+      .map((item: any) => ({
+        region_id: item.region_id,
+        region_label: item.region_label || item.region_id,
+        side: item.side || 'midline',
+        evaluation_count: item.evaluation_count ?? item.count ?? 1,
+        latest_pain_score: item.latest_pain_score !== undefined ? item.latest_pain_score : null,
+        latest_evaluation_date: item.latest_evaluation_date || item.latest_date || ''
+      }));
+  }
+  return [];
+}
+

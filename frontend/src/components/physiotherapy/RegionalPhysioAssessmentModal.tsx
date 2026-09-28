@@ -67,10 +67,32 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
     initialData?.evaluation_date || new Date().toISOString().split('T')[0]
   );
 
+  // Helpers seguros de parsing
+  const parseJsonObjSafe = <T,>(val: any, fallback: T): T => {
+    if (!val) return fallback;
+    try {
+      const parsed = typeof val === 'string' ? JSON.parse(val) : val;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const parseJsonArrSafe = <T,>(val: any, fallback: T[]): T[] => {
+    if (!val) return fallback;
+    try {
+      const parsed = typeof val === 'string' ? JSON.parse(val) : val;
+      return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
   // 1. Dor
-  const initialPain: PhysioPainAssessment = initialData?.pain_json
-    ? (typeof initialData.pain_json === 'string' ? JSON.parse(initialData.pain_json) : initialData.pain_json)
-    : { score: 5, restScore: 2, movementScore: 6, palpationScore: 4, duration: 'Subaguda (3-12 sem)' };
+  const initialPain: PhysioPainAssessment = parseJsonObjSafe<PhysioPainAssessment>(
+    initialData?.pain_json,
+    { score: 5, restScore: 2, movementScore: 6, palpationScore: 4, duration: 'Subaguda (3-12 sem)' }
+  );
 
   const [pain, setPain] = useState<PhysioPainAssessment>(initialPain);
 
@@ -85,9 +107,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
     notes: ''
   }));
 
-  const initialAdm: PhysioAdmItem[] = initialData?.adm_json
-    ? (typeof initialData.adm_json === 'string' ? JSON.parse(initialData.adm_json) : initialData.adm_json)
-    : defaultAdmItems;
+  const initialAdm: PhysioAdmItem[] = parseJsonArrSafe<PhysioAdmItem>(initialData?.adm_json, defaultAdmItems);
 
   const [admList, setAdmList] = useState<PhysioAdmItem[]>(initialAdm);
 
@@ -98,9 +118,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
     notes: ''
   }));
 
-  const initialStrength: PhysioStrengthItem[] = initialData?.strength_json
-    ? (typeof initialData.strength_json === 'string' ? JSON.parse(initialData.strength_json) : initialData.strength_json)
-    : defaultStrengthItems;
+  const initialStrength: PhysioStrengthItem[] = parseJsonArrSafe<PhysioStrengthItem>(initialData?.strength_json, defaultStrengthItems);
 
   const [strengthList, setStrengthList] = useState<PhysioStrengthItem[]>(initialStrength);
 
@@ -112,35 +130,37 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
     notes: ''
   }));
 
-  const initialTests: PhysioSpecialTestItem[] = initialData?.tests_json
-    ? (typeof initialData.tests_json === 'string' ? JSON.parse(initialData.tests_json) : initialData.tests_json)
-    : defaultTests;
+  const initialTests: PhysioSpecialTestItem[] = parseJsonArrSafe<PhysioSpecialTestItem>(initialData?.tests_json, defaultTests);
 
   const [specialTests, setSpecialTests] = useState<PhysioSpecialTestItem[]>(initialTests);
 
   // 5. Palpação & Edema
-  const initialPalpation: PhysioPalpationAssessment = initialData?.palpation_json
-    ? (typeof initialData.palpation_json === 'string' ? JSON.parse(initialData.palpation_json) : initialData.palpation_json)
-    : { muscleTone: 'normal', triggerPoints: false, tenderness: 'mild', localTemperature: 'normal' };
+  const initialPalpation: PhysioPalpationAssessment = parseJsonObjSafe<PhysioPalpationAssessment>(
+    initialData?.palpation_json,
+    { muscleTone: 'normal', triggerPoints: false, tenderness: 'mild', localTemperature: 'normal' }
+  );
 
   const [palpation, setPalpation] = useState<PhysioPalpationAssessment>(initialPalpation);
 
-  const initialEdema: PhysioEdemaAssessment = initialData?.edema_json
-    ? (typeof initialData.edema_json === 'string' ? JSON.parse(initialData.edema_json) : initialData.edema_json)
-    : { present: false, godetScale: '0', perimetryCm: '' };
+  const initialEdema: PhysioEdemaAssessment = parseJsonObjSafe<PhysioEdemaAssessment>(
+    initialData?.edema_json,
+    { present: false, godetScale: '0', perimetryCm: '' }
+  );
 
   const [edema, setEdema] = useState<PhysioEdemaAssessment>(initialEdema);
 
   // 6. Escalas Funcionais & Metas / Home Exercises
-  const initialScales: PhysioFunctionalScaleItem[] = initialData?.functional_scales_json
-    ? (typeof initialData.functional_scales_json === 'string' ? JSON.parse(initialData.functional_scales_json) : initialData.functional_scales_json)
-    : [{ scaleName: jointConfig.suggestedScales[0] || 'Escala EVA', score: '', interpretation: '' }];
+  const initialScales: PhysioFunctionalScaleItem[] = parseJsonArrSafe<PhysioFunctionalScaleItem>(
+    initialData?.functional_scales_json,
+    [{ scaleName: jointConfig.suggestedScales[0] || 'Escala EVA', score: '', interpretation: '' }]
+  );
 
   const [scales, setScales] = useState<PhysioFunctionalScaleItem[]>(initialScales);
 
-  const initialPlan: PhysioPlanLink = initialData?.plan_link_json
-    ? (typeof initialData.plan_link_json === 'string' ? JSON.parse(initialData.plan_link_json) : initialData.plan_link_json)
-    : { goal: '', homeExercises: '', reassessmentDate: '' };
+  const initialPlan: PhysioPlanLink = parseJsonObjSafe<PhysioPlanLink>(
+    initialData?.plan_link_json,
+    { goal: '', homeExercises: '', reassessmentDate: '' }
+  );
 
   const [plan, setPlan] = useState<PhysioPlanLink>(initialPlan);
   const [generalNotes, setGeneralNotes] = useState<string>(initialData?.notes || '');

@@ -32,10 +32,12 @@ interface PersonalAssessmentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
-  student?: Student | null;
+  student?: Student | any | null;
   studentsList?: Student[];
   assessmentToEdit?: any;
   postureOnly?: boolean;
+  sourceModule?: 'ZemdaPersonal' | 'ZemdaFisio';
+  clientTermLabel?: string;
 }
 
 export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = ({
@@ -45,14 +47,17 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   student,
   studentsList = [],
   assessmentToEdit,
-  postureOnly = false
+  postureOnly = false,
+  sourceModule = 'ZemdaPersonal',
+  clientTermLabel: propClientTermLabel
 }) => {
+  const effectiveTermLabel = propClientTermLabel || (postureOnly ? 'Paciente' : 'Aluno');
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'anthropometry' | 'composition' | 'skinfolds' | 'cardio_tests' | 'photos_notes'>('anthropometry');
 
   const [selectedStudentId, setSelectedStudentId] = useState(student?.id || '');
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(student || null);
+  const [selectedStudent, setSelectedStudent] = useState<Student | any | null>(student || null);
   const [assessmentDate, setAssessmentDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Tab 1: Antropometria Básica & Perímetros (cm)
@@ -338,6 +343,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   useEffect(() => {
     if (student) {
       setSelectedStudentId(student.id);
+      setSelectedStudent(student);
       if (student.current_weight) setWeight(student.current_weight);
       if (student.height) setHeight(student.height);
     }
@@ -559,7 +565,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     e.preventDefault();
     if (postureBusy || saving || photosUploading) return;
     if (!selectedStudentId) {
-      showToast('Selecione o aluno para a avaliação', 'error');
+      showToast(`Selecione o ${effectiveTermLabel.toLowerCase()} para a avaliação`, 'error');
       return;
     }
     if ((!w || !h) && !posture) {
@@ -671,22 +677,31 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
         notes,
         photos,
-        posture: posture || undefined
+        posture: posture || undefined,
+        source_module: sourceModule
       };
 
       if (assessmentToEdit?.id) {
-        await ApiClient.put(`/v1/personal/assessments/${assessmentToEdit.id}`, postureOnly ? {assessment_date:assessmentDate,posture:posture||undefined,photos,notes} : payload);
-        showToast('Avaliação física atualizada com sucesso!', 'success');
+        await ApiClient.put(`/v1/personal/assessments/${assessmentToEdit.id}`, postureOnly ? { assessment_date: assessmentDate, posture: posture || undefined, photos, notes, source_module: sourceModule } : payload);
+        showToast(postureOnly ? 'Avaliação postural atualizada com sucesso!' : 'Avaliação física atualizada com sucesso!', 'success');
       } else {
-        await ApiClient.post('/v1/personal/assessments', payload);
-        showToast('Avaliação física completa registrada com sucesso!', 'success');
+        const createPayload = postureOnly ? {
+          patient_id: selectedStudentId,
+          assessment_date: assessmentDate,
+          photos,
+          posture: posture || undefined,
+          notes,
+          source_module: sourceModule
+        } : payload;
+        await ApiClient.post('/v1/personal/assessments', createPayload);
+        showToast(postureOnly ? 'Avaliação postural registrada com sucesso!' : 'Avaliação física completa registrada com sucesso!', 'success');
       }
       if(!postureOnly) await autosave.clearDraft();
       onSaved();
       onClose();
     } catch (err) {
       console.error('Erro ao salvar avaliação:', err);
-      showToast('Erro ao registrar avaliação física completa', 'error');
+      showToast(postureOnly ? 'Erro ao registrar avaliação postural' : 'Erro ao registrar avaliação física completa', 'error');
     } finally {
       setSaving(false);
     }
@@ -729,10 +744,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         {/* Top Info Strip: Aluno e Data */}
         <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
           <div>
-            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Aluno(a) *</label>
+            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">{effectiveTermLabel} *</label>
             <PatientSearchSelect
-              isStudent
-              clientTermLabel="Aluno"
+              isStudent={!postureOnly}
+              clientTermLabel={effectiveTermLabel}
               value={selectedStudentId}
               onChange={(id, stud) => {
                 if(id!==selectedStudentId){setPosture(postureMode?emptyPosture():null);setPhotoFrontFileId('');setPhotoBackFileId('');setPhotoRightFileId('');setPhotoLeftFileId('');setPhotoFront('');setPhotoBack('');setPhotoRight('');setPhotoLeft('');}
@@ -740,7 +755,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 setSelectedStudent((stud as any) || null);
               }}
               disabled={!!student || postureBusy || saving || photosUploading}
-              placeholder="Buscar aluno pelo nome..."
+              placeholder={`Buscar ${effectiveTermLabel.toLowerCase()} pelo nome...`}
             />
           </div>
 
@@ -757,9 +772,9 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
           <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0">
             <div className="text-right">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Aluno / Idade</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">{effectiveTermLabel} / Idade</span>
               <strong className="text-xs text-slate-800">
-                {currentStudent?.name || '—'} • {age} anos
+                {currentStudent?.name || (currentStudent as any)?.full_name || '—'} • {age} anos
               </strong>
             </div>
           </div>
@@ -1813,7 +1828,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
              ======================================================== */}
           {activeTab === 'photos_notes' && (
             <div className="space-y-6 animate-fadeIn">
-              <label className="flex items-center gap-2 text-sm font-semibold text-indigo-800"><input type="checkbox" checked={postureMode} disabled={postureBusy} onChange={e=>{setPostureMode(e.target.checked);if(e.target.checked&&!posture)setPosture(emptyPosture());}} />Modo Avaliação Postural</label>
+              {!postureOnly && (
+                <label className="flex items-center gap-2 text-sm font-semibold text-indigo-800">
+                  <input type="checkbox" checked={postureMode} disabled={postureBusy} onChange={e=>{setPostureMode(e.target.checked);if(e.target.checked&&!posture)setPosture(emptyPosture());}} />
+                  Modo Avaliação Postural
+                </label>
+              )}
               {postureMode && posture && <Suspense fallback={<p className="text-xs">Carregando ferramentas posturais…</p>}><PersonalPostureEditor key={[selectedStudentId,photoFrontFileId,photoBackFileId,photoRightFileId,photoLeftFileId].join(':')} value={posture} onChange={setPosture} onBusy={setPostureBusy} patientId={selectedStudentId} photos={[
                 {view:'front',fileId:photoFrontFileId,url:photoFront},{view:'back',fileId:photoBackFileId,url:photoBack},
                 {view:'right',fileId:photoRightFileId,url:photoRight},{view:'left',fileId:photoLeftFileId,url:photoLeft}
@@ -1829,7 +1849,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 {!selectedStudentId && (
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                    <span>Selecione um aluno para adicionar fotos.</span>
+                    <span>Selecione um {effectiveTermLabel.toLowerCase()} para adicionar fotos.</span>
                   </div>
                 )}
 

@@ -2419,6 +2419,7 @@ export function initializeDatabase(): void {
         lean_mass_kg REAL,
         muscle_mass_kg REAL,
         protocol TEXT DEFAULT 'pollock_7',
+        source_module TEXT DEFAULT 'ZemdaPersonal',
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2646,6 +2647,7 @@ export function initializeDatabase(): void {
 
   const postureColumns = rawDb.prepare('PRAGMA table_info(personal_assessments)').all().map((c: any) => c.name);
   if (!postureColumns.includes('posture_json')) rawDb.exec('ALTER TABLE personal_assessments ADD COLUMN posture_json TEXT');
+  if (!postureColumns.includes('source_module')) rawDb.exec("ALTER TABLE personal_assessments ADD COLUMN source_module TEXT DEFAULT 'ZemdaPersonal'");
 
   // Fallback artwork is shipped locally. R2 imports are explicit maintenance operations.
   for (const [column, definition] of Object.entries({

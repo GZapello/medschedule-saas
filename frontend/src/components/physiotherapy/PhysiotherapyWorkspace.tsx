@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   Activity,
   User,
@@ -20,7 +20,11 @@ import {
   ChevronDown,
   ChevronUp,
   Award,
-  Sparkles
+  Sparkles,
+  Camera,
+  GitCompare,
+  Eye,
+  ArrowRight
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -46,8 +50,17 @@ import {
   RegionalSummaryItem,
   PhysioRegionalEvaluation,
   detectSideFromRegionId,
-  formatLaterality
+  formatLaterality,
+  normalizeRegionalSummary
 } from './regionalData';
+import { dateLabel } from '../personal/posture';
+
+const PersonalAssessmentModal = lazy(() =>
+  import('../personal/PersonalAssessmentModal').then(m => ({ default: m.PersonalAssessmentModal }))
+);
+const PersonalAssessmentComparisonModal = lazy(() =>
+  import('../personal/PersonalAssessmentComparisonModal').then(m => ({ default: m.PersonalAssessmentComparisonModal }))
+);
 
 interface PhysiotherapyWorkspaceProps {
   initialPatientId?: string;
@@ -206,7 +219,12 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     { group: 'Extensores de Cotovelo (Tríceps)', rightGrade: 5, leftGrade: 5 }
   ]);
 
-  // 7. Postura & Marcha
+  // 7. Postura & Marcha (Avaliação Postural Compartilhada + Marcha)
+  const [posturalAssessments, setPosturalAssessments] = useState<any[]>([]);
+  const [loadingPosturalAssessments, setLoadingPosturalAssessments] = useState<boolean>(false);
+  const [isPostureModalOpen, setIsPostureModalOpen] = useState<boolean>(false);
+  const [isPostureComparisonOpen, setIsPostureComparisonOpen] = useState<boolean>(false);
+  const [editingPostureAssessment, setEditingPostureAssessment] = useState<any | null>(null);
   const [postureAnterior, setPostureAnterior] = useState<string>('Alinhamento simétrico das cristas ilíacas e ombros');
   const [postureLateral, setPostureLateral] = useState<string>('Curvaturas fisiológicas preservadas');
   const [posturePosterior, setPosturePosterior] = useState<string>('Espinhas e escápulas alinhadas');
@@ -402,7 +420,10 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
         if (latest.body_map_json) setBodyMapJson(latest.body_map_json);
         if (latest.body_map_image) setBodyMapImage(latest.body_map_image);
       }
-      await loadRegionalSummary(patId);
+      await Promise.allSettled([
+        loadRegionalSummary(patId),
+        loadPosturalAssessments(patId)
+      ]);
     } catch (err) {
       console.warn('Erro ao carregar dados fisioterapêuticos do paciente:', err);
     } finally {
@@ -410,12 +431,40 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     }
   };
 
+  const loadPosturalAssessments = async (patId: string) => {
+    if (!patId) {
+      setPosturalAssessments([]);
+      return;
+    }
+    try {
+      setLoadingPosturalAssessments(true);
+      const res = await ApiClient.get<{ assessments: any[] }>(`/v1/personal/students/${patId}/assessments`);
+      setPosturalAssessments(Array.isArray(res?.assessments) ? res.assessments : []);
+    } catch (err) {
+      console.warn('[PhysiotherapyWorkspace] Erro ao carregar avaliações posturais:', err);
+      setPosturalAssessments([]);
+    } finally {
+      setLoadingPosturalAssessments(false);
+    }
+  };
+
+  const handleOpenPostureAssessment = async (assessmentId: string) => {
+    try {
+      const data = await ApiClient.get<any>(`/v1/personal/assessments/${assessmentId}`);
+      setEditingPostureAssessment({ ...data.assessment, photos: data.photos });
+      setIsPostureModalOpen(true);
+    } catch (err) {
+      showToast('Não foi possível carregar a avaliação postural.', 'error');
+    }
+  };
+
   const loadRegionalSummary = async (patId: string) => {
     try {
       const res = await ApiClient.get<any>(`/v1/physiotherapy/regional-evaluations/summary/${patId}`);
-      setRegionalSummary(res.data || res || []);
+      setRegionalSummary(normalizeRegionalSummary(res));
     } catch (err) {
       console.warn('Erro ao carregar sumário regional:', err);
+      setRegionalSummary([]);
     }
   };
 
@@ -523,6 +572,15 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
             finishLabel="Finalizar Atendimento"
             isSubmitting={saving}
             tools={[
+              {
+                id: 'postural_assessment',
+                label: 'Avaliação Postural',
+                icon: Camera,
+                onClick: () => {
+                  setEditingPostureAssessment(null);
+                  setIsPostureModalOpen(true);
+                }
+              },
               {
                 id: 'exercise_guide',
                 label: 'Guia de Exercícios',
@@ -876,7 +934,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                   </div>
 
                   {/* Badges Discretos de Regiões com Histórico */}
-                  {regionalSummary.length > 0 && (
+                  {Array.isArray(regionalSummary) && regionalSummary.length > 0 && (
                     <div className="p-3 bg-teal-50/50 border border-teal-100 rounded-xl space-y-1.5">
                       <span className="text-[11px] font-bold text-teal-900 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-teal-600" /> Regiões com Histórico de Avaliação:
@@ -918,9 +976,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                       initialViewMode={bodyCanvasViewMode}
                       controlledView={bodyCanvasViewMode}
                       selectedRegions={
-                        selectedRegionId
-                          ? [selectedRegionId, ...regionalSummary.map(r => r.region_id)]
-                          : regionalSummary.map(r => r.region_id)
+                        Array.isArray(regionalSummary)
+                          ? (selectedRegionId
+                              ? [selectedRegionId, ...regionalSummary.map(r => r.region_id)]
+                              : regionalSummary.map(r => r.region_id))
+                          : (selectedRegionId ? [selectedRegionId] : [])
                       }
                       onToggleRegion={(regId: string) => {
                         setSelectedRegionId(regId);
@@ -933,7 +993,9 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                   {/* PAINEL DE AÇÃO REGIONAL INTERATIVO */}
                   {selectedRegionId ? (
                     (() => {
-                      const summaryItem = regionalSummary.find(r => r.region_id === selectedRegionId);
+                      const summaryItem = Array.isArray(regionalSummary)
+                        ? regionalSummary.find(r => r.region_id === selectedRegionId)
+                        : undefined;
                       const regLabel = summaryItem?.region_label || getRegionLabel(selectedRegionId, bodyModel);
                       const regSide = summaryItem?.side || detectSideFromRegionId(selectedRegionId);
                       const evalCount = summaryItem?.evaluation_count || 0;
@@ -1153,48 +1215,214 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
             {/* ABA 7: POSTURA & MARCHA */}
             {activeTab === 'posture_gait' && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b pb-3">
-                  <User className="w-4 h-4 text-teal-600" /> Avaliação Postural & Análise de Marcha
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Vista Anterior</label>
-                    <textarea
-                      rows={3}
-                      value={postureAnterior}
-                      onChange={e => setPostureAnterior(e.target.value)}
-                      className="w-full p-2.5 text-xs rounded-xl border border-slate-200"
-                    />
+              <div className="space-y-6">
+                {/* 1. SEÇÃO DE AVALIAÇÃO POSTURAL (FOTOGRAMETRIA E IA COMPARTILHADA) */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+                          <Camera className="w-4 h-4" />
+                        </span>
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            Avaliação Postural Compartilhada
+                            <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                              ZemdaFisio ↔ ZemdaPersonal
+                            </span>
+                          </h3>
+                          <p className="text-xs text-slate-500">
+                            Fotogrametria em 4 vistas, caneta anatômica, linhas de referência, IA postural e histórico comparativo.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPostureAssessment(null);
+                          setIsPostureModalOpen(true);
+                        }}
+                        className="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Nova Avaliação Postural
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={posturalAssessments.filter(a => a.has_posture).length === 0}
+                        onClick={() => setIsPostureComparisonOpen(true)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
+                          posturalAssessments.filter(a => a.has_posture).length === 0
+                            ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                            : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50 shadow-xs'
+                        }`}
+                      >
+                        <GitCompare className="w-3.5 h-3.5" />
+                        Comparar Posturas
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('pain_zemdabody')}
+                        className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 transition cursor-pointer"
+                        title="Correlacionar postura com dor e mapeamento 3D corporal"
+                      >
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                        Mapeamento Zemda360
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Vista Lateral</label>
-                    <textarea
-                      rows={3}
-                      value={postureLateral}
-                      onChange={e => setPostureLateral(e.target.value)}
-                      className="w-full p-2.5 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Vista Posterior</label>
-                    <textarea
-                      rows={3}
-                      value={posturePosterior}
-                      onChange={e => setPosturePosterior(e.target.value)}
-                      className="w-full p-2.5 text-xs rounded-xl border border-slate-200"
-                    />
-                  </div>
+
+                  {/* Lista de Avaliações Posturais */}
+                  {loadingPosturalAssessments ? (
+                    <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
+                      Carregando avaliações posturais...
+                    </div>
+                  ) : posturalAssessments.filter(a => a.has_posture).length === 0 ? (
+                    <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center space-y-3">
+                      <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto shadow-xs">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <div className="max-w-md mx-auto">
+                        <h4 className="text-xs font-bold text-slate-700">Nenhuma avaliação postural registrada</h4>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Capture fotos nas vistas anterior, posterior e laterais para desenhar eixos anatômicos, identificar desvios e obter apoio assistido por IA.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPostureAssessment(null);
+                          setIsPostureModalOpen(true);
+                        }}
+                        className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Registrar Primeira Avaliação Postural
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {posturalAssessments
+                        .filter(a => a.has_posture)
+                        .map(item => (
+                          <div
+                            key={item.id}
+                            className="p-4 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 rounded-2xl transition space-y-3 flex flex-col justify-between"
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">
+                                  {dateLabel(item.assessment_date)}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
+                                    item.source_module === 'ZemdaFisio'
+                                      ? 'bg-teal-50 text-teal-700 border-teal-200'
+                                      : 'bg-purple-50 text-purple-700 border-purple-200'
+                                  }`}
+                                >
+                                  {item.source_module || 'ZemdaFisio'}
+                                </span>
+                              </div>
+
+                              <p className="text-[11px] text-slate-500">
+                                Avaliador: <strong className="text-slate-700">{item.professional_name || 'Profissional da Clínica'}</strong>
+                              </p>
+
+                              <div className="flex items-center gap-2 flex-wrap pt-1">
+                                <span className="text-[11px] px-2 py-0.5 bg-white border border-slate-200 rounded-lg text-slate-600 font-medium">
+                                  📷 {item.photos_count || 0} fotos
+                                </span>
+                                {item.posture_summary?.regions && item.posture_summary.regions.length > 0 && (
+                                  <span className="text-[11px] px-2 py-0.5 bg-white border border-slate-200 rounded-lg text-slate-600 font-medium">
+                                    📍 {item.posture_summary.regions.length} regiões
+                                  </span>
+                                )}
+                                {item.posture_summary?.count !== undefined && (
+                                  <span className="text-[11px] px-2 py-0.5 bg-white border border-slate-200 rounded-lg text-slate-600 font-medium">
+                                    📝 {item.posture_summary.count} apontamentos
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPostureAssessment(item.id)}
+                                className="px-2.5 py-1 text-xs font-semibold text-teal-700 hover:bg-teal-100/60 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                Abrir Postura
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsPostureComparisonOpen(true);
+                                }}
+                                className="px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100/60 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                              >
+                                <GitCompare className="w-3.5 h-3.5" />
+                                Comparar
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Análise de Marcha</label>
-                  <textarea
-                    rows={3}
-                    value={gaitAnalysis}
-                    onChange={e => setGaitAnalysis(e.target.value)}
-                    placeholder="Contato inicial, resposta à carga, apoio médio, balanço e claudicação..."
-                    className="w-full p-3 text-xs rounded-xl border border-slate-200"
-                  />
+
+                {/* 2. ANOTAÇÕES CLÍNICAS E ANÁLISE DE MARCHA */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b pb-3">
+                    <User className="w-4 h-4 text-teal-600" /> Anotações Descritivas & Análise de Marcha
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Vista Anterior</label>
+                      <textarea
+                        rows={3}
+                        value={postureAnterior}
+                        onChange={e => setPostureAnterior(e.target.value)}
+                        className="w-full p-2.5 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Vista Lateral</label>
+                      <textarea
+                        rows={3}
+                        value={postureLateral}
+                        onChange={e => setPostureLateral(e.target.value)}
+                        className="w-full p-2.5 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Vista Posterior</label>
+                      <textarea
+                        rows={3}
+                        value={posturePosterior}
+                        onChange={e => setPosturePosterior(e.target.value)}
+                        className="w-full p-2.5 text-xs rounded-xl border border-slate-200"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Análise de Marcha</label>
+                    <textarea
+                      rows={3}
+                      value={gaitAnalysis}
+                      onChange={e => setGaitAnalysis(e.target.value)}
+                      placeholder="Contato inicial, resposta à carga, apoio médio, balanço e claudicação..."
+                      className="w-full p-3 text-xs rounded-xl border border-slate-200"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -1521,7 +1749,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                   </div>
                 </div>
 
-                {regionalSummary.length > 0 && (
+                {Array.isArray(regionalSummary) && regionalSummary.length > 0 && (
                   <div className="p-4 bg-teal-50/40 border border-teal-100 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-teal-900 flex items-center gap-1.5">
@@ -1637,11 +1865,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           appointmentId={initialAppointmentId}
           regionId={selectedRegionId}
           regionLabel={
-            regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label ||
+            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
             getRegionLabel(selectedRegionId, bodyModel)
           }
           side={
-            (regionalSummary.find(r => r.region_id === selectedRegionId)?.side as any) ||
+            (Array.isArray(regionalSummary) && (regionalSummary.find(r => r.region_id === selectedRegionId)?.side as any)) ||
             detectSideFromRegionId(selectedRegionId)
           }
           initialData={editingRegionalEval}
@@ -1656,11 +1884,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           patientName={selectedPatient?.full_name || 'Paciente'}
           regionId={selectedRegionId}
           regionLabel={
-            regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label ||
+            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
             getRegionLabel(selectedRegionId, bodyModel)
           }
           side={
-            regionalSummary.find(r => r.region_id === selectedRegionId)?.side ||
+            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.side) ||
             detectSideFromRegionId(selectedRegionId)
           }
           onNewAssessmentRequested={() => {
@@ -1678,11 +1906,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           patientName={selectedPatient?.full_name || 'Paciente'}
           regionId={selectedRegionId}
           regionLabel={
-            regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label ||
+            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.region_label) ||
             getRegionLabel(selectedRegionId, bodyModel)
           }
           side={
-            regionalSummary.find(r => r.region_id === selectedRegionId)?.side ||
+            (Array.isArray(regionalSummary) && regionalSummary.find(r => r.region_id === selectedRegionId)?.side) ||
             detectSideFromRegionId(selectedRegionId)
           }
           onSelectForEdit={(ev) => {
@@ -1710,6 +1938,46 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
         onRecoverServer={() => autosave.resolveConflict('server')}
         onKeepCurrent={() => autosave.resolveConflict('local')}
       />
+
+      {isPostureModalOpen && selectedPatientId && (
+        <Suspense fallback={null}>
+          <PersonalAssessmentModal
+            isOpen={isPostureModalOpen}
+            onClose={() => {
+              setIsPostureModalOpen(false);
+              setEditingPostureAssessment(null);
+            }}
+            onSaved={() => {
+              loadPosturalAssessments(selectedPatientId);
+            }}
+            student={{
+              id: selectedPatientId,
+              name: selectedPatient?.full_name || selectedPatient?.name || 'Paciente',
+              birth_date: selectedPatient?.birth_date,
+              gender: selectedPatient?.gender
+            } as any}
+            assessmentToEdit={editingPostureAssessment}
+            postureOnly={true}
+            sourceModule="ZemdaFisio"
+            clientTermLabel="Paciente"
+          />
+        </Suspense>
+      )}
+
+      {isPostureComparisonOpen && selectedPatientId && (
+        <Suspense fallback={null}>
+          <PersonalAssessmentComparisonModal
+            isOpen={isPostureComparisonOpen}
+            onClose={() => setIsPostureComparisonOpen(false)}
+            student={{
+              id: selectedPatientId,
+              name: selectedPatient?.full_name || selectedPatient?.name || 'Paciente'
+            } as any}
+            assessmentsList={posturalAssessments.filter(a => a.has_posture)}
+            postureOnly={true}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

@@ -58,10 +58,12 @@ export const RegionalEvaluationsListModal: React.FC<RegionalEvaluationsListModal
       const res = await ApiClient.get<any>(
         `/v1/physiotherapy/regional-evaluations/patient/${patientId}?region_id=${encodeURIComponent(regionId)}`
       );
-      setList(res.data || res || []);
+      const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      setList(items);
     } catch (err: any) {
       console.error('Erro ao carregar lista de avaliações da região:', err);
       showToast(err.message || 'Erro ao carregar histórico da região', 'error');
+      setList([]);
     } finally {
       setLoading(false);
     }

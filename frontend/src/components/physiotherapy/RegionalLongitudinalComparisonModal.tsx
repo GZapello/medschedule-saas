@@ -237,11 +237,11 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                       <Activity className="w-4 h-4 text-teal-600" /> Mobilidade / ADM:
                     </span>
                     <span className="text-[10px] font-bold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
-                      {data.variations.admDiffs.length} Movimentos
+                      {data.variations?.admDiffs?.length || 0} Movimentos
                     </span>
                   </div>
                   <div className="space-y-1 max-h-20 overflow-y-auto pr-1">
-                    {data.variations.admDiffs.map((m, idx) => (
+                    {(data.variations?.admDiffs || []).map((m, idx) => (
                       <div key={idx} className="flex justify-between text-[11px]">
                         <span className="text-slate-600 font-medium truncate max-w-[120px]">{m.movement}:</span>
                         <span className="font-mono font-bold text-slate-800">
@@ -262,11 +262,11 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                       <Dumbbell className="w-4 h-4 text-indigo-600" /> Força (MRC):
                     </span>
                     <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full">
-                      {data.variations.strengthDiffs.length} Grupos
+                      {data.variations?.strengthDiffs?.length || 0} Grupos
                     </span>
                   </div>
                   <div className="space-y-1 max-h-20 overflow-y-auto pr-1">
-                    {data.variations.strengthDiffs.map((s, idx) => (
+                    {(data.variations?.strengthDiffs || []).map((s, idx) => (
                       <div key={idx} className="flex justify-between text-[11px]">
                         <span className="text-slate-600 font-medium truncate max-w-[120px]">{s.movement}:</span>
                         <span className="font-bold text-slate-800">
@@ -280,7 +280,7 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
               </div>
 
               {/* TIMELINE / HISTÓRICO DE TENDÊNCIA DE DOR */}
-              {data.timeline && data.timeline.length > 0 && (
+              {Array.isArray(data.timeline) && data.timeline.length > 0 && (
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -358,7 +358,7 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                 <div className="grid grid-cols-2 divide-x divide-slate-200 p-3 bg-slate-50/40 text-xs border-b border-slate-100">
                   <div className="space-y-1 pr-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase">ADM Inicial:</span>
-                    {baselineAdm.length === 0 ? (
+                    {!Array.isArray(baselineAdm) || baselineAdm.length === 0 ? (
                       <p className="text-slate-400 text-[11px]">Não registrado</p>
                     ) : (
                       baselineAdm.map((m, i) => (
@@ -372,7 +372,7 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
 
                   <div className="space-y-1 pl-2 bg-teal-50/10">
                     <span className="text-[10px] font-bold text-teal-600 uppercase">ADM Atual:</span>
-                    {currentAdm.length === 0 ? (
+                    {!Array.isArray(currentAdm) || currentAdm.length === 0 ? (
                       <p className="text-slate-400 text-[11px]">Não registrado</p>
                     ) : (
                       currentAdm.map((m, i) => (
@@ -389,7 +389,7 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
                 <div className="grid grid-cols-2 divide-x divide-slate-200 p-3 bg-white text-xs border-b border-slate-100">
                   <div className="space-y-1 pr-2">
                     <span className="text-[10px] font-bold text-slate-400 uppercase">Testes Clínicos Iniciais:</span>
-                    {baselineTests.filter(t => t.result !== 'not_tested').length === 0 ? (
+                    {!Array.isArray(baselineTests) || baselineTests.filter(t => t.result !== 'not_tested').length === 0 ? (
                       <p className="text-slate-400 text-[11px]">Nenhum teste positivo/negativo</p>
                     ) : (
                       baselineTests.filter(t => t.result !== 'not_tested').map((t, i) => (
@@ -405,7 +405,7 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
 
                   <div className="space-y-1 pl-2 bg-teal-50/10">
                     <span className="text-[10px] font-bold text-teal-600 uppercase">Testes Clínicos Atuais:</span>
-                    {currentTests.filter(t => t.result !== 'not_tested').length === 0 ? (
+                    {!Array.isArray(currentTests) || currentTests.filter(t => t.result !== 'not_tested').length === 0 ? (
                       <p className="text-slate-400 text-[11px]">Nenhum teste positivo/negativo</p>
                     ) : (
                       currentTests.filter(t => t.result !== 'not_tested').map((t, i) => (

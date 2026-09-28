@@ -750,6 +750,7 @@ export class PhysiotherapyController {
       `).all(patientId, tenantId) as any[];
 
       const summaryMap: Record<string, any> = {};
+      const summaryList: any[] = [];
 
       for (const r of rows) {
         const latest = db.prepare(`
@@ -760,7 +761,7 @@ export class PhysiotherapyController {
           LIMIT 1
         `).get(patientId, tenantId, r.region_id) as any;
 
-        let latestPainScore: number | undefined;
+        let latestPainScore: number | null = null;
         if (latest?.pain_json) {
           try {
             const pObj = JSON.parse(latest.pain_json);
@@ -768,17 +769,22 @@ export class PhysiotherapyController {
           } catch {}
         }
 
-        summaryMap[r.region_id] = {
+        const item = {
           region_id: r.region_id,
           region_label: r.region_label,
           side: r.side,
           count: r.count,
+          evaluation_count: r.count,
           latest_date: r.latest_date,
+          latest_evaluation_date: r.latest_date,
           latest_pain_score: latestPainScore
         };
+
+        summaryMap[r.region_id] = item;
+        summaryList.push(item);
       }
 
-      res.json(summaryMap);
+      res.json({ ...summaryMap, summary: summaryList });
     } catch (err: any) {
       console.error('[PhysiotherapyController.getRegionalSummary] Erro:', err);
       res.status(500).json({ error: 'Erro ao gerar sumário regional fisioterapêutico' });

@@ -91,6 +91,7 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const safeSelectedRegions = Array.isArray(selectedRegions) ? selectedRegions : [];
 
   // Modo de visualização de vistas (Todas / Frontal / Posterior / Lateral D / Lateral E)
   const [localView, setLocalView] = useState<BodyViewMode>(initialViewMode);
@@ -509,9 +510,9 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
           >
             {regions.filter(r => anatomy || viewMode === 'all' || r.view === viewMode).map(r => {
               const isSelected =
-                selectedRegions.includes(r.id) ||
-                selectedRegions.includes(r.baseRegion) ||
-                selectedRegions.includes(r.region);
+                safeSelectedRegions.includes(r.id) ||
+                safeSelectedRegions.includes(r.baseRegion) ||
+                safeSelectedRegions.includes(r.region);
 
               // Volume Heatmap para ZemdaPersonal
               let heatmapClass = '';
