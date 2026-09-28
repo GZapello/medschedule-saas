@@ -276,14 +276,14 @@ export class TenantController {
             profession_id, profession_name, practice_areas, registration_type, registration_number,
             terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
             zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled,
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled,
             created_at, updated_at
           ) VALUES (
             ?, ?, ?, ?, ?, 'clinic_admin', ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, datetime('now'), datetime('now'),
             ?, ?, ?, ?,
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
             datetime('now'), datetime('now')
           )
         `).run(
@@ -291,7 +291,7 @@ export class TenantController {
           resolvedProfId, resolvedProfName, managerPracticeAreas || null, resolvedBoardLabel, managerRegistrationNumber || null,
           CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION,
           modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
-          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled
+          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
         );
 
         // 5. Salva a prova documental do aceite legal na tabela legal_acceptances
@@ -316,12 +316,12 @@ export class TenantController {
             id, tenant_id, user_id, role, status, is_manager,
             profession_id, profession_name, profession_custom, practice_areas, permissions_json,
             zemda_body_enabled, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, created_at
+            zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled, created_at
           ) VALUES (
             ?, ?, ?, 'clinic_admin', ?, 1,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, datetime('now')
+            ?, ?, ?, ?, ?, ?, datetime('now')
           )
         `).run(
           'cu-' + uuidv4().slice(0, 8),
@@ -335,7 +335,7 @@ export class TenantController {
           initialPermissions,
           1,
           modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
-          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled
+          modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
         );
 
         // 7. Se o gestor também for profissional de saúde clínico, cria o registro em professionals
@@ -346,8 +346,8 @@ export class TenantController {
               id, tenant_id, user_id, name, profession_id, profession_name,
               registration_type, registration_number, practice_areas, bio, active,
               zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             createdProfId,
             tenantId,
@@ -530,7 +530,8 @@ export class TenantController {
         zemdaPsicoEnabled: modFlags.zemda_psico_enabled === 1,
         zemdaPPEnabled: modFlags.zemda_pp_enabled === 1,
         zemdaPersonalEnabled: modFlags.zemda_personal_enabled === 1,
-        zemdaMedEnabled: modFlags.zemda_med_enabled === 1
+        zemdaMedEnabled: modFlags.zemda_med_enabled === 1,
+        zemdaEsteticEnabled: modFlags.zemda_estetic_enabled === 1
       };
 
       // Disparo automático e não-bloqueante de notificações administrativas ao SuperAdmin

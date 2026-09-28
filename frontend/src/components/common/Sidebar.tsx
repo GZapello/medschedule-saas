@@ -35,6 +35,7 @@ import {
   Dumbbell,
   GraduationCap,
   Stethoscope,
+  Sparkles,
   Sliders
 } from 'lucide-react';
 import { openZemdaAI } from '../../utils/aiHelper';
@@ -87,6 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isZemdaPersonal,
     isDoctor,
     isZemdaMed,
+    isEsthetician,
+    isZemdaEstetic,
     hasCapability,
     isZemdaBody,
     commercialModule,
@@ -133,6 +136,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: 'ZemdaOdonto (Odontologia)',
           icon: Smile,
           visible: isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto'
+        },
+        {
+          id: 'zemda-estetic',
+          label: 'ZemdaEstetic (Estética)',
+          icon: Sparkles,
+          visible: isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic'
         },
         {
           id: 'zemda-nutri',

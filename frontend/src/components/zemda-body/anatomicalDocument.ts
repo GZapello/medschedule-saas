@@ -21,13 +21,15 @@ export const layerKey = (type: MapType, sex: SexVariant, view: AnatomicalView) =
 export function emptyLayer(mapType: MapType, sexVariant: SexVariant, view: AnatomicalView = 'front'): AnatomicalLayer {
   return {mapType,sexVariant,view,selectedRegions:[],selectionViews:{},drawings:[],clinicalNotes:'',marks:[]};
 }
-export function readAnatomicalDocument(response: any, fallback: SexVariant = 'female'): AnatomicalDocument {
+export function readAnatomicalDocument(response: any, fallback: SexVariant = 'female', initialMapType: MapType = 'BODY'): AnatomicalDocument {
   const assessment=response?.assessment || {};
   const sex: SexVariant=assessment.body_model === 'male' ? 'male' : assessment.body_model === 'female' ? 'female' : fallback;
   let parsed: any=assessment.notes;
   try { parsed=JSON.parse(assessment.notes); } catch { /* Plain text is a valid legacy note. */ }
   if(parsed?.schemaVersion === 2 && parsed.layers && parsed.layers[parsed.activeLayerKey]) return parsed;
-  const layer=emptyLayer('BODY',sex,'all');
+  const mapType: MapType = initialMapType || 'BODY';
+  const defaultView: AnatomicalView = mapType === 'FACE' ? 'front' : 'all';
+  const layer=emptyLayer(mapType,sex,defaultView);
   const explicitSelection=Array.isArray(parsed) || Array.isArray(parsed?.selectedRegions);
   layer.selectedRegions=Array.isArray(parsed) ? parsed.filter(x=>typeof x==='string') : Array.isArray(parsed?.selectedRegions) ? parsed.selectedRegions : [];
   if(!explicitSelection) layer.selectedRegions=(response?.markers || []).map((m:any)=>m.body_region).filter(Boolean);
@@ -40,9 +42,9 @@ export function readAnatomicalDocument(response: any, fallback: SexVariant = 'fe
     }
   }
   layer.clinicalNotes=typeof parsed==='string' ? parsed : parsed?.clinicalNotes || parsed?.clinicalNote || parsed?.observation || '';
-  layer.marks=(response?.markers || []).filter((m:any)=>m.marker_type!=='selected_region').map((m:any)=>({id:m.id,regionId:m.body_region,view:m.view || 'front',note:m.notes || m.value || '',type:m.marker_type,createdAt:m.created_at}));
-  const key=layerKey('BODY',sex,'all');
-  return {schemaVersion:2,mapType:'BODY',activeLayerKey:key,layers:{[key]:layer},legacyNotes:parsed ?? null};
+  layer.marks=(response?.markers || []).filter((m:any)=>m.marker_type!=='selected_region').map((m:any)=>({id:m.id,regionId:m.body_region,view:m.view || defaultView,note:m.notes || m.value || '',type:m.marker_type,createdAt:m.created_at}));
+  const key=layerKey(mapType,sex,defaultView);
+  return {schemaVersion:2,mapType,activeLayerKey:key,layers:{[key]:layer},legacyNotes:parsed ?? null};
 }
 // Compatibility projection for old BODY-only integrations. Face data never
 // appears as a bodily symptom in those consumers.

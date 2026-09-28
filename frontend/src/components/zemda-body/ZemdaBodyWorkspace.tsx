@@ -33,6 +33,8 @@ interface ZemdaBodyWorkspaceProps {
   professionalId?: string;
   module?: string;
   initialBodyModel?: 'female' | 'male';
+  initialMapType?: 'BODY' | 'FACE';
+  initialRegion?: string;
   readOnly?: boolean;
   onClose?: () => void;
   registerSave?: (save: () => Promise<boolean>) => void;
@@ -45,6 +47,8 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
   professionalId,
   module = 'general',
   initialBodyModel = 'female',
+  initialMapType = 'BODY',
+  initialRegion,
   readOnly = false,
   onClose, registerSave
 }) => {
@@ -56,10 +60,10 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
   const [tool,setTool]=useState<'select'|'pen'|'eraser'>('select');
   const [penColor,setPenColor]=useState('#dc2626'),[penWidth,setPenWidth]=useState(4);
   const [showClearDrawingsConfirm,setShowClearDrawingsConfirm]=useState(false);
-  const [focusedRegion,setFocusedRegion]=useState('');
+  const [focusedRegion,setFocusedRegion]=useState(initialRegion || '');
   const [available,setAvailable]=useState<string[]>([]);
   const [history,setHistory]=useState<any[]|null>(null),[historyRecord,setHistoryRecord]=useState<any>(null);
-  const state=useAnatomicalAssessment({patientId,initialAssessmentId,appointmentId,professionalId,module,initialBodyModel,readOnly,notify:showToast});
+  const state=useAnatomicalAssessment({patientId,initialAssessmentId,appointmentId,professionalId,module,initialBodyModel,initialMapType,readOnly,notify:showToast});
   const {layer,loading,loadError,savingStatus}=state;
   useEffect(()=>{registerSave?.(()=>state.save());});
   const {sexVariant:bodyModel,selectedRegions,drawings,clinicalNotes,mapType}=layer;

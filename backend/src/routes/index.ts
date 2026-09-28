@@ -54,6 +54,7 @@ import { ClinicalDraftController } from '../controllers/clinical-draft.controlle
 import { CapabilityController } from '../controllers/capability.controller';
 import { MedicalController } from '../controllers/medical.controller';
 import { SandboxController } from '../controllers/sandbox.controller';
+import { EsteticController } from '../controllers/estetic.controller';
 
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
@@ -901,5 +902,31 @@ api.post('/v1/medical/finish-consultation', requireTenant, MedicalController.fin
 // ==========================================
 api.post('/v1/sandbox/create-session', requireRole('superadmin'), SandboxController.createSession);
 api.post('/v1/sandbox/reset', SandboxController.resetSandbox);
+// ==========================================
+// ZEMDAESTETIC — ESTÉTICA FACIAL, CORPORAL & CAPILAR
+// ==========================================
+api.get('/v1/estetic/config', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getConfig);
+api.get('/v1/estetic/catalog', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getCatalog);
+api.post('/v1/estetic/catalog', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createCatalogItem);
+api.get('/v1/estetic/patient/:patientId/overview', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getPatientOverview);
+api.get('/v1/estetic/assessments', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getAssessments);
+api.post('/v1/estetic/assessments', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createAssessment);
+api.delete('/v1/estetic/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deleteAssessment);
+api.get('/v1/estetic/plans', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getPlans);
+api.post('/v1/estetic/plans', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createPlan);
+api.put('/v1/estetic/plans/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updatePlan);
+api.delete('/v1/estetic/plans/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deletePlan);
+api.get('/v1/estetic/procedures', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getProcedures);
+api.post('/v1/estetic/procedures', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createProcedure);
+api.delete('/v1/estetic/procedures/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deleteProcedure);
+api.get('/v1/estetic/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getEvolutions);
+api.post('/v1/estetic/evolutions', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createEvolution);
+api.get('/v1/estetic/returns', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getReturns);
+api.post('/v1/estetic/returns', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createReturn);
+api.get('/v1/estetic/photos', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getPhotos);
+api.post('/v1/estetic/photos', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.createPhoto);
+api.delete('/v1/estetic/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deletePhoto);
+api.get('/v1/estetic/before-after', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getBeforeAfter);
+api.get('/v1/estetic/history', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getHistory);
 
 export default api;

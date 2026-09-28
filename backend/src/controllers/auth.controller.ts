@@ -159,7 +159,7 @@ export class AuthController {
         profDetails = db.prepare(`
           SELECT 
             p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled,
+            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
@@ -171,7 +171,7 @@ export class AuthController {
         // Se não houver registro formal em professionals, verifica clinic_users / users / tenant
         if (!profDetails && user.role === 'clinic_admin') {
           const cu = db.prepare(`
-            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled,
+            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
                    u.profession_name, u.practice_areas as user_practice_areas,
                    u.registration_type, u.registration_number
             FROM clinic_users cu
@@ -193,6 +193,7 @@ export class AuthController {
             else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
             else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
             else if (pName.toLowerCase().includes('personal')) deducedProfId = 'prof-personal-trainer';
+            else if (pName.toLowerCase().includes('estet')) deducedProfId = 'prof-esteticista';
 
             profDetails = {
               profession_id: deducedProfId,
@@ -219,7 +220,7 @@ export class AuthController {
       let userPermissions: string[] = [];
       let cuRow: any = null;
       if (user.tenant_id) {
-        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_body_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_body_enabled, zemda_estetic_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
@@ -250,13 +251,23 @@ export class AuthController {
       const zemdaPsicoEnabled = isEligibleUser && modFlags.zemda_psico_enabled === 1;
       const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
       const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
-      const zemdaBodyEnabled = user.role !== 'superadmin' && (
-        user.role === 'clinic_admin' || user.role === 'professional'
-      );
-
       const computedCaps = (user.tenant_id && user.role !== 'superadmin')
         ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
         : null;
+
+      const hasEsteticArea = (profDetails?.practice_areas || '').toLowerCase().includes('estet') ||
+        (profDetails?.practice_areas || '').toLowerCase().includes('harmoniz');
+      const hasEsteticCap = computedCaps?.activeCapabilities.some(c => c.startsWith('ESTETIC_')) || false;
+      const zemdaEsteticEnabled = isEligibleUser && (
+        modFlags.zemda_estetic_enabled === 1 ||
+        cuRow?.zemda_estetic_enabled === 1 ||
+        profDetails?.zemda_estetic_enabled === 1 ||
+        hasEsteticArea ||
+        hasEsteticCap
+      );
+      const zemdaBodyEnabled = user.role !== 'superadmin' && (
+        user.role === 'clinic_admin' || user.role === 'professional'
+      );
 
       const zemdaMedEnabled = isEligibleUser && modFlags.zemda_med_enabled === 1;
 
@@ -302,6 +313,7 @@ export class AuthController {
           zemdaPPEnabled,
           zemdaPsicoEnabled,
           zemdaPersonalEnabled,
+          zemdaEsteticEnabled: !!zemdaEsteticEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
           zemdaBodyEnabled,
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
@@ -361,7 +373,7 @@ export class AuthController {
         profDetails = db.prepare(`
           SELECT 
             p.id as professional_id, p.active as professional_active, p.profession_id, p.specialty_id, p.registration_type, p.registration_number,
-            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled,
+            p.practice_areas, p.slug as professional_slug, p.zemda_fisio_enabled, p.zemda_odonto_enabled, p.zemda_nutri_enabled, p.zemda_to_enabled, p.zemda_fono_enabled, p.zemda_pp_enabled, p.zemda_psico_enabled, p.zemda_personal_enabled, p.zemda_estetic_enabled,
             prof.name as profession_name, prof.slug as profession_slug,
             spec.name as specialty_name
           FROM professionals p
@@ -372,7 +384,7 @@ export class AuthController {
 
         if (!profDetails && user.role === 'clinic_admin') {
           const cu = db.prepare(`
-            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled,
+            SELECT cu.profession_custom, cu.practice_areas, cu.zemda_fisio_enabled, cu.zemda_odonto_enabled, cu.zemda_pp_enabled, cu.zemda_psico_enabled, cu.zemda_personal_enabled, cu.zemda_estetic_enabled,
                    u.profession_name, u.practice_areas as user_practice_areas,
                    u.registration_type, u.registration_number
             FROM clinic_users cu
@@ -394,6 +406,7 @@ export class AuthController {
             else if (pName.toLowerCase().includes('ocupacional')) deducedProfId = 'prof-terapeuta-ocupacional';
             else if (pName.toLowerCase().includes('fono')) deducedProfId = 'prof-fonoaudiologo';
             else if (pName.toLowerCase().includes('personal')) deducedProfId = 'prof-personal-trainer';
+            else if (pName.toLowerCase().includes('estet')) deducedProfId = 'prof-esteticista';
 
             profDetails = {
               profession_id: deducedProfId,
@@ -418,7 +431,7 @@ export class AuthController {
       let userPermissions: string[] = [];
       let cuRow: any = null;
       if (user.tenant_id) {
-        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_body_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
+        cuRow = db.prepare('SELECT permissions_json, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled, zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_body_enabled, zemda_estetic_enabled FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(user.id, user.tenant_id) as any;
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
@@ -450,13 +463,23 @@ export class AuthController {
       const zemdaPsicoEnabled = isEligibleUser && modFlags.zemda_psico_enabled === 1;
       const zemdaPPEnabled = isEligibleUser && modFlags.zemda_pp_enabled === 1;
       const zemdaPersonalEnabled = isEligibleUser && modFlags.zemda_personal_enabled === 1;
-      const zemdaBodyEnabled = user.role !== 'superadmin' && (
-        user.role === 'clinic_admin' || user.role === 'professional'
-      );
-
       const computedCaps = (user.tenant_id && user.role !== 'superadmin')
         ? CapabilityService.computeUserCapabilities(user.id, user.tenant_id)
         : null;
+
+      const hasEsteticArea = (profDetails?.practice_areas || '').toLowerCase().includes('estet') ||
+        (profDetails?.practice_areas || '').toLowerCase().includes('harmoniz');
+      const hasEsteticCap = computedCaps?.activeCapabilities.some(c => c.startsWith('ESTETIC_')) || false;
+      const zemdaEsteticEnabled = isEligibleUser && (
+        modFlags.zemda_estetic_enabled === 1 ||
+        cuRow?.zemda_estetic_enabled === 1 ||
+        profDetails?.zemda_estetic_enabled === 1 ||
+        hasEsteticArea ||
+        hasEsteticCap
+      );
+      const zemdaBodyEnabled = user.role !== 'superadmin' && (
+        user.role === 'clinic_admin' || user.role === 'professional'
+      );
 
       const zemdaMedEnabled = isEligibleUser && modFlags.zemda_med_enabled === 1;
 
@@ -501,6 +524,7 @@ export class AuthController {
           zemdaPPEnabled,
           zemdaPsicoEnabled,
           zemdaPersonalEnabled,
+          zemdaEsteticEnabled: !!zemdaEsteticEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
           zemdaBodyEnabled,
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
@@ -1400,6 +1424,7 @@ export class AuthController {
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
           selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || [],
           zemdaPersonalEnabled: modFlags.zemda_personal_enabled === 1,
+          zemdaEsteticEnabled: modFlags.zemda_estetic_enabled === 1,
           isPersonalTrainer: modFlags.zemda_personal_enabled === 1,
           zemdaFisioEnabled: modFlags.zemda_fisio_enabled === 1,
           zemdaOdontoEnabled: modFlags.zemda_odonto_enabled === 1,

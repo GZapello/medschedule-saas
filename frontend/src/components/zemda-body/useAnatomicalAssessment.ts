@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { AnatomicalDocument, AnatomicalLayer, AnatomicalView, MapType, SexVariant, emptyLayer, layerKey, readAnatomicalDocument, serializeAnatomicalDocument } from './anatomicalDocument';
 
-export function useAnatomicalAssessment(options: {patientId:string;initialAssessmentId?:string;appointmentId?:string;professionalId?:string;module:string;initialBodyModel:SexVariant;readOnly:boolean;notify:(message:string,type:any)=>void}) {
-  const initial=()=>readAnatomicalDocument({},options.initialBodyModel);
+export function useAnatomicalAssessment(options: {patientId:string;initialAssessmentId?:string;appointmentId?:string;professionalId?:string;module:string;initialBodyModel:SexVariant;initialMapType?:MapType;readOnly:boolean;notify:(message:string,type:any)=>void}) {
+  const initial=()=>readAnatomicalDocument({},options.initialBodyModel,options.initialMapType);
   const [document,setDocument]=useState<AnatomicalDocument>(initial);
   const docRef=useRef(document), idRef=useRef(options.initialAssessmentId);
   const [loading,setLoading]=useState(true),[loadError,setLoadError]=useState(false);
@@ -22,7 +22,7 @@ export function useAnatomicalAssessment(options: {patientId:string;initialAssess
         if(version!==epoch.current)return;
         if(data.assessment?.patient_id && data.assessment.patient_id!==options.patientId)throw Error('A avaliação pertence a outro paciente.');
         idRef.current=data.assessment?.id || options.initialAssessmentId;
-        const loaded=readAnatomicalDocument(data,options.initialBodyModel);
+        const loaded=readAnatomicalDocument(data,options.initialBodyModel,options.initialMapType);
         docRef.current=loaded;setDocument(loaded);ready.current=true;
       }catch{if(version===epoch.current){setLoadError(true);options.notify('Não foi possível carregar o mapa. Reabra para tentar novamente.','error');}}
       finally{if(version===epoch.current)setLoading(false);}

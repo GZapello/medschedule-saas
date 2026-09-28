@@ -37,6 +37,7 @@ export interface User {
   zemdaPsicoEnabled?: boolean;
   zemdaPersonalEnabled?: boolean;
   zemdaMedEnabled?: boolean;
+  zemdaEsteticEnabled?: boolean;
   zemdaBodyEnabled?: boolean;
   commercialModule?: string;
   clinicalWorkspace?: string | null;

@@ -16,7 +16,8 @@ export type ZemdaModule =
   | 'ZemdaFisio'
   | 'ZemdaOdonto'
   | 'ZemdaPersonal'
-  | 'ZemdaMed';
+  | 'ZemdaMed'
+  | 'ZemdaEstetic';
 
 export interface ModuleFlags {
   zemda_fono_enabled: number;
@@ -28,6 +29,7 @@ export interface ModuleFlags {
   zemda_odonto_enabled: number;
   zemda_personal_enabled: number;
   zemda_med_enabled?: number;
+  zemda_estetic_enabled?: number;
 }
 
 export interface ResolveProfessionInput {
@@ -279,16 +281,21 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     };
   }
 
-  if (pId === 'prof-esteticista' || combined.includes('esteticist') || combined.includes('estética facial')) {
+  if (
+    pId === 'prof-esteticista' ||
+    combined.includes('esteticist') ||
+    combined.includes('estética') ||
+    combined.includes('estetica')
+  ) {
     return {
       canonicalId: 'prof-esteticista',
       canonicalName: 'Esteticista',
-      commercialModule: null,
-      clinicalWorkspace: 'general',
-      boardLabel: 'Registro Técnico',
-      taxonomyCategory: 'HEALTH_SUPPORT',
+      commercialModule: 'ZemdaEstetic',
+      clinicalWorkspace: 'zemda-estetic',
+      boardLabel: 'Registro / Conselho',
+      taxonomyCategory: 'CANONICAL',
       isSpecificAlias: false,
-      flags: makeFlags(null)
+      flags: makeFlags('ZemdaEstetic')
     };
   }
 
@@ -856,7 +863,8 @@ function makeFlags(target: ZemdaModule | null): ModuleFlags {
     zemda_fisio_enabled: target === 'ZemdaFisio' ? 1 : 0,
     zemda_odonto_enabled: target === 'ZemdaOdonto' ? 1 : 0,
     zemda_personal_enabled: target === 'ZemdaPersonal' ? 1 : 0,
-    zemda_med_enabled: target === 'ZemdaMed' ? 1 : 0
+    zemda_med_enabled: target === 'ZemdaMed' ? 1 : 0,
+    zemda_estetic_enabled: target === 'ZemdaEstetic' ? 1 : 0
   };
 }
 
@@ -887,7 +895,8 @@ export function cleanPracticeAreasForNewProfession(newProfessionId: string, curr
     ZemdaFisio: ['fisio', 'reabilita', 'ortoped', 'ortopéd', 'traumato', 'pilates', 'cinesio'],
     ZemdaOdonto: ['odonto', 'dentis', 'clareamento', 'ortodontia', 'endodontia', 'implante'],
     ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'musculacao', 'treinamento', 'condicionamento físico'],
-    ZemdaMed: ['médic', 'medic', 'clínica médica', 'prescrição', 'soap', 'cid', 'neurologia', 'psiquiatria', 'pediatria', 'cardiologia', 'dermatologia']
+    ZemdaMed: ['médic', 'medic', 'clínica médica', 'prescrição', 'soap', 'cid', 'neurologia', 'psiquiatria', 'pediatria', 'cardiologia', 'dermatologia'],
+    ZemdaEstetic: ['estet', 'estétic', 'facial', 'corporal', 'capilar', 'botox', 'preenchimento', 'bioestimulador']
   };
 
   const filtered = rawAreas.filter(area => {

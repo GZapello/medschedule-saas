@@ -11,6 +11,7 @@ import { seedNutritionFoodDatabase } from './nutrition-foods.seed';
 import { migrateRemoveOutOfScopeProfessions } from './remove-out-of-scope-professions.migration';
 import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
+import { migrateEstetic } from './estetic.migration';
 import { dbPath } from './db-path';
 
 const dbDir = path.dirname(dbPath);
@@ -3576,6 +3577,12 @@ function repairLegacyPhotoUrls(rawDb: any): void {
     migrateMedicalTree(rawDb);
   } catch (err) {
     console.error('[Database] Erro ao executar migrateMedicalTree:', err);
+  }
+
+  try {
+    migrateEstetic(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateEstetic:', err);
   }
 
   try {

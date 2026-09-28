@@ -36,6 +36,8 @@ interface AuthContextType {
   isZemdaPersonal: boolean;
   isDoctor: boolean;
   isZemdaMed: boolean;
+  isEsthetician: boolean;
+  isZemdaEstetic: boolean;
   isZemdaBody: boolean;
   commercialModule: string | null;
   clinicalWorkspace: string | null;
@@ -235,6 +237,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     | 'ZemdaOdonto'
     | 'ZemdaPersonal'
     | 'ZemdaMed'
+    | 'ZemdaEstetic'
     | null = (currentUser?.commercialModule as any) || null;
 
   // Fallback retroativo para sessões legadas sem commercialModule populado
@@ -362,6 +365,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       regType === 'CRM'
     ) {
       activeModule = 'ZemdaMed';
+    } else if (
+      profId === 'prof-esteticista' ||
+      profSlug === 'esteticista' ||
+      combinedProf.includes('estetic') ||
+      combinedProf.includes('estétic')
+    ) {
+      activeModule = 'ZemdaEstetic';
     }
   }
 
@@ -403,12 +413,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ));
   const isZemdaMed = isDoctor;
 
-  // ZemdaBody: Módulo transversal automático para TODOS os profissionais clínicos e gestores ativos da clínica
-  const isZemdaBody = isEligibleStaff;
-
+  // ZemdaEstetic: Vertical de Estética (Facial, Corporal, Capilar)
+  // Dentistas preservam ZemdaOdonto e obtêm acesso duplo estritamente via área de atuação (HOF) ou permissão
   const capabilities = currentUser?.capabilities || [];
   const practiceAreaIds = currentUser?.practiceAreaIds || [];
   const selectedOptionalCapabilities = currentUser?.selectedOptionalCapabilities || [];
+
+  const isEsthetician = isEligibleStaff && (
+    activeModule === 'ZemdaEstetic' ||
+    profId === 'prof-esteticista' ||
+    profSlug === 'esteticista' ||
+    combinedProf.includes('estetic') ||
+    combinedProf.includes('estétic')
+  );
+
+  const isZemdaEstetic = isEligibleStaff && (
+    activeModule === 'ZemdaEstetic' ||
+    isEsthetician ||
+    Boolean((currentUser as any)?.zemdaEsteticEnabled) ||
+    Boolean((currentUser as any)?.zemda_estetic_enabled) ||
+    userPermissions.includes('access_zemda_estetic') ||
+    (isDentist && (
+      practiceAreaIds.includes('pa-odonto-estetica') ||
+      Boolean((currentUser as any)?.zemdaEsteticEnabled) ||
+      Boolean((currentUser as any)?.zemda_estetic_enabled) ||
+      userPermissions.includes('access_zemda_estetic')
+    )) ||
+    practiceAreaIds.some(pa => [
+      'pa-estet-facial',
+      'pa-estet-corporal',
+      'pa-estet-capilar',
+      'pa-odonto-estetica',
+      'pa-biomed-estetica',
+      'pa-farm-estetica'
+    ].includes(pa)) ||
+    capabilities.some(c => c.startsWith('ESTETIC_'))
+  );
+
+  // ZemdaBody: Módulo transversal automático para TODOS os profissionais clínicos e gestores ativos da clínica
+  const isZemdaBody = isEligibleStaff;
+
   const commercialModule = activeModule || currentUser?.commercialModule || null;
 
   const isSandboxSession = Boolean(
@@ -462,6 +506,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isZemdaPersonal,
         isDoctor,
         isZemdaMed,
+        isEsthetician,
+        isZemdaEstetic,
         isZemdaBody,
         commercialModule,
         clinicalWorkspace: currentUser?.clinicalWorkspace ?? null,

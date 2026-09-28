@@ -315,6 +315,7 @@ export class CapabilityService {
              u.zemda_nutri_enabled as u_nutri, u.zemda_to_enabled as u_to,
              u.zemda_pp_enabled as u_pp, u.zemda_psico_enabled as u_psico,
              u.zemda_personal_enabled as u_personal,
+             u.zemda_estetic_enabled as u_estetic,
              cu.profession_custom as cu_prof_custom, cu.profession_id as cu_prof_id,
              cu.profession_name as cu_prof_name,
              cu.zemda_fono_enabled as cu_fono, cu.zemda_med_enabled as cu_med,
@@ -322,6 +323,7 @@ export class CapabilityService {
              cu.zemda_nutri_enabled as cu_nutri, cu.zemda_to_enabled as cu_to,
              cu.zemda_pp_enabled as cu_pp, cu.zemda_psico_enabled as cu_psico,
              cu.zemda_personal_enabled as cu_personal,
+             cu.zemda_estetic_enabled as cu_estetic,
              p.profession_id as p_prof_id, p.profession_name as p_prof_name,
              p.name as p_name, p.specialty_custom as p_spec_custom,
              p.zemda_fono_enabled as p_fono, p.zemda_med_enabled as p_med,
@@ -329,6 +331,7 @@ export class CapabilityService {
              p.zemda_nutri_enabled as p_nutri, p.zemda_to_enabled as p_to,
              p.zemda_pp_enabled as p_pp, p.zemda_psico_enabled as p_psico,
              p.zemda_personal_enabled as p_personal,
+             p.zemda_estetic_enabled as p_estetic,
              prof.name as prof_name, prof.slug as prof_slug,
              t.manager_profession as t_manager_prof, t.name as t_name,
              t.trade_name as t_trade_name, t.description as t_description
@@ -405,8 +408,51 @@ export class CapabilityService {
       commercialModule = 'ZemdaFono';
     }
 
+    // Detecção de Estética (ZemdaEstetic):
+    const isEsteticSignal =
+      userRow?.u_estetic === 1 ||
+      userRow?.p_estetic === 1 ||
+      userRow?.cu_estetic === 1 ||
+      (userRow?.p_prof_id || '').toLowerCase().includes('estet') ||
+      (userRow?.u_prof_id || '').toLowerCase().includes('estet') ||
+      (userRow?.cu_prof_id || '').toLowerCase().includes('estet') ||
+      (userRow?.p_prof_name || '').toLowerCase().includes('estet') ||
+      (userRow?.u_prof_name || '').toLowerCase().includes('estet') ||
+      (userRow?.cu_prof_name || '').toLowerCase().includes('estet') ||
+      (userRow?.cu_prof_custom || '').toLowerCase().includes('estet') ||
+      (userRow?.p_spec_custom || '').toLowerCase().includes('estet') ||
+      (userRow?.prof_name || '').toLowerCase().includes('estet');
+
+    if (
+      (commercialModule === 'ZemdaEstetic' || canonicalProfId === 'prof-esteticista' || isEsteticSignal) &&
+      canonicalProfId !== 'prof-dentista' &&
+      canonicalProfId !== 'prof-medico'
+    ) {
+      canonicalProfId = 'prof-esteticista';
+      commercialModule = 'ZemdaEstetic';
+    }
+
     // 2. Busca áreas selecionadas pelo usuário
     let userAreaIds = this.getUserPracticeAreas(userId, tenantId);
+
+    // Cirurgião-Dentista: Mantém ZemdaOdonto, e se tiver permissão estética ou especialidade HOF, inclui pa-odonto-estetica
+    if (canonicalProfId === 'prof-dentista') {
+      const hasDentistEsteticPermission =
+        userRow?.u_estetic === 1 ||
+        userRow?.cu_estetic === 1 ||
+        userRow?.p_estetic === 1 ||
+        (userRow?.p_spec_custom || '').toLowerCase().includes('harmoniz') ||
+        (userRow?.p_spec_custom || '').toLowerCase().includes('estet');
+
+      if (hasDentistEsteticPermission && !userAreaIds.includes('pa-odonto-estetica')) {
+        userAreaIds.push('pa-odonto-estetica');
+      }
+    }
+
+    // Se esteticista não tiver áreas cadastradas, inclui Facial e Corporal por padrão
+    if (canonicalProfId === 'prof-esteticista' && userAreaIds.length === 0) {
+      userAreaIds = ['pa-estet-facial', 'pa-estet-corporal'];
+    }
 
     const isTOSignal =
       userRow?.u_to === 1 ||

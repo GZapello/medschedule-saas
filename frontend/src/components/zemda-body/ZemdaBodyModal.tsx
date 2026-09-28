@@ -13,6 +13,8 @@ interface ZemdaBodyModalProps {
   professionalName?: string;
   module?: string;
   initialBodyModel?: 'female' | 'male';
+  initialMapType?: 'BODY' | 'FACE';
+  initialRegion?: string;
   readOnly?: boolean;
 }
 
@@ -27,6 +29,8 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
   professionalName,
   module = 'general',
   initialBodyModel = 'female',
+  initialMapType = 'BODY',
+  initialRegion,
   readOnly = false
 }) => {
   const saveRef=useRef<() => Promise<boolean>>(()=>Promise.resolve(true));
@@ -88,6 +92,8 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
             professionalId={professionalId}
             module={module}
             initialBodyModel={initialBodyModel}
+            initialMapType={initialMapType}
+            initialRegion={initialRegion}
             readOnly={readOnly}
             onClose={onClose}
           />

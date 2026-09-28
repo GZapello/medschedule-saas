@@ -48,6 +48,7 @@ const InventoryView = lazyWithRetry(() => import('./components/inventory/Invento
 const BudgetsView = lazyWithRetry(() => import('./components/budgets/BudgetsView').then(module => ({ default: module.BudgetsView })), 'BudgetsView');
 const ProfessionalPayrollView = lazyWithRetry(() => import('./components/payroll/ProfessionalPayrollView').then(module => ({ default: module.ProfessionalPayrollView })), 'ProfessionalPayrollView');
 const ZemdaMedWorkspace = lazyWithRetry(() => import('./components/medical/ZemdaMedWorkspace').then(module => ({ default: module.ZemdaMedWorkspace })), 'ZemdaMedWorkspace');
+const ZemdaEsteticWorkspace = lazyWithRetry(() => import('./components/estetic/ZemdaEsteticWorkspace').then(module => ({ default: module.ZemdaEsteticWorkspace })), 'ZemdaEsteticWorkspace');
 const MyResourcesView = lazyWithRetry(() => import('./components/profile/MyResourcesView').then(module => ({ default: module.MyResourcesView })), 'MyResourcesView');
 const SuperAdminLaboratoryView = lazyWithRetry(() => import('./components/superadmin/SuperAdminLaboratoryView').then(module => ({ default: module.SuperAdminLaboratoryView })), 'SuperAdminLaboratoryView');
 import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
@@ -126,6 +127,7 @@ export const VIEW_TO_PATH: Record<string, string> = {
   'zemda-personal': '/zemda-personal',
   'zemda-fisio': '/zemda-fisio',
   'zemda-odonto': '/zemda-odonto',
+  'zemda-estetic': '/zemda-estetic',
   'nutrition-workspace': '/zemda-nutri',
   'occupational-therapy-workspace': '/zemda-to',
   'speech-therapy-workspace': '/zemda-fono',
@@ -158,6 +160,7 @@ export const PATH_TO_VIEW: Record<string, string> = {
   '/zemda-personal': 'zemda-personal',
   '/zemda-fisio': 'zemda-fisio',
   '/zemda-odonto': 'zemda-odonto',
+  '/zemda-estetic': 'zemda-estetic',
   '/zemda-nutri': 'nutrition-workspace',
   '/zemda-to': 'occupational-therapy-workspace',
   '/zemda-fono': 'speech-therapy-workspace',
@@ -192,6 +195,11 @@ export function parseRouteFromPath(pathname: string): { view: string; subId?: st
   const patientMatch = clean.match(/^\/pacientes\/([^/]+)$/);
   if (patientMatch) {
     return { view: 'patients', subId: patientMatch[1] };
+  }
+
+  const esteticPatientMatch = clean.match(/^\/zemda-estetic\/(?:pacientes\/)?([^/]+)$/);
+  if (esteticPatientMatch) {
+    return { view: 'zemda-estetic', subId: esteticPatientMatch[1] };
   }
 
   if (PATH_TO_VIEW[clean]) {
@@ -232,6 +240,8 @@ const AppContent: React.FC = () => {
     isZemdaPersonal,
     isDoctor,
     isZemdaMed,
+    isEsthetician,
+    isZemdaEstetic,
     hasCapability,
     isSandboxSession,
     exitSandboxSession
@@ -268,6 +278,8 @@ const AppContent: React.FC = () => {
       targetPath = `/zemda-personal/alunos/${subId}`;
     } else if (view === 'patients' && subId) {
       targetPath = `/pacientes/${subId}`;
+    } else if (view === 'zemda-estetic' && subId) {
+      targetPath = `/zemda-estetic/pacientes/${subId}`;
     }
 
     if (window.location.pathname !== targetPath) {
@@ -1148,6 +1160,31 @@ const AppContent: React.FC = () => {
                 <p className="text-sm text-slate-600 mb-4">
                   Este módulo clínico é de uso exclusivo para cirurgiões-dentistas e gestores autorizados com área de atuação em <strong>Odontologia</strong>.
                 </p>
+              </div>
+            )
+          )}
+
+          {currentView === 'zemda-estetic' && (
+            (isEsthetician || isZemdaEstetic || currentUser?.commercialModule === 'ZemdaEstetic' || hasCapability('ESTETIC_FACIAL') || isSuperAdmin) ? (
+              <ZemdaEsteticWorkspace
+                initialPatientId={subRouteId || undefined}
+                onSelectPatient={(pId) => handleNavigateView('zemda-estetic', pId)}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: ZemdaEstetic</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Este módulo clínico é de uso exclusivo para profissionais com capacitação estética comprovada (Estética Facial, Corporal ou Capilar) ou com permissão expressa concedida pela clínica.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
               </div>
             )
           )}
