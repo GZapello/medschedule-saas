@@ -1050,8 +1050,49 @@ export const PUBLIC_NICHE_PAGES: Record<string, SeoPageData> = Object.fromEntrie
  }])
 );
 const VALID_INTERNAL_EXACT_PATHS = new Set<string>([
+  // Autenticação & Entrada
   '/login',
+  '/cadastro',
+
+  // Visões Principais (Rotas em Português usadas pela plataforma)
   '/dashboard',
+  '/agenda',
+  '/pacientes',
+  '/atendimentos',
+  '/mapa-corporal',
+  '/zemda-med',
+  '/zemda-personal',
+  '/zemda-fisio',
+  '/zemda-odonto',
+  '/zemda-estetic',
+  '/zemda-nutri',
+  '/zemda-to',
+  '/zemda-fono',
+  '/zemda-psico',
+  '/zemda-pp',
+  '/profissionais',
+  '/servicos',
+  '/financeiro',
+  '/recibos',
+  '/equipe',
+  '/horarios',
+  '/orcamentos',
+  '/comissoes',
+  '/estoque',
+  '/exames-pendentes',
+  '/suporte',
+  '/relatorios',
+  '/configuracoes',
+  '/superadmin',
+  '/assinatura',
+  '/planos',
+  '/onboarding',
+  '/audit',
+  '/meus-recursos',
+  '/laboratorio',
+  '/cookies',
+
+  // Visões Legadas / Aliases em Inglês
   '/calendar',
   '/patients',
   '/clinical-records',
@@ -1074,12 +1115,7 @@ const VALID_INTERNAL_EXACT_PATHS = new Set<string>([
   '/support-tickets',
   '/reports',
   '/settings',
-  '/superadmin',
-  '/billing',
-  '/onboarding',
-  '/audit',
-  '/assinatura',
-  '/cookies'
+  '/billing'
 ]);
 
 /**
@@ -1149,6 +1185,21 @@ export function isValidInternalRoute(rawPath: string): boolean {
 
   // Link de execução de treino do aluno no ZemdaPersonal: /treino/:token
   if (/^\/treino\/[a-zA-Z0-9_-]+$/i.test(norm)) {
+    return true;
+  }
+
+  // Sub-rotas dinâmicas internas de prontuário de pacientes: /pacientes/:id
+  if (/^\/pacientes\/[a-zA-Z0-9_-]+$/i.test(norm)) {
+    return true;
+  }
+
+  // Sub-rotas dinâmicas de alunos no ZemdaPersonal: /zemda-personal/:id ou /zemda-personal/alunos/:id
+  if (/^\/zemda-personal(?:\/alunos)?\/[a-zA-Z0-9_-]+$/i.test(norm)) {
+    return true;
+  }
+
+  // Sub-rotas dinâmicas de pacientes no ZemdaEstetic: /zemda-estetic/:id ou /zemda-estetic/pacientes/:id
+  if (/^\/zemda-estetic(?:\/pacientes)?\/[a-zA-Z0-9_-]+$/i.test(norm)) {
     return true;
   }
 

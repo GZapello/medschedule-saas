@@ -50,7 +50,7 @@ interface AuthContextType {
   hasCapability: (capabilityId: string) => boolean;
   isSandboxSession: boolean;
   startSandboxSession: (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => void;
-  exitSandboxSession: () => void;
+  exitSandboxSession: () => void | Promise<void>;
   userPermissions: string[];
   clientTermLabel: string;
 }
@@ -132,9 +132,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('active_tenant_id');
     localStorage.removeItem('sandbox_backup_token');
     localStorage.removeItem('sandbox_backup_tenant');
+    try {
+      sessionStorage.removeItem('activeView');
+      sessionStorage.removeItem('zemda-billing-return-home');
+    } catch (_) {}
     setToken(null);
     setCurrentUser(null);
     setCurrentTenant(null);
+
+    // Substitui a URL no histórico sem empilhar nova entrada (evita voltar para páginas protegidas pelo botão Voltar)
+    try {
+      window.history.replaceState(null, '', '/login');
+    } catch (_) {}
+
+    window.dispatchEvent(new CustomEvent('zemda-auth-state', { detail: { action: 'logout' } }));
   };
 
   const startSandboxSession = (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => {
@@ -148,22 +159,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     loginWithToken(sessionData.token, sessionData.user, sessionData.tenant);
   };
 
-  const exitSandboxSession = () => {
+  const exitSandboxSession = async () => {
     const backupToken = localStorage.getItem('sandbox_backup_token');
     const backupTenant = localStorage.getItem('sandbox_backup_tenant');
 
     localStorage.removeItem('sandbox_backup_token');
     localStorage.removeItem('sandbox_backup_tenant');
+    localStorage.removeItem('active_tenant_id');
+    setCurrentTenant(null);
+
+    try {
+      sessionStorage.setItem('activeView', 'superadmin');
+    } catch (_) {}
 
     if (backupToken) {
       localStorage.setItem('auth_token', backupToken);
-      if (backupTenant) {
+      if (backupTenant && !backupTenant.startsWith('sbx-tenant-')) {
         localStorage.setItem('active_tenant_id', backupTenant);
-      } else {
-        localStorage.removeItem('active_tenant_id');
       }
       setToken(backupToken);
-      void reloadSession();
+
+      try {
+        await reloadSession();
+      } catch (e) {
+        console.error('Erro ao restaurar sessão de SuperAdmin:', e);
+      }
+
+      try {
+        window.history.pushState({ view: 'superadmin' }, '', '/superadmin');
+      } catch (_) {}
+
+      window.dispatchEvent(new CustomEvent('zemda-exit-sandbox'));
+      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'superadmin', force: true } }));
     } else {
       logout();
     }
@@ -193,9 +220,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const data = await ApiClient.get<{ user: User; tenant: Tenant | null }>('/v1/auth/me');
       setCurrentUser(data.user);
-      if (data.tenant) {
+      if (data.tenant && !data.tenant.id.startsWith('sbx-tenant-')) {
         setCurrentTenant(data.tenant);
         localStorage.setItem('active_tenant_id', data.tenant.id);
+      } else {
+        setCurrentTenant(null);
+        localStorage.removeItem('active_tenant_id');
       }
     } catch (err) {
       console.error('Erro ao recarregar sessão:', err);

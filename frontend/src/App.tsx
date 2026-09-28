@@ -55,7 +55,7 @@ import { ZemdaLandingPage } from './components/public/ZemdaLandingPage';
 import { PublicSeoPageView } from './components/public/PublicSeoPageView';
 import { PublicHeader } from './components/public/PublicHeader';
 import { PublicFooter } from './components/public/PublicFooter';
-import { SEO_PAGES, isValidApplicationRoute, buildCanonical } from './data/seoPagesData';
+import { SEO_PAGES, isValidApplicationRoute, isValidInternalRoute, buildCanonical } from './data/seoPagesData';
 const NewAppointmentModal = lazyWithRetry(() => import('./components/calendar/NewAppointmentModal').then(module => ({ default: module.NewAppointmentModal })), 'NewAppointmentModal');
 const NewPatientModal = lazyWithRetry(() => import('./components/patients/NewPatientModal').then(module => ({ default: module.NewPatientModal })), 'NewPatientModal');
 const AICopilotDrawer = lazyWithRetry(() => import('./components/ai-copilot/AICopilotDrawer').then(module => ({ default: module.AICopilotDrawer })), 'AICopilotDrawer');
@@ -264,8 +264,8 @@ const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [subRouteId, setSubRouteId] = useState<string | null>(initialRoute.subId || null);
 
-  const handleNavigateView = (view: string, subId?: string | null) => {
-    if ((view === 'superadmin' || view === 'audit') && currentUserRef.current?.role !== 'superadmin') {
+  const handleNavigateView = (view: string, subId?: string | null, force?: boolean) => {
+    if ((view === 'superadmin' || view === 'audit') && currentUserRef.current?.role !== 'superadmin' && !force) {
       return;
     }
     setCurrentView(view);
@@ -292,7 +292,10 @@ const AppContent: React.FC = () => {
     sessionStorage.removeItem('zemda-billing-return-home');
     setBillingReturnHome(false);
   };
-  const [publicView, setPublicView] = useState<'landing' | 'login'>(window.location.pathname.startsWith('/assinatura') ? 'login' : 'landing');
+  const isDirectAuthPath = window.location.pathname === '/login' || window.location.pathname === '/cadastro';
+  const [publicView, setPublicView] = useState<'landing' | 'login'>(() =>
+    window.location.pathname.startsWith('/assinatura') || isDirectAuthPath ? 'login' : 'landing'
+  );
 
   // Roteamento de páginas públicas de nicho (SEO)
   const getInitialSeoSlug = (): string | null => {
@@ -375,7 +378,9 @@ const AppContent: React.FC = () => {
     window.history.pushState(null, '', '/');
   };
 
-  const [authInitialAction, setAuthInitialAction] = useState<'login' | 'create-clinic' | 'register-user'>('login');
+  const [authInitialAction, setAuthInitialAction] = useState<'login' | 'create-clinic' | 'register-user'>(() =>
+    window.location.pathname === '/cadastro' ? 'create-clinic' : 'login'
+  );
   const [selectedRegistrationPlan, setSelectedRegistrationPlan] = useState<string | undefined>(undefined);
   const [isRegistrationTrial, setIsRegistrationTrial] = useState<boolean | undefined>(undefined);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
@@ -427,10 +432,29 @@ const AppContent: React.FC = () => {
     const handleNavigate = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.view) {
-        if ((detail.view === 'superadmin' || detail.view === 'audit') && currentUserRef.current?.role !== 'superadmin') {
+        if ((detail.view === 'superadmin' || detail.view === 'audit') && currentUserRef.current?.role !== 'superadmin' && detail?.force !== true) {
           return;
         }
-        handleNavigateView(detail.view, detail.subId || null);
+        handleNavigateView(detail.view, detail.subId || null, detail?.force);
+      }
+    };
+
+    const handleAuthState = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.action === 'logout') {
+        setPublicView('login');
+        setAuthInitialAction('login');
+        setActiveSeoSlug(null);
+        setCurrentView('dashboard');
+      }
+    };
+
+    const handleExitSandbox = () => {
+      setCurrentView('superadmin');
+      setSubRouteId(null);
+      sessionStorage.setItem('activeView', 'superadmin');
+      if (window.location.pathname !== '/superadmin') {
+        window.history.pushState({ view: 'superadmin' }, '', '/superadmin');
       }
     };
 
@@ -438,11 +462,15 @@ const AppContent: React.FC = () => {
     window.addEventListener('zemda-ai-appointment-context', handleAppointmentContext);
     window.addEventListener('open-zemda-ai', handleOpenAI);
     window.addEventListener('zemda-navigate', handleNavigate);
+    window.addEventListener('zemda-auth-state', handleAuthState);
+    window.addEventListener('zemda-exit-sandbox', handleExitSandbox);
     return () => {
       window.removeEventListener('zemda-ai-patient-context', handlePatientContext);
       window.removeEventListener('zemda-ai-appointment-context', handleAppointmentContext);
       window.removeEventListener('open-zemda-ai', handleOpenAI);
       window.removeEventListener('zemda-navigate', handleNavigate);
+      window.removeEventListener('zemda-auth-state', handleAuthState);
+      window.removeEventListener('zemda-exit-sandbox', handleExitSandbox);
     };
   }, []);
 
@@ -587,7 +615,15 @@ const AppContent: React.FC = () => {
         }
       }
 
-      if (!currentUserRef.current) setPublicView(window.location.pathname === '/login' || window.location.pathname === '/cadastro' ? 'login' : 'landing');
+      if (!currentUserRef.current) {
+        const isAuthDirect = window.location.pathname === '/login' || window.location.pathname === '/cadastro';
+        setPublicView(isAuthDirect ? 'login' : 'landing');
+        if (window.location.pathname === '/cadastro') {
+          setAuthInitialAction('create-clinic');
+        } else if (window.location.pathname === '/login') {
+          setAuthInitialAction('login');
+        }
+      }
       const cleanPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
       if (cleanPath === 'termos-de-uso') {
         setActiveLegalPage('terms');
@@ -885,7 +921,46 @@ const AppContent: React.FC = () => {
   }
   // Se não estiver logado, exibe páginas de SEO de nicho, Landing Page ou Login
   if (!currentUser || billingReturnHome) {
-    // Se a rota acessada for inválida (404 real)
+    const isLoginPath = window.location.pathname === '/login';
+    const isRegisterPath = window.location.pathname === '/cadastro';
+    const isExplicitAuth = isLoginPath || isRegisterPath || publicView === 'login';
+
+    // 1. Se o usuário deslogado estiver em rota de autenticação (/login, /cadastro ou publicView === 'login')
+    if (isExplicitAuth && !billingReturnHome) {
+      return (
+        <AuthPage
+          onOpenPublicBooking={() => setCurrentView('public_preview')}
+          onBackToLanding={() => {
+            setActiveSeoSlug(null);
+            setPublicView('landing');
+            window.history.pushState(null, '', '/');
+          }}
+          initialAction={isRegisterPath ? 'create-clinic' : authInitialAction}
+          initialPlan={selectedRegistrationPlan}
+          isTrial={isRegistrationTrial}
+        />
+      );
+    }
+
+    // 2. Se o usuário deslogado tentar acessar uma rota interna protegida válida (ex: /atendimentos, /agenda, /pacientes, /dashboard)
+    if (isValidInternalRoute(window.location.pathname)) {
+      window.history.replaceState(null, '', '/login');
+      return (
+        <AuthPage
+          onOpenPublicBooking={() => setCurrentView('public_preview')}
+          onBackToLanding={() => {
+            setActiveSeoSlug(null);
+            setPublicView('landing');
+            window.history.pushState(null, '', '/');
+          }}
+          initialAction="login"
+          initialPlan={selectedRegistrationPlan}
+          isTrial={isRegistrationTrial}
+        />
+      );
+    }
+
+    // 3. Se a rota acessada for inválida (404 real)
     if (!isValidApplicationRoute(window.location.pathname)) {
       return (
         <div className="min-h-screen bg-[#fafbfc] text-slate-800 font-sans flex flex-col justify-between">
@@ -950,7 +1025,7 @@ const AppContent: React.FC = () => {
           }}
           onRegisterClinic={() => {
             setActiveSeoSlug(null);
-            window.history.pushState(null, '', '/login');
+            window.history.pushState(null, '', '/cadastro');
             setAuthInitialAction('create-clinic');
             setPublicView('login');
           }}
@@ -965,6 +1040,7 @@ const AppContent: React.FC = () => {
             leaveBillingHome();
             setAuthInitialAction('login');
             setPublicView('login');
+            window.history.pushState(null, '', '/login');
           }}
           onRegisterClinic={(plan, isTrial) => {
             leaveBillingHome();
@@ -972,11 +1048,13 @@ const AppContent: React.FC = () => {
             setIsRegistrationTrial(isTrial);
             setAuthInitialAction('create-clinic');
             setPublicView('login');
+            window.history.pushState(null, '', '/cadastro');
           }}
           onRegisterUser={() => {
             leaveBillingHome();
             setAuthInitialAction('register-user');
             setPublicView('login');
+            window.history.pushState(null, '', '/cadastro');
           }}
           onOpenPublicBooking={() => setCurrentView('public_preview')}
           onNavigateSeoPage={navigateToSeoPage}
@@ -990,6 +1068,7 @@ const AppContent: React.FC = () => {
         onBackToLanding={() => {
           setActiveSeoSlug(null);
           setPublicView('landing');
+          window.history.pushState(null, '', '/');
         }}
         initialAction={authInitialAction}
         initialPlan={selectedRegistrationPlan}

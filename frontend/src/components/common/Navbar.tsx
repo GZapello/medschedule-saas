@@ -23,7 +23,17 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNavigate }) => {
-  const { currentUser, currentTenant, isSuperAdmin, logout, clientTermLabel, isZemdaFisio, isZemdaOdonto } = useAuth();
+  const {
+    currentUser,
+    currentTenant,
+    isSuperAdmin,
+    logout,
+    clientTermLabel,
+    isZemdaFisio,
+    isZemdaOdonto,
+    isSandboxSession,
+    exitSandboxSession
+  } = useAuth();
   const { openHelp } = useOnboarding();
   const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
 
@@ -88,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
 
       <div className="flex items-center gap-2 sm:gap-4">
         {/* Botão de retorno ao Painel Global para SuperAdmin */}
-        {isSuperAdmin && (
+        {isSuperAdmin && !isSandboxSession && (
           <button
             onClick={() => onNavigate('superadmin')}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200 cursor-pointer shadow-xs"
@@ -96,6 +106,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
           >
             <Shield className="w-3.5 h-3.5 text-rose-600" />
             <span>Painel Global</span>
+          </button>
+        )}
+
+        {/* Botão de encerramento de simulação Sandbox para SuperAdmin */}
+        {isSandboxSession && (
+          <button
+            onClick={exitSandboxSession}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors border border-purple-300 cursor-pointer shadow-xs"
+            title="Encerrar Simulação Sandbox (Voltar ao SuperAdmin)"
+          >
+            <LogOut className="w-3.5 h-3.5 text-purple-600" />
+            <span>Encerrar Sandbox</span>
           </button>
         )}
 
@@ -176,9 +198,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
           </button>
 
           <button
-            onClick={logout}
-            className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-            title="Sair do sistema"
+            onClick={isSandboxSession ? exitSandboxSession : logout}
+            className={`p-2 rounded-lg transition-colors cursor-pointer ${
+              isSandboxSession
+                ? 'text-purple-600 hover:text-purple-800 hover:bg-purple-100 bg-purple-50'
+                : 'text-slate-500 hover:text-rose-600 hover:bg-rose-50'
+            }`}
+            title={isSandboxSession ? "Encerrar Simulação Sandbox (Voltar ao SuperAdmin)" : "Sair do sistema"}
           >
             <LogOut className="w-4 h-4" />
           </button>
