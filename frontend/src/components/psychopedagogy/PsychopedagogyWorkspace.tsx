@@ -11,6 +11,7 @@ import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import {
   GraduationCap,
   BookOpen,
@@ -796,75 +797,65 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       
       {/* 10. NOVO CABEÇALHO DO MÓDULO ZEMDAPP */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-700 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-            <GraduationCap className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">ZemdaPP</h1>
-              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                Psicopedagogia
-              </span>
-              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                <Lock className="w-2.5 h-2.5 text-slate-400" />
-                Prontuário com acesso restrito
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">
-              Avaliação da aprendizagem, intervenção psicopedagógica e acompanhamento longitudinal.
-            </p>
-          </div>
-        </div>
+      <ProfessionalModuleHeader
+        icon={GraduationCap}
+        iconGradient="from-indigo-600 to-violet-700"
+        iconShadow="shadow-indigo-500/20"
+        title="ZemdaPP"
+        badgeLabel="Psicopedagogia"
+        badgeVariant="bg-indigo-100 text-indigo-700 border-indigo-200"
+        secondaryBadge={
+          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+            <Lock className="w-2.5 h-2.5 text-slate-400" />
+            Prontuário com acesso restrito
+          </span>
+        }
+        description="Avaliação da aprendizagem, intervenção psicopedagógica e acompanhamento longitudinal."
+      >
+        <PatientSearchSelect
+          compact
+          value={selectedPatientId}
+          selectedPatient={selectedPatient}
+          clientTermLabel="Aprendente"
+          disabled={!!initialAppointmentId}
+          onChange={(id, pat) => {
+            setSelectedPatientId(id);
+            if (pat) setPatientData(pat);
+            else if (!id) setPatientData(null);
+          }}
+        />
 
-        {/* CONTROLES À DIREITA: SELETOR DE APRENDENTE E AÇÕES RÁPIDAS */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <PatientSearchSelect
-            compact
-            value={selectedPatientId}
-            selectedPatient={selectedPatient}
-            clientTermLabel="Aprendente"
-            disabled={!!initialAppointmentId}
-            onChange={(id, pat) => {
-              setSelectedPatientId(id);
-              if (pat) setPatientData(pat);
-              else if (!id) setPatientData(null);
-            }}
-          />
-
-          {selectedPatientId && (
-            <ClinicalQuickHeaderActions
-              autosaveStatus={autosave.autosaveStatus}
-              lastSavedTime={autosave.lastSavedTime}
-              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-              onFinishConsultation={() => setActiveTab('finish')}
-              finishLabel="Finalizar Atendimento"
-              isSubmitting={saving}
-              tools={[
-                {
-                  id: 'documents',
-                  label: 'Documentos & Pareceres',
-                  icon: Printer,
-                  onClick: () => {
-                    setSelectedDocType('relatorio');
-                    setShowDocumentModal(true);
-                  }
-                },
-                {
-                  id: 'ai_support',
-                  label: 'IA Apoio Pedagógico',
-                  icon: Sparkles,
-                  highlight: true,
-                  onClick: () => setShowAiModal(true)
+        {selectedPatientId && (
+          <ClinicalQuickHeaderActions
+            autosaveStatus={autosave.autosaveStatus}
+            lastSavedTime={autosave.lastSavedTime}
+            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onFinishConsultation={() => setActiveTab('finish')}
+            finishLabel="Finalizar Atendimento"
+            isSubmitting={saving}
+            tools={[
+              {
+                id: 'documents',
+                label: 'Documentos & Pareceres',
+                icon: Printer,
+                onClick: () => {
+                  setSelectedDocType('relatorio');
+                  setShowDocumentModal(true);
                 }
-              ]}
-              toolsVariant="indigo"
-              toolsLabel="Ferramentas"
-            />
-          )}
-        </div>
-      </div>
+              },
+              {
+                id: 'ai_support',
+                label: 'IA Apoio Pedagógico',
+                icon: Sparkles,
+                highlight: true,
+                onClick: () => setShowAiModal(true)
+              }
+            ]}
+            toolsVariant="indigo"
+            toolsLabel="Ferramentas"
+          />
+        )}
+      </ProfessionalModuleHeader>
 
       {/* 1. NAVEGAÇÃO HORIZONTAL NAS 8 ABAS (PADRÃO MODERNO ZEMDA COM SCROLL FLUIDO) */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0">

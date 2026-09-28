@@ -51,6 +51,7 @@ import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 
 interface OccupationalTherapyWorkspaceProps {
   initialPatientId?: string;
@@ -564,70 +565,58 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {completion.dialog}
       {/* CABEÇALHO DO MÓDULO ZEMDATO */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center">
-            <Hand className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-800">ZemdaTO</h1>
-              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
-                Terapia Ocupacional
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">
-              Perfil ocupacional, AVDs padronizadas em 6 níveis, perfil sensorial, tecnologia assistiva e prontuário integrado.
-            </p>
-          </div>
+      <ProfessionalModuleHeader
+        icon={Hand}
+        iconGradient="from-teal-500 to-emerald-600"
+        iconShadow="shadow-teal-500/20"
+        title="ZemdaTO"
+        badgeLabel="Terapia Ocupacional Especializada"
+        badgeVariant="bg-teal-100 text-teal-800 border-teal-200"
+        description="Perfil ocupacional, AVDs padronizadas em 6 níveis, perfil sensorial, tecnologia assistiva e prontuário integrado."
+      >
+        {/* SWITCHER DE ÁREA DE ATUAÇÃO */}
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+          <span className="text-[10px] font-extrabold uppercase text-slate-400">Área:</span>
+          <select
+            value={practiceArea}
+            onChange={e => setPracticeArea(e.target.value as any)}
+            className="text-xs font-bold text-teal-900 bg-transparent focus:outline-none cursor-pointer"
+          >
+            <option value="pediatria">Pediatria e Desenvolvimento Infantil</option>
+            <option value="neurologia">Neurologia Adulto / Infantil</option>
+            <option value="saude_mental">Saúde Mental e Psicossocial</option>
+            <option value="gerontologia">Gerontologia / Saúde do Idoso</option>
+            <option value="reabilitacao_fisica">Reabilitação Física / Membro Superior</option>
+            <option value="hospitalar">Contextos Hospitalares / Leito</option>
+          </select>
         </div>
 
-        {/* CONTROLES DO CABEÇALHO: ÁREA DE ATUAÇÃO E SELETOR DE PACIENTE */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* SWITCHER DE ÁREA DE ATUAÇÃO */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
-            <span className="text-[10px] font-extrabold uppercase text-slate-400">Área:</span>
-            <select
-              value={practiceArea}
-              onChange={e => setPracticeArea(e.target.value as any)}
-              className="text-xs font-bold text-teal-900 bg-transparent focus:outline-none cursor-pointer"
-            >
-              <option value="pediatria">Pediatria e Desenvolvimento Infantil</option>
-              <option value="neurologia">Neurologia Adulto / Infantil</option>
-              <option value="saude_mental">Saúde Mental e Psicossocial</option>
-              <option value="gerontologia">Gerontologia / Saúde do Idoso</option>
-              <option value="reabilitacao_fisica">Reabilitação Física / Membro Superior</option>
-              <option value="hospitalar">Contextos Hospitalares / Leito</option>
-            </select>
-          </div>
+        <PatientSearchSelect
+          compact
+          value={selectedPatientId}
+          selectedPatient={selectedPatient}
+          disabled={!!initialAppointmentId}
+          onChange={(id, pat) => {
+            setSelectedPatientId(id);
+            if (pat) setSelectedPatient(pat);
+            else if (!id) setSelectedPatient(null);
+          }}
+        />
 
-          <PatientSearchSelect
-            compact
-            value={selectedPatientId}
-            selectedPatient={selectedPatient}
-            disabled={!!initialAppointmentId}
-            onChange={(id, pat) => {
-              setSelectedPatientId(id);
-              if (pat) setSelectedPatient(pat);
-              else if (!id) setSelectedPatient(null);
-            }}
+        {selectedPatientId && (
+          <ClinicalQuickHeaderActions
+            autosaveStatus={autosave.autosaveStatus}
+            lastSavedTime={autosave.lastSavedTime}
+            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onFinishConsultation={() => setActiveTab('finish')}
+            finishLabel="Finalizar Atendimento"
+            isSubmitting={saving}
+            tools={toQuickTools}
+            toolsVariant="teal"
+            toolsLabel="Ferramentas"
           />
-
-          {selectedPatientId && (
-            <ClinicalQuickHeaderActions
-              autosaveStatus={autosave.autosaveStatus}
-              lastSavedTime={autosave.lastSavedTime}
-              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-              onFinishConsultation={() => setActiveTab('finish')}
-              finishLabel="Finalizar Atendimento"
-              isSubmitting={saving}
-              tools={toQuickTools}
-              toolsVariant="teal"
-              toolsLabel="Ferramentas"
-            />
-          )}
-        </div>
-      </div>
+        )}
+      </ProfessionalModuleHeader>
 
       {/* BARRA HORIZONTAL DE ABAS EXCLUSIVA (SEM INTERFERÊNCIA DE ATALHOS) */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0">

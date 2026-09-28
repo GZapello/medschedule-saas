@@ -46,6 +46,7 @@ import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 
 interface NutritionWorkspaceProps {
   initialPatientId?: string;
@@ -910,60 +911,48 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       {completion.dialog}
 
       {/* CABEÇALHO DO MÓDULO ZEMDANUTRI */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-green-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
-            <Apple className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-800">ZemdaNutri</h1>
-              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                Nutrição Especializada
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">
-              Evolução, avaliação antropométrica, composição corporal, calculadoras energéticas, planos alimentares e metas.
-            </p>
-          </div>
-        </div>
+      <ProfessionalModuleHeader
+        icon={Apple}
+        iconGradient="from-emerald-500 to-green-600"
+        iconShadow="shadow-emerald-500/20"
+        title="ZemdaNutri"
+        badgeLabel="Nutrição Especializada"
+        badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
+        description="Evolução, avaliação antropométrica, composição corporal, calculadoras energéticas, planos alimentares e metas."
+      >
+        <PatientSearchSelect
+          compact
+          value={selectedPatientId}
+          selectedPatient={selectedPatient}
+          disabled={!!initialAppointmentId}
+          onChange={(id, pat) => {
+            setSelectedPatientId(id);
+            if (pat) setSelectedPatient(pat);
+            else if (!id) setSelectedPatient(null);
+          }}
+        />
 
-        {/* SELETOR DE PACIENTE */}
-        <div className="flex items-center gap-3">
-          <PatientSearchSelect
-            compact
-            value={selectedPatientId}
-            selectedPatient={selectedPatient}
-            disabled={!!initialAppointmentId}
-            onChange={(id, pat) => {
-              setSelectedPatientId(id);
-              if (pat) setSelectedPatient(pat);
-              else if (!id) setSelectedPatient(null);
-            }}
+        {selectedPatientId && (
+          <ClinicalQuickHeaderActions
+            autosaveStatus={autosave.autosaveStatus}
+            lastSavedTime={autosave.lastSavedTime}
+            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onFinishConsultation={() => setActiveTab('finish')}
+            finishLabel="Finalizar Atendimento"
+            isSubmitting={saving}
+            tools={[
+              {
+                id: 'patient_guide',
+                label: 'Guia do Paciente',
+                icon: Printer,
+                onClick: () => setShowFollowUpModal(true)
+              }
+            ]}
+            toolsVariant="emerald"
+            toolsLabel="Ferramentas"
           />
-
-          {selectedPatientId && (
-            <ClinicalQuickHeaderActions
-              autosaveStatus={autosave.autosaveStatus}
-              lastSavedTime={autosave.lastSavedTime}
-              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-              onFinishConsultation={() => setActiveTab('finish')}
-              finishLabel="Finalizar Atendimento"
-              isSubmitting={saving}
-              tools={[
-                {
-                  id: 'patient_guide',
-                  label: 'Guia do Paciente',
-                  icon: Printer,
-                  onClick: () => setShowFollowUpModal(true)
-                }
-              ]}
-              toolsVariant="emerald"
-              toolsLabel="Ferramentas"
-            />
-          )}
-        </div>
-      </div>
+        )}
+      </ProfessionalModuleHeader>
 
       {/* 10 ABAS DE NAVEGAÇÃO ORDENADAS (Trilha Limpa com Rolagem Livre) */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0">

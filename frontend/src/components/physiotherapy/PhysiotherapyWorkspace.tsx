@@ -36,6 +36,7 @@ import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 
 interface PhysiotherapyWorkspaceProps {
   initialPatientId?: string;
@@ -463,60 +464,48 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
       {completion.dialog}
 
       {/* CABEÇALHO DO MÓDULO ZEMDAFISIO */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-500 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-teal-500/20">
-            <Activity className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-800">ZemdaFisio</h1>
-              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">
-                Fisioterapia Especializada
-              </span>
-            </div>
-            <p className="text-xs text-slate-500">
-              Evolução, ADM/Goniometria, Escala Oxford, CBDF COFFITO 610/2025 e RBPF 618/2025.
-            </p>
-          </div>
-        </div>
+      <ProfessionalModuleHeader
+        icon={Activity}
+        iconGradient="from-teal-500 to-indigo-600"
+        iconShadow="shadow-teal-500/20"
+        title="ZemdaFisio"
+        badgeLabel="Fisioterapia Especializada"
+        badgeVariant="bg-teal-100 text-teal-800 border-teal-200"
+        description="Evolução, ADM/Goniometria, Escala Oxford, CBDF COFFITO 610/2025 e RBPF 618/2025."
+      >
+        <PatientSearchSelect
+          compact
+          value={selectedPatientId}
+          selectedPatient={selectedPatient}
+          disabled={!!initialAppointmentId}
+          onChange={(id, pat) => {
+            setSelectedPatientId(id);
+            if (pat) setSelectedPatient(pat);
+            else if (!id) setSelectedPatient(null);
+          }}
+        />
 
-        {/* SELETOR DE PACIENTE */}
-        <div className="flex items-center gap-3">
-          <PatientSearchSelect
-            compact
-            value={selectedPatientId}
-            selectedPatient={selectedPatient}
-            disabled={!!initialAppointmentId}
-            onChange={(id, pat) => {
-              setSelectedPatientId(id);
-              if (pat) setSelectedPatient(pat);
-              else if (!id) setSelectedPatient(null);
-            }}
+        {selectedPatientId && (
+          <ClinicalQuickHeaderActions
+            autosaveStatus={autosave.autosaveStatus}
+            lastSavedTime={autosave.lastSavedTime}
+            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onFinishConsultation={() => setActiveTab('finish')}
+            finishLabel="Finalizar Atendimento"
+            isSubmitting={saving}
+            tools={[
+              {
+                id: 'exercise_guide',
+                label: 'Guia de Exercícios',
+                icon: Printer,
+                onClick: () => setShowFollowUpModal(true)
+              }
+            ]}
+            toolsVariant="teal"
+            toolsLabel="Ferramentas"
           />
-
-          {selectedPatientId && (
-            <ClinicalQuickHeaderActions
-              autosaveStatus={autosave.autosaveStatus}
-              lastSavedTime={autosave.lastSavedTime}
-              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-              onFinishConsultation={() => setActiveTab('finish')}
-              finishLabel="Finalizar Atendimento"
-              isSubmitting={saving}
-              tools={[
-                {
-                  id: 'exercise_guide',
-                  label: 'Guia de Exercícios',
-                  icon: Printer,
-                  onClick: () => setShowFollowUpModal(true)
-                }
-              ]}
-              toolsVariant="teal"
-              toolsLabel="Ferramentas"
-            />
-          )}
-        </div>
-      </div>
+        )}
+      </ProfessionalModuleHeader>
 
       {/* 14 ABAS DE NAVEGAÇÃO ESTRUTURADAS (Trilha Limpa com Rolagem Livre) */}
       <div className="bg-white border-b border-slate-200 px-6 shrink-0">
