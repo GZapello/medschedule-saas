@@ -93,12 +93,14 @@ export class AuthController {
       let tenantData: any = null;
       if (user.tenant_id) {
         const tenantStmt = db.prepare(`
-          SELECT 
-            id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-            primary_color, client_term_label, status, banned_reason, registrations_blocked,
-            onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
-          FROM tenants
-          WHERE id = ?
+          SELECT
+            t.id, t.slug, t.name, t.corporate_name, t.trade_name, t.email, t.phone, t.logo_url,
+            t.primary_color, t.client_term_label, t.status, t.banned_reason, t.registrations_blocked,
+            t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.manager_profession, t.manager_practice_areas,
+            p.code as plan_code, p.max_users
+          FROM tenants t
+          LEFT JOIN plans p ON p.id = t.plan_id
+          WHERE t.id = ?
         `);
         tenantData = tenantStmt.get(user.tenant_id);
 
@@ -345,12 +347,14 @@ export class AuthController {
       let tenantData: any = null;
       if (user.tenant_id) {
         const tenantStmt = db.prepare(`
-          SELECT 
-            id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-            primary_color, client_term_label, status,
-            onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
-          FROM tenants
-          WHERE id = ?
+          SELECT
+            t.id, t.slug, t.name, t.corporate_name, t.trade_name, t.email, t.phone, t.logo_url,
+            t.primary_color, t.client_term_label, t.status,
+            t.onboarding_completed, t.onboarding_step, t.manager_confirmed, t.manager_profession, t.manager_practice_areas,
+            p.code as plan_code, p.max_users
+          FROM tenants t
+          LEFT JOIN plans p ON p.id = t.plan_id
+          WHERE t.id = ?
         `);
         tenantData = tenantStmt.get(user.tenant_id);
       }

@@ -51,6 +51,7 @@ interface AuthContextType {
   exitSandboxSession: () => void;
   userPermissions: string[];
   clientTermLabel: string;
+  isSoloPlan: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -133,6 +134,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setToken(null);
     setCurrentUser(null);
     setCurrentTenant(null);
+    // Força a URL para uma rota pública válida: sem isso, deslogar em qualquer
+    // tela que não seja /dashboard cai no allowlist desatualizado de
+    // isValidApplicationRoute (App.tsx) e mostra 404 em vez da tela de login.
+    window.history.pushState(null, '', '/');
   };
 
   const startSandboxSession = (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => {
@@ -426,6 +431,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     ? 'Aluno'
     : 'Paciente';
 
+  // Plano "SOLO" (profissional autônomo, sem equipe). Ausência de plan_code (tenants legados
+  // sem join de plano ainda populado) deve DEFAULT para false — é pior esconder um recurso de
+  // equipe de um tenant legado que realmente precisa dele do que ocasionalmente exibi-lo à toa.
+  const isSoloPlan = currentTenant?.plan_code === 'SOLO';
+
   return (
     <AuthContext.Provider
       value={{
@@ -476,7 +486,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         startSandboxSession,
         exitSandboxSession,
         userPermissions,
-        clientTermLabel
+        clientTermLabel,
+        isSoloPlan
       }}
     >
       {children}

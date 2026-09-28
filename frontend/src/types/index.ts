@@ -70,6 +70,8 @@ export interface Tenant {
   status: 'active' | 'suspended' | 'trial' | 'pending' | 'blocked' | 'rejected';
   plan_name?: string;
   plan_slug?: string;
+  plan_code?: string;
+  max_users?: number;
   onboarding_completed?: number;
   onboarding_step?: number;
   manager_confirmed?: number;
