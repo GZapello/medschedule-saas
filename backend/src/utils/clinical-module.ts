@@ -11,7 +11,8 @@ export const PRIMARY_CLINICAL_MODULES = [
   'ZemdaNutri',
   'ZemdaPsico',
   'ZemdaPP',
-  'ZemdaPersonal'
+  'ZemdaPersonal',
+  'ZemdaEstetic'
 ];
 
 export const isPrimaryClinicalModule = (module?: string | null): boolean =>

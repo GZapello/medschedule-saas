@@ -72,7 +72,9 @@ export function hasClinicalAccess(req: Request, patientId: string): boolean {
       managerAreaText.includes('educa') ||
       managerAreaText.includes('físic') ||
       managerAreaText.includes('cref') ||
-      managerAreaText.includes('treina');
+      managerAreaText.includes('treina') ||
+      managerAreaText.includes('estet') ||
+      managerAreaText.includes('estét');
 
     return hasAnyClinicalArea;
   }

@@ -321,6 +321,13 @@ api.post('/v1/physiotherapy/evolutions', requireTenant, requireRole('clinic_admi
 api.put('/v1/physiotherapy/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.updateEvolution);
 api.post('/v1/physiotherapy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.finishConsultation);
 
+// 8.2 ZEMDAFISIO × ZEMDA360: AVALIAÇÕES REGIONAIS VISUAIS & COMPARAÇÃO LONGITUDINAL
+api.get('/v1/physiotherapy/regional-evaluations/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.listRegionalEvaluations);
+api.get('/v1/physiotherapy/regional-evaluations/summary/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.getRegionalSummary);
+api.get('/v1/physiotherapy/regional-evaluations/compare/:patientId/:regionId', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.getRegionalComparison);
+api.post('/v1/physiotherapy/regional-evaluations', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.createRegionalEvaluation);
+api.delete('/v1/physiotherapy/regional-evaluations/:id', requireTenant, requireRole('clinic_admin', 'professional'), PhysiotherapyController.deleteRegionalEvaluation);
+
 // ==========================================
 // MÓDULO CLÍNICO ZEMDAODONTO (ODONTOLOGIA)
 // ==========================================

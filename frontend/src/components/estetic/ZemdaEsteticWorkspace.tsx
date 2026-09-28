@@ -48,12 +48,16 @@ export type EsteticArea = 'FACIAL' | 'CORPORAL' | 'CAPILAR';
 
 interface ZemdaEsteticWorkspaceProps {
   initialPatientId?: string;
+  initialAppointmentId?: string;
   onSelectPatient?: (patientId: string) => void;
+  onFinishConsultation?: () => void;
 }
 
 export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
   initialPatientId,
-  onSelectPatient
+  initialAppointmentId,
+  onSelectPatient,
+  onFinishConsultation
 }) => {
   const { currentUser, isClinicAdmin, isSuperAdmin, isDentist, practiceAreaIds } = useAuth();
   const { showToast } = useToast();
@@ -612,6 +616,16 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         description="Avaliação estruturada por área, rastreabilidade de produtos, fotos clínicas e motor anatômico Zemda360."
       >
         <div className="flex items-center gap-2 flex-wrap">
+          {onFinishConsultation && (
+            <button
+              type="button"
+              onClick={onFinishConsultation}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Finalizar Atendimento</span>
+            </button>
+          )}
           {/* SELETOR DE ÁREA DE ATUAÇÃO (FACIAL, CORPORAL, CAPILAR) */}
           <div className="relative">
             <button

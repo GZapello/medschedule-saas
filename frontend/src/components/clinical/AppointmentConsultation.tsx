@@ -14,7 +14,8 @@ import { ZemdaPersonalView } from '../personal/ZemdaPersonalView';
 import { QuickConsultationModal } from './QuickConsultationModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 import { GeneralClinicalWorkspace } from './GeneralClinicalWorkspace';
-import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell } from 'lucide-react';
+import { ZemdaEsteticWorkspace } from '../estetic/ZemdaEsteticWorkspace';
+import { Activity, FileText, Stethoscope, ChevronLeft, Dumbbell, Sparkles } from 'lucide-react';
 
 export function AppointmentConsultation({
   appointment,
@@ -46,6 +47,8 @@ export function AppointmentConsultation({
     isZemdaFisio,
     isPersonalTrainer,
     isZemdaPersonal,
+    isEsthetician,
+    isZemdaEstetic,
     isZemdaBody,
     currentUser,
     hasCapability
@@ -62,6 +65,7 @@ export function AppointmentConsultation({
     (isOccupationalTherapist || isZemdaTO || (currentUser?.professionName || '').toLowerCase().includes('ocupacional')) ? 'ZemdaTO' :
     (isNutritionist || isZemdaNutri || (currentUser?.professionName || '').toLowerCase().includes('nutri')) ? 'ZemdaNutri' :
     (isPersonalTrainer || isZemdaPersonal || (currentUser?.professionName || '').toLowerCase().includes('personal') || (currentUser?.professionName || '').toLowerCase().includes('educa')) ? 'ZemdaPersonal' :
+    (isEsthetician || isZemdaEstetic || currentUser?.commercialModule === 'ZemdaEstetic' || (currentUser?.professionName || '').toLowerCase().includes('estet') || (currentUser?.professionName || '').toLowerCase().includes('estét')) ? 'ZemdaEstetic' :
     (isPhysiotherapist || isZemdaFisio || (currentUser?.professionName || '').toLowerCase().includes('fisio') || (appointment.service_name || '').toLowerCase().includes('fisio')) ? 'ZemdaFisio' :
     undefined;
 
@@ -128,6 +132,7 @@ export function AppointmentConsultation({
     effectiveModuleType === 'ZemdaPP' ? PsychopedagogyWorkspace :
     effectiveModuleType === 'ZemdaFisio' ? PhysiotherapyWorkspace :
     effectiveModuleType === 'ZemdaPersonal' ? ZemdaPersonalView :
+    effectiveModuleType === 'ZemdaEstetic' ? ZemdaEsteticWorkspace :
     effectiveModuleType === 'general' ? GeneralClinicalWorkspace :
     null;
 
@@ -312,8 +317,9 @@ export function AppointmentConsultation({
           effectiveModuleType === 'ZemdaNutri' ? 'ZemdaNutri' :
           effectiveModuleType === 'ZemdaFisio' ? 'ZemdaFisio' :
           effectiveModuleType === 'ZemdaPersonal' ? 'ZemdaPersonal' :
+          effectiveModuleType === 'ZemdaEstetic' ? 'ZemdaEstetic' :
           effectiveModuleType === 'general' ? `Atendimento Clínico • ${currentUser?.canonicalProfessionName || currentUser?.professionName || 'Geral'}` :
-          (isDoctor || isZemdaMed ? 'ZemdaMed' : isPersonalTrainer || isZemdaPersonal ? 'ZemdaPersonal' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
+          (isDoctor || isZemdaMed ? 'ZemdaMed' : isPersonalTrainer || isZemdaPersonal ? 'ZemdaPersonal' : isEsthetician || isZemdaEstetic ? 'ZemdaEstetic' : isPsychologist || isZemdaPsico ? 'ZemdaPsico' : isPsychopedagogue || isZemdaPP ? 'ZemdaPP' : isSpeechTherapist ? 'ZemdaFono' : isDentist ? 'ZemdaOdonto' : isOccupationalTherapist ? 'ZemdaTO' : isNutritionist ? 'ZemdaNutri' : undefined)
         }
       />
     </>

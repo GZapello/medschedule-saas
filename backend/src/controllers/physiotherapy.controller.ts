@@ -658,4 +658,458 @@ export class PhysiotherapyController {
       res.status(500).json({ error: 'Erro ao finalizar consulta de fisioterapia' });
     }
   }
+
+  // =========================================================================
+  // 3. AVALIAÇÕES REGIONAIS VISUAIS (INTEGRAÇÃO ZEMDAFISIO × ZEMDA360)
+  // =========================================================================
+
+  static listRegionalEvaluations(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+      const regionId = req.query.region_id ? String(req.query.region_id) : null;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autorizado' });
+        return;
+      }
+      if (!isPhysiotherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito à Fisioterapia' });
+        return;
+      }
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito ao paciente' });
+        return;
+      }
+
+      let sql = `
+        SELECT pre.*, p.name as professional_name
+        FROM physiotherapy_regional_evaluations pre
+        JOIN professionals p ON p.id = pre.professional_id
+        WHERE pre.patient_id = ? AND pre.tenant_id = ?
+      `;
+      const params: any[] = [patientId, tenantId];
+
+      if (regionId) {
+        sql += ` AND pre.region_id = ?`;
+        params.push(regionId);
+      }
+
+      sql += ` ORDER BY pre.evaluation_date DESC, pre.created_at DESC`;
+
+      const rows = db.prepare(sql).all(...params) as any[];
+
+      const parseJson = (str: string | null) => {
+        if (!str) return null;
+        try { return JSON.parse(str); } catch { return null; }
+      };
+
+      const parsed = rows.map(r => ({
+        ...r,
+        pain: parseJson(r.pain_json),
+        adm: parseJson(r.adm_json) || [],
+        strength: parseJson(r.strength_json) || [],
+        tests: parseJson(r.tests_json) || [],
+        palpation: parseJson(r.palpation_json),
+        edema: parseJson(r.edema_json),
+        functionalScales: parseJson(r.functional_scales_json) || [],
+        planLink: parseJson(r.plan_link_json)
+      }));
+
+      logAudit(req, 'LIST_PHYSIO_REGIONAL_EVALUATIONS', 'physiotherapy_regional_evaluations', patientId);
+      res.json(parsed);
+    } catch (err: any) {
+      console.error('[PhysiotherapyController.listRegionalEvaluations] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar avaliações regionais' });
+    }
+  }
+
+  static getRegionalSummary(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const tenantId = req.tenantId;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autorizado' });
+        return;
+      }
+      if (!isPhysiotherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito à Fisioterapia' });
+        return;
+      }
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito ao paciente' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT region_id, region_label, side, COUNT(*) as count, MAX(evaluation_date) as latest_date
+        FROM physiotherapy_regional_evaluations
+        WHERE patient_id = ? AND tenant_id = ?
+        GROUP BY region_id, side
+      `).all(patientId, tenantId) as any[];
+
+      const summaryMap: Record<string, any> = {};
+
+      for (const r of rows) {
+        const latest = db.prepare(`
+          SELECT pain_json, evaluation_date, created_at
+          FROM physiotherapy_regional_evaluations
+          WHERE patient_id = ? AND tenant_id = ? AND region_id = ?
+          ORDER BY evaluation_date DESC, created_at DESC
+          LIMIT 1
+        `).get(patientId, tenantId, r.region_id) as any;
+
+        let latestPainScore: number | undefined;
+        if (latest?.pain_json) {
+          try {
+            const pObj = JSON.parse(latest.pain_json);
+            if (pObj && pObj.score !== undefined) latestPainScore = Number(pObj.score);
+          } catch {}
+        }
+
+        summaryMap[r.region_id] = {
+          region_id: r.region_id,
+          region_label: r.region_label,
+          side: r.side,
+          count: r.count,
+          latest_date: r.latest_date,
+          latest_pain_score: latestPainScore
+        };
+      }
+
+      res.json(summaryMap);
+    } catch (err: any) {
+      console.error('[PhysiotherapyController.getRegionalSummary] Erro:', err);
+      res.status(500).json({ error: 'Erro ao gerar sumário regional fisioterapêutico' });
+    }
+  }
+
+  static getRegionalComparison(req: Request, res: Response): void {
+    try {
+      const patientId = String(req.params.patientId);
+      const regionId = String(req.params.regionId);
+      const tenantId = req.tenantId;
+      const firstId = req.query.first_id ? String(req.query.first_id) : null;
+      const currentId = req.query.current_id ? String(req.query.current_id) : null;
+
+      if (!req.user || !tenantId) {
+        res.status(401).json({ error: 'Não autorizado' });
+        return;
+      }
+      if (!isPhysiotherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito à Fisioterapia' });
+        return;
+      }
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito ao paciente' });
+        return;
+      }
+
+      const rows = db.prepare(`
+        SELECT pre.*, p.name as professional_name
+        FROM physiotherapy_regional_evaluations pre
+        JOIN professionals p ON p.id = pre.professional_id
+        WHERE pre.patient_id = ? AND pre.tenant_id = ? AND pre.region_id = ?
+        ORDER BY pre.evaluation_date ASC, pre.created_at ASC
+      `).all(patientId, tenantId, regionId) as any[];
+
+      if (rows.length === 0) {
+        res.status(404).json({ error: 'Nenhuma avaliação encontrada para esta região' });
+        return;
+      }
+
+      const baselineRow = firstId ? rows.find(r => r.id === firstId) || rows[0] : rows[0];
+      const currentRow = currentId ? rows.find(r => r.id === currentId) || rows[rows.length - 1] : rows[rows.length - 1];
+
+      const parseJson = (str: string | null) => {
+        if (!str) return null;
+        try { return JSON.parse(str); } catch { return null; }
+      };
+
+      const baseline = {
+        ...baselineRow,
+        pain: parseJson(baselineRow.pain_json),
+        adm: parseJson(baselineRow.adm_json) || [],
+        strength: parseJson(baselineRow.strength_json) || [],
+        tests: parseJson(baselineRow.tests_json) || [],
+        palpation: parseJson(baselineRow.palpation_json),
+        edema: parseJson(baselineRow.edema_json),
+        functionalScales: parseJson(baselineRow.functional_scales_json) || [],
+        planLink: parseJson(baselineRow.plan_link_json)
+      };
+
+      const current = {
+        ...currentRow,
+        pain: parseJson(currentRow.pain_json),
+        adm: parseJson(currentRow.adm_json) || [],
+        strength: parseJson(currentRow.strength_json) || [],
+        tests: parseJson(currentRow.tests_json) || [],
+        palpation: parseJson(currentRow.palpation_json),
+        edema: parseJson(currentRow.edema_json),
+        functionalScales: parseJson(currentRow.functional_scales_json) || [],
+        planLink: parseJson(currentRow.plan_link_json)
+      };
+
+      // Variação de Dor (EVA)
+      const painBaselineScore = baseline.pain?.score !== undefined ? Number(baseline.pain.score) : null;
+      const painCurrentScore = current.pain?.score !== undefined ? Number(current.pain.score) : null;
+      const painDiff = (painCurrentScore !== null && painBaselineScore !== null)
+        ? (painCurrentScore - painBaselineScore)
+        : null;
+
+      // Variações de ADM / Goniometria
+      const allMovements = Array.from(new Set([
+        ...(current.adm || []).map((m: any) => m.movement),
+        ...(baseline.adm || []).map((m: any) => m.movement)
+      ]));
+
+      const admDiffs = allMovements.map(movName => {
+        const currMov = (current.adm || []).find((b: any) => b.movement === movName) || {};
+        const baseMov = (baseline.adm || []).find((b: any) => b.movement === movName) || {};
+
+        const currActive = parseFloat(currMov.activeRom);
+        const baseActive = parseFloat(baseMov.activeRom);
+        const activeDiff = (!isNaN(currActive) && !isNaN(baseActive)) ? (currActive - baseActive) : null;
+
+        const currPassive = parseFloat(currMov.passiveRom);
+        const basePassive = parseFloat(baseMov.passiveRom);
+        const passiveDiff = (!isNaN(currPassive) && !isNaN(basePassive)) ? (currPassive - basePassive) : null;
+
+        return {
+          movement: movName,
+          side: currMov.side || baseMov.side || currentRow.side,
+          normalRange: currMov.normalRange || baseMov.normalRange || '-',
+          baselineActive: baseMov.activeRom || '-',
+          currentActive: currMov.activeRom || '-',
+          activeDiff,
+          baselinePassive: baseMov.passiveRom || '-',
+          currentPassive: currMov.passiveRom || '-',
+          passiveDiff,
+          unit: currMov.unit || baseMov.unit || '°'
+        };
+      });
+
+      // Variações de Força Muscular
+      const allMuscleGroups = Array.from(new Set([
+        ...(current.strength || []).map((s: any) => s.muscleGroup),
+        ...(baseline.strength || []).map((s: any) => s.muscleGroup)
+      ]));
+
+      const strengthDiffs = allMuscleGroups.map(groupName => {
+        const currStr = (current.strength || []).find((s: any) => s.muscleGroup === groupName) || {};
+        const baseStr = (baseline.strength || []).find((s: any) => s.muscleGroup === groupName) || {};
+        return {
+          muscleGroup: groupName,
+          side: currStr.side || baseStr.side || currentRow.side,
+          baselineGrade: baseStr.grade || '-',
+          currentGrade: currStr.grade || '-',
+          notes: currStr.notes || baseStr.notes || ''
+        };
+      });
+
+      // Timeline numérica para gráficos
+      const timeline = rows.map(r => {
+        const p = parseJson(r.pain_json);
+        const a = parseJson(r.adm_json) || [];
+        return {
+          id: r.id,
+          date: r.evaluation_date,
+          createdAt: r.created_at,
+          painScore: p?.score !== undefined ? Number(p.score) : null,
+          adm: a
+        };
+      });
+
+      logAudit(req, 'COMPARE_PHYSIO_REGIONAL', 'physiotherapy_regional_evaluations', regionId, { patientId });
+
+      res.json({
+        regionId,
+        regionLabel: currentRow.region_label,
+        side: currentRow.side,
+        baseline,
+        current,
+        variations: {
+          painDiff,
+          admDiffs,
+          strengthDiffs
+        },
+        timeline,
+        allEvaluations: rows.map(r => ({
+          id: r.id,
+          evaluation_date: r.evaluation_date,
+          professional_name: r.professional_name,
+          created_at: r.created_at
+        }))
+      });
+    } catch (err: any) {
+      console.error('[PhysiotherapyController.getRegionalComparison] Erro:', err);
+      res.status(500).json({ error: 'Erro ao gerar comparação longitudinal' });
+    }
+  }
+
+  static createRegionalEvaluation(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!isPhysiotherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito à Fisioterapia' });
+        return;
+      }
+
+      const {
+        patientId,
+        appointmentId,
+        regionId,
+        regionLabel,
+        side,
+        evaluationDate,
+        pain,
+        adm,
+        strength,
+        tests,
+        palpation,
+        edema,
+        functionalScales,
+        planLink,
+        notes
+      } = req.body;
+
+      if (!patientId || !regionId || !regionLabel) {
+        res.status(400).json({ error: 'patientId, regionId e regionLabel são obrigatórios' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, patientId)) {
+        res.status(403).json({ error: 'Acesso clínico restrito ao paciente' });
+        return;
+      }
+
+      let profId: string | null = null;
+      if (req.user?.role === 'professional') {
+        const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
+        if (prof) profId = prof.id;
+      } else if (req.body.professionalId) {
+        profId = req.body.professionalId;
+      } else {
+        const firstProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? LIMIT 1').get(tenantId) as any;
+        if (firstProf) profId = firstProf.id;
+      }
+
+      if (!profId) {
+        res.status(400).json({ error: 'Profissional fisioterapeuta não identificado' });
+        return;
+      }
+
+      const id = 'pfre-' + uuidv4().slice(0, 8);
+      const evalDate = evaluationDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+
+      const stringifyOrNull = (val: any) => {
+        if (val === undefined || val === null) return null;
+        return typeof val === 'string' ? val : JSON.stringify(val);
+      };
+
+      db.prepare(`
+        INSERT INTO physiotherapy_regional_evaluations (
+          id, tenant_id, patient_id, professional_id, appointment_id,
+          region_id, region_label, side, evaluation_date,
+          pain_json, adm_json, strength_json, tests_json,
+          palpation_json, edema_json, functional_scales_json, plan_link_json,
+          notes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(
+        id, tenantId, patientId, profId, appointmentId || null,
+        regionId, regionLabel, side || 'midline', evalDate,
+        stringifyOrNull(pain),
+        stringifyOrNull(adm),
+        stringifyOrNull(strength),
+        stringifyOrNull(tests),
+        stringifyOrNull(palpation),
+        stringifyOrNull(edema),
+        stringifyOrNull(functionalScales),
+        stringifyOrNull(planLink),
+        notes || null
+      );
+
+      // Sincroniza marcação em body_markers caso haja avaliação Zemda360 ativa para a consulta/paciente
+      try {
+        const activeAssess = db.prepare(`
+          SELECT id FROM body_assessments
+          WHERE patient_id = ? AND tenant_id = ?
+          ORDER BY assessment_date DESC, created_at DESC LIMIT 1
+        `).get(patientId, tenantId) as any;
+
+        if (activeAssess) {
+          const markerId = 'bm-physio-' + uuidv4().slice(0, 8);
+          const painScore = pain?.score !== undefined ? String(pain.score) : 'Marcador';
+          db.prepare(`
+            INSERT INTO body_markers (
+              id, tenant_id, assessment_id, body_region, side, view,
+              marker_type, value, severity, notes, details_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, 'front', 'pain', ?, ?, ?, ?, datetime('now'), datetime('now'))
+          `).run(
+            markerId, tenantId, activeAssess.id, regionId, side || 'midline',
+            `Dor ${painScore}/10`,
+            Number(painScore) >= 7 ? 'severe' : Number(painScore) >= 4 ? 'moderate' : 'mild',
+            `${regionLabel}: Avaliação Funcional Fisioterapêutica registrada`,
+            stringifyOrNull({ regional_evaluation_id: id, pain, adm })
+          );
+        }
+      } catch (markErr) {
+        console.warn('[PhysiotherapyController] Aviso ao sincronizar body_marker:', markErr);
+      }
+
+      logAudit(req, 'CREATE_PHYSIO_REGIONAL_EVALUATION', 'physiotherapy_regional_evaluations', id, { patientId, regionId });
+
+      res.status(201).json({
+        id,
+        message: 'Avaliação funcional regional registrada com sucesso!',
+        evaluation: {
+          id,
+          patientId,
+          regionId,
+          regionLabel,
+          side: side || 'midline',
+          evaluationDate: evalDate
+        }
+      });
+    } catch (err: any) {
+      console.error('[PhysiotherapyController.createRegionalEvaluation] Erro:', err);
+      res.status(500).json({ error: 'Erro ao criar avaliação regional de fisioterapia' });
+    }
+  }
+
+  static deleteRegionalEvaluation(req: Request, res: Response): void {
+    try {
+      const id = String(req.params.id);
+      const tenantId = req.tenantId;
+
+      if (!isPhysiotherapistOrClinicManager(req)) {
+        res.status(403).json({ error: 'Acesso restrito à Fisioterapia' });
+        return;
+      }
+
+      const existing = db.prepare(`
+        SELECT id, patient_id FROM physiotherapy_regional_evaluations
+        WHERE id = ? AND tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!existing) {
+        res.status(404).json({ error: 'Avaliação regional não encontrada' });
+        return;
+      }
+
+      if (!hasClinicalAccess(req, existing.patient_id)) {
+        res.status(403).json({ error: 'Acesso restrito ao prontuário deste paciente' });
+        return;
+      }
+
+      db.prepare('DELETE FROM physiotherapy_regional_evaluations WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+
+      logAudit(req, 'DELETE_PHYSIO_REGIONAL_EVALUATION', 'physiotherapy_regional_evaluations', id);
+      res.json({ message: 'Avaliação regional excluída com sucesso.' });
+    } catch (err: any) {
+      console.error('[PhysiotherapyController.deleteRegionalEvaluation] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir avaliação regional' });
+    }
+  }
 }

@@ -707,3 +707,32 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_notif_unique
 CREATE INDEX IF NOT EXISTS idx_admin_notif_type_created 
   ON admin_notification_logs (notification_type, created_at);
 
+-- 32. Avaliações Regionais Fisioterapêuticas Integradas ao Zemda360
+CREATE TABLE IF NOT EXISTS physiotherapy_regional_evaluations (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  patient_id TEXT NOT NULL,
+  professional_id TEXT NOT NULL,
+  appointment_id TEXT,
+  region_id TEXT NOT NULL,
+  region_label TEXT NOT NULL,
+  side TEXT NOT NULL DEFAULT 'midline',
+  evaluation_date TEXT NOT NULL DEFAULT (date('now')),
+  pain_json TEXT,
+  adm_json TEXT,
+  strength_json TEXT,
+  tests_json TEXT,
+  palpation_json TEXT,
+  edema_json TEXT,
+  functional_scales_json TEXT,
+  plan_link_json TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
+  FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_physio_reg_patient_region ON physiotherapy_regional_evaluations (tenant_id, patient_id, region_id, evaluation_date);
+CREATE INDEX IF NOT EXISTS idx_physio_reg_appt ON physiotherapy_regional_evaluations (tenant_id, appointment_id);
+

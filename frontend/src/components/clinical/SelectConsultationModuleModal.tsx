@@ -9,12 +9,13 @@ import {
   Brain,
   GraduationCap,
   Dumbbell,
+  Sparkles,
   X,
   ChevronRight
 } from 'lucide-react';
 
 export interface ClinicalModuleOption {
-  id: 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general';
+  id: 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'ZemdaEstetic' | 'general';
   name: string;
   badge: string;
   profession: string;
@@ -195,6 +196,24 @@ export const ALL_CLINICAL_MODULES: Record<string, ClinicalModuleOption> = {
       iconColor: 'text-orange-600'
     }
   },
+  ZemdaEstetic: {
+    id: 'ZemdaEstetic',
+    name: 'ZemdaEstetic',
+    badge: 'Estética',
+    profession: 'Estética & Saúde Integrativa',
+    description: 'Avaliação facial, corporal e capilar, planejamento estético, comparador e histórico.',
+    icon: Sparkles,
+    colorTheme: {
+      border: 'border-pink-200 hover:border-pink-500',
+      bg: 'bg-white hover:bg-pink-50/50',
+      hoverBg: 'hover:bg-pink-50',
+      text: 'text-pink-900',
+      badgeBg: 'bg-pink-100',
+      badgeText: 'text-pink-800',
+      iconBg: 'bg-pink-100 text-pink-700',
+      iconColor: 'text-pink-600'
+    }
+  },
   general: {
     id: 'general',
     name: 'Atendimento Geral',
@@ -245,6 +264,8 @@ export function getModuleForProfession(auth: {
   isPsychologist?: boolean;
   isPsychopedagogue?: boolean;
   isPersonalTrainer?: boolean;
+  isEsthetician?: boolean;
+  isZemdaEstetic?: boolean;
   isDoctor?: boolean;
   isZemdaMed?: boolean;
   isZemdaPsico?: boolean;
@@ -257,7 +278,7 @@ export function getModuleForProfession(auth: {
   isZemdaTO?: boolean;
   currentUser?: any;
   currentTenant?: any;
-}): 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'general' {
+}): 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'ZemdaEstetic' | 'general' {
   // 1. Prioridade absoluta: commercialModule do usuário vindo do backend/AuthContext
   const commModule = auth.currentUser?.commercialModule;
   if (commModule && commModule in ALL_CLINICAL_MODULES) {
@@ -266,6 +287,7 @@ export function getModuleForProfession(auth: {
   // 2. Detecção por flags de perfil
   if (auth.isDoctor || auth.isZemdaMed) return 'ZemdaMed';
   if (auth.isPersonalTrainer || auth.isZemdaPersonal) return 'ZemdaPersonal';
+  if (auth.isEsthetician || auth.isZemdaEstetic) return 'ZemdaEstetic';
   if (auth.isSpeechTherapist || auth.isZemdaFono) return 'ZemdaFono';
   if (auth.isPsychologist || auth.isZemdaPsico) return 'ZemdaPsico';
   if (auth.isPsychopedagogue || auth.isZemdaPP) return 'ZemdaPP';
