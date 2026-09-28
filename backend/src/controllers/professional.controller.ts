@@ -9,6 +9,7 @@ import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { resolveProfessionModule, cleanPracticeAreasForNewProfession } from '../utils/profession-module';
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
+import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 
 export class ProfessionalController {
   static list(req: Request, res: Response): void {
@@ -164,20 +165,26 @@ export class ProfessionalController {
         return;
       }
 
+      const assignedRole = req.body.role || req.body.systemRole || 'professional';
+      const isManager = (assignedRole === 'clinic_admin' || assignedRole === 'clinical_coordinator') ? 1 : 0;
+
       // Verifica ou cria usuário
       let userId: string;
-      const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim().toLowerCase()) as { id: string } | undefined;
+      const existingUser = db.prepare('SELECT id, role FROM users WHERE email = ?').get(email.trim().toLowerCase()) as { id: string; role: string } | undefined;
 
       if (existingUser) {
         userId = existingUser.id;
+        if (assignedRole && existingUser.role !== 'superadmin' && existingUser.role !== 'clinic_admin') {
+          db.prepare('UPDATE users SET role = ? WHERE id = ?').run(assignedRole, userId);
+        }
       } else {
         userId = uuidv4();
         const pwdHash = await hashPassword(password || '123456');
         const insertUser = db.prepare(`
           INSERT INTO users (id, tenant_id, name, email, password_hash, role, phone, status)
-          VALUES (?, ?, ?, ?, ?, 'professional', ?, 'active')
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
         `);
-        insertUser.run(userId, tenantId, name, email.trim().toLowerCase(), pwdHash, phone || null);
+        insertUser.run(userId, tenantId, name, email.trim().toLowerCase(), pwdHash, assignedRole, phone || null);
       }
 
       const profId = 'pro-' + uuidv4().slice(0, 8);
@@ -190,10 +197,13 @@ export class ProfessionalController {
         finalSlug = `${base}-${profId.slice(-4)}`;
       }
 
+      const rawProfId = professionId ? String(professionId).trim() : null;
+      const canonicalProfId = rawProfId ? ((REGISTRATION_PROFESSION_ALIASES as Record<string, string>)[rawProfId] || rawProfId) : null;
+
       let profName = '';
       let profSlug = '';
-      if (professionId) {
-        const pRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(professionId) as any;
+      if (canonicalProfId) {
+        const pRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(canonicalProfId) as any;
         if (pRow) {
           profName = pRow.name || '';
           profSlug = pRow.slug || '';
@@ -201,7 +211,7 @@ export class ProfessionalController {
       }
 
       const { module: targetModule, flags } = resolveProfessionModule({
-        id: professionId,
+        id: canonicalProfId || undefined,
         name: profName,
         slug: profSlug,
         registrationType
@@ -226,7 +236,7 @@ export class ProfessionalController {
         finalSlug,
         publicBookingEnabled !== undefined ? (publicBookingEnabled ? 1 : 0) : 1,
         photoUrl || null,
-        professionId || null,
+        canonicalProfId || null,
         profName || null,
         specialtyId || null,
         customSpec,
@@ -272,7 +282,7 @@ export class ProfessionalController {
           zemda_estetic_enabled = ?
         WHERE id = ?
       `).run(
-        professionId || null,
+        canonicalProfId || null,
         profName || null,
         registrationType || null,
         registrationNumber || null,
@@ -310,10 +320,11 @@ export class ProfessionalController {
           zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
           zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled
         )
-        VALUES (?, ?, ?, 'professional', 'active', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(tenant_id, user_id) DO UPDATE SET
-          role = 'professional',
+          role = excluded.role,
           status = 'active',
+          is_manager = CASE WHEN excluded.is_manager = 1 THEN 1 ELSE clinic_users.is_manager END,
           profession_id = excluded.profession_id,
           profession_name = excluded.profession_name,
           profession_custom = excluded.profession_custom,
@@ -333,9 +344,11 @@ export class ProfessionalController {
         'cu-' + uuidv4().slice(0, 8),
         tenantId,
         userId,
+        assignedRole,
+        isManager,
         JSON.stringify(permissions),
         practiceAreas || null,
-        professionId || null,
+        canonicalProfId || null,
         profName || null,
         profName || null,
         flags.zemda_fisio_enabled,
@@ -345,7 +358,9 @@ export class ProfessionalController {
         flags.zemda_fono_enabled,
         flags.zemda_pp_enabled,
         flags.zemda_psico_enabled,
-        flags.zemda_personal_enabled
+        flags.zemda_personal_enabled,
+        flags.zemda_med_enabled,
+        flags.zemda_estetic_enabled || 0
       );
 
       logAudit(req, 'CREATE_PROFESSIONAL', 'professionals', profId, { name, email, slug: finalSlug });

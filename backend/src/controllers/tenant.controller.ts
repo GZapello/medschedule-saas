@@ -333,7 +333,7 @@ export class TenantController {
           resolvedProfName,
           managerPracticeAreas || null,
           initialPermissions,
-          1,
+          0,
           modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
           modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
         );
@@ -521,7 +521,7 @@ export class TenantController {
         termsVersionAccepted: CURRENT_TERMS_VERSION,
         privacyVersionAccepted: CURRENT_PRIVACY_VERSION,
         permissions: [],
-        zemdaBodyEnabled: true,
+        zemdaBodyEnabled: false,
         zemdaFisioEnabled: modFlags.zemda_fisio_enabled === 1,
         zemdaOdontoEnabled: modFlags.zemda_odonto_enabled === 1,
         zemdaNutriEnabled: modFlags.zemda_nutri_enabled === 1,

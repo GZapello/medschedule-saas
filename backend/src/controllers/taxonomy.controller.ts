@@ -127,7 +127,7 @@ export class TaxonomyController {
 
       let query = `
         SELECT p.id, p.category_id, c.name as category_name, c.is_clinical as category_is_clinical,
-               p.name, p.slug, p.registration_board_label, p.registration_required, p.custom_fields_schema, p.active
+               p.name, p.slug, p.registration_board_label, p.registration_required, p.custom_fields_schema, p.active, p.is_canonical
         FROM professions p
         LEFT JOIN categories c ON c.id = p.category_id
       `;
@@ -141,6 +141,9 @@ export class TaxonomyController {
 
       if (!showAll) {
         conditions.push('p.active = 1');
+        // Apenas profissões canônicas (exclui especialidades médicas no nível base e cargos administrativos)
+        conditions.push('(p.is_canonical = 1 OR p.is_canonical IS NULL)');
+        conditions.push("(p.category_id != 'cat-admin' OR p.category_id IS NULL)");
       }
 
       if (categoryId) {
@@ -314,8 +317,10 @@ export class TaxonomyController {
       }
 
       if (professionId) {
-        conditions.push('s.profession_id = ?');
-        params.push(professionId);
+        const profStr = String(professionId);
+        const canonicalId = (REGISTRATION_PROFESSION_ALIASES as Record<string, string>)[profStr] || profStr;
+        conditions.push('(s.profession_id = ? OR s.profession_id = ?)');
+        params.push(profStr, canonicalId);
       }
 
       if (conditions.length > 0) {
@@ -330,6 +335,46 @@ export class TaxonomyController {
     } catch (err: any) {
       console.error('[TaxonomyController.listSpecialties] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar especialidades' });
+    }
+  }
+
+  // Áreas de Atuação
+  static listPracticeAreas(req: Request, res: Response): void {
+    try {
+      const { professionId, all } = req.query;
+      const showAll = all === 'true';
+
+      let query = `
+        SELECT pa.id, pa.profession_id, p.name as profession_name, pa.name, pa.slug, pa.description, pa.active
+        FROM practice_areas pa
+        LEFT JOIN professions p ON p.id = pa.profession_id
+      `;
+      const conditions: string[] = [];
+      const params: any[] = [];
+
+      if (!showAll) {
+        conditions.push('pa.active = 1');
+      }
+
+      if (professionId) {
+        const profStr = String(professionId);
+        const canonicalId = (REGISTRATION_PROFESSION_ALIASES as Record<string, string>)[profStr] || profStr;
+        conditions.push('(pa.profession_id = ? OR pa.profession_id = ?)');
+        params.push(profStr, canonicalId);
+      }
+
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
+      }
+
+      query += ' ORDER BY pa.name ASC';
+
+      const stmt = db.prepare(query);
+      const practiceAreas = stmt.all(...params);
+      res.json(practiceAreas);
+    } catch (err: any) {
+      console.error('[TaxonomyController.listPracticeAreas] Erro:', err);
+      res.status(500).json({ error: 'Erro ao listar áreas de atuação' });
     }
   }
 

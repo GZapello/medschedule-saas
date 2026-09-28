@@ -12,6 +12,7 @@ import { migrateRemoveOutOfScopeProfessions } from './remove-out-of-scope-profes
 import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
 import { migrateEstetic } from './estetic.migration';
+import { migrateProfessionsNormalization } from './professions-normalization.migration';
 import { dbPath } from './db-path';
 
 const dbDir = path.dirname(dbPath);
@@ -3583,6 +3584,12 @@ function repairLegacyPhotoUrls(rawDb: any): void {
     migrateEstetic(rawDb);
   } catch (err) {
     console.error('[Database] Erro ao executar migrateEstetic:', err);
+  }
+
+  try {
+    migrateProfessionsNormalization(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateProfessionsNormalization:', err);
   }
 
   try {

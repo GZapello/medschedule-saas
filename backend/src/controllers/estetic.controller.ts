@@ -87,7 +87,7 @@ export function getEsteticAccess(req: Request, targetArea?: string): { allowed: 
     if (isDentist) {
       allowedAreas.push('FACIAL');
     } else {
-      allowedAreas.push('FACIAL', 'CORPORAL');
+      allowedAreas.push('FACIAL', 'CORPORAL', 'CAPILAR');
     }
   }
 

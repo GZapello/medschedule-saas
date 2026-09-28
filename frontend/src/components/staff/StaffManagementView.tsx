@@ -153,9 +153,20 @@ export const StaffManagementView: React.FC = () => {
   // Form de edição de Cargo / Profissão / Áreas
   const [editRoleForm, setEditRoleForm] = useState({
     role: 'professional',
+    professionId: '',
     professionName: '',
     practiceAreas: ''
   });
+
+  const [canonicalProfessions, setCanonicalProfessions] = useState<any[]>([]);
+
+  useEffect(() => {
+    ApiClient.get<any[]>('/v1/taxonomy/professions')
+      .then(data => {
+        if (Array.isArray(data)) setCanonicalProfessions(data);
+      })
+      .catch(() => {});
+  }, []);
 
   const loadStaff = async () => {
     try {

@@ -10,6 +10,7 @@ import { hashPassword } from '../utils/password';
 import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
 import { resolveCanonicalProfession } from '../utils/profession-module';
+import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 
 /**
  * Purga com segurança colaboradores desativados há mais de 30 dias (Item 3).
@@ -226,7 +227,7 @@ export class StaffController {
         return;
       }
       const { id } = req.params;
-      const { role, professionName, practiceAreas } = req.body;
+      const { role, professionId, professionName, practiceAreas } = req.body;
 
       const user = db.prepare('SELECT id, tenant_id, name, role FROM users WHERE id = ?').get(id) as any;
       if (!user) {
@@ -244,45 +245,89 @@ export class StaffController {
         res.status(403).json({ error: 'O Administrador do Sistema não pode ser criado ou alterado pelo controle de funcionários.' }); return;
       }
 
+      const isManager = (newRole === 'clinic_admin' || newRole === 'clinical_coordinator') ? 1 : 0;
+
+      // Resolve profissão canônica (se fornecida)
+      const rawProf = professionId || req.body.profession_id;
+      let canonicalProfId: string | null = null;
+      let finalProfName: string | null = professionName || null;
+
+      if (rawProf && rawProf !== 'none') {
+        canonicalProfId = (REGISTRATION_PROFESSION_ALIASES as Record<string, string>)[rawProf] || rawProf;
+        const pRow = db.prepare('SELECT id, name FROM professions WHERE id = ?').get(canonicalProfId) as any;
+        if (pRow) {
+          finalProfName = pRow.name;
+        }
+      } else if (professionName && professionName !== 'none') {
+        const canonical = resolveCanonicalProfession({ name: professionName });
+        if (canonical.canonicalId) {
+          canonicalProfId = canonical.canonicalId;
+          finalProfName = canonical.canonicalName;
+        }
+      }
+
       // Atualiza usuário
-      db.prepare("UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?").run(newRole, id);
+      db.prepare(`
+        UPDATE users SET
+          role = ?,
+          profession_id = ?,
+          profession_name = ?,
+          practice_areas = ?,
+          updated_at = datetime('now')
+        WHERE id = ?
+      `).run(newRole, canonicalProfId, finalProfName, practiceAreas || null, id);
 
       // Atualiza clinic_users
       db.prepare(`
         UPDATE clinic_users SET
           role = ?,
+          is_manager = ?,
+          profession_id = ?,
+          profession_name = ?,
           profession_custom = ?,
           practice_areas = ?
         WHERE user_id = ? AND tenant_id = ?
-      `).run(newRole, professionName || null, practiceAreas || null, id, tenantId);
+      `).run(newRole, isManager, canonicalProfId, finalProfName, finalProfName, practiceAreas || null, id, tenantId);
 
-      // Sincroniza tabela professionals e taxonomia
+      // Sincroniza tabela professionals e taxonomia se usuário tem perfil clínico ou é 'professional'
       const existingProf = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (existingProf) {
-        db.prepare('UPDATE professionals SET practice_areas = ?, active = 1 WHERE user_id = ? AND tenant_id = ?').run(practiceAreas || null, id, tenantId);
-        ProfessionTaxonomyService.updateProfessionalTaxonomy({
-          tenantId,
-          professionalId: existingProf.id,
-          newProfessionId: professionName,
-          newProfessionName: professionName,
-          practiceAreas
-        });
-      } else if (newRole === 'professional') {
+        db.prepare(`
+          UPDATE professionals SET
+            profession_id = COALESCE(?, profession_id),
+            profession_name = COALESCE(?, profession_name),
+            practice_areas = ?,
+            active = 1
+          WHERE user_id = ? AND tenant_id = ?
+        `).run(canonicalProfId, finalProfName, practiceAreas || null, id, tenantId);
+
+        if (canonicalProfId) {
+          ProfessionTaxonomyService.updateProfessionalTaxonomy({
+            tenantId,
+            professionalId: existingProf.id,
+            newProfessionId: canonicalProfId,
+            newProfessionName: finalProfName || undefined,
+            practiceAreas
+          });
+        }
+      } else if (canonicalProfId || newRole === 'professional') {
         const profId = 'pro-' + uuidv4().slice(0, 8);
         db.prepare(`
-          INSERT INTO professionals (id, tenant_id, user_id, name, registration_type, practice_areas, active)
-          VALUES (?, ?, ?, ?, 'Conselho', ?, 1)
-        `).run(profId, tenantId, id, user.name, practiceAreas || null);
+          INSERT INTO professionals (id, tenant_id, user_id, name, profession_id, profession_name, registration_type, practice_areas, active)
+          VALUES (?, ?, ?, ?, ?, ?, 'Conselho', ?, 1)
+        `).run(profId, tenantId, id, user.name, canonicalProfId, finalProfName, practiceAreas || null);
 
         createDefaultSchedules(db, tenantId, profId);
 
-        ProfessionTaxonomyService.updateProfessionalTaxonomy({
-          tenantId,
-          professionalId: profId,
-          newProfessionId: professionName,
-          newProfessionName: professionName,
-          practiceAreas
-        });
+        if (canonicalProfId) {
+          ProfessionTaxonomyService.updateProfessionalTaxonomy({
+            tenantId,
+            professionalId: profId,
+            newProfessionId: canonicalProfId,
+            newProfessionName: finalProfName || undefined,
+            practiceAreas
+          });
+        }
       }
 
       logAudit(req, 'UPDATE_ROLE_PROFESSION', 'users', id, { role: newRole, professionName, practiceAreas });
