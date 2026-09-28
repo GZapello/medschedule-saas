@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { Service, Professional, AvailableSlot } from '../../types';
+import { isProfessionalCompatibleWithService } from '../../utils/moduleCompat';
 import {
   Calendar,
   Clock,
@@ -16,7 +17,8 @@ import {
   Phone,
   Mail,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Info
 } from 'lucide-react';
 
 interface PublicBookingViewProps {
@@ -48,6 +50,10 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+
+  // Profissionais compatíveis com o serviço escolhido (módulo) e com disponibilidade na data escolhida
+  const [checkingAvailability, setCheckingAvailability] = useState<boolean>(false);
+  const [availableProfessionals, setAvailableProfessionals] = useState<Professional[]>([]);
 
   // Formulário do paciente
   const [fullName, setFullName] = useState<string>('');
@@ -103,6 +109,61 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
     }
   }, [selectedProf, selectedService, selectedDate, tenantSlug]);
 
+  // Profissionais compatíveis com o módulo do serviço escolhido (ver utils/moduleCompat.ts).
+  // Serviço sem módulo derivável (specialty/profissão não configurada) -> compatível com todos,
+  // preservando o comportamento anterior a essa filtragem.
+  const moduleCompatibleProfessionals = useMemo(
+    () => professionals.filter(prof => isProfessionalCompatibleWithService(selectedService, prof)),
+    [professionals, selectedService]
+  );
+
+  // Ao trocar o serviço ou a data, a seleção anterior de profissional/horário pode não ser mais válida
+  useEffect(() => {
+    setSelectedProf(null);
+    setSelectedSlot(null);
+  }, [selectedService, selectedDate]);
+
+  // PASSO 3 (Profissional): dentre os compatíveis por módulo, verifica quais têm ao menos um horário
+  // livre na data escolhida, chamando o endpoint de slots já existente uma vez por candidato (poucos
+  // profissionais por clínica — não justifica um endpoint em lote novo).
+  useEffect(() => {
+    if (!selectedService || !selectedDate || moduleCompatibleProfessionals.length === 0) {
+      setAvailableProfessionals([]);
+      return;
+    }
+    const srvId = selectedService.id;
+    const dateVal = selectedDate;
+    const candidates = moduleCompatibleProfessionals;
+    let cancelled = false;
+    async function checkAvailability() {
+      setCheckingAvailability(true);
+      try {
+        const results = await Promise.all(
+          candidates.map(async prof => {
+            try {
+              const data = await ApiClient.get<any>(
+                `/v1/public/slots/available?tenantSlug=${tenantSlug}&professionalId=${prof.id}&serviceId=${srvId}&date=${dateVal}`
+              );
+              return (data.slots || []).length > 0 ? prof : null;
+            } catch {
+              return null;
+            }
+          })
+        );
+        if (!cancelled) {
+          setAvailableProfessionals(results.filter((p): p is Professional => p !== null));
+        }
+      } finally {
+        if (!cancelled) setCheckingAvailability(false);
+      }
+    }
+    checkAvailability();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moduleCompatibleProfessionals, selectedService, selectedDate, tenantSlug]);
+
   const handleConfirmBooking = async () => {
     if (!fullName || !phone) {
       showToast('Por favor, informe seu nome completo e telefone WhatsApp', 'error');
@@ -142,7 +203,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
 
       const result = await ApiClient.post<any>('/v1/public/appointments', payload);
       setBookingResult(result);
-      setStep(5); // Tela de Sucesso
+      setStep(6); // Tela de Sucesso
     } catch (err: any) {
       showToast(err.message || 'Erro ao concluir agendamento', 'error');
     } finally {
@@ -199,15 +260,17 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
           </div>
 
           {/* Stepper Progress Bar (se não estiver no step de sucesso) */}
-          {step < 5 && (
+          {step < 6 && (
             <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/20 text-xs font-semibold">
               <span className={step >= 1 ? 'text-white' : 'text-indigo-200'}>1. Serviço</span>
               <ChevronRight className="w-4 h-4 text-white/40" />
-              <span className={step >= 2 ? 'text-white' : 'text-indigo-200'}>2. Profissional</span>
+              <span className={step >= 2 ? 'text-white' : 'text-indigo-200'}>2. Data</span>
               <ChevronRight className="w-4 h-4 text-white/40" />
-              <span className={step >= 3 ? 'text-white' : 'text-indigo-200'}>3. Horário</span>
+              <span className={step >= 3 ? 'text-white' : 'text-indigo-200'}>3. Profissional</span>
               <ChevronRight className="w-4 h-4 text-white/40" />
-              <span className={step >= 4 ? 'text-white' : 'text-indigo-200'}>4. Seus Dados</span>
+              <span className={step >= 4 ? 'text-white' : 'text-indigo-200'}>4. Horário</span>
+              <ChevronRight className="w-4 h-4 text-white/40" />
+              <span className={step >= 5 ? 'text-white' : 'text-indigo-200'}>5. Seus Dados</span>
             </div>
           )}
         </div>
@@ -278,69 +341,14 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
             </div>
           )}
 
-          {/* PASSO 2: ESCOLHA DO PROFISSIONAL */}
+          {/* PASSO 2: ESCOLHA DA DATA */}
           {step === 2 && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">Escolha o Profissional</h2>
-                <p className="text-xs text-slate-500">Selecione quem irá conduzir o seu atendimento.</p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                {professionals.map(prof => {
-                  const isSelected = selectedProf?.id === prof.id;
-                  return (
-                    <div
-                      key={prof.id}
-                      onClick={() => setSelectedProf(prof)}
-                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
-                        isSelected
-                          ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base flex-shrink-0">
-                          {prof.name.charAt(0)}
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900 text-sm">{prof.name}</h3>
-                          <p className="text-xs text-indigo-600 font-medium">{prof.specialty_name || prof.profession_name}</p>
-                          {prof.registration_number && (
-                            <span className="text-[11px] text-slate-400">{prof.registration_type}: {prof.registration_number}</span>
-                          )}
-                        </div>
-                      </div>
-                      {isSelected && <CheckCircle2 className="w-5 h-5 text-indigo-600" />}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="pt-4 flex justify-between">
-                <button
-                  onClick={() => setStep(1)}
-                  className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  <ArrowLeft className="w-4 h-4" /> Voltar
-                </button>
-                <button
-                  disabled={!selectedProf}
-                  onClick={() => setStep(3)}
-                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  Continuar <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* PASSO 3: DATA E HORÁRIOS DISPONÍVEIS */}
-          {step === 3 && (
             <div className="space-y-5 animate-in fade-in duration-200">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Escolha o Dia e Horário</h2>
-                <p className="text-xs text-slate-500">Horários disponíveis calculados em tempo real de acordo com a agenda.</p>
+                <h2 className="text-lg font-bold text-slate-900">Escolha a Data do Atendimento</h2>
+                <p className="text-xs text-slate-500">
+                  Selecionaremos, a seguir, os profissionais deste serviço com horário livre neste dia.
+                </p>
               </div>
 
               <div>
@@ -354,6 +362,128 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
                 />
               </div>
 
+              <div className="pt-4 flex justify-between">
+                <button
+                  onClick={() => setStep(1)}
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Voltar
+                </button>
+                <button
+                  disabled={!selectedDate}
+                  onClick={() => setStep(3)}
+                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  Continuar <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* PASSO 3: ESCOLHA DO PROFISSIONAL (compatível com o módulo do serviço + disponível na data) */}
+          {step === 3 && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Escolha o Profissional</h2>
+                <p className="text-xs text-slate-500">
+                  Mostrando profissionais aptos para este serviço, com agenda livre em{' '}
+                  {selectedDate.split('-').reverse().join('/')}.
+                </p>
+              </div>
+
+              {moduleCompatibleProfessionals.length === 0 ? (
+                <div className="p-6 bg-amber-50 rounded-2xl border border-dashed border-amber-200 text-center space-y-3">
+                  <Info className="w-6 h-6 text-amber-500 mx-auto" />
+                  <p className="text-xs text-amber-800 font-medium">
+                    Não há profissional cadastrado para este serviço nesta clínica no momento.
+                  </p>
+                  <button
+                    onClick={() => setStep(1)}
+                    className="text-xs font-bold text-indigo-600 hover:underline"
+                  >
+                    Escolher outro serviço
+                  </button>
+                </div>
+              ) : checkingAvailability ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  Verificando disponibilidade dos profissionais...
+                </div>
+              ) : availableProfessionals.length === 0 ? (
+                <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center space-y-3">
+                  <Info className="w-6 h-6 text-slate-400 mx-auto" />
+                  <p className="text-xs text-slate-600 font-medium">
+                    Nenhum profissional deste serviço tem horário livre em{' '}
+                    {selectedDate.split('-').reverse().join('/')}.
+                  </p>
+                  <button
+                    onClick={() => setStep(2)}
+                    className="flex items-center gap-1.5 mx-auto text-xs font-bold text-indigo-600 hover:underline"
+                  >
+                    <Calendar className="w-3.5 h-3.5" /> Escolher outra data
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  {availableProfessionals.map(prof => {
+                    const isSelected = selectedProf?.id === prof.id;
+                    return (
+                      <div
+                        key={prof.id}
+                        onClick={() => setSelectedProf(prof)}
+                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
+                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base flex-shrink-0">
+                            {prof.name.charAt(0)}
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-slate-900 text-sm">{prof.name}</h3>
+                            <p className="text-xs text-indigo-600 font-medium">{prof.specialty_name || prof.profession_name}</p>
+                            {prof.registration_number && (
+                              <span className="text-[11px] text-slate-400">{prof.registration_type}: {prof.registration_number}</span>
+                            )}
+                          </div>
+                        </div>
+                        {isSelected && <CheckCircle2 className="w-5 h-5 text-indigo-600" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="pt-4 flex justify-between">
+                <button
+                  onClick={() => setStep(2)}
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Voltar
+                </button>
+                <button
+                  disabled={!selectedProf}
+                  onClick={() => setStep(4)}
+                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  Continuar <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* PASSO 4: HORÁRIOS DISPONÍVEIS */}
+          {step === 4 && (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Escolha o Horário</h2>
+                <p className="text-xs text-slate-500">
+                  Horários de {selectedProf?.name} em {selectedDate.split('-').reverse().join('/')}, calculados em tempo real de acordo com a agenda.
+                </p>
+              </div>
+
               {/* Slot Picker */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-2">Horários Livres Disponíveis</label>
@@ -365,7 +495,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
                   </div>
                 ) : availableSlots.length === 0 ? (
                   <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-500">
-                    Nenhum horário livre encontrado para esta data. Por favor, tente outro dia.
+                    Nenhum horário livre encontrado para esta data. Por favor, tente outro profissional ou outro dia.
                   </div>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
@@ -392,14 +522,14 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
 
               <div className="pt-4 flex justify-between">
                 <button
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   <ArrowLeft className="w-4 h-4" /> Voltar
                 </button>
                 <button
                   disabled={!selectedSlot}
-                  onClick={() => setStep(4)}
+                  onClick={() => setStep(5)}
                   className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   Continuar <ArrowRight className="w-4 h-4" />
@@ -408,8 +538,8 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
             </div>
           )}
 
-          {/* PASSO 4: IDENTIFICAÇÃO DO CLIENTE / PACIENTE / MENOR */}
-          {step === 4 && (
+          {/* PASSO 5: IDENTIFICAÇÃO DO CLIENTE / PACIENTE / MENOR */}
+          {step === 5 && (
             <div className="space-y-4 animate-in fade-in duration-200">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">Seus Dados para Contato</h2>
@@ -529,7 +659,7 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
 
               <div className="pt-2 flex justify-between">
                 <button
-                  onClick={() => setStep(3)}
+                  onClick={() => setStep(4)}
                   className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   <ArrowLeft className="w-4 h-4" /> Voltar
@@ -544,8 +674,8 @@ export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
             </div>
           )}
 
-          {/* PASSO 5: TELA DE SUCESSO / COMPROVANTE */}
-          {step === 5 && (
+          {/* PASSO 6: TELA DE SUCESSO / COMPROVANTE */}
+          {step === 6 && (
             <div className="py-6 text-center space-y-5 animate-in zoom-in-95 duration-300">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
                 <CheckCircle2 className="w-10 h-10" />

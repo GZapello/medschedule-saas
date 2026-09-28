@@ -16,11 +16,17 @@ import {
   HelpCircle,
   Stethoscope,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  LifeBuoy
 } from 'lucide-react';
 import { PracticeArea, Capability, ComputedUserCapabilities, MedicalTreeResponse, MedicalSpecialtyItem } from '../../types/capabilities';
 
-export const MyResourcesView: React.FC = () => {
+interface MyResourcesViewProps {
+  /** Permite navegar para a Central de Chamados, que deixou de ter entrada própria no menu principal. */
+  onNavigate?: (view: string) => void;
+}
+
+export const MyResourcesView: React.FC<MyResourcesViewProps> = ({ onNavigate }) => {
   const { currentUser, reloadSession } = useAuth();
   const { showToast } = useToast();
 
@@ -221,7 +227,18 @@ export const MyResourcesView: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
+            {onNavigate && (
+              <button
+                onClick={() => onNavigate('support-tickets')}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all cursor-pointer"
+                title="Central de Chamados"
+              >
+                <LifeBuoy className="w-3.5 h-3.5" />
+                Central de Chamados
+              </button>
+            )}
+            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md p-1.5 rounded-2xl border border-white/10">
             <button
               onClick={() => setActiveTab('resources')}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -244,6 +261,7 @@ export const MyResourcesView: React.FC = () => {
                 ? `Especialidades & Subáreas (${selectedMedicalSpecialties.length})`
                 : `Áreas de Atuação (${selectedAreas.length})`}
             </button>
+            </div>
           </div>
         </div>
       </div>

@@ -71,7 +71,6 @@ const OnboardingSpotlight = lazyWithRetry(() => import('./components/onboarding/
 const OnboardingWelcomeModal = lazyWithRetry(() => import('./components/onboarding/OnboardingWelcomeModal').then(module => ({ default: module.OnboardingWelcomeModal })), 'OnboardingWelcomeModal');
 const OnboardingHelpModal = lazyWithRetry(() => import('./components/onboarding/OnboardingHelpModal').then(module => ({ default: module.OnboardingHelpModal })), 'OnboardingHelpModal');
 const WhatsNewModal = lazyWithRetry(() => import('./components/onboarding/WhatsNewModal').then(module => ({ default: module.WhatsNewModal })), 'WhatsNewModal');
-const KeyboardShortcutsModal = lazyWithRetry(() => import('./components/onboarding/KeyboardShortcutsModal').then(module => ({ default: module.KeyboardShortcutsModal })), 'KeyboardShortcutsModal');
 import { trackPageView } from './utils/analytics';
 import { Sparkles, AlertCircle } from 'lucide-react';
 
@@ -144,6 +143,7 @@ export const VIEW_TO_PATH: Record<string, string> = {
   'support-tickets': '/suporte',
   reports: '/relatorios',
   settings: '/configuracoes',
+  'manage-clinic': '/gerenciar-clinica',
   superadmin: '/superadmin',
   billing: '/assinatura'
 };
@@ -176,6 +176,7 @@ export const PATH_TO_VIEW: Record<string, string> = {
   '/suporte': 'support-tickets',
   '/relatorios': 'reports',
   '/configuracoes': 'settings',
+  '/gerenciar-clinica': 'manage-clinic',
   '/superadmin': 'superadmin',
   '/assinatura': 'billing'
 };
@@ -479,6 +480,7 @@ const AppContent: React.FC = () => {
         'support-tickets': 'Central de Chamados',
         reports: 'Relatórios Gerenciais',
         settings: 'Configurações da Clínica',
+        'manage-clinic': 'Gerenciar Clínica',
         superadmin: 'Administração Global',
         billing: 'Assinatura e Planos',
         onboarding: 'Configuração Inicial'
@@ -1262,9 +1264,11 @@ const AppContent: React.FC = () => {
 
           {currentView === 'audit' && <AuditView />}
 
-          {currentView === 'settings' && <SettingsView />}
+          {currentView === 'settings' && <SettingsView onNavigate={handleNavigateView} />}
 
-          {currentView === 'my-resources' && <MyResourcesView />}
+          {currentView === 'manage-clinic' && <SettingsView onNavigate={handleNavigateView} initialTab="clinic" />}
+
+          {currentView === 'my-resources' && <MyResourcesView onNavigate={handleNavigateView} />}
 
           {(currentView === 'sandbox' || currentView === 'laboratory') && isSuperAdmin && (
             <SuperAdminLaboratoryView />
@@ -1325,7 +1329,7 @@ const AppContent: React.FC = () => {
 const PrivateOverlays: React.FC = () => {
   const { currentUser } = useAuth();
   if (!currentUser) return null;
-  return <Suspense fallback={null}><LegalReacceptanceModal /><OnboardingSpotlight /><OnboardingWelcomeModal /><OnboardingHelpModal /><WhatsNewModal /><KeyboardShortcutsModal /></Suspense>;
+  return <Suspense fallback={null}><LegalReacceptanceModal /><OnboardingSpotlight /><OnboardingWelcomeModal /><OnboardingHelpModal /><WhatsNewModal /></Suspense>;
 };
 
 export const App: React.FC = () => {

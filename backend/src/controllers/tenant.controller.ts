@@ -14,7 +14,7 @@ import { TrialNotificationService } from '../services/trial-notification.service
 import { AdminNotificationService } from '../services/admin-notification.service';
 import { CapabilityService } from '../services/capability.service';
 import { MedicalTreeService } from '../services/medical-tree.service';
-import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
+import { resolveProfessionModule, resolveCanonicalProfession, deriveModuleFromProfessionRef } from '../utils/profession-module';
 import { REGISTRATION_PROFESSIONS } from '../types/professions';
 
 
@@ -1164,30 +1164,48 @@ export class TenantController {
       }
 
       // Profissionais ativos da clínica
+      // (p.profession_id e cu.zemda_body_enabled adicionados para computar `module` abaixo — WS-D)
       const profStmt = db.prepare(`
-        SELECT 
+        SELECT
           p.id, p.name, p.photo_url, p.registration_type, p.registration_number, p.bio,
+          p.profession_id,
           spec.id as specialty_id, spec.name as specialty_name, spec.color as specialty_color,
-          prof.name as profession_name
+          prof.name as profession_name,
+          cu.zemda_body_enabled
         FROM professionals p
         LEFT JOIN specialties spec ON spec.id = p.specialty_id
         LEFT JOIN professions prof ON prof.id = p.profession_id
+        LEFT JOIN clinic_users cu ON cu.user_id = p.user_id AND cu.tenant_id = p.tenant_id
         WHERE p.tenant_id = ? AND p.active = 1
         ORDER BY p.name ASC
       `);
-      const professionals = profStmt.all(tenant.id);
+      const professionals = (profStmt.all(tenant.id) as any[]).map(p => ({
+        ...p,
+        module: deriveModuleFromProfessionRef(p.profession_id, p.profession_name)
+      }));
 
       // Serviços ativos
+      // (s.specialty_id exposto e specialty->profession juntados apenas para computar `module` — WS-D)
       const srvStmt = db.prepare(`
-        SELECT 
+        SELECT
           s.id, s.name, s.description, s.duration_minutes, s.buffer_minutes, s.price, s.modality,
-          spec.name as specialty_name
+          s.specialty_id,
+          spec.name as specialty_name,
+          spec.profession_id as specialty_profession_id,
+          sprof.name as specialty_profession_name
         FROM services s
         LEFT JOIN specialties spec ON spec.id = s.specialty_id
+        LEFT JOIN professions sprof ON sprof.id = spec.profession_id
         WHERE s.tenant_id = ? AND s.active = 1
         ORDER BY s.name ASC
       `);
-      const services = srvStmt.all(tenant.id);
+      const services = (srvStmt.all(tenant.id) as any[]).map(s => {
+        const { specialty_profession_id, specialty_profession_name, ...rest } = s;
+        return {
+          ...rest,
+          module: deriveModuleFromProfessionRef(specialty_profession_id, specialty_profession_name)
+        };
+      });
 
       res.json({
         tenant,

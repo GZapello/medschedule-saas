@@ -27,6 +27,7 @@ import {
   ClinicDocumentFooter
 } from '../common/ClinicDocumentHeader';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { EmptyState } from '../common/EmptyState';
 
 export const BudgetsView: React.FC = () => {
   const { showToast } = useToast();
@@ -198,6 +199,16 @@ export const BudgetsView: React.FC = () => {
     }
   };
 
+  const openNewBudgetModal = () => {
+    setSelectedPatientId('');
+    setSupplierName('');
+    setSupplierContact('');
+    setItems([{ description: '', quantity: 1, unitPrice: 0 }]);
+    setDiscount(0);
+    setNotes('');
+    setShowNewModal(true);
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved':
@@ -228,15 +239,7 @@ export const BudgetsView: React.FC = () => {
         </div>
 
         <button
-          onClick={() => {
-            setSelectedPatientId('');
-            setSupplierName('');
-            setSupplierContact('');
-            setItems([{ description: '', quantity: 1, unitPrice: 0 }]);
-            setDiscount(0);
-            setNotes('');
-            setShowNewModal(true);
-          }}
+          onClick={openNewBudgetModal}
           className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
@@ -302,9 +305,32 @@ export const BudgetsView: React.FC = () => {
         {loading ? (
           <div className="p-8 text-center text-xs text-slate-400">Carregando orçamentos...</div>
         ) : budgets.length === 0 ? (
-          <div className="p-12 text-center text-xs text-slate-400">
-            Nenhum orçamento encontrado nesta categoria.
-          </div>
+          search || filterStatus ? (
+            <EmptyState
+              icon={Search}
+              title="Nenhum orçamento encontrado"
+              description="Ajuste o termo de busca ou o filtro de status para localizar o orçamento desejado."
+            />
+          ) : (
+            <EmptyState
+              icon={activeTab === 'patient' ? User : Truck}
+              title={
+                activeTab === 'patient'
+                  ? `Nenhum orçamento de ${clientTermLabel.toLowerCase()} cadastrado`
+                  : 'Nenhum orçamento de fornecedor cadastrado'
+              }
+              description={
+                activeTab === 'patient'
+                  ? `Gere propostas de tratamento para ${clientTermLabel.toLowerCase()}s com impressão em folha A4.`
+                  : 'Registre orçamentos de insumos com fornecedores e converta os itens aprovados diretamente em entrada de estoque.'
+              }
+              action={{
+                label: activeTab === 'patient' ? `Novo Orçamento de ${clientTermLabel}` : 'Novo Orçamento de Insumos',
+                onClick: openNewBudgetModal,
+                icon: Plus
+              }}
+            />
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">

@@ -40,7 +40,6 @@ interface OnboardingContextType {
   isWelcomeModalOpen: boolean;
   isHelpOpen: boolean;
   isWhatsNewOpen: boolean;
-  isShortcutsOpen: boolean;
   isModuleSelectorOpen: boolean;
 
   // Ações do Tour
@@ -60,8 +59,6 @@ interface OnboardingContextType {
   closeHelp: () => void;
   openWhatsNew: () => void;
   closeWhatsNew: () => void;
-  openShortcuts: () => void;
-  closeShortcuts: () => void;
   openModuleSelector: () => void;
   closeModuleSelector: () => void;
 
@@ -126,7 +123,6 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [isWhatsNewOpen, setIsWhatsNewOpen] = useState<boolean>(false);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isModuleSelectorOpen, setIsModuleSelectorOpen] = useState<boolean>(false);
 
   // Lista canônica de módulos clínicos aos quais o usuário tem permissão
@@ -431,10 +427,6 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
           setIsWhatsNewOpen(false);
           return;
         }
-        if (isShortcutsOpen) {
-          setIsShortcutsOpen(false);
-          return;
-        }
         if (isModuleSelectorOpen) {
           setIsModuleSelectorOpen(false);
           return;
@@ -455,7 +447,7 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTourActive, isHelpOpen, isWhatsNewOpen, isShortcutsOpen, isModuleSelectorOpen, isWelcomeModalOpen]);
+  }, [isTourActive, isHelpOpen, isWhatsNewOpen, isModuleSelectorOpen, isWelcomeModalOpen]);
 
   const currentStep = currentTour?.steps[currentStepIndex] || null;
 
@@ -471,7 +463,6 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
         isWelcomeModalOpen,
         isHelpOpen,
         isWhatsNewOpen,
-        isShortcutsOpen,
         isModuleSelectorOpen,
         startTour,
         nextStep,
@@ -487,8 +478,6 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
         closeHelp: () => setIsHelpOpen(false),
         openWhatsNew: () => setIsWhatsNewOpen(true),
         closeWhatsNew: () => setIsWhatsNewOpen(false),
-        openShortcuts: () => setIsShortcutsOpen(true),
-        closeShortcuts: () => setIsShortcutsOpen(false),
         openModuleSelector: () => setIsModuleSelectorOpen(true),
         closeModuleSelector: () => setIsModuleSelectorOpen(false),
         availableModules,

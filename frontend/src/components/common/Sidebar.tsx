@@ -8,10 +8,8 @@ import {
   Activity,
   ClipboardList,
   UserCog,
-  CalendarClock,
   Scissors,
   DollarSign,
-  Layers,
   BarChart3,
   ShieldCheck,
   Settings,
@@ -20,7 +18,6 @@ import {
   UserPlus,
   UploadCloud,
   X,
-  Bot,
   Package,
   FileSpreadsheet,
   Wallet,
@@ -35,9 +32,9 @@ import {
   Dumbbell,
   GraduationCap,
   Stethoscope,
-  Sliders
+  Sliders,
+  Building2
 } from 'lucide-react';
-import { openZemdaAI } from '../../utils/aiHelper';
 
 interface SidebarProps {
   currentView: string;
@@ -91,7 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isZemdaBody,
     commercialModule,
     clinicalWorkspace,
-    clientTermLabel
+    clientTermLabel,
+    isSoloPlan
   } = useAuth();
 
   const categories: NavCategory[] = [
@@ -174,44 +172,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ]
     },
     {
-      id: 'team',
-      label: 'Cadastros & Equipe',
+      id: 'administracao',
+      label: 'Administração',
       items: [
-        { id: 'professionals', label: 'Profissionais & Horários', icon: UserCog, visible: isClinicAdmin },
-        { id: 'work-schedules', label: 'Escala de Trabalho', icon: CalendarClock, visible: isClinicAdmin || isProfessional },
+        { id: 'professionals', label: 'Profissionais & Horários', icon: UserCog, visible: isClinicAdmin && !isSoloPlan },
         { id: 'services', label: 'Serviços & Salas', icon: Scissors, visible: isClinicAdmin },
-        { id: 'staff', label: 'Equipe & Acessos', icon: UserPlus, visible: isClinicAdmin },
-      ]
-    },
-    {
-      id: 'operations',
-      label: 'Operação & Estoque',
-      items: [
+        { id: 'staff', label: 'Equipe & Acessos', icon: UserPlus, visible: isClinicAdmin && !isSoloPlan },
         { id: 'inventory', label: 'Estoque de Insumos', icon: Package, visible: isClinicAdmin },
         { id: 'budgets', label: 'Orçamentos', icon: FileSpreadsheet, visible: isClinicAdmin || isProfessional },
-      ]
-    },
-    {
-      id: 'financial',
-      label: 'Financeiro & Gestão',
-      items: [
         { id: 'financial', label: 'Financeiro', icon: DollarSign, visible: isClinicAdmin },
         { id: 'payroll', label: 'Pagamentos & Comissões', icon: Wallet, visible: isClinicAdmin },
         { id: 'receipts', label: 'Recibos Oficiais', icon: Receipt, visible: isClinicAdmin },
         { id: 'reports', label: 'Relatórios & Exportação', icon: BarChart3, visible: isClinicAdmin },
+        { id: 'import', label: 'Importar Dados', icon: UploadCloud, visible: isClinicAdmin },
+        { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isSuperAdmin },
+        { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: isSuperAdmin },
       ]
     },
     {
-      id: 'system',
-      label: 'Suporte & Sistema',
+      id: 'perfil',
+      label: 'Perfil',
       items: [
-        { id: 'ai-assistant', label: 'Assistente Zemda', icon: Bot, visible: true },
-        { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: true },
-        { id: 'import', label: 'Importar Dados', icon: UploadCloud, visible: isClinicAdmin },
-        { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isSuperAdmin },
-        { id: 'my-resources', label: 'Meus Recursos', icon: Sliders, visible: isProfessional || isClinicAdmin },
         { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },
-        { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: isSuperAdmin },
+        { id: 'manage-clinic', label: 'Gerenciar Clínica', icon: Building2, visible: isClinicAdmin },
+        { id: 'my-resources', label: 'Meus Recursos', icon: Sliders, visible: isProfessional || isClinicAdmin },
+        // Quem não vê "Meus Recursos" (ex.: recepção) perderia todo acesso à Central de Chamados,
+        // já que ela só é alcançável por um botão dentro daquela tela — mantém uma entrada direta
+        // só para esses papéis, sem duplicar o caminho para quem já chega lá via Meus Recursos.
+        { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: !(isProfessional || isClinicAdmin) },
       ]
     }
   ];
@@ -238,10 +226,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
     const initial: Record<string, boolean> = {
       attendance: true,
-      team: false,
-      operations: false,
-      financial: false,
-      system: false
+      administracao: false,
+      perfil: false
     };
     for (const cat of categories) {
       if (cat.items.some(item => item.id === currentView)) {
@@ -360,13 +346,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           data-nav-id={item.id}
                           data-clinical-module={isUserModule ? "true" : undefined}
                           onClick={() => {
-                            if (item.id === 'ai-assistant') {
-                              openZemdaAI();
-                              onClose();
-                            } else {
-                              onNavigate(item.id);
-                              onClose();
-                            }
+                            onNavigate(item.id);
+                            onClose();
                           }}
                           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                             isActive
@@ -384,15 +365,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             );
           })}
-        </div>
-
-        {/* Footer info */}
-        <div className="p-3 border-t border-slate-100 text-[11px] text-slate-400 bg-slate-50/40 flex items-center justify-between">
-          <span>v1.1.2 • LGPD</span>
-          <span className="inline-flex items-center gap-1.5 text-emerald-600 font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Online
-          </span>
         </div>
       </aside>
     </>

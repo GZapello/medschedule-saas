@@ -8,6 +8,21 @@ export interface TourStep {
   requiredPermission?: string;
   requiredRoles?: string[];
   hideIfNoTarget?: boolean;
+  /**
+   * Deep-link para dentro de um modal/workspace com estado (ex.: o editor do ZemdaBody),
+   * que não possui uma rota própria para onde `route` possa navegar. Depois de navegar
+   * para `route` (se houver), o motor do tour tenta localizar `openSelector` no DOM e, se
+   * encontrado e habilitado (não-disabled), dispara um clique nele para abrir o
+   * modal/workspace ANTES de procurar `target` dentro dele. Reaproveita sempre o gatilho
+   * real já existente na tela (o mesmo botão que o usuário clicaria manualmente) — o motor
+   * nunca sintetiza estado de aplicação (ex.: selecionar um paciente sozinho). Se o gatilho
+   * não existir ou continuar desabilitado, a ação é ignorada silenciosamente e o passo
+   * segue o fluxo normal de `hideIfNoTarget`/fallback. Campo opcional e aditivo: passos
+   * existentes sem ele continuam funcionando exatamente como antes.
+   */
+  action?: {
+    openSelector: string;
+  };
 }
 
 export interface TourDefinition {
@@ -853,14 +868,16 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
         id: 'body_canvas',
         target: '[data-tour="body-canvas-container"]',
         route: 'zemda-body',
+        action: { openSelector: '[data-tour="btn-body-new-assessment"]' },
         title: 'Modelo Anatômico 360°',
-        description: 'Alterne entre visão anterior, posterior, lateral e modelos anatômicos masculino e feminino.',
+        description: 'Alterne entre visão anterior, posterior, lateral e modelos anatômicos masculino e feminino. Selecione um paciente e clique em "Nova Avaliação" para abrir o mapa corporal.',
         position: 'bottom'
       },
       {
         id: 'body_tools',
         target: '[data-tour="body-tool-selector"]',
         route: 'zemda-body',
+        action: { openSelector: '[data-tour="btn-body-new-assessment"]' },
         title: 'Seleção, Caneta e Borracha',
         description: 'Use a ferramenta de seleção para áreas anatômicas ou a caneta colorida para desenhar traços manuais.',
         position: 'bottom',
@@ -870,6 +887,7 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
         id: 'body_plans',
         target: '[data-tour="body-section-selector"]',
         route: 'zemda-body',
+        action: { openSelector: '[data-tour="btn-body-new-assessment"]' },
         title: 'Antropometria & Plano Terapêutico',
         description: 'Associe medidas corporais e condutas terapêuticas diretamente aos pontos selecionados.',
         position: 'bottom',

@@ -32,7 +32,8 @@ import {
   Award,
   Briefcase,
   MapPin,
-  Info
+  Info,
+  CalendarClock
 } from 'lucide-react';
 
 export const COMMON_INSURANCE_PRESETS = [
@@ -54,12 +55,19 @@ export const COMMON_INSURANCE_PRESETS = [
   { name: 'Prevent Senior', ansCode: '302147', phone: '0800 770 0789' }
 ];
 
-export const SettingsView: React.FC = () => {
-  const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession } = useAuth();
+interface SettingsViewProps {
+  /** Permite navegar para outras views do app (ex.: Escala de Trabalho, que deixou de ter entrada própria no menu). */
+  onNavigate?: (view: string) => void;
+  /** Aba inicial a exibir — usada pela entrada "Gerenciar Clínica" do menu Perfil, que reaproveita esta tela já focada na aba de dados da clínica. */
+  initialTab?: 'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal';
+}
+
+export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate, initialTab }) => {
+  const { currentUser, currentTenant, isClinicAdmin, isProfessional, refreshTenant, reloadSession } = useAuth();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal'>(
-    isClinicAdmin ? 'clinic' : 'profile'
+    initialTab || (isClinicAdmin ? 'clinic' : 'profile')
   );
 
   // Configurações da Clínica
@@ -500,7 +508,19 @@ export const SettingsView: React.FC = () => {
           </p>
         </div>
 
-        <button type="button" onClick={()=>setActiveTab(activeTab==='billing'?'profile':'billing')} className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm">{activeTab==='billing'?'Minha conta':'Assinatura e Plano'}</button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {(isClinicAdmin || isProfessional) && onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('work-schedules')}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm"
+            >
+              <CalendarClock className="w-4 h-4" />
+              Escala de Trabalho
+            </button>
+          )}
+          <button type="button" onClick={()=>setActiveTab(activeTab==='billing'?'profile':'billing')} className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm">{activeTab==='billing'?'Minha conta':'Assinatura e Plano'}</button>
+        </div>
         {/* Abas de navegação */}
         <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
           {isClinicAdmin && (

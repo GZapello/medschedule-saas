@@ -6,7 +6,6 @@ import {
   Compass,
   Sparkles,
   Layers,
-  Keyboard,
   LifeBuoy,
   X,
   ChevronRight,
@@ -23,7 +22,6 @@ export const OnboardingHelpModal: React.FC = () => {
     startTour,
     startModuleTour,
     openWhatsNew,
-    openShortcuts,
     availableModules,
     isPureAdmin,
     isZemdaBody,
@@ -266,32 +264,7 @@ export const OnboardingHelpModal: React.FC = () => {
               <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-600 shrink-0" />
             </button>
 
-            {/* 5. Atalhos de Teclado */}
-            <button
-              type="button"
-              onClick={() => {
-                closeHelp();
-                openShortcuts();
-              }}
-              className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-slate-100 hover:border-slate-200 transition-all text-left cursor-pointer group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-center shadow-xs">
-                  <Keyboard className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-slate-800 group-hover:text-slate-900 block">
-                    Atalhos de teclado
-                  </span>
-                  <span className="text-[11px] text-slate-500">
-                    Navegação rápida e atalhos de rotina
-                  </span>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-600 shrink-0" />
-            </button>
-
-            {/* 6. Central de Suporte */}
+            {/* 5. Central de Suporte */}
             <button
               type="button"
               onClick={handleSupportClick}

@@ -18,6 +18,15 @@ interface TargetRect {
   right: number;
 }
 
+// Intervalo e teto de tentativas para localizar o elemento alvo no DOM.
+// Necessário porque a navegação do tour pode disparar o carregamento de uma rota
+// lazy (`lazyWithRetry`/`React.lazy`, ver App.tsx) ou a abertura de um modal com
+// estado (`TourStep.action`) — em ambos os casos o elemento real só existe no DOM
+// algum tempo depois do evento de navegação/clique, e um único setTimeout fixo
+// (180ms) não é suficiente em chunks maiores ou conexões mais lentas.
+const TARGET_POLL_INTERVAL_MS = 100;
+const TARGET_POLL_CEILING_MS = 2000;
+
 export const OnboardingSpotlight: React.FC = () => {
   const {
     isTourActive,
@@ -35,11 +44,15 @@ export const OnboardingSpotlight: React.FC = () => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardPos, setCardPos] = useState<{ top: number; left: number }>({ top: 100, left: 100 });
 
-  // Localiza e mede o elemento alvo na tela
-  const updatePosition = useCallback(() => {
+  // Guarda o id do passo para o qual já disparamos `action.openSelector`, para não
+  // clicar de novo a cada tentativa do polling enquanto o alvo ainda não aparece.
+  const actionTriggeredForStepRef = useRef<string | null>(null);
+
+  // Localiza e mede o elemento alvo na tela. Retorna true se encontrado.
+  const updatePosition = useCallback((): boolean => {
     if (!isTourActive || !currentStep) {
       setRect(null);
-      return;
+      return false;
     }
 
     let el = document.querySelector(currentStep.target) as HTMLElement | null;
@@ -54,7 +67,7 @@ export const OnboardingSpotlight: React.FC = () => {
     if (!el) {
       setTargetFound(false);
       setRect(null);
-      return;
+      return false;
     }
 
     setTargetFound(true);
@@ -115,25 +128,79 @@ export const OnboardingSpotlight: React.FC = () => {
     top = Math.max(16, Math.min(top, window.innerHeight - cardHeight - 16));
 
     setCardPos({ top, left });
+    return true;
   }, [isTourActive, currentStep]);
 
+  // Ao entrar em um passo: se ele tiver `action.openSelector`, tenta clicar no gatilho real
+  // assim que ele existir e estiver habilitado (ex.: abrir o workspace do ZemdaBody a partir
+  // do botão "Nova Avaliação"); em seguida faz polling pelo elemento `target` até encontrá-lo
+  // ou esgotar o teto de tentativas, em vez de depender de um único setTimeout fixo que
+  // corria o risco de disparar antes de uma rota lazy ou um modal terminarem de montar.
+  // Quando as tentativas se esgotam e o passo está marcado `hideIfNoTarget`, avança
+  // automaticamente para o próximo passo em vez de mostrar um overlay escurecido sem
+  // realce, seta ou rótulo algum.
   useEffect(() => {
-    updatePosition();
+    actionTriggeredForStepRef.current = null;
+
+    if (!isTourActive || !currentStep) {
+      setRect(null);
+      return;
+    }
+
+    let cancelled = false;
+    let elapsedMs = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = () => {
+      if (cancelled) return;
+
+      if (currentStep.action?.openSelector && actionTriggeredForStepRef.current !== currentStep.id) {
+        const trigger = document.querySelector(currentStep.action.openSelector) as
+          | (HTMLElement & { disabled?: boolean })
+          | null;
+        if (trigger && !trigger.disabled) {
+          actionTriggeredForStepRef.current = currentStep.id;
+          trigger.click();
+        }
+      }
+
+      const found = updatePosition();
+      if (found || cancelled) return;
+
+      elapsedMs += TARGET_POLL_INTERVAL_MS;
+      if (elapsedMs >= TARGET_POLL_CEILING_MS) {
+        if (currentStep.hideIfNoTarget) {
+          nextStep();
+        }
+        return;
+      }
+
+      timer = setTimeout(tick, TARGET_POLL_INTERVAL_MS);
+    };
+
+    tick();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [isTourActive, currentStep, updatePosition, nextStep]);
+
+  // Reposiciona o realce/card quando a janela é redimensionada ou a página rola
+  useEffect(() => {
+    if (!isTourActive || !currentStep) return;
+
     const handleResize = () => updatePosition();
     const handleScroll = () => updatePosition();
 
     window.addEventListener('resize', handleResize);
     window.addEventListener('scroll', handleScroll, true);
 
-    // Timeout de reavaliação após animação de transição de tela
-    const timer = setTimeout(updatePosition, 180);
-
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('scroll', handleScroll, true);
-      clearTimeout(timer);
     };
-  }, [updatePosition, currentStepIndex]);
+  }, [isTourActive, currentStep, updatePosition]);
 
   // Navegação por teclado acessível
   useEffect(() => {
