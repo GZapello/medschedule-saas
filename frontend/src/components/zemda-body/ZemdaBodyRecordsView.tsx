@@ -244,7 +244,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Principal */}
-      <div data-tour="body-canvas-container" className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div data-tour="body-records-header" className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-500 text-white flex items-center justify-center shadow-lg shadow-teal-500/20">
             <Activity className="w-6 h-6" />
@@ -281,6 +281,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
 
           <button
             type="button"
+            data-tour="btn-body-new-assessment"
             onClick={() => setCreatingNew(true)}
             disabled={!selectedPatientId}
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
