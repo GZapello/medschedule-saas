@@ -281,6 +281,7 @@ export const StaffManagementView: React.FC = () => {
     setEditingRoleUser(member);
     setEditRoleForm({
       role: member.role || 'professional',
+      professionId: member.profession_id || '',
       professionName: member.profession_name || '',
       practiceAreas: member.practice_areas || ''
     });
@@ -293,6 +294,7 @@ export const StaffManagementView: React.FC = () => {
     try {
       await ApiClient.put(`/v1/staff/${editingRoleUser.id}/role-profession`, {
         role: editRoleForm.role,
+        professionId: editRoleForm.professionId,
         professionName: editRoleForm.professionName,
         practiceAreas: editRoleForm.practiceAreas
       });
@@ -300,6 +302,7 @@ export const StaffManagementView: React.FC = () => {
       setStaffList(prev => prev.map(m => m.id === editingRoleUser.id ? {
         ...m,
         role: editRoleForm.role,
+        profession_id: editRoleForm.professionId,
         profession_name: editRoleForm.professionName,
         practice_areas: editRoleForm.practiceAreas
       } : m));
@@ -1007,7 +1010,7 @@ export const StaffManagementView: React.FC = () => {
                 <input
                   type="text"
                   value={editRoleForm.professionName}
-                  onChange={e => setEditRoleForm({ ...editRoleForm, professionName: e.target.value })}
+                  onChange={e => setEditRoleForm({ ...editRoleForm, professionId: canonicalProfessions.find(p => p.name === e.target.value)?.id || '', professionName: e.target.value })}
                   placeholder="Ex: Psicopedagogo Infantil, Psiquiatra, Secretária..."
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium"
                 />

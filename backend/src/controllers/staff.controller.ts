@@ -73,6 +73,7 @@ export class StaffController {
           COALESCE(cu.profession_custom, prof.name, u.role) as profession_name,
           COALESCE(cu.practice_areas, p.practice_areas, p.bio) as practice_areas,
           p.id as professional_id, p.registration_type, p.registration_number,
+          COALESCE(p.profession_id, cu.profession_id, u.profession_id) as profession_id,
           p.zemda_fisio_enabled, p.zemda_odonto_enabled,
           spec.name as specialty_name
         FROM users u
