@@ -281,6 +281,7 @@ export const StaffManagementView: React.FC = () => {
     setEditingRoleUser(member);
     setEditRoleForm({
       role: member.role || 'professional',
+      professionId: member.profession_id || '',
       professionName: member.profession_name || '',
       practiceAreas: member.practice_areas || ''
     });
@@ -293,13 +294,15 @@ export const StaffManagementView: React.FC = () => {
     try {
       await ApiClient.put(`/v1/staff/${editingRoleUser.id}/role-profession`, {
         role: editRoleForm.role,
+        professionId: editRoleForm.professionId,
         professionName: editRoleForm.professionName,
         practiceAreas: editRoleForm.practiceAreas
       });
-      showToast('Cargo, profissão e áreas de atuação atualizados!', 'success');
+      showToast('Função, profissão e áreas de atuação atualizados!', 'success');
       setStaffList(prev => prev.map(m => m.id === editingRoleUser.id ? {
         ...m,
         role: editRoleForm.role,
+        profession_id: editRoleForm.professionId,
         profession_name: editRoleForm.professionName,
         practice_areas: editRoleForm.practiceAreas
       } : m));
@@ -355,12 +358,14 @@ export const StaffManagementView: React.FC = () => {
 
   const getRoleLabel = (role: string) => {
     switch (role) {
-      case 'clinic_admin': return 'Gestor / Admin da Clínica';
-      case 'professional': return 'Profissional de Atendimento';
-      case 'receptionist': return 'Recepção / Atendimento';
+      case 'clinic_admin': return 'Gestor da Clínica';
+      case 'clinical_coordinator': return 'Coordenação Clínica';
+      case 'hr': return 'Recursos Humanos (RH)';
+      case 'professional': return 'Profissional Clínico';
+      case 'receptionist': return 'Recepcionista';
       case 'secretary': return 'Secretária(o)';
       case 'financial': return 'Financeiro';
-      case 'assistant': return 'Auxiliar Administrativo';
+      case 'assistant': return 'Assistente / Auxiliar';
       default: return role;
     }
   };
@@ -987,30 +992,49 @@ export const StaffManagementView: React.FC = () => {
 
             <form onSubmit={handleSaveRoleProfession} className="p-6 space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Perfil / Cargo no Sistema</label>
+                <label className="block font-bold text-slate-700 mb-1">Função no Sistema (RBAC) *</label>
                 <select
                   value={editRoleForm.role}
                   onChange={e => setEditRoleForm({ ...editRoleForm, role: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium"
                 >
-                  <option value="professional">Profissional de Atendimento / Saúde</option>
-                  <option value="receptionist">Recepcionista / Atendimento</option>
+                  <option value="professional">Profissional Clínico</option>
+                  <option value="clinic_admin">Gestor da Clínica (Administrador)</option>
+                  <option value="clinical_coordinator">Coordenação Clínica</option>
+                  <option value="hr">Recursos Humanos (RH)</option>
+                  <option value="receptionist">Recepcionista</option>
                   <option value="secretary">Secretária(o)</option>
                   <option value="financial">Financeiro</option>
-                  <option value="assistant">Auxiliar Administrativo</option>
-                  <option value="clinic_admin">Administrador / Gestor da Clínica</option>
+                  <option value="assistant">Assistente / Auxiliar</option>
                 </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Define o nível de permissão e papéis administrativos no sistema.
+                </p>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Profissão / Título</label>
-                <input
-                  type="text"
-                  value={editRoleForm.professionName}
-                  onChange={e => setEditRoleForm({ ...editRoleForm, professionName: e.target.value })}
-                  placeholder="Ex: Psicopedagogo Infantil, Psiquiatra, Secretária..."
+                <label className="block font-bold text-slate-700 mb-1">Profissão Clínica Base (Opcional)</label>
+                <select
+                  value={editRoleForm.professionId || ''}
+                  onChange={e => {
+                    const pid = e.target.value;
+                    const pObj = canonicalProfessions.find(p => p.id === pid);
+                    setEditRoleForm({
+                      ...editRoleForm,
+                      professionId: pid,
+                      professionName: pObj ? pObj.name : ''
+                    });
+                  }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium"
-                />
+                >
+                  <option value="">Nenhuma (Apenas função administrativa/operacional)</option>
+                  {canonicalProfessions.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Caso este colaborador atenda pacientes, selecione sua profissão para habilitar prontuários clínicos e agenda.
+                </p>
               </div>
 
               <div>

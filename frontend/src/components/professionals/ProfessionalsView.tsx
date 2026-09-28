@@ -74,6 +74,7 @@ export const ProfessionalsView: React.FC = () => {
   const [bufferMinutes, setBufferMinutes] = useState<number>(10);
   const [slug, setSlug] = useState<string>('');
   const [publicBookingEnabled, setPublicBookingEnabled] = useState<boolean>(true);
+  const [systemRole, setSystemRole] = useState<string>('professional');
   const [remunerationType, setRemunerationType] = useState<'commission' | 'salary' | 'both'>('commission');
   const [commissionPercentage, setCommissionPercentage] = useState<number>(50);
   const [fixedSalary, setFixedSalary] = useState<number>(0);
@@ -154,6 +155,7 @@ export const ProfessionalsView: React.FC = () => {
         specialtyId: specialtyId || null,
         specialtyName: specialtyName.trim(),
         specialtyCustom: specialtyName.trim(),
+        role: systemRole,
         registrationType: registrationType || null,
         registrationNumber: registrationNumber || null,
         bio: bio || null,
@@ -511,14 +513,26 @@ export const ProfessionalsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Função no Sistema *</label>
+                  <select
+                    value={systemRole}
+                    onChange={e => setSystemRole(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
+                  >
+                    <option value="professional">Profissional Clínico</option>
+                    <option value="clinic_admin">Gestor da Clínica (Admin)</option>
+                    <option value="clinical_coordinator">Coordenação Clínica</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Tipo de Registro</label>
                   <input
                     type="text"
                     value={registrationType}
                     onChange={e => setRegistrationType(e.target.value)}
-                    placeholder="Ex: CRP, CRM, OAB"
+                    placeholder="Ex: CRP, CRM, CRO"
                     className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                   />
                 </div>
