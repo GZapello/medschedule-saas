@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "selection_record_example": {
+    "patientId": "<uuid>",
+    "sexVariant": "female",
+    "view": "body_front",
+    "regionId": "knee_right",
+    "type": "pain|observation|procedure|scar|edema|lesion|aesthetic|other",
+    "intensity": null,
+    "note": "",
+    "drawingLayerId": "<optional>",
+    "createdAt": "ISO-8601",
+    "createdBy": "<user-id>"
+  },
+  "compatibility": {
+    "keep_existing_zemdabody_routes": true,
+    "keep_existing_permissions": true,
+    "suggested_ui_name": "ZemdaMap",
+    "migration_strategy": "rename UI first; preserve internal zemdaBody identifiers until dedicated migration"
+  }
+}

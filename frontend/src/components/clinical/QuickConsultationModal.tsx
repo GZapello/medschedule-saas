@@ -928,10 +928,10 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   }
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-teal-600 hover:bg-teal-500 text-white shadow-xs transition-colors cursor-pointer"
-                title="Abrir mapa corporal clínico ZemdaBody"
+                title="Abrir mapeamento anatômico Zemda360"
               >
                 <Activity className="w-4 h-4" />
-                <span>ZemdaBody</span>
+                <span>Zemda360</span>
               </button>
             )}
 

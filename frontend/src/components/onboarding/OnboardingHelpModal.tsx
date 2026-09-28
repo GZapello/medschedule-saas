@@ -225,7 +225,7 @@ export const OnboardingHelpModal: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-900 block">
-                      Conhecer o Mapa Corporal (ZemdaBody)
+                      Conhecer o Mapeamento Anatômico (Zemda360)
                     </span>
                     <span className="text-[11px] text-slate-500">
                       Marcação anatômica 360° e planos corporais

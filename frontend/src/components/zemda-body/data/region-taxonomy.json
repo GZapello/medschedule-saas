@@ -1,0 +1,1505 @@
+{
+  "schema_version": "1.0.0",
+  "product": "ZemdaMap",
+  "legacy_module": "ZemdaBody",
+  "coordinate_system": "normalized_0_1000",
+  "sex_variants": [
+    "female",
+    "male"
+  ],
+  "views": [
+    "body_front",
+    "body_back",
+    "body_left",
+    "body_right",
+    "face_front",
+    "face_back",
+    "face_left",
+    "face_right",
+    "face_3q_left",
+    "face_3q_right",
+    "face_up",
+    "face_down"
+  ],
+  "rules": {
+    "same_region_ids_for_both_sexes": true,
+    "geometry_must_be_aligned_to_current_zemdabody_assets": true,
+    "do_not_duplicate_clinical_assessments": true,
+    "body_and_face_are_visual_mapping_resources": true,
+    "joints_are_independently_selectable": true
+  },
+  "regions": [
+    {
+      "id": "face_forehead",
+      "label": "Testa",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_glabella",
+      "label": "Glabela",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_temporal_right",
+      "label": "Temporal direita",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_temporal_left",
+      "label": "Temporal esquerda",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_eyebrow_right",
+      "label": "Sobrancelha direita",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_eyebrow_left",
+      "label": "Sobrancelha esquerda",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_periocular_right",
+      "label": "Periocular direita",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_periocular_left",
+      "label": "Periocular esquerda",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_nose",
+      "label": "Nariz",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_malar_right",
+      "label": "Malar/Zigomático direito",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_malar_left",
+      "label": "Malar/Zigomático esquerdo",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_cheek_right",
+      "label": "Bochecha direita",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_cheek_left",
+      "label": "Bochecha esquerda",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_nasolabial_right",
+      "label": "Sulco nasolabial direito",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_nasolabial_left",
+      "label": "Sulco nasolabial esquerdo",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_upper_lip",
+      "label": "Lábio superior",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_lower_lip",
+      "label": "Lábio inferior",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_perioral",
+      "label": "Região perioral",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_chin",
+      "label": "Mento",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_mandible_right",
+      "label": "Mandíbula direita",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_mandible_left",
+      "label": "Mandíbula esquerda",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_masseter_right",
+      "label": "Masseter direito",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_masseter_left",
+      "label": "Masseter esquerdo",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_submental",
+      "label": "Submentoniana",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_ear_right",
+      "label": "Orelha direita",
+      "group": "face",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "face_ear_left",
+      "label": "Orelha esquerda",
+      "group": "face",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "neck_anterior",
+      "label": "Pescoço anterior",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "neck_posterior",
+      "label": "Pescoço posterior",
+      "group": "face",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "face_3q_left",
+        "face_3q_right"
+      ]
+    },
+    {
+      "id": "cervical",
+      "label": "Cervical",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thorax",
+      "label": "Tórax",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "pectoral_right",
+      "label": "Peitoral direito",
+      "group": "trunk",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "pectoral_left",
+      "label": "Peitoral esquerdo",
+      "group": "trunk",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "sternum",
+      "label": "Esterno",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "ribs_right",
+      "label": "Costelas direitas",
+      "group": "trunk",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "ribs_left",
+      "label": "Costelas esquerdas",
+      "group": "trunk",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "abdomen_upper",
+      "label": "Abdômen superior",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "abdomen_lower",
+      "label": "Abdômen inferior",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "flank_right",
+      "label": "Flanco direito",
+      "group": "trunk",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "flank_left",
+      "label": "Flanco esquerdo",
+      "group": "trunk",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thoracic_back",
+      "label": "Dorsal/Torácica",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "scapula_right",
+      "label": "Escápula direita",
+      "group": "trunk",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "scapula_left",
+      "label": "Escápula esquerda",
+      "group": "trunk",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "lumbar",
+      "label": "Lombar",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "sacral",
+      "label": "Sacral",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "pelvis",
+      "label": "Pelve",
+      "group": "trunk",
+      "side": "center",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "glute_right",
+      "label": "Glúteo direito",
+      "group": "trunk",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "glute_left",
+      "label": "Glúteo esquerdo",
+      "group": "trunk",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "shoulder_right",
+      "label": "Ombro direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "upper_arm_right",
+      "label": "Braço direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "elbow_right",
+      "label": "Cotovelo direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "forearm_right",
+      "label": "Antebraço direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "wrist_right",
+      "label": "Punho direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "hand_right",
+      "label": "Mão direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "hand_digit_1_right",
+      "label": "Polegar direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "hand_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hand_digit_2_right",
+      "label": "Indicador direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "hand_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hand_digit_3_right",
+      "label": "Médio direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "hand_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hand_digit_4_right",
+      "label": "Anelar direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "hand_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hand_digit_5_right",
+      "label": "Mínimo direito",
+      "group": "upper_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "hand_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "shoulder_left",
+      "label": "Ombro esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "upper_arm_left",
+      "label": "Braço esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "elbow_left",
+      "label": "Cotovelo esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "forearm_left",
+      "label": "Antebraço esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "wrist_left",
+      "label": "Punho esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "hand_left",
+      "label": "Mão esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "hand_digit_1_left",
+      "label": "Polegar esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "hand_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hand_digit_2_left",
+      "label": "Indicador esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "hand_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hand_digit_3_left",
+      "label": "Médio esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "hand_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hand_digit_4_left",
+      "label": "Anelar esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "hand_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hand_digit_5_left",
+      "label": "Mínimo esquerdo",
+      "group": "upper_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "hand_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hip_right",
+      "label": "Quadril direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thigh_anterior_right",
+      "label": "Coxa anterior direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thigh_posterior_right",
+      "label": "Coxa posterior direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thigh_medial_right",
+      "label": "Coxa medial direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thigh_lateral_right",
+      "label": "Coxa lateral direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "knee_right",
+      "label": "Joelho direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "leg_anterior_right",
+      "label": "Perna anterior/Canela direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "leg_posterior_right",
+      "label": "Panturrilha direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "ankle_right",
+      "label": "Tornozelo direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "heel_right",
+      "label": "Calcâneo direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "foot_right",
+      "label": "Pé direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "foot_digit_1_right",
+      "label": "Hálux direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "foot_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "foot_digit_2_right",
+      "label": "2º dedo direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "foot_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "foot_digit_3_right",
+      "label": "3º dedo direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "foot_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "foot_digit_4_right",
+      "label": "4º dedo direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "foot_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "foot_digit_5_right",
+      "label": "5º dedo direito",
+      "group": "lower_limb",
+      "side": "right",
+      "kind": "joint",
+      "parent": "foot_right",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "hip_left",
+      "label": "Quadril esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thigh_anterior_left",
+      "label": "Coxa anterior esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thigh_posterior_left",
+      "label": "Coxa posterior esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thigh_medial_left",
+      "label": "Coxa medial esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "thigh_lateral_left",
+      "label": "Coxa lateral esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "knee_left",
+      "label": "Joelho esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "leg_anterior_left",
+      "label": "Perna anterior/Canela esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "leg_posterior_left",
+      "label": "Panturrilha esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "ankle_left",
+      "label": "Tornozelo esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "heel_left",
+      "label": "Calcâneo esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "foot_left",
+      "label": "Pé esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "region",
+      "parent": null,
+      "views": [
+        "body_front",
+        "body_back",
+        "body_left",
+        "body_right"
+      ]
+    },
+    {
+      "id": "foot_digit_1_left",
+      "label": "Hálux esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "foot_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "foot_digit_2_left",
+      "label": "2º dedo esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "foot_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "foot_digit_3_left",
+      "label": "3º dedo esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "foot_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "foot_digit_4_left",
+      "label": "4º dedo esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "foot_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "foot_digit_5_left",
+      "label": "5º dedo esquerdo",
+      "group": "lower_limb",
+      "side": "left",
+      "kind": "joint",
+      "parent": "foot_left",
+      "views": [
+        "body_front",
+        "body_back"
+      ]
+    },
+    {
+      "id": "joint_tmj_right",
+      "label": "ATM direita",
+      "group": "joints",
+      "side": "right",
+      "kind": "joint",
+      "parent": "face_mandible_right",
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "body_back"
+      ]
+    },
+    {
+      "id": "joint_tmj_left",
+      "label": "ATM esquerda",
+      "group": "joints",
+      "side": "left",
+      "kind": "joint",
+      "parent": "face_mandible_left",
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "body_back"
+      ]
+    },
+    {
+      "id": "joint_cervical",
+      "label": "Articulação/região cervical",
+      "group": "joints",
+      "side": "center",
+      "kind": "joint",
+      "parent": "cervical",
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "body_back"
+      ]
+    },
+    {
+      "id": "joint_sacroiliac_right",
+      "label": "Sacroilíaca direita",
+      "group": "joints",
+      "side": "right",
+      "kind": "joint",
+      "parent": "pelvis",
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "body_back"
+      ]
+    },
+    {
+      "id": "joint_sacroiliac_left",
+      "label": "Sacroilíaca esquerda",
+      "group": "joints",
+      "side": "left",
+      "kind": "joint",
+      "parent": "pelvis",
+      "views": [
+        "face_front",
+        "face_left",
+        "face_right",
+        "body_back"
+      ]
+    }
+  ]
+}

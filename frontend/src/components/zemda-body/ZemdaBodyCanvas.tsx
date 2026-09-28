@@ -4,7 +4,7 @@ import {
   getPanoramaRegions,
   getRegionLabel
 } from './bodyRegionsData';
-import { Eye, Layers } from 'lucide-react';
+import type { AnatomyAsset } from './anatomicalRegions';
 
 export interface BodyStrokePoint {
   x: number; // 0..1 normalizado relativo ao panorama (1024x768)
@@ -52,6 +52,11 @@ export interface ZemdaBodyCanvasProps {
     secondary?: string[];
   };
   initialViewMode?: BodyViewMode;
+  anatomy?: AnatomyAsset;
+  regionCatalog?: BodyPanoramaRegion[];
+  controlledView?: BodyViewMode;
+  onViewChange?: (view: BodyViewMode) => void;
+  onRegionsReady?: (ids: string[]) => void;
 }
 
 // Distância euclidiana de um ponto até um segmento de reta
@@ -82,13 +87,19 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
   readOnly = false,
   volumeHeatmap,
   activeMuscleHighlight,
-  initialViewMode = 'all'
+  initialViewMode = 'all', anatomy, regionCatalog, controlledView, onViewChange, onRegionsReady
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Modo de visualização de vistas (Todas / Frontal / Posterior / Lateral D / Lateral E)
-  const [viewMode, setViewMode] = useState<BodyViewMode>(initialViewMode);
+  const [localView, setLocalView] = useState<BodyViewMode>(initialViewMode);
+  const viewMode=anatomy ? 'all' : controlledView || localView;
+  const setViewMode=(view:BodyViewMode)=>{setLocalView(view);onViewChange?.(view);};
+  const width=anatomy?.width || 1024, height=anatomy?.height || 768;
+  const bounds=bodyModel==='female' ? {front:[0,286],back:[286,243],left:[529,219],right:[748,276]} : {front:[0,306],back:[306,288],left:[594,202],right:[796,228]};
+  const crop=viewMode==='all' ? [0,width] : bounds[viewMode];
+  const surfaceStyle={width: `${100*width/crop[1]}%`,left: `${-100*crop[0]/crop[1]}%`};
 
   // Refs para desenho síncrono contínuo de alta performance (sem lag de closure do React)
   const isDrawingRef = useRef<boolean>(false);
@@ -109,10 +120,12 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
   }, [drawings]);
 
   // Obtém as regiões calibradas para o modelo selecionado (1024 x 768)
-  const regions = getPanoramaRegions(bodyModel);
+  const regions = anatomy?.regions || regionCatalog || getPanoramaRegions(bodyModel);
+  const visibleIds=regions.filter(r=>anatomy || viewMode==='all' || r.view===viewMode).map(r=>r.baseRegion).join('|');
+  useEffect(()=>{onRegionsReady?.(Array.from(new Set(visibleIds.split('|'))));},[visibleIds,onRegionsReady]);
 
   // Imagem de alta fidelidade
-  const imgSrc = bodyModel === 'female' ? '/Corpo_Feminino.jpg' : '/Corpo_masculino.jpg';
+  const imgSrc = anatomy?.src || (bodyModel === 'female' ? '/Corpo_Feminino.jpg' : '/Corpo_masculino.jpg');
 
   // Redesenha todos os traços no Canvas
   const redrawCanvas = useCallback(() => {
@@ -227,17 +240,6 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
     const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const relY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
 
-    if (viewMode === 'all') {
-      return { x: relX, y: relY };
-    } else if (viewMode === 'front') {
-      return { x: relX * 0.25, y: relY };
-    } else if (viewMode === 'back') {
-      return { x: 0.25 + relX * 0.25, y: relY };
-    } else if (viewMode === 'left') {
-      return { x: 0.50 + relX * 0.25, y: relY };
-    } else if (viewMode === 'right') {
-      return { x: 0.75 + relX * 0.25, y: relY };
-    }
     return { x: relX, y: relY };
   };
 
@@ -359,30 +361,15 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
   };
 
   // ViewBox do SVG conforme a vista selecionada
-  const svgViewBox =
-    viewMode === 'all'
-      ? '0 0 1024 768'
-      : viewMode === 'front'
-      ? '0 0 256 768'
-      : viewMode === 'back'
-      ? '256 0 256 768'
-      : viewMode === 'left'
-      ? '512 0 256 768'
-      : '768 0 256 768';
+  const svgViewBox = `${crop[0]} 0 ${crop[1]} ${height}`;
 
   return (
     <div className="w-full flex flex-col items-center select-none">
       {/* SELETOR DE VISTAS (Frontal, Posterior, Lateral Direita, Lateral Esquerda, Todas) */}
       <div className="w-full max-w-[1100px] mb-2 flex items-center justify-between flex-wrap gap-2 px-1">
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
-          <button
-            type="button"
-            onClick={() => setViewMode('all')}
-            className="px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-default bg-white text-teal-700 shadow-xs"
-          >
-            Todas as Vistas
-          </button>
-        </div>
+        {!anatomy && <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          {([['all','Todas as vistas'],['front','Frente'],['back','Costas'],['left','Lado E'],['right','Lado D']] as const).map(([id,label])=><button key={id} type="button" aria-pressed={viewMode===id} onClick={()=>setViewMode(id)} className={`px-3 py-1 text-xs font-bold rounded-lg ${viewMode===id?'bg-white text-teal-700 shadow-sm':'text-slate-600'}`}>{label}</button>)}
+        </div>}
 
         {/* Indicador de Status e Legenda */}
         <div className="text-right">
@@ -401,12 +388,12 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
               <span className="text-xs text-slate-400">
                 {readOnly
                   ? 'Modo visualização histórica (somente leitura)'
-                  : 'Clique nas articulações ou regiões corporais'}
+                  : 'Clique nas articulações ou regiões do mapa'}
               </span>
             )
           ) : tool === 'pen' ? (
             <span className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full shadow-xs">
-              Caneta: desenho livre sobre o corpo
+              Caneta: desenho livre sobre o mapa
             </span>
           ) : (
             <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full shadow-xs">
@@ -422,7 +409,7 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
         className="mapa-corporal-wrapper shadow-lg border border-slate-200 relative overflow-hidden"
         style={{
           width: '100%',
-          maxWidth: viewMode === 'all' ? '1100px' : '480px',
+          maxWidth: anatomy ? '420px' : viewMode === 'all' ? '1100px' : '360px',
           borderRadius: '16px',
           backgroundColor: '#f8f9fa'
         }}
@@ -498,26 +485,14 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
         <div
           className="relative w-full overflow-hidden"
           style={{
-            aspectRatio: viewMode === 'all' ? '1024 / 768' : '256 / 768'
+            aspectRatio: `${crop[1]} / ${height}`
           }}
         >
           <img
             src={imgSrc}
-            alt={`Mapa Corporal - ${bodyModel === 'female' ? 'Feminino' : 'Masculino'}`}
+            alt={anatomy?.label || `Mapa Corporal - ${bodyModel === 'female' ? 'Feminino' : 'Masculino'}`}
             className="absolute top-0 left-0 h-full max-w-none pointer-events-none select-none"
-            style={{
-              width: viewMode === 'all' ? '100%' : '400%',
-              left:
-                viewMode === 'all'
-                  ? '0%'
-                  : viewMode === 'front'
-                  ? '0%'
-                  : viewMode === 'back'
-                  ? '-100%'
-                  : viewMode === 'left'
-                  ? '-200%'
-                  : '-300%'
-            }}
+            style={surfaceStyle}
             draggable={false}
           />
 
@@ -532,7 +507,7 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
               pointerEvents: tool === 'select' && !readOnly ? 'auto' : 'none'
             }}
           >
-            {regions.map(r => {
+            {regions.filter(r => anatomy || viewMode === 'all' || r.view === viewMode).map(r => {
               const isSelected =
                 selectedRegions.includes(r.id) ||
                 selectedRegions.includes(r.baseRegion) ||
@@ -568,6 +543,8 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
                   <ellipse
                     key={r.id}
                     id={r.id}
+                    data-region-id={r.baseRegion}
+                    data-region-kind={r.isJoint ? 'joint' : 'region'}
                     className={baseClass}
                     cx={r.ellipseCoords.cx}
                     cy={r.ellipseCoords.cy}
@@ -581,7 +558,7 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
                     }}
                     onMouseLeave={() => setHoveredRegion(null)}
                     role="button"
-                    tabIndex={tool === 'select' ? 0 : -1}
+                    tabIndex={tool === 'select' && !readOnly ? 0 : -1}
                     aria-label={r.label}
                     aria-pressed={isSelected}
                     onKeyDown={e => {
@@ -600,6 +577,8 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
                 <polygon
                   key={r.id}
                   id={r.id}
+                    data-region-id={r.baseRegion}
+                    data-region-kind={r.isJoint ? 'joint' : 'region'}
                   className={baseClass}
                   points={r.points || ''}
                   onClick={() => handleClickRegion(r)}
@@ -608,7 +587,7 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
                   }}
                   onMouseLeave={() => setHoveredRegion(null)}
                   role="button"
-                  tabIndex={tool === 'select' ? 0 : -1}
+                  tabIndex={tool === 'select' && !readOnly ? 0 : -1}
                   aria-label={r.label}
                   aria-pressed={isSelected}
                   onKeyDown={e => {
@@ -627,10 +606,11 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
           {/* CAMADA 3: Canvas Transparente Independente para Caneta e Borracha */}
           <canvas
             ref={canvasRef}
-            width={2048}
-            height={1536}
+            width={width*2}
+            height={height*2}
             className="absolute top-0 left-0 w-full h-full z-20 pointer-events-auto"
             style={{
+              ...surfaceStyle,
               pointerEvents: tool === 'select' || readOnly ? 'none' : 'auto',
               touchAction: 'none',
               cursor: tool === 'pen' ? 'crosshair' : tool === 'eraser' ? 'cell' : 'default'
@@ -658,7 +638,7 @@ export const ZemdaBodyCanvas: React.FC<ZemdaBodyCanvasProps> = ({
       </div>
 
       {/* Rótulos das 4 Vistas */}
-      {viewMode === 'all' && (
+      {!anatomy && viewMode === 'all' && (
         <div className="w-full max-w-[1100px] mt-2 px-2 flex justify-around text-xs font-bold text-slate-500 uppercase tracking-wider">
           <div className="w-1/4 text-center">Frente</div>
           <div className="w-1/4 text-center">Verso</div>

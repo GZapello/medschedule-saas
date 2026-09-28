@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { parseAnatomicalDocument, validateAnatomicalDocument, stampAnatomicalDocument } from '../services/anatomical-document';
 import { logAudit } from '../middlewares/audit.middleware';
 
 /**
@@ -60,7 +61,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -130,7 +131,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -176,7 +177,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -250,7 +251,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -281,14 +282,40 @@ export class BodyAssessmentController {
         existing = db.prepare('SELECT * FROM body_assessments WHERE appointment_id = ? AND tenant_id = ?').get(appointmentId, tenantId);
       }
 
+      if (existing && existing.patient_id !== patientId) {
+        res.status(409).json({error:'A avaliação pertence a outro paciente'});return;
+      }
+      if(customId && !existing && db.prepare('SELECT id FROM body_assessments WHERE id=?').get(customId)) {
+        res.status(404).json({error:'Avaliação não encontrada'});return;
+      }
+      if(appointmentId && !db.prepare('SELECT id FROM appointments WHERE id=? AND tenant_id=? AND patient_id=?').get(appointmentId,tenantId,patientId)) {
+        res.status(400).json({error:'Agendamento incompatível com o paciente'});return;
+      }
+      if(resolvedProfId && !db.prepare('SELECT id FROM professionals WHERE id=? AND tenant_id=?').get(resolvedProfId,tenantId)) {
+        res.status(400).json({error:'Profissional não encontrado nesta clínica'});return;
+      }
+      const document=parseAnatomicalDocument(notes);
+      const previous=parseAnatomicalDocument(existing?.notes);
+      if(previous && notes!==undefined && !document) {
+        res.status(409).json({error:'Reabra no Zemda360 para preservar as camadas desta avaliação'});return;
+      }
+      let storedNotes=notes;
+      if(document){
+        const validation=validateAnatomicalDocument(document);
+        if(validation){res.status(400).json({error:validation});return;}
+        storedNotes=stampAnatomicalDocument(document,previous,req.user.userId);
+      }
+
       let assessmentId: string;
+      db.exec('SAVEPOINT zemda360_save');
+      try {
       if (existing) {
         assessmentId = existing.id;
         db.prepare(`
           UPDATE body_assessments
           SET body_model = ?, module = ?, notes = COALESCE(?, notes), updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
-        `).run(bodyModel, module, notes || null, assessmentId, tenantId);
+        `).run(bodyModel, module, storedNotes || null, assessmentId, tenantId);
       } else {
         assessmentId = customId || 'ba-' + uuidv4().slice(0, 8);
         db.prepare(`
@@ -299,8 +326,27 @@ export class BodyAssessmentController {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         `).run(
           assessmentId, tenantId, patientId, appointmentId || null, resolvedProfId,
-          professionId || null, module, bodyModel, dateStr, notes || null
+          professionId || null, module, bodyModel, dateStr, storedNotes || null
         );
+      }
+
+      if(document){
+        // Only the derived selection mirror is replaced; clinical markers and
+        // historical drawings owned by older integrations remain untouched.
+        db.prepare("DELETE FROM body_markers WHERE assessment_id=? AND tenant_id=? AND marker_type='selected_region'").run(assessmentId,tenantId);
+        const selected=Array.isArray(document.selectedRegions)?document.selectedRegions:[];
+        const insert=db.prepare("INSERT INTO body_markers (id,tenant_id,assessment_id,body_region,side,view,marker_type,value) VALUES (?,?,?,?,?,?,'selected_region',?)");
+        for(const region of new Set(selected as string[])){
+          if(typeof region!=='string')continue;
+          const side=/_right$|direit/.test(region)?'right':/_left$|esquerd/.test(region)?'left':'midline';
+          insert.run(`${assessmentId}_z360_${region}`,tenantId,assessmentId,region,side,'front',region);
+        }
+      }
+      db.exec('RELEASE SAVEPOINT zemda360_save');
+      } catch(error) {
+        db.exec('ROLLBACK TO SAVEPOINT zemda360_save');
+        db.exec('RELEASE SAVEPOINT zemda360_save');
+        throw error;
       }
 
       logAudit(req, 'SAVE_BODY_ASSESSMENT', 'body_assessments', assessmentId);
@@ -337,7 +383,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -397,7 +443,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -438,7 +484,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -525,7 +571,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -579,7 +625,7 @@ export class BodyAssessmentController {
       } = req.body;
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -700,7 +746,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -763,7 +809,7 @@ export class BodyAssessmentController {
       } = req.body;
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 
@@ -834,7 +880,7 @@ export class BodyAssessmentController {
       }
 
       if (!hasZemdaBodyAccess(req)) {
-        res.status(403).json({ error: 'Acesso ao ZemdaBody restrito a profissionais de saúde e gestores da clínica' });
+        res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
 

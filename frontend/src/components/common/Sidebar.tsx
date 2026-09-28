@@ -118,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: 'zemda-body',
-          label: 'ZemdaBody (Mapa Corporal)',
+          label: 'Zemda360 (Mapeamento Anatômico)',
           icon: Activity,
           visible: isClinicAdmin || isZemdaBody
         },

@@ -664,7 +664,7 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
                     className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-teal-200 bg-teal-50/60 hover:bg-teal-100/70 text-teal-800 text-xs font-bold transition-all cursor-pointer"
                   >
                     <span className="inline-flex items-center gap-2">
-                      <Activity className="w-4 h-4 text-teal-600" /> Abrir ZemdaBody (Mapa Corporal)
+                      <Activity className="w-4 h-4 text-teal-600" /> Abrir Zemda360 (Mapeamento Anatômico)
                     </span>
                     <span className="text-teal-600">→</span>
                   </button>
@@ -935,7 +935,7 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
                 onClick={() => setShowBodyMapModal(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
-                <Activity className="w-4 h-4" /> Abrir Caneta Anatômica ZemdaBody
+                <Activity className="w-4 h-4" /> Abrir Caneta Anatômica Zemda360
               </button>
             </div>
 

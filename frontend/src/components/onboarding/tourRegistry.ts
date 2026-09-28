@@ -846,7 +846,7 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
   // ZemdaBody
   zemda_body: {
     id: 'zemda_body',
-    name: 'ZemdaBody • Mapa Corporal Clínico',
+    name: 'Zemda360 • Mapeamento Visual & Anatômico',
     description: 'Guia para marcação anatômica, caneta digital, borracha e planos.',
     steps: [
       {

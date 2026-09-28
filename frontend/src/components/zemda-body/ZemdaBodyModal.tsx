@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { ZemdaBodyWorkspace } from './ZemdaBodyWorkspace';
 import { X, Activity, User, ShieldCheck } from 'lucide-react';
 
@@ -29,6 +29,8 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
   initialBodyModel = 'female',
   readOnly = false
 }) => {
+  const saveRef=useRef<() => Promise<boolean>>(()=>Promise.resolve(true));
+  const close=async()=>{if(await saveRef.current())onClose();};
   if (!isOpen) return null;
 
   return (
@@ -47,7 +49,7 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-slate-900 tracking-tight">
-                  ZemdaBody • Mapa Corporal Clínico
+                  Zemda360 • Mapeamento Visual & Anatômico
                 </h3>
                 {readOnly ? (
                   <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
@@ -67,9 +69,9 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
           </div>
 
           <button
-            onClick={onClose}
+            onClick={close}
             className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-2xl transition-colors cursor-pointer"
-            aria-label="Fechar modal do ZemdaBody"
+            aria-label="Fechar modal do Zemda360"
           >
             <X className="w-5 h-5" />
           </button>
@@ -78,6 +80,8 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
         {/* Conteúdo do Workspace */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           <ZemdaBodyWorkspace
+            key={`${patientId}:${assessmentId || appointmentId || 'new'}`}
+            registerSave={save=>{saveRef.current=save;}}
             patientId={patientId}
             initialAssessmentId={assessmentId}
             appointmentId={appointmentId}
@@ -91,9 +95,9 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
 
         {/* Footer */}
         <div className="px-6 py-3 bg-white border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0">
-          <span>ZemdaBody • Registro Corporal Integrado</span>
+          <span>Zemda360 • Registro Anatômico Integrado</span>
           <button
-            onClick={onClose}
+            onClick={close}
             className="px-4 py-2 font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
           >
             Fechar

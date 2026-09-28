@@ -215,7 +215,7 @@ export const ALL_CLINICAL_MODULES: Record<string, ClinicalModuleOption> = {
   },
   ZemdaBody: {
     id: 'ZemdaBody' as any,
-    name: 'ZemdaBody',
+    name: 'Zemda360',
     badge: 'Mapa Corporal',
     profession: 'Avaliação Corporal & Caneta Clínica',
     description: 'Mapa anatômico interativo com caneta clínica, escala de dor EVA e marcadores por região.',

@@ -4,8 +4,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Patient } from '../../types';
 import { ZemdaBodyModal } from './ZemdaBodyModal';
-import { ZemdaBodyCanvas } from './ZemdaBodyCanvas';
-import { getRegionLabel } from './bodyRegionsData';
+import { AnatomicalRecordPreview } from './AnatomicalRecordPreview';
+import { anatomicalLabel as getRegionLabel } from './anatomicalRegions';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import {
   Activity,
@@ -32,6 +32,8 @@ interface ExtractedAssessmentData {
   clinicalNote: string;
   selectedRegions: string[];
   viewsDrawn: string[];
+  mapTypes?: string;
+  marksCount?: number;
 }
 
 const VIEW_LABELS: Record<string, string> = {
@@ -67,6 +69,17 @@ function parseAssessmentNotes(rawNotes?: string | null): ExtractedAssessmentData
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
       const parsed = JSON.parse(trimmed);
+      if(parsed?.schemaVersion===2 && parsed.layers){
+        const layers=Object.values(parsed.layers) as any[];
+        result.clinicalNote=layers.flatMap(l=>[l.clinicalNotes,...(l.marks||[]).map((m:any)=>m.note)]).filter(Boolean).join(' • ');
+        result.selectedRegions=Array.from(new Set(layers.flatMap(l=>l.selectedRegions || [])));
+        result.viewsDrawn=layers.filter(l=>l.drawings?.length).map(l=>l.mapType==='FACE'?`Face · ${l.view}`:l.view);
+        result.mapTypes=Array.from(new Set(layers.map(l=>l.mapType==='FACE'?'Face':'Corpo'))).join(' + ');
+        result.marksCount=layers.reduce((n,l)=>n+(l.marks?.length||0)+(l.selectedRegions?.length||0),0);
+        return result;
+      }
+      if(Array.isArray(parsed)){result.selectedRegions=parsed.filter(x=>typeof x==='string');return result;}
+      if(typeof parsed?.clinicalNotes==='string')result.clinicalNote=parsed.clinicalNotes;
       if (parsed && typeof parsed === 'object') {
         // Extração de anotação clínica real se presente em campo aninhado
         if (typeof parsed.notes === 'string' && parsed.notes.trim()) {
@@ -87,7 +100,7 @@ function parseAssessmentNotes(rawNotes?: string | null): ExtractedAssessmentData
 
         // Vistas com desenhos
         if (parsed.drawings && typeof parsed.drawings === 'object') {
-          result.viewsDrawn = Object.keys(parsed.drawings).filter(v => {
+          result.viewsDrawn = Array.isArray(parsed.drawings) ? (parsed.drawings.length ? ['all'] : []) : Object.keys(parsed.drawings).filter(v => {
             const val = parsed.drawings[v];
             return Array.isArray(val) ? val.length > 0 : Boolean(val);
           });
@@ -251,7 +264,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
           </div>
           <div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              ZemdaBody • Mapas Corporais Clínicos
+              Zemda360 • Mapeamento Visual & Anatômico
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Histórico completo de avaliações corporais, comparações temporais e marcadores anatômicos.
@@ -394,7 +407,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
                         </span>
 
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
-                          {item.total_markers || 0} marcadores
+                          {parsedNotes.marksCount ?? item.total_markers ?? 0} marcações · {parsedNotes.mapTypes || 'Corpo'}
                         </span>
 
                         {hasDrawings && (
@@ -775,17 +788,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
                 </div>
 
                 <div className="flex justify-center">
-                  <ZemdaBodyCanvas
-                    bodyModel={comparingData.assessA.assessment?.body_model || 'female'}
-                    selectedRegions={
-                      comparingData.assessA.markers?.map((m: any) => m.body_region) || []
-                    }
-                    onToggleRegion={() => {}}
-                    tool="select"
-                    drawings={comparingData.assessA.drawings?.front || []}
-                    onSaveDrawings={() => {}}
-                    readOnly={true}
-                  />
+                  <AnatomicalRecordPreview response={comparingData.assessA}/>
                 </div>
 
                 <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -815,17 +818,7 @@ export const ZemdaBodyRecordsView: React.FC = () => {
                 </div>
 
                 <div className="flex justify-center">
-                  <ZemdaBodyCanvas
-                    bodyModel={comparingData.assessB.assessment?.body_model || 'female'}
-                    selectedRegions={
-                      comparingData.assessB.markers?.map((m: any) => m.body_region) || []
-                    }
-                    onToggleRegion={() => {}}
-                    tool="select"
-                    drawings={comparingData.assessB.drawings?.front || []}
-                    onSaveDrawings={() => {}}
-                    readOnly={true}
-                  />
+                  <AnatomicalRecordPreview response={comparingData.assessB}/>
                 </div>
 
                 <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">

@@ -434,7 +434,7 @@ export const ClinicalRecordsView: React.FC = () => {
                                   </div>
                                   <div>
                                     <span className="text-[10px] font-extrabold text-teal-700 uppercase tracking-wider block">
-                                      ZemdaBody • Mapa Corporal
+                                      Zemda360 • Mapeamento Anatômico
                                     </span>
                                     <span className="text-xs font-bold text-slate-800">
                                       {bodyAss.total_markers || regionsList.length || 0} regiões marcadas
