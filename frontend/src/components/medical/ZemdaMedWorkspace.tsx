@@ -5,6 +5,7 @@ import { useToast } from '../../context/ToastContext';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 import {
   Stethoscope,
   Activity,
@@ -661,96 +662,41 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
 
   return (
-    <div className="space-y-6">
-      {/* Top Header ZemdaMed */}
-      <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
-              <Stethoscope className="w-3.5 h-3.5" />
-              ZemdaMed • Medicina
-            </span>
-
-            {/* Seletor Compacto e Discreto no Topo */}
-            {allowedPresets.length === 1 ? (
-              <span className="text-xs px-2.5 py-1 rounded-full bg-teal-500/20 text-teal-300 font-bold border border-teal-500/30">
-                {allowedPresets[0].name}
-              </span>
-            ) : (
-              <div className="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full border border-white/20 backdrop-blur-xs">
-                <span className="text-xs text-teal-300 font-bold">Especialidade atual:</span>
-                <select
-                  value={activePreset}
-                  onChange={e => setActivePreset(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer pr-1"
-                >
-                  {allowedPresets.map(preset => (
-                    <option key={preset.id} value={preset.id} className="bg-slate-900 text-white">
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Indicador Padronizado de Autosave */}
-            <div className="ml-2">
-              <ClinicalAutosaveIndicator
-                status={autosave.autosaveStatus}
-                lastSavedTime={autosave.lastSavedTime}
-                className="bg-white/10 text-white border-white/20"
-              />
-            </div>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Consultório Médico & Especialidades
-          </h1>
-          <p className="text-slate-300 text-sm mt-1 max-w-2xl font-medium">
-            Prontuário médico com anamnese estruturada, sinais vitais, exame físico adaptativo à especialidade, notas SOAP e integração ao CID-10.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {selectedPatient && (
-            <div className="bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 text-right">
-              <div className="text-[11px] text-teal-300 font-bold uppercase tracking-wider">
-                {clientTermLabel} em Atendimento
-              </div>
-              <div className="text-sm font-bold text-white truncate max-w-[200px]">
-                {selectedPatient.full_name || selectedPatient.name}
-              </div>
-            </div>
-          )}
-
-          <div className="flex bg-white/10 p-1 rounded-2xl border border-white/10">
-            <button
-              onClick={() => setActiveTab('consultation')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'consultation' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'
-              }`}
+    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      {/* CABEÇALHO DO MÓDULO ZEMDAMED */}
+      <ProfessionalModuleHeader
+        icon={Stethoscope}
+        iconGradient="from-teal-600 to-slate-800"
+        iconShadow="shadow-teal-600/20"
+        title="ZemdaMed"
+        badgeLabel="Medicina Especializada"
+        badgeVariant="bg-teal-100 text-teal-800 border-teal-200"
+        description="Prontuário médico com anamnese estruturada, sinais vitais, exame físico adaptativo à especialidade, notas SOAP e integração ao CID-10."
+      >
+        {/* Seletor Compacto de Especialidade quando houver mais de 1 */}
+        {allowedPresets.length > 1 && (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <span className="text-[10px] font-extrabold uppercase text-slate-400">Especialidade:</span>
+            <select
+              value={activePreset}
+              onChange={e => setActivePreset(e.target.value)}
+              className="text-xs font-bold text-teal-900 bg-transparent focus:outline-none cursor-pointer"
             >
-              Atendimento
-            </button>
-            <button
-              onClick={() => setActiveTab('history')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Histórico ({consultationsHistory.length})
-            </button>
+              {allowedPresets.map(preset => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Seleção do Paciente */}
-      <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-xs space-y-3">
         <PatientSearchSelect
-          label={`1. ${clientTermLabel} em Atendimento`}
+          compact
           value={selectedPatientId}
           selectedPatient={selectedPatient}
           clientTermLabel={clientTermLabel}
+          disabled={!!initialAppointmentId}
           onChange={(id, pat) => {
             setSelectedPatientId(id);
             if (pat) {
@@ -762,40 +708,83 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             }
           }}
         />
+
+        <ClinicalAutosaveIndicator
+          status={autosave.autosaveStatus}
+          lastSavedTime={autosave.lastSavedTime}
+          className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs"
+        />
+      </ProfessionalModuleHeader>
+
+      {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
+      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
+        <div className="flex items-center gap-1 py-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('consultation')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'consultation'
+                ? 'border-teal-600 text-teal-700 bg-teal-50/50'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <Stethoscope className={`w-4 h-4 ${activeTab === 'consultation' ? 'text-teal-600' : 'text-slate-400'}`} />
+            <span>Atendimento Clínico</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('history')}
+            className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+              activeTab === 'history'
+                ? 'border-teal-600 text-teal-700 bg-teal-50/50'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            <History className={`w-4 h-4 ${activeTab === 'history' ? 'text-teal-600' : 'text-slate-400'}`} />
+            <span>Histórico ({consultationsHistory.length})</span>
+          </button>
+        </div>
       </div>
 
-      {/* Seletor Compacto Discreto para Médicos com Múltiplas Especialidades */}
-      {allowedPresets.length > 1 && (
-        <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-xs flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
-              Especialidade de Atendimento:
-            </span>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {allowedPresets.map(preset => {
-                const isSelected = activePreset === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => setActivePreset(preset.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-teal-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {preset.name}
-                  </button>
-                );
-              })}
+      {/* CONTEÚDO PRINCIPAL */}
+      <div className="flex-1 p-6 overflow-y-auto">
+        {!selectedPatientId ? (
+          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8 max-w-6xl mx-auto">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
+              <Stethoscope className="w-6 h-6" />
             </div>
+            <h3 className="text-base font-bold text-slate-800">Selecione um(a) {clientTermLabel}</h3>
+            <p className="text-xs text-slate-500 max-w-sm mt-1">
+              Escolha um paciente no menu superior para iniciar o atendimento médico estruturado, sinais vitais e notas SOAP.
+            </p>
           </div>
-          <span className="text-xs text-slate-400 font-medium hidden sm:inline">
-            {allowedPresets.find(p => p.id === activePreset)?.focusAreas.join(' • ')}
-          </span>
-        </div>
-      )}
+        ) : (
+          <div className="max-w-6xl mx-auto space-y-6">
+            {/* Informações do Paciente Selecionado */}
+            {selectedPatient && (
+              <div className="p-4 bg-white border border-teal-200 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-black text-sm border border-teal-200">
+                    {(selectedPatient.full_name || selectedPatient.name || 'P').charAt(0)}
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">
+                      {selectedPatient.full_name || selectedPatient.name}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      CPF: {selectedPatient.cpf || '-'} • Nasc: {selectedPatient.birth_date || '-'} • Telefone: {selectedPatient.phone || '-'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-teal-50 text-teal-800 border border-teal-200 rounded-full text-xs font-bold">
+                    {allowedPresets.find(p => p.id === activePreset)?.name || 'Medicina'}
+                  </span>
+                </div>
+              </div>
+            )}
 
       {activeTab === 'consultation' ? (
         <div className="space-y-6">
@@ -1704,6 +1693,9 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
           )}
         </div>
       )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

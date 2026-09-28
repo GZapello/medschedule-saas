@@ -48,6 +48,7 @@ import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
@@ -603,275 +604,156 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {completion.dialog}
-      {/* Top Header do Módulo com Identidade Oficial ZemdaOdonto */}
-      <div className="bg-gradient-to-r from-cyan-900 via-cyan-800 to-sky-900 text-white rounded-3xl p-6 shadow-md relative overflow-hidden">
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-cyan-500/30 backdrop-blur border border-cyan-400/40 flex items-center justify-center text-white shadow-inner">
-              <Smile className="w-7 h-7 text-cyan-200" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-black tracking-tight text-white">
-                  Zemda<span className="text-cyan-300">Odonto</span>
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-cyan-400/20 text-cyan-200 text-[11px] font-bold border border-cyan-400/30">
-                  Prontuário Odontológico Digital
-                </span>
-              </div>
-              <p className="text-xs text-cyan-200/80 font-medium">
-                Odontograma FDI Interativo • Periodontia • Endodontia • Orçamentos • Prótese & HOF
-              </p>
-            </div>
-          </div>
 
-          {/* Dados do Dentista Ativo */}
-          <div className="flex items-center gap-3 bg-white/10 backdrop-blur px-4 py-2 rounded-2xl border border-white/15 text-right">
-            <div>
-              <div className="text-xs font-bold text-white">{currentUser?.name}</div>
-              <div className="text-[11px] text-cyan-200 font-medium">
-                {currentUser?.registrationType || 'CRO'}: {currentUser?.registrationNumber || 'Cirurgião-Dentista'}
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-full bg-cyan-500/40 flex items-center justify-center text-cyan-100 font-bold text-xs border border-cyan-300/30">
-              CD
-            </div>
-          </div>
+      {/* CABEÇALHO DO MÓDULO ZEMDAODONTO */}
+      <ProfessionalModuleHeader
+        icon={Smile}
+        iconGradient="from-cyan-600 to-teal-700"
+        iconShadow="shadow-cyan-600/20"
+        title="ZemdaOdonto"
+        badgeLabel="Odontologia Especializada"
+        badgeVariant="bg-cyan-100 text-cyan-800 border-cyan-200"
+        description="Odontograma FDI interativo, periodontia, endodontia, planos de tratamento e orçamentos, prótese e HOF."
+      >
+        <PatientSearchSelect
+          compact
+          value={selectedPatientId}
+          selectedPatient={selectedPatient}
+          disabled={!!initialAppointmentId}
+          onChange={(id, pat) => {
+            setSelectedPatientId(id);
+            if (pat) setSelectedPatient(pat);
+            else if (!id) setSelectedPatient(null);
+          }}
+        />
+
+        {selectedPatientId && (
+          <ClinicalQuickHeaderActions
+            autosaveStatus={autosave.autosaveStatus}
+            lastSavedTime={autosave.lastSavedTime}
+            onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
+            onFinishConsultation={handleFinishConsultation}
+            finishLabel="Finalizar Atendimento"
+            isSubmitting={saving}
+            tools={[
+              {
+                id: 'dictation',
+                label: 'Ditado Clínico IA',
+                icon: Sparkles,
+                highlight: true,
+                onClick: () => setIsDictationModalOpen(true)
+              }
+            ]}
+            toolsVariant="cyan"
+            toolsLabel="Ferramentas"
+          />
+        )}
+      </ProfessionalModuleHeader>
+
+      {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
+      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
+        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+          {[
+            { id: 'odontogram', label: 'Odontograma 2D', icon: Smile },
+            { id: 'treatment_plans', label: 'Planos & Orçamento', icon: DollarSign },
+            { id: 'perio', label: 'Periodontia (PERIO)', icon: Activity },
+            { id: 'endo', label: 'Endodontia (ENDO)', icon: Scissors },
+            { id: 'prosthetics', label: 'Prótese & Laboratório', icon: Package },
+            { id: 'ortho_hof', label: 'Ortodontia & HOF', icon: Sparkles },
+            { id: 'anamnesis', label: 'Anamnese Odonto', icon: Shield },
+            { id: 'implants', label: 'Implantes & Cirurgia', icon: CheckCircle2 },
+            { id: 'photos_exams', label: 'Fotos & Exames', icon: Camera }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                data-tour={`tab-${tab.id}`}
+                data-active={isActive}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                  isActive
+                    ? 'border-cyan-600 text-cyan-700 bg-cyan-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Alertas de Notificação */}
-      {successMsg && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {errorMsg && (
-        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn">
-          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
-      )}
-
-      {/* Seletor de Paciente (quando não fixado via initialPatientId) */}
-      {!initialPatientId && !selectedPatientId && (
-        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs space-y-3">
-          <label className="block text-xs font-extrabold uppercase tracking-wide text-slate-700 flex items-center gap-2">
-            <User className="w-4 h-4 text-cyan-600" />
-            Selecione o Paciente para o Prontuário Odontológico:
-          </label>
-          <PatientSearchSelect
-            value={selectedPatientId}
-            selectedPatient={selectedPatient}
-            placeholder="Buscar paciente por nome, CPF ou telefone..."
-            onChange={(id, pat) => {
-              setSelectedPatientId(id);
-              if (pat) setSelectedPatient(pat);
-              else if (!id) setSelectedPatient(null);
-            }}
-          />
-        </div>
-      )}
-
-      {/* Informações do Paciente Selecionado */}
-      {selectedPatient && (
-        <div className="p-4 bg-white border border-cyan-200 rounded-3xl shadow-sm flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-cyan-100 text-cyan-800 flex items-center justify-center font-black text-base border border-cyan-200">
-              {(selectedPatient.full_name || selectedPatient.name || 'P').charAt(0)}
-            </div>
-            <div>
-              <div className="text-sm font-black text-slate-900">
-                {selectedPatient.full_name || selectedPatient.name}
-              </div>
-              <div className="text-xs text-slate-500">
-                CPF: {selectedPatient.cpf || '-'} • Nasc: {selectedPatient.birth_date || '-'} • Telefone: {selectedPatient.phone || '-'}
-              </div>
-            </div>
+      {/* CONTEÚDO PRINCIPAL */}
+      <div className="flex-1 p-6 overflow-y-auto">
+        {/* Alertas de Notificação */}
+        {successMsg && (
+          <div className="mb-4 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn max-w-6xl mx-auto">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successMsg}</span>
           </div>
+        )}
 
-          <div className="flex items-center gap-2">
-            {!initialPatientId && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedPatientId('');
-                  setSelectedPatient(null);
-                }}
-                className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer mr-1"
-              >
-                Trocar Paciente
-              </button>
+        {errorMsg && (
+          <div className="mb-4 p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fadeIn max-w-6xl mx-auto">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {!selectedPatientId ? (
+          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8 max-w-6xl mx-auto">
+            <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center mb-3">
+              <Smile className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">Selecione um Paciente</h3>
+            <p className="text-xs text-slate-500 max-w-sm mt-1">
+              Escolha um paciente no menu superior para visualizar o odontograma anatômico, periodontia, endodontia e condutas odontológicas.
+            </p>
+          </div>
+        ) : (
+          <div className="max-w-6xl mx-auto space-y-6">
+            {/* Informações do Paciente Selecionado */}
+            {selectedPatient && (
+              <div className="p-4 bg-white border border-cyan-200 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-100 text-cyan-800 flex items-center justify-center font-black text-sm border border-cyan-200">
+                    {(selectedPatient.full_name || selectedPatient.name || 'P').charAt(0)}
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">
+                      {selectedPatient.full_name || selectedPatient.name}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      CPF: {selectedPatient.cpf || '-'} • Nasc: {selectedPatient.birth_date || '-'} • Telefone: {selectedPatient.phone || '-'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {!initialPatientId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPatientId('');
+                        setSelectedPatient(null);
+                      }}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-rose-600 bg-slate-100 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer mr-1"
+                    >
+                      Trocar Paciente
+                    </button>
+                  )}
+                  <span className="px-3 py-1 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-full text-xs font-bold">
+                    Prontuário Ativo
+                  </span>
+                </div>
+              </div>
             )}
-            <ClinicalQuickHeaderActions
-              autosaveStatus={autosave.autosaveStatus}
-              lastSavedTime={autosave.lastSavedTime}
-              onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-              onFinishConsultation={handleFinishConsultation}
-              finishLabel="Finalizar Atendimento"
-              isSubmitting={saving}
-              tools={[
-                {
-                  id: 'dictation',
-                  label: 'Ditado Clínico IA',
-                  icon: Sparkles,
-                  highlight: true,
-                  onClick: () => setIsDictationModalOpen(true)
-                }
-              ]}
-              toolsVariant="cyan"
-              toolsLabel="Ferramentas"
-            />
-            <span className="px-3 py-1 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-full text-xs font-bold">
-              Prontuário Ativo
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Navegação por Abas do ZemdaOdonto (Trilha Horizontal Única com Scroll Suave) */}
-      {selectedPatientId && (
-        <div className="space-y-6">
-          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1.5 border-b border-slate-200 pb-2`}>
-            <button
-              type="button"
-              data-tour="tab-odontogram"
-              data-active={activeTab === 'odontogram'}
-              onClick={() => setActiveTab('odontogram')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'odontogram'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Smile className="w-4 h-4" />
-              Odontograma 2D
-            </button>
-
-            <button
-              type="button"
-              data-tour="tab-treatment_plans"
-              data-active={activeTab === 'treatment_plans'}
-              onClick={() => setActiveTab('treatment_plans')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'treatment_plans'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <DollarSign className="w-4 h-4" />
-              Planos & Orçamento
-            </button>
-
-            <button
-              type="button"
-              data-tour="tab-perio"
-              data-active={activeTab === 'perio'}
-              onClick={() => setActiveTab('perio')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'perio'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Activity className="w-4 h-4" />
-              Periodontia (PERIO)
-            </button>
-
-            <button
-              type="button"
-              data-tour="tab-endo"
-              data-active={activeTab === 'endo'}
-              onClick={() => setActiveTab('endo')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'endo'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Scissors className="w-4 h-4" />
-              Endodontia (ENDO)
-            </button>
-
-            <button
-              type="button"
-              data-tour="tab-prosthetics"
-              data-active={activeTab === 'prosthetics'}
-              onClick={() => setActiveTab('prosthetics')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'prosthetics'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              Prótese & Laboratório
-            </button>
-
-            <button
-              type="button"
-              data-tour="tab-ortho_hof"
-              data-active={activeTab === 'ortho_hof'}
-              onClick={() => setActiveTab('ortho_hof')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'ortho_hof'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Sparkles className="w-4 h-4" />
-              Ortodontia & HOF
-            </button>
-
-            <button
-              type="button"
-              data-tour="tab-anamnesis"
-              data-active={activeTab === 'anamnesis'}
-              onClick={() => setActiveTab('anamnesis')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'anamnesis'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Shield className="w-4 h-4" />
-              Anamnese Odonto
-            </button>
-
-            <button
-              type="button"
-              data-tour="tab-implants"
-              data-active={activeTab === 'implants'}
-              onClick={() => setActiveTab('implants')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'implants'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              Implantes & Cirurgia
-            </button>
-
-            <button
-              type="button"
-              data-tour="tab-photos_exams"
-              data-active={activeTab === 'photos_exams'}
-              onClick={() => setActiveTab('photos_exams')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-extrabold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'photos_exams'
-                  ? 'bg-cyan-600 text-white shadow-sm'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              <Camera className="w-4 h-4" />
-              Fotos & Exames
-            </button>
-          </div>
 
           {/* ========================================================================= */}
           {/* ABA 1: ODONTOGRAMA INTERATIVO */}
@@ -1950,6 +1832,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           )}
         </div>
       )}
+      </div>
 
       {/* Dossiê do Dente Drawer */}
       <ToothDossierDrawer

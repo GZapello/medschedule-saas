@@ -58,7 +58,10 @@ export const EQUIPMENT_LIST = [
   { id: 'peso_corporal', label: 'Peso Corporal' },
   { id: 'kettlebell', label: 'Kettlebell' },
   { id: 'elastico', label: 'Elástico' },
-  { id: 'smith', label: 'Smith Machine' }
+  { id: 'smith', label: 'Smith Machine' },
+  { id: 'suspensao', label: 'Fita de Suspensão / TRX' },
+  { id: 'medicine_ball', label: 'Medicine Ball' },
+  { id: 'caixa', label: 'Caixa / Step' }
 ];
 
 export const CATEGORY_LIST = [

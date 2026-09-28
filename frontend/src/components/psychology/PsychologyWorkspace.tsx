@@ -38,6 +38,7 @@ import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 
 interface PsychologyWorkspaceProps {
   initialPatientId?: string;
@@ -812,119 +813,90 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   const hasAssessmentBasis = assessmentsList.length > 0 || !!mentalState.criticalJudgment;
 
   return (
-    <div className="bg-slate-100 min-h-screen flex flex-col">
-      {/* Top Bar / Header do Módulo ZemdaPsico */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 sm:px-6 py-3 shadow-xs">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-teal-700 to-slate-900 flex items-center justify-center text-white shadow-xs">
-              <Brain className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-extrabold text-slate-900 tracking-tight">ZEMDAPsico</h1>
-                <span className="px-2 py-0.5 bg-teal-50 text-teal-800 text-[11px] font-bold rounded-md border border-teal-200">
-                  CFP 2025
-                </span>
-                <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[11px] font-medium rounded-md">
-                  Prontuário Psicológico Confidencial
-                </span>
-              </div>
-              <p className="text-xs text-slate-500">
-                Resoluções CFP nº 01/2009, 05/2010, 06/2019, 31/2022, 09/2024 e Código de Ética
-              </p>
-            </div>
-          </div>
+    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      {/* CABEÇALHO DO MÓDULO ZEMDAPSICO */}
+      <ProfessionalModuleHeader
+        icon={Brain}
+        iconGradient="from-purple-700 to-indigo-800"
+        iconShadow="shadow-purple-600/20"
+        title="ZemdaPsico"
+        badgeLabel="Psicologia Clínica"
+        badgeVariant="bg-purple-100 text-purple-800 border-purple-200"
+        secondaryBadge={
+          <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+            CFP 2025
+          </span>
+        }
+        description="Prontuário psicológico confidencial, evolução de sessões, anamnese, exames de estado mental e resoluções CFP."
+      >
+        <PatientSearchSelect
+          compact
+          value={selectedPatientId}
+          selectedPatient={selectedPatient}
+          clientTermLabel={clientTermLabel || 'Paciente'}
+          disabled={!!initialAppointmentId}
+          onChange={(id, pat) => {
+            setSelectedPatientId(id);
+            if (pat) setSelectedPatient(pat);
+            else if (!id) setSelectedPatient(null);
+          }}
+        />
 
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Indicador Discreto de Autosave */}
-            {selectedPatientId && (
-              <ClinicalAutosaveIndicator
-                status={autosaveStatus}
-                lastSavedTime={lastSavedTime}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs"
-              />
-            )}
-
-            {/* Botão Assistente IA Ético */}
-            <button
-              type="button"
-              data-tour="psico-ai-btn"
-              onClick={() => setShowAiDrawer(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold rounded-xl text-xs border border-purple-200 transition-colors cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4 text-purple-600" />
-              Assistente IA (CFP)
-            </button>
-
-            {/* Botão Histórico Confidencial */}
-            <button
-              type="button"
-              data-tour="clinical-previous-records"
-              onClick={() => setShowHistoryModal(true)}
-              disabled={!selectedPatientId}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <History className="w-4 h-4 text-slate-500" />
-              Histórico ({sessionsList.length})
-            </button>
-
-            {/* Botão Documentos Emitidos */}
-            <button
-              type="button"
-              onClick={() => setShowDocumentModal(true)}
-              disabled={!selectedPatientId}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold rounded-xl text-xs border border-teal-200 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <FileText className="w-4 h-4 text-teal-600" />
-              Emitir Documento CFP
-            </button>
-
-            {/* Botão Rápido: Finalizar Atendimento */}
-            <button
-              type="button"
-              data-tour="clinical-finish"
-              onClick={handleQuickFinishClick}
-              disabled={!selectedPatientId || saving}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              title="Finalizar atendimento, selar evolução com SHA-256 e emitir documentos"
-            >
-              <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-              Finalizar Atendimento
-            </button>
-          </div>
-        </div>
-
-        {/* Seleção do Paciente */}
-        {!initialPatientId && (
-          <div className="max-w-7xl mx-auto mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs flex-wrap gap-3">
-            <div className="flex items-center gap-2 flex-1 min-w-[280px] max-w-md">
-              <PatientSearchSelect
-                compact
-                value={selectedPatientId}
-                selectedPatient={selectedPatient}
-                clientTermLabel={clientTermLabel || 'Paciente'}
-                onChange={(id, pat) => {
-                  setSelectedPatientId(id);
-                  if (pat) setSelectedPatient(pat);
-                  else if (!id) setSelectedPatient(null);
-                }}
-              />
-            </div>
-            {selectedPatient && (
-              <div className="text-xs text-slate-600 flex items-center gap-3">
-                <span>Nascimento: <strong>{selectedPatient.birth_date ? new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR') : 'Não informado'}</strong></span>
-                <span>CPF: <strong>{selectedPatient.cpf || 'Não informado'}</strong></span>
-                <span>Telefone: <strong>{selectedPatient.phone || 'Não informado'}</strong></span>
-              </div>
-            )}
-          </div>
+        {selectedPatientId && (
+          <ClinicalAutosaveIndicator
+            status={autosaveStatus}
+            lastSavedTime={lastSavedTime}
+            className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/80 shadow-2xs"
+          />
         )}
-      </header>
 
-      {/* Barra de Navegação de Abas Estruturadas (Trilha Suave com Scroll Livre) */}
-      <div className="bg-white border-b border-slate-200 shadow-2xs shrink-0">
-        <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 py-2`}>
+        <button
+          type="button"
+          data-tour="psico-ai-btn"
+          onClick={() => setShowAiDrawer(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold rounded-xl text-xs border border-purple-200 transition-colors cursor-pointer"
+        >
+          <Sparkles className="w-4 h-4 text-purple-600" />
+          Assistente IA (CFP)
+        </button>
+
+        <button
+          type="button"
+          data-tour="clinical-previous-records"
+          onClick={() => setShowHistoryModal(true)}
+          disabled={!selectedPatientId}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-50"
+        >
+          <History className="w-4 h-4 text-slate-500" />
+          Histórico ({sessionsList.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowDocumentModal(true)}
+          disabled={!selectedPatientId}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold rounded-xl text-xs border border-teal-200 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          <FileText className="w-4 h-4 text-teal-600" />
+          Emitir Documento CFP
+        </button>
+
+        <button
+          type="button"
+          data-tour="clinical-finish"
+          onClick={handleQuickFinishClick}
+          disabled={!selectedPatientId || saving}
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+          title="Finalizar atendimento, selar evolução com SHA-256 e emitir documentos"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+          Finalizar Atendimento
+        </button>
+      </ProfessionalModuleHeader>
+
+      {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
+      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
+        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
           {[
             { id: 'sessions', label: '1. Sessões & Evolução', icon: Clock },
             { id: 'anamnese', label: '2. Anamnese Psicológica', icon: User },
@@ -944,28 +916,63 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                 data-active={isActive}
                 type="button"
                 onClick={() => setActiveTab(tab.id as TabKey)}
-                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
                   isActive
-                    ? 'bg-teal-700 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    ? 'border-purple-600 text-purple-700 bg-purple-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
-                {tab.label}
+                <Icon className={`w-4 h-4 ${isActive ? 'text-purple-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Conteúdo Principal */}
-      <main className="max-w-7xl mx-auto w-full flex-1 p-4 sm:p-6 space-y-6">
+      {/* CONTEÚDO PRINCIPAL */}
+      <div className="flex-1 p-6 overflow-y-auto">
         {loading ? (
-          <div className="bg-white rounded-2xl p-12 text-center text-slate-500 text-xs border border-slate-200">
+          <div className="bg-white rounded-2xl p-12 text-center text-slate-500 text-xs border border-slate-200 max-w-6xl mx-auto">
             Carregando prontuário psicológico com integridade e sigilo...
           </div>
+        ) : !selectedPatientId ? (
+          <div className="flex flex-col items-center justify-center h-64 text-center bg-white rounded-2xl border border-slate-200 p-8 max-w-6xl mx-auto">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
+              <Brain className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">Selecione um(a) {clientTermLabel || 'Paciente'}</h3>
+            <p className="text-xs text-slate-500 max-w-sm mt-1">
+              Escolha um paciente no menu superior para visualizar o prontuário psicológico, evolução das sessões e avaliações.
+            </p>
+          </div>
         ) : (
-          <>
+          <div className="max-w-6xl mx-auto space-y-6">
+            {/* Informações do Paciente Selecionado */}
+            {selectedPatient && (
+              <div className="p-4 bg-white border border-purple-200 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-black text-sm border border-purple-200">
+                    {(selectedPatient.full_name || selectedPatient.name || 'P').charAt(0)}
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">
+                      {selectedPatient.full_name || selectedPatient.name}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      CPF: {selectedPatient.cpf || '-'} • Nasc: {selectedPatient.birth_date ? new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR') : '-'} • Telefone: {selectedPatient.phone || '-'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-purple-50 text-purple-800 border border-purple-200 rounded-full text-xs font-bold">
+                    Prontuário Ativo (CFP)
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* ========================================================================= */}
             {/* ABA 1: SESSÕES & EVOLUÇÃO (Com Selamento SHA-256 e Conclusão de Atendimento) */}
             {/* ========================================================================= */}
@@ -2132,9 +2139,9 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                 )}
               </div>
             )}
-          </>
+          </div>
         )}
-      </main>
+      </div>
 
       {/* ========================================================================= */}
       {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO RÁPIDA (ZemdaPsico) */}

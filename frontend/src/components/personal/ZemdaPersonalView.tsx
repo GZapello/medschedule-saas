@@ -26,6 +26,7 @@ import { PersonalWorkoutBuilder } from './PersonalWorkoutBuilder';
 import { PersonalAssessmentModal } from './PersonalAssessmentModal';
 import { PersonalAIAssistantModal } from './PersonalAIAssistantModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 
 interface ZemdaPersonalViewProps {
   initialStudentId?: string | null;
@@ -246,40 +247,31 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Top Header Principal */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20">
-            <Dumbbell className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-800">ZemdaPersonal</h1>
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-200">
-                Treinamento & Prescrição
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular.
-            </p>
-          </div>
-        </div>
-
+    <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      {/* CABEÇALHO DO MÓDULO ZEMDAPERSONAL */}
+      <ProfessionalModuleHeader
+        icon={Dumbbell}
+        iconGradient="from-emerald-600 to-teal-700"
+        iconShadow="shadow-emerald-600/20"
+        title="ZemdaPersonal"
+        badgeLabel="Treinamento & Prescrição"
+        badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
+        description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
+      >
         {/* Barra de Busca Rápida Global */}
-        <div className="relative flex-1 max-w-xs md:max-w-sm">
+        <div className="relative flex-1 min-w-[220px] max-w-xs md:max-w-sm">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar aluno, exercício ou treino..."
             value={searchQuery}
             onChange={(e) => handleGlobalSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none transition-all"
+            className="w-full pl-10 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none transition-all"
           />
 
           {/* Dropdown de Resultados da Busca */}
           {searchResults && (
-            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 max-h-80 overflow-y-auto space-y-3 animate-slideDown">
+            <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 max-h-80 overflow-y-auto space-y-3 animate-slideDown">
               {searchResults.students?.length > 0 && (
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400 block px-2 mb-1">Alunos</span>
@@ -352,101 +344,93 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
             </div>
           )}
         </div>
+
+        {/* Ferramentas Rápidas no Cabeçalho */}
+        <div className="shrink-0 flex items-center gap-2">
+          <button
+            type="button"
+            data-tour="personal-exercises-tab"
+            onClick={() => setIsExerciseLibraryOpen(true)}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+            title="Abrir acervo completo e biblioteca de exercícios"
+          >
+            <Dumbbell className="w-4 h-4 text-emerald-600" />
+            <span className="hidden sm:inline">Biblioteca de Exercícios</span>
+          </button>
+          <button
+            type="button"
+            data-tour="personal-ai-btn"
+            onClick={() => setIsAIAssistantOpen(true)}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
+            title="Assistente IA ZemdaPersonal"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span>Assistente IA</span>
+          </button>
+        </div>
+      </ProfessionalModuleHeader>
+
+      {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
+      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
+        <div className="flex items-center gap-1 py-1 overflow-x-auto no-scrollbar">
+          {[
+            { id: 'dashboard', label: 'Painel de Treinamento', icon: LayoutDashboard },
+            { id: 'students', label: `Alunos & Prescrições (${students.length})`, icon: Users },
+            { id: 'templates', label: 'Modelos de Treino (Templates)', icon: Layers },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = currentTab === tab.id && !selectedStudentId;
+            return (
+              <button
+                key={tab.id}
+                data-tour={`personal-${tab.id}-tab`}
+                data-active={isActive}
+                type="button"
+                onClick={() => {
+                  if (selectedStudentId) {
+                    handleSelectStudent(null);
+                  }
+                  setCurrentTab(tab.id as any);
+                }}
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                  isActive
+                    ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Se o perfil do aluno estiver ativo, renderiza o perfil detalhado */}
-      {selectedStudentId ? (
-        <PersonalStudentProfile
-          studentId={selectedStudentId}
-          onBack={lockStudentContext ? undefined : () => {
-            handleSelectStudent(null);
-            loadDashboard();
-            loadStudents();
-          }}
-          onOpenNewWorkout={() => {
-            setWorkoutToEdit(null);
-            setIsWorkoutBuilderOpen(true);
-          }}
-          onEditWorkout={(w) => {
-            setWorkoutToEdit(w);
-            setIsWorkoutBuilderOpen(true);
-          }}
-          onOpenNewAssessment={() => setIsAssessmentModalOpen(true)}
-          onOpenAIAssistant={() => setIsAIAssistantOpen(true)}
-        />
-      ) : (
-        /* Caso contrário, renderiza a navegação principal (Dashboard, Alunos, Exercícios, Modelos) */
-        <div className="space-y-6">
-          {/* Navegação por Abas Principais e Ação Rápida */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2">
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth">
-              <button
-                data-tour="personal-overview"
-                data-active={currentTab === 'dashboard'}
-                onClick={() => setCurrentTab('dashboard')}
-                className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                  currentTab === 'dashboard'
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                Painel de Treinamento
-              </button>
-
-              <button
-                data-tour="personal-students-tab"
-                data-active={currentTab === 'students'}
-                onClick={() => setCurrentTab('students')}
-                className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                  currentTab === 'students'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                Alunos & Prescrições ({students.length})
-              </button>
-
-              <button
-                data-tour="personal-templates-tab"
-                data-active={currentTab === 'templates'}
-                onClick={() => setCurrentTab('templates')}
-                className={`px-4 py-2.5 text-xs font-bold rounded-xl flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer shrink-0 ${
-                  currentTab === 'templates'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Layers className="w-4 h-4" />
-                Modelos de Treino (Templates)
-              </button>
-            </div>
-
-            {/* Ação / Ferramenta Rápida: Biblioteca de Exercícios & IA */}
-            <div className="shrink-0 flex items-center gap-2">
-              <button
-                type="button"
-                data-tour="personal-exercises-tab"
-                onClick={() => setIsExerciseLibraryOpen(true)}
-                className="px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
-                title="Abrir acervo completo e biblioteca de exercícios"
-              >
-                <Dumbbell className="w-4 h-4 text-emerald-600" />
-                <span>Biblioteca de Exercícios</span>
-              </button>
-              <button
-                type="button"
-                data-tour="personal-ai-btn"
-                onClick={() => setIsAIAssistantOpen(true)}
-                className="px-3.5 py-2 text-xs font-bold rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-xs flex items-center gap-2 transition-all whitespace-nowrap cursor-pointer"
-                title="Assistente IA ZemdaPersonal"
-              >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>Assistente IA</span>
-              </button>
-            </div>
-          </div>
+      {/* CONTEÚDO PRINCIPAL */}
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Se o perfil do aluno estiver ativo, renderiza o perfil detalhado */}
+          {selectedStudentId ? (
+            <PersonalStudentProfile
+              studentId={selectedStudentId}
+              onBack={lockStudentContext ? undefined : () => {
+                handleSelectStudent(null);
+                loadDashboard();
+                loadStudents();
+              }}
+              onOpenNewWorkout={() => {
+                setWorkoutToEdit(null);
+                setIsWorkoutBuilderOpen(true);
+              }}
+              onEditWorkout={(w) => {
+                setWorkoutToEdit(w);
+                setIsWorkoutBuilderOpen(true);
+              }}
+              onOpenNewAssessment={() => setIsAssessmentModalOpen(true)}
+              onOpenAIAssistant={() => setIsAIAssistantOpen(true)}
+            />
+          ) : (
+            <>
 
           {/* CONTEÚDO: DASHBOARD */}
           {currentTab === 'dashboard' && (
@@ -616,8 +600,10 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
               )}
             </div>
           )}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
       {/* MODAL: BIBLIOTECA DE EXERCÍCIOS */}
       <PersonalExerciseLibraryModal

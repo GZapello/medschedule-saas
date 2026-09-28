@@ -1,6 +1,7 @@
 import reviewedMedia from './exercise-library.media.json';
 import licensedPhotos from './exercise-library.photos.json';
 import { EXPANDED_EXERCISES } from './exercise-library.expansion';
+import { PRIORITY_EXPANSION_EXERCISES } from './exercise-library.priority-expansion';
 export interface SeedExercise {
   id: string;
   name: string;
@@ -1760,6 +1761,7 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
 ];
 
 DEFAULT_EXERCISE_LIBRARY.push(...EXPANDED_EXERCISES);
+DEFAULT_EXERCISE_LIBRARY.push(...PRIORITY_EXPANSION_EXERCISES);
 for (const ex of DEFAULT_EXERCISE_LIBRARY) ex.photo_url = licensedPhotos.find(photo => photo.exercise_id === ex.id)?.photo_url || reviewedMedia.find(media => media.exercise_id === ex.id)?.photo_url || `/exercise-fallbacks/${ex.id}.webp`;
 
 export function seedExerciseLibrary(rawDb: any): void {

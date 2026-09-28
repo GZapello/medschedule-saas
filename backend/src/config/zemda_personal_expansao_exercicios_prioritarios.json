@@ -1,0 +1,1881 @@
+{
+  "schema_version": 1,
+  "arquivo": "zemda_personal_expansao_exercicios_prioritarios",
+  "objetivo": "Direcionar a próxima expansão da biblioteca do ZemdaPersonal sem duplicar os 268 exercícios existentes.",
+  "gerado_em": "2026-09-28",
+  "contexto_atual": {
+    "exercicios_zemda_existentes_snapshot": 268,
+    "fonte_referencia_externa": "ExerciseGymGifsDB v1.1.0",
+    "exercicios_fonte_referencia": 1323,
+    "observacao": "Este arquivo NÃO autoriza importação cega. O Codex deve deduplicar cada candidato contra a biblioteca atual do ZemdaPersonal."
+  },
+  "regras_obrigatorias": [
+    "Preservar integralmente os 268 exercícios atuais e seus IDs.",
+    "Não criar duplicata por diferença de idioma, acento, ordem de palavras, equipamento equivalente ou pequena variação de nomenclatura.",
+    "Antes de inserir, comparar nome, padrão de movimento, músculo-alvo, equipamento, posição corporal e execução.",
+    "Quando já existir equivalente no ZemdaPersonal, marcar como JA_EXISTE e não inserir.",
+    "Quando houver exercício novo, gerar ID estável conforme o padrão atual do projeto.",
+    "Manter nome em PT-BR; guardar nome/origem externa apenas como metadado técnico quando necessário.",
+    "Associar GIF somente após confirmar que a animação corresponde ao movimento e à variante.",
+    "Não substituir GIF já validado de exercício existente.",
+    "Manter músculo principal, músculos secundários, equipamento, categoria, instruções e nível quando disponíveis.",
+    "Gerar relatório final: candidatos, novos importados, já existentes, rejeitados e sem mídia válida.",
+    "Priorizar primeiro itens marcados como essencial, depois alta, depois média."
+  ],
+  "ordem_de_execucao_codex": [
+    "Ler a biblioteca atual do ZemdaPersonal diretamente no repositório/banco/seed vigente.",
+    "Normalizar os nomes atuais e construir índice por nome + músculo + equipamento + padrão de movimento.",
+    "Percorrer os candidatos deste arquivo.",
+    "Marcar equivalências antes de criar qualquer registro.",
+    "Pesquisar a mídia correspondente na fonte aprovada.",
+    "Validar visualmente/semanticamente o GIF e instruções.",
+    "Inserir somente exercícios realmente ausentes.",
+    "Executar validação de duplicidade após a importação.",
+    "Entregar relatório JSON de resultado."
+  ],
+  "quantidade_candidatos_curados": 261,
+  "distribuicao": {
+    "Peito": 24,
+    "Costas": 24,
+    "Ombros": 19,
+    "Bíceps e antebraços": 19,
+    "Tríceps": 14,
+    "Quadríceps": 20,
+    "Posteriores e glúteos": 32,
+    "Panturrilhas": 9,
+    "Core": 26,
+    "Funcional e kettlebell": 21,
+    "Peso corporal e calistenia": 18,
+    "Cardio e pliometria": 16,
+    "Mobilidade e estabilidade": 19
+  },
+  "exercicios": [
+    {
+      "nome_pt_br": "Supino reto com barra",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino inclinado com barra",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino declinado com barra",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino reto com halteres",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino inclinado com halteres",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino declinado com halteres",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino reto na máquina",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino inclinado na máquina",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Chest press convergente",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino reto no Smith",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino inclinado no Smith",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão de braços",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão inclinada",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão declinada",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão com joelhos apoiados",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crucifixo reto com halteres",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crucifixo inclinado com halteres",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crucifixo na máquina (Peck Deck)",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crossover na polia alta",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crossover na polia média",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crossover na polia baixa",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crucifixo unilateral na polia",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Pullover com halter",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Pullover na polia",
+      "grupo": "Peito",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Barra fixa pronada",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Barra fixa supinada",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Barra fixa neutra",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Barra fixa assistida",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Puxada frontal pronada",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Puxada frontal supinada",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Puxada neutra",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Puxada unilateral na polia",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Puxada com braços estendidos",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada curvada com barra",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada Pendlay",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada unilateral com halter",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada cavalinho (T-Bar)",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada baixa na polia",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada baixa pegada aberta",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada articulada",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada articulada unilateral",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada no Smith",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada invertida",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada com apoio no peito",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Pullover na máquina",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Face pull",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Encolhimento com barra",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Encolhimento com halteres",
+      "grupo": "Costas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Desenvolvimento militar com barra",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Desenvolvimento com halteres",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Desenvolvimento Arnold",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Desenvolvimento na máquina",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Desenvolvimento no Smith",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação lateral com halteres",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação lateral unilateral",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação lateral na polia",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação lateral na máquina",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação frontal com halteres",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação frontal com barra",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação frontal na polia",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crucifixo inverso com halteres",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crucifixo inverso na máquina",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crucifixo inverso na polia",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada alta com barra",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remada alta na polia",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rotação externa na polia",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rotação externa com elástico",
+      "grupo": "Ombros",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca direta com barra",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca direta com barra EZ",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca direta com halteres",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca alternada",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca martelo",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca martelo cruzada",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca Scott com barra EZ",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca Scott unilateral",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca concentrada",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca inclinada com halteres",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca na polia baixa",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca unilateral na polia",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca Bayesian",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca inversa com barra",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca inversa na polia",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca punho com barra",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rosca punho inversa",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão de punho com halter",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Extensão de punho com halter",
+      "grupo": "Bíceps e antebraços",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps pulley com barra",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps pulley com corda",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps unilateral na polia",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps francês com halter",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps francês unilateral",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps testa com barra EZ",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps testa com halteres",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps testa na polia",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps coice com halter",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tríceps coice na polia",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Supino fechado",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Mergulho nas paralelas",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Mergulho no banco",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Extensão de tríceps acima da cabeça na polia",
+      "grupo": "Tríceps",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento livre com barra",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento frontal",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento goblet",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento sumô",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento no Smith",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento Hack",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento sissy",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento búlgaro",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Afundo estacionário",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Avanço à frente",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Passada caminhando",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Avanço reverso",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Step-up",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Leg press 45°",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Leg press horizontal",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Leg press unilateral",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Cadeira extensora",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Cadeira extensora unilateral",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Spanish squat",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Wall sit",
+      "grupo": "Quadríceps",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Levantamento terra convencional",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Levantamento terra sumô",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Levantamento terra romeno",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Stiff com barra",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Stiff com halteres",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Stiff unilateral",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Good morning",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Hip thrust com barra",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Hip thrust no Smith",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Hip thrust na máquina",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação pélvica",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação pélvica unilateral",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Frog pump",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Mesa flexora",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Mesa flexora unilateral",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Cadeira flexora",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Cadeira flexora unilateral",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão de joelho em pé na máquina",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão de joelho na bola suíça",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Nordic curl",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Glute ham raise",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Pull-through na polia",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Coice na polia",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Coice na máquina",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Extensão de quadril na polia",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Abdução de quadril na máquina",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Abdução de quadril na polia",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Abdução de quadril com elástico",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Caminhada lateral com miniband",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Clamshell com elástico",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Adutora na máquina",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Adução de quadril na polia",
+      "grupo": "Posteriores e glúteos",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Panturrilha em pé na máquina",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Panturrilha sentada",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Panturrilha no leg press",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Panturrilha em pé unilateral",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Panturrilha no Smith",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Panturrilha donkey",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Panturrilha com halteres",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Tibial anterior na máquina",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação de ponta do pé (tibial)",
+      "grupo": "Panturrilhas",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Prancha frontal",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Prancha lateral",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Prancha com toque no ombro",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Prancha com elevação de perna",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Dead bug",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Bird dog",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Hollow body hold",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Abdominal crunch",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Abdominal infra",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação de pernas deitado",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação de joelhos suspenso",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elevação de pernas suspenso",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Abdominal na polia",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Abdominal na máquina",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Abdominal bicicleta",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Reverse crunch",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Russian twist",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Pallof press",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Pallof press ajoelhado",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Wood chop na polia",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Wood chop reverso",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Ab wheel rollout",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Mountain climber",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Farmer's walk",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Suitcase carry",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Prancha Copenhagen",
+      "grupo": "Core",
+      "prioridade": "essencial",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell swing",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell goblet squat",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell deadlift",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell clean",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell clean and press",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell snatch",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Turkish get-up",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell row",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell overhead press",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Kettlebell reverse lunge",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Farmer's carry",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Battle rope ondas alternadas",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Battle rope ondas simultâneas",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Medicine ball slam",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Medicine ball chest pass",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Medicine ball rotational throw",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "TRX row",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "TRX chest press",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "TRX squat",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "TRX lunge",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "TRX hamstring curl",
+      "grupo": "Funcional e kettlebell",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento com peso corporal",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Agachamento com salto",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Afundo com peso corporal",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Afundo com salto",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Step-up com peso corporal",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão diamante",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Flexão arqueiro",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Pike push-up",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Handstand push-up",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Barra fixa",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Chin-up",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Paralelas (dips)",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Burpee",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Bear crawl",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Crab walk",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Glute bridge",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Single-leg glute bridge",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Superman",
+      "grupo": "Peso corporal e calistenia",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Polichinelo",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Corrida estacionária",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Joelho alto",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Skater jump",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Box jump",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Salto vertical",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Salto horizontal",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Salto lateral",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Jumping lunge",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Pular corda",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Bike ergométrica",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Elíptico",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Remo ergométrico",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Esteira - caminhada",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Esteira - corrida",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Stair climber",
+      "grupo": "Cardio e pliometria",
+      "prioridade": "média",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Alongamento do flexor do quadril",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Alongamento de posteriores de coxa",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Alongamento de quadríceps",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Alongamento de panturrilha",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Alongamento de glúteos",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Alongamento de peitoral",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Alongamento de dorsal",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Mobilidade de tornozelo na parede",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Mobilidade 90/90 de quadril",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "World's Greatest Stretch",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Rotação torácica em quatro apoios",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Cat-cow",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Child's pose",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Wall slides",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Band pull-apart",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Scapular push-up",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Scapular pull-up",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Y-T-W com elástico",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    },
+    {
+      "nome_pt_br": "Dead hang",
+      "grupo": "Mobilidade e estabilidade",
+      "prioridade": "alta",
+      "status_importacao": "CANDIDATO_NOVO",
+      "acao_codex": "Comparar com a biblioteca atual; importar somente se não existir exercício equivalente."
+    }
+  ]
+}

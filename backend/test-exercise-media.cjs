@@ -16,27 +16,28 @@ const mapping = require('../docs/exercise-media/zemda_exercisegymgifs_mapping_fo
 
 async function main() {
   initializeDatabase();
-  assert.equal(catalog.length, 268);
+  assert.equal(catalog.length, 318);
   assert.equal(report.exercises.length, 268);
-  assert.deepEqual(report.exercises.map(e => e.zemda_id).sort(), catalog.map(e => e.id).sort());
+  const originalCatalog = catalog.filter(e => supplement.catalog_before.some(b => b.id === e.id));
+  assert.deepEqual(report.exercises.map(e => e.zemda_id).sort(), originalCatalog.map(e => e.id).sort());
   const oldMedia = media.filter(m => m.source_commit === '2c041b35557d7aae47dfac87b291f095476db191');
   const newMedia = media.filter(m => m.source_repository === 'JahelCuadrado/ExerciseGymGifsDB');
   assert.deepEqual(oldMedia, supplement.preserved_manifest_entries, 'All 59 prior entries remain unchanged');
   assert.equal(oldMedia.length, 59);
-  assert.equal(media.length, 268);
-  assert.equal(newMedia.length, 209);
-  assert.equal(new Set(media.map(m => m.exercise_id)).size, 268);
-  assert.equal(new Set(media.map(m => m.gif_url)).size, 268);
-  assert.equal(new Set(media.map(m => m.gif_sha256)).size, 268, 'All 268 exercises have completely unique GIF hashes');
-  assert.equal(new Set(newMedia.map(m => m.source_path)).size, 209, 'Zero duplicate source_path');
+  assert.equal(media.length, 290);
+  assert.equal(newMedia.length, 231);
+  assert.equal(new Set(media.map(m => m.exercise_id)).size, 290);
+  assert.equal(new Set(media.map(m => m.gif_url)).size, 290);
+  assert.equal(new Set(media.map(m => m.gif_sha256)).size, 290, 'All 290 exercises have completely unique GIF hashes');
+  assert.equal(new Set(newMedia.map(m => m.source_path)).size, 231, 'Zero duplicate source_path');
   const withoutPhoto = rows => rows.map(({photo_url, ...row}) => row);
-  assert.deepEqual(withoutPhoto(catalog), withoutPhoto(supplement.catalog_before), 'IDs, names, instructions and all exercise metadata are unchanged');
+  assert.deepEqual(withoutPhoto(originalCatalog), withoutPhoto(supplement.catalog_before), 'IDs, names, instructions and all exercise metadata are unchanged');
   assert.deepEqual(supplement.exercises.filter(e => e.zemda_id !== 'ex-stiff-halteres').map(e => e.zemda_id), mapping.map(e => e.zemda_id));
   assert.equal(supplement.exercises.length, 209);
   assert.equal(supplement.exercises.filter(e => e.resultado === 'rejeitado').length, 0);
   assert.equal(supplement.exercises.filter(e => e.resultado === 'pendente').length, 0);
-  assert.equal(catalog.filter(ex => !media.some(m => m.exercise_id === ex.id)).length, 0);
-  assert.equal(newMedia.filter(m => m.photo_url).length, 208);
+  assert.equal(catalog.filter(ex => media.some(m => m.exercise_id === ex.id)).length, 290);
+  assert.equal(newMedia.filter(m => m.photo_url).length, 230);
   assert.equal(supplement.media_evidence.length, 333);
   for (const result of supplement.exercises) {
     const entry = newMedia.find(m => m.exercise_id === result.zemda_id);
@@ -105,7 +106,7 @@ async function main() {
   assert(db.prepare("SELECT photo_url FROM personal_exercises WHERE id='ex-supino-reto-barra'").get().photo_url.startsWith('/exercise-photos/'));
   let response;
   await PersonalController.listExercises({tenantId:'test',query:{},user:{role:'clinic_admin'}}, {json(value){response=value;},status(code){throw Error(`Unexpected status ${code}`);}});
-  assert.equal(response.exercises.length, 268);
+  assert.equal(response.exercises.length, 318);
   assert.equal(response.exercises.filter(e => e.gif_url).length, media.length);
   assert(response.exercises.find(e => e.id === 'ex-gluteo-cabo-coice').gif_url);
   console.log(`PASS ${media.length} reviewed GIFs: 59 preserved + 209 added, 268 unique hashes, paths, both reports, API, attribution, immutable catalogue, preserved photos and idempotent upgrades`);

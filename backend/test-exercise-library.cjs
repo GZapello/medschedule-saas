@@ -24,19 +24,19 @@ async function call(controller, method, body = {}, params = {}, query = {}, tena
 async function main() {
   db.prepare("INSERT INTO tenants (id,name,slug,email,status) VALUES ('library-test','Test','library-test','test@example.test','active')").run();
   db.prepare("INSERT INTO users (id,tenant_id,email,password_hash,role,status,name) VALUES ('library-user','library-test','test@example.test','test','clinic_admin','active','Tester')").run();
-  check(catalog.length === 268 && new Set(catalog.map(ex => ex.id)).size === 268, '268 distinct stable IDs');
+  check(catalog.length === 318 && new Set(catalog.map(ex => ex.id)).size === 318, '318 distinct stable IDs');
   check(catalog.filter(ex => ex.category === 'Alongamento').length === 48, '48 stretches');
-  check(catalog.filter(ex => ex.category === 'Mobilidade').length === 25, '25 mobility exercises');
+  check(catalog.filter(ex => ex.category === 'Mobilidade').length === 27, '27 mobility exercises');
   check(catalog.every(ex => fs.existsSync(path.join(__dirname, '../frontend/public', ex.photo_url))), 'Every standard exercise has a shipped persistent image');
   const previousIds = require('./test-fixtures/legacy-exercise-ids.json');
   check(previousIds.length === 119 && previousIds.every(id => catalog.some(ex => ex.id === id)), 'All 119 original exercise IDs preserved');
   const initialAudit = await audit(rawDb, async () => 'unverified', row => Boolean(row.photo_url?.startsWith('/exercise-fallbacks/')), bundledPhotoExists);
-  check(initialAudit.totals.LOCAL_REAL_IMAGE === 2 && initialAudit.totals.WITH_REAL_IMAGE === 2 && initialAudit.totals.FALLBACK_ONLY === 1 && initialAudit.totals.REVIEWED_DEMONSTRATION === 265 && initialAudit.totals.WITHOUT_IMAGE === 0, 'Audit distinguishes 2 photos, 265 reviewed demonstrations and 1 placeholder');
+  check(initialAudit.totals.LOCAL_REAL_IMAGE === 2 && initialAudit.totals.WITH_REAL_IMAGE === 2 && initialAudit.totals.FALLBACK_ONLY === 29 && initialAudit.totals.REVIEWED_DEMONSTRATION === 287 && initialAudit.totals.WITHOUT_IMAGE === 0, 'Audit distinguishes 2 photos, 287 reviewed demonstrations and 29 placeholders');
   check(!bundledPhotoExists({photo_url:'/exercise-photos/unknown.webp'}), 'Unknown local image is not classified as a verified photograph');
   const original = catalog.find(ex => ex.id === 'ex-supino-reto-barra');
   db.prepare("UPDATE personal_exercises SET name='Personalizado', is_active=0 WHERE id=?").run(original.id);
   seedExerciseLibrary(rawDb); seedExerciseLibrary(rawDb);
-  check(db.prepare('SELECT count(*) AS n FROM personal_exercises').get().n === 268, 'Repeated seed does not duplicate');
+  check(db.prepare('SELECT count(*) AS n FROM personal_exercises').get().n === 318, 'Repeated seed does not duplicate');
   check(db.prepare('SELECT name,is_active FROM personal_exercises WHERE id=?').get(original.id).name === 'Personalizado', 'Seed preserves customization');
   check(db.prepare('SELECT is_active FROM personal_exercises WHERE id=?').get(original.id).is_active === 0, 'Seed preserves deactivation');
   for (const muscle of ['Alongamento','Alongamentos','alongamento']) {
