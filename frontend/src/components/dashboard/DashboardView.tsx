@@ -39,7 +39,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenNewPatient
 }) => {
   const auth = useAuth();
-  const { clientTermLabel } = auth;
+  const { clientTermLabel, isClinicAdmin, isProfessional } = auth;
+  // Indicadores financeiros (Receita/Pendente) só aparecem para quem já tinha essa visão hoje:
+  // administração da clínica e profissionais (comportamento pré-existente do profissional
+  // mantido sem alteração). Recepção e demais papéis veem uma seção operacional mais leve.
+  const showFinancials = isClinicAdmin || isProfessional;
   const { showToast } = useToast();
   const [loading, setLoading] = useState<boolean>(true);
   const [metrics, setMetrics] = useState<any>(null);
@@ -173,6 +177,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const countCompleted = allTodayAppts.filter((a: any) => a.status === 'completed').length;
   const countNoShow = allTodayAppts.filter((a: any) => a.status === 'no_show').length;
   const countCancelled = allTodayAppts.filter((a: any) => a.status === 'cancelled').length;
+  // Próximo atendimento ainda não realizado (lista já vem ordenada por horário) — usado na
+  // seção operacional exibida para papéis sem visão financeira (ex.: recepção).
+  const nextAppointment = allTodayAppts.find(
+    (a: any) => a.status !== 'completed' && a.status !== 'cancelled' && a.status !== 'no_show'
+  ) || null;
+  const nextAppointmentTime = nextAppointment?.start_time?.split('T')[1]?.slice(0, 5) || null;
 
   const todayList = allTodayAppts.filter((appt: any) => {
     if (filterTab === 'all') return true;
@@ -251,33 +261,72 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-slate-400 mt-1">taxa de ausência</p>
         </div>
 
-        {/* Faturamento Recebido */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Receita</span>
-            <div className="p-2 bg-teal-50 text-teal-600 rounded-xl">
-              <DollarSign className="w-4 h-4" />
+        {showFinancials ? (
+          <>
+            {/* Faturamento Recebido */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Receita</span>
+                <div className="p-2 bg-teal-50 text-teal-600 rounded-xl">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-xl font-bold text-slate-900 truncate">
+                {formatCurrency(metrics?.monthly?.revenue)}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">recebido no mês</p>
             </div>
-          </div>
-          <div className="text-xl font-bold text-slate-900 truncate">
-            {formatCurrency(metrics?.monthly?.revenue)}
-          </div>
-          <p className="text-xs text-slate-400 mt-1">recebido no mês</p>
-        </div>
 
-        {/* Valores Pendentes */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Pendente</span>
-            <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
-              <Clock className="w-4 h-4" />
+            {/* Valores Pendentes */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Pendente</span>
+                <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                  <Clock className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-xl font-bold text-slate-900 truncate">
+                {formatCurrency(metrics?.monthly?.pending)}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">a receber</p>
             </div>
-          </div>
-          <div className="text-xl font-bold text-slate-900 truncate">
-            {formatCurrency(metrics?.monthly?.pending)}
-          </div>
-          <p className="text-xs text-slate-400 mt-1">a receber</p>
-        </div>
+          </>
+        ) : (
+          <>
+            {/* Aguardando Atendimento (visão operacional, sem dados financeiros) */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Aguardando</span>
+                <div className="p-2 bg-teal-50 text-teal-600 rounded-xl">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-slate-900">{countScheduled}</div>
+              <p className="text-xs text-slate-400 mt-1">agendados hoje</p>
+            </div>
+
+            {/* Próximo Atendimento (visão operacional, sem dados financeiros) */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider">Próximo</span>
+                <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+              </div>
+              {nextAppointment ? (
+                <>
+                  <div className="text-xl font-bold text-slate-900 truncate">{nextAppointmentTime}</div>
+                  <p className="text-xs text-slate-400 mt-1 truncate">{nextAppointment.patient_name}</p>
+                </>
+              ) : (
+                <>
+                  <div className="text-xl font-bold text-slate-900">—</div>
+                  <p className="text-xs text-slate-400 mt-1">nenhum atendimento restante</p>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Main Content Area: Today's Appointments & Monthly Chart */}

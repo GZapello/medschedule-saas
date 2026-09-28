@@ -22,13 +22,24 @@ export class DashboardController {
       const todayParams: any[] = [tenantId, `${today}%`];
       const countParams: any[] = [tenantId, monthStart];
 
-      if ((req as any).user && (req as any).user.role === 'professional') {
+      const userRole = (req as any).user?.role;
+
+      if (userRole === 'professional') {
         profFilterToday = ' AND a.professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
         todayParams.push((req as any).user.userId, tenantId);
 
         profFilterMonth = ' AND professional_id IN (SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1)';
         countParams.push((req as any).user.userId, tenantId);
       }
+
+      // Dados financeiros e indicadores administrativos (faturamento, pendências, ocupação) só
+      // devem ser calculados/expostos para quem tem visão administrativa da clínica. O papel
+      // 'professional' mantém o comportamento pré-existente (não filtrado por profissional, como
+      // já era antes desta correção) por estar fora do escopo desta mudança; 'receptionist' e
+      // qualquer outro papel não-admin/não-profissional nunca recebem esses campos na resposta —
+      // omitidos aqui, e não apenas escondidos no frontend, para que não vazem via um frontend
+      // desatualizado ou contornado.
+      const includeFinancials = userRole === 'clinic_admin' || userRole === 'superadmin' || userRole === 'professional';
 
       // 1. Atendimentos de hoje (inclui completed, in_progress, scheduled, etc. - nunca exclui atendimentos finalizados)
       const todayApptsStmt = db.prepare(`
@@ -63,15 +74,18 @@ export class DashboardController {
       `);
       const counts = countStmt.get(...countParams) as any;
 
-      // 3. Faturamento do mês
-      const financeStmt = db.prepare(`
-        SELECT 
-          SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) as revenue_month,
-          SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as pending_month
-        FROM payments
-        WHERE tenant_id = ? AND created_at >= ?
-      `);
-      const finance = financeStmt.get(tenantId, monthStart) as any;
+      // 3. Faturamento do mês — só é consultado quando o papel tem visão financeira/administrativa
+      let finance: any = { revenue_month: 0, pending_month: 0 };
+      if (includeFinancials) {
+        const financeStmt = db.prepare(`
+          SELECT
+            SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) as revenue_month,
+            SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as pending_month
+          FROM payments
+          WHERE tenant_id = ? AND created_at >= ?
+        `);
+        finance = financeStmt.get(tenantId, monthStart) as any;
+      }
 
       // 4. Novos pacientes do mês
       const patientCountStmt = db.prepare(`
@@ -96,8 +110,9 @@ export class DashboardController {
       const estimatedCapacity = profCount * 8 * 22; // 22 dias úteis
       const occupancyRate = Math.min(100, Math.round((totalMonth / (estimatedCapacity || 1)) * 100));
 
-      // 7. Dados dos últimos 6 meses para gráficos
-      const monthsData: { month: string; appointments: number; revenue: number }[] = [];
+      // 7. Dados dos últimos 6 meses para gráficos (receita por mês só entra para quem tem
+      // visão financeira — ver `includeFinancials` acima)
+      const monthsData: { month: string; appointments: number; revenue?: number }[] = [];
       for (let i = 5; i >= 0; i--) {
         const d = new Date();
         d.setMonth(d.getMonth() - i);
@@ -105,20 +120,46 @@ export class DashboardController {
         const monthLabel = d.toLocaleString('pt-BR', { month: 'short' });
 
         const apptCount = (db.prepare(`
-          SELECT COUNT(*) as c FROM appointments 
+          SELECT COUNT(*) as c FROM appointments
           WHERE tenant_id = ? AND start_time LIKE ? AND status != 'cancelled'
         `).get(tenantId, `${yMonth}%`) as any)?.c || 0;
 
-        const revSum = (db.prepare(`
-          SELECT SUM(amount) as s FROM payments 
-          WHERE tenant_id = ? AND created_at LIKE ? AND status = 'paid'
-        `).get(tenantId, `${yMonth}%`) as any)?.s || 0;
-
-        monthsData.push({
+        const monthEntry: { month: string; appointments: number; revenue?: number } = {
           month: monthLabel,
-          appointments: apptCount,
-          revenue: revSum
-        });
+          appointments: apptCount
+        };
+
+        if (includeFinancials) {
+          monthEntry.revenue = (db.prepare(`
+            SELECT SUM(amount) as s FROM payments
+            WHERE tenant_id = ? AND created_at LIKE ? AND status = 'paid'
+          `).get(tenantId, `${yMonth}%`) as any)?.s || 0;
+        }
+
+        monthsData.push(monthEntry);
+      }
+
+      const monthly: {
+        totalAppointments: number;
+        completed: number;
+        noShow: number;
+        cancelled: number;
+        newPatients: number;
+        revenue?: number;
+        pending?: number;
+        occupancyRate?: number;
+      } = {
+        totalAppointments: counts.total_month || 0,
+        completed: counts.completed_month || 0,
+        noShow: counts.no_show_month || 0,
+        cancelled: counts.cancelled_month || 0,
+        newPatients
+      };
+
+      if (includeFinancials) {
+        monthly.revenue = finance.revenue_month || 0;
+        monthly.pending = finance.pending_month || 0;
+        monthly.occupancyRate = occupancyRate;
       }
 
       res.json({
@@ -127,16 +168,7 @@ export class DashboardController {
           total: todayAppointments.length,
           appointments: todayAppointments
         },
-        monthly: {
-          totalAppointments: counts.total_month || 0,
-          completed: counts.completed_month || 0,
-          noShow: counts.no_show_month || 0,
-          cancelled: counts.cancelled_month || 0,
-          revenue: finance.revenue_month || 0,
-          pending: finance.pending_month || 0,
-          newPatients,
-          occupancyRate
-        },
+        monthly,
         totals,
         chart: monthsData
       });

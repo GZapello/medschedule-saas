@@ -698,7 +698,7 @@ api.post('/v1/payments', requireTenant, requireRole('clinic_admin', 'receptionis
 api.put('/v1/payments/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist'), PaymentController.updateStatus);
 
 // Dashboard
-api.get('/v1/dashboard/metrics', requireTenant, DashboardController.getMetrics);
+api.get('/v1/dashboard/metrics', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), DashboardController.getMetrics);
 
 // Relatórios e Exportação CSV e DOCX
 api.get('/v1/reports/attendance', requireTenant, requireRole('clinic_admin'), ReportController.getAttendanceReport);
