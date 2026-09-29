@@ -48,6 +48,7 @@ interface AuthContextType {
   practiceAreaIds: string[];
   selectedOptionalCapabilities: string[];
   hasCapability: (capabilityId: string) => boolean;
+  hasPermission: (permissionId: string) => boolean;
   isSandboxSession: boolean;
   startSandboxSession: (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => void;
   exitSandboxSession: () => void | Promise<void>;
@@ -496,6 +497,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return capabilities.includes(capId);
   };
 
+  const hasPermission = (permId: string): boolean => {
+    if (isSuperAdmin && !isSandboxSession) return true;
+    if (isClinicAdmin) return true;
+    return userPermissions.includes(permId);
+  };
+
   const clientTermLabel = (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
     ? 'Aluno'
     : 'Paciente';
@@ -548,6 +555,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         practiceAreaIds,
         selectedOptionalCapabilities,
         hasCapability,
+        hasPermission,
         isSandboxSession,
         startSandboxSession,
         exitSandboxSession,

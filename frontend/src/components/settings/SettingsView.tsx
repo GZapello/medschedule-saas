@@ -4,6 +4,11 @@ import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { openCookiePreferencesModal } from '../../utils/cookieConsent';
+import { UnifiedTeamManagement } from './UnifiedTeamManagement';
+import { ServicesView } from '../services/ServicesView';
+import { MyResourcesView } from '../profile/MyResourcesView';
+import { ImportDataView } from '../import/ImportDataView';
+import { ProfessionalPayrollView } from '../payroll/ProfessionalPayrollView';
 import {
   Settings,
   Building2,
@@ -32,7 +37,16 @@ import {
   Award,
   Briefcase,
   MapPin,
-  Info
+  Info,
+  ArrowLeft,
+  ChevronRight,
+  Users,
+  Calendar,
+  DollarSign,
+  Share2,
+  MessageSquare,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export const COMMON_INSURANCE_PRESETS = [
@@ -54,9 +68,48 @@ export const COMMON_INSURANCE_PRESETS = [
   { name: 'Prevent Senior', ansCode: '302147', phone: '0800 770 0789' }
 ];
 
-export const SettingsView: React.FC = () => {
+export interface SettingsViewProps {
+  initialSection?: string;
+  onNavigateView?: (view: string) => void;
+}
+
+export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNavigateView }) => {
   const { currentUser, currentTenant, isClinicAdmin, refreshTenant, reloadSession } = useAuth();
   const { showToast } = useToast();
+
+  const [activeSection, setActiveSection] = useState<string>(() => {
+    if (initialSection) {
+      if (['team', 'professionals', 'staff', 'schedules', 'work-schedules'].includes(initialSection)) return 'team';
+      if (initialSection === 'services') return 'services';
+      if (['resources', 'my-resources'].includes(initialSection)) return 'resources';
+      if (['import', 'importar-dados'].includes(initialSection)) return 'import';
+      if (['financial', 'comissoes', 'payroll'].includes(initialSection)) return 'financial';
+      if (['billing', 'assinatura'].includes(initialSection)) return 'billing';
+      if (['clinic', 'clinica'].includes(initialSection)) return 'clinic';
+      if (['account', 'profile', 'minha-conta'].includes(initialSection)) return 'account';
+      if (['legal', 'privacidade'].includes(initialSection)) return 'legal';
+      if (['integrations', 'integracoes'].includes(initialSection)) return 'integrations';
+    }
+    return 'hub';
+  });
+
+  const [hubSearchTerm, setHubSearchTerm] = useState<string>('');
+
+  useEffect(() => {
+    if (initialSection) {
+      if (['team', 'professionals', 'staff', 'schedules', 'work-schedules'].includes(initialSection)) setActiveSection('team');
+      else if (initialSection === 'services') setActiveSection('services');
+      else if (['resources', 'my-resources'].includes(initialSection)) setActiveSection('resources');
+      else if (['import', 'importar-dados'].includes(initialSection)) setActiveSection('import');
+      else if (['financial', 'comissoes', 'payroll'].includes(initialSection)) setActiveSection('financial');
+      else if (['billing', 'assinatura'].includes(initialSection)) setActiveSection('billing');
+      else if (['clinic', 'clinica'].includes(initialSection)) setActiveSection('clinic');
+      else if (['account', 'profile', 'minha-conta'].includes(initialSection)) setActiveSection('account');
+      else if (['legal', 'privacidade'].includes(initialSection)) setActiveSection('legal');
+      else if (['integrations', 'integracoes'].includes(initialSection)) setActiveSection('integrations');
+      else if (initialSection === 'hub') setActiveSection('hub');
+    }
+  }, [initialSection]);
 
   const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal'>(
     isClinicAdmin ? 'clinic' : 'profile'
@@ -484,88 +537,523 @@ export const SettingsView: React.FC = () => {
     }
   };
 
+  const adminCards = [
+    {
+      id: 'clinic',
+      title: 'Clínica & Identidade',
+      desc: 'Dados institucionais, razão social, CNPJ, logotipo oficial, horários de funcionamento, convênios e modelos de documentos.',
+      icon: Building2,
+      iconBg: 'bg-indigo-50',
+      iconColor: 'text-indigo-600',
+      tags: ['Identidade', 'Logo', 'Horários', 'Convênios'],
+      defaultTab: 'clinic'
+    },
+    {
+      id: 'team',
+      title: 'Equipe & Acessos',
+      desc: 'Ficha única do membro: profissionais, equipe administrativa, escalas semanais, bloqueios/férias, permissões granulares e convites.',
+      icon: Users,
+      iconBg: 'bg-violet-50',
+      iconColor: 'text-violet-600',
+      tags: ['Ficha Única', 'Escala', 'Permissões', 'Convites']
+    },
+    {
+      id: 'services',
+      title: 'Agenda & Operação',
+      desc: 'Catálogo de serviços clínicos, procedimentos, salas de atendimento e parâmetros operacionais de agendamento.',
+      icon: Calendar,
+      iconBg: 'bg-cyan-50',
+      iconColor: 'text-cyan-600',
+      tags: ['Serviços', 'Salas', 'Duração']
+    },
+    {
+      id: 'financial',
+      title: 'Financeiro & Repasses',
+      desc: 'Configurações de remuneração de profissionais, percentuais de comissão, fechamento de folha e repasses.',
+      icon: DollarSign,
+      iconBg: 'bg-emerald-50',
+      iconColor: 'text-emerald-600',
+      tags: ['Comissões', 'Repasses', 'Folha']
+    },
+    {
+      id: 'resources',
+      title: 'Módulos & Recursos',
+      desc: 'Habilitação e parametrização dos módulos do ecossistema Zemda e recursos clínicos opcionais da clínica.',
+      icon: Sparkles,
+      iconBg: 'bg-purple-50',
+      iconColor: 'text-purple-600',
+      tags: ['Zemda360', 'Módulos Clínicos']
+    },
+    {
+      id: 'integrations',
+      title: 'Integrações (WhatsApp/Infobip)',
+      desc: 'Conexão oficial com WhatsApp/Infobip para envio de confirmações e lembretes automáticos de consulta.',
+      icon: Share2,
+      iconBg: 'bg-blue-50',
+      iconColor: 'text-blue-600',
+      tags: ['WhatsApp', 'Infobip', 'Lembretes']
+    },
+    {
+      id: 'import',
+      title: 'Importação de Dados',
+      desc: 'Importe dados de pacientes, agendamentos e prontuários a partir de planilhas Excel/CSV ou outros sistemas.',
+      icon: Upload,
+      iconBg: 'bg-amber-50',
+      iconColor: 'text-amber-600',
+      tags: ['Planilhas CSV', 'Pacientes', 'Migração']
+    },
+    {
+      id: 'account',
+      title: 'Conta & Segurança',
+      desc: 'E-mail de acesso, alteração de senha pessoal, conformidade LGPD, termos legais vigentes e cookies.',
+      icon: Shield,
+      iconBg: 'bg-slate-100',
+      iconColor: 'text-slate-700',
+      tags: ['Minha Conta', 'Senha', 'LGPD'],
+      defaultTab: 'profile'
+    },
+    {
+      id: 'billing',
+      title: 'Assinatura & Plano',
+      desc: 'Gerenciamento do plano ativo, limites de capacidade da clínica, faturas e opções de upgrade.',
+      icon: CreditCard,
+      iconBg: 'bg-rose-50',
+      iconColor: 'text-rose-600',
+      tags: ['Plano Ativo', 'Faturas', 'Limites']
+    }
+  ];
+
+  const staffCards = [
+    {
+      id: 'account',
+      title: 'Minha Conta',
+      desc: 'Dados pessoais cadastrados, e-mail de acesso e alteração de senha de segurança.',
+      icon: User,
+      iconBg: 'bg-indigo-50',
+      iconColor: 'text-indigo-600',
+      tags: ['E-mail', 'Senha', 'Segurança'],
+      defaultTab: 'profile'
+    },
+    {
+      id: 'profile_professional',
+      title: 'Perfil Profissional',
+      desc: 'Consulte e edite suas informações profissionais autorizadas, especialidades, registro e biografia.',
+      icon: Briefcase,
+      iconBg: 'bg-teal-50',
+      iconColor: 'text-teal-600',
+      tags: ['Registro', 'Bio', 'Especialidades']
+    },
+    {
+      id: 'my_booking',
+      title: 'Minha Página de Agendamento',
+      desc: 'Consulte seu link de agendamento online e copie para compartilhar com seus pacientes.',
+      icon: Calendar,
+      iconBg: 'bg-cyan-50',
+      iconColor: 'text-cyan-600',
+      tags: ['Link Público', 'Agendamento Online']
+    },
+    {
+      id: 'legal',
+      title: 'Segurança & Privacidade (LGPD)',
+      desc: 'Termos de uso da plataforma, política de privacidade da LGPD e preferências de cookies.',
+      icon: ShieldCheck,
+      iconBg: 'bg-emerald-50',
+      iconColor: 'text-emerald-600',
+      tags: ['Termos', 'Privacidade', 'Cookies'],
+      defaultTab: 'legal'
+    }
+  ];
+
+  const cards = isClinicAdmin ? adminCards : staffCards;
+
+  const getSectionTitle = (sec: string) => {
+    const found = [...adminCards, ...staffCards].find(c => c.id === sec);
+    return found ? found.title : 'Configurações';
+  };
+
   return (
-    <div className="max-w-4xl space-y-6">
-      {/* Header */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Settings className="w-5 h-5 text-indigo-600" />
-            Configurações
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {isClinicAdmin
-              ? 'Gerencie os dados institucionais da clínica e as configurações pessoais da sua conta.'
-              : 'Gerencie os dados de acesso e configurações pessoais da sua conta.'}
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* SEÇÃO HUB: Grade de Cards da Central de Configurações */}
+      {activeSection === 'hub' && (
+        <div className="space-y-6">
+          {/* Header da Central */}
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shadow-2xs">
+                  <Settings className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                    Central de Configurações
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {isClinicAdmin
+                      ? 'Gerencie parâmetros institucionais, equipe, escalas, serviços, financeiro e integrações da clínica.'
+                      : 'Gerencie suas credenciais de acesso, perfil profissional e preferências pessoais.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Busca rápida nos cards de configuração */}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar configuração..."
+                value={hubSearchTerm}
+                onChange={e => setHubSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-xs placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
+              />
+            </div>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {cards
+              .filter(card => {
+                if (!hubSearchTerm.trim()) return true;
+                const term = hubSearchTerm.toLowerCase();
+                return card.title.toLowerCase().includes(term) || card.desc.toLowerCase().includes(term) || card.tags.some(t => t.toLowerCase().includes(term));
+              })
+              .map(card => (
+                <div
+                  key={card.id}
+                  onClick={() => {
+                    setActiveSection(card.id as any);
+                    if (card.defaultTab) setActiveTab(card.defaultTab as any);
+                  }}
+                  className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col justify-between gap-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${card.iconBg} ${card.iconColor} transition-transform group-hover:scale-105 shadow-2xs`}>
+                        <card.icon className="w-6 h-6" />
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
+                    </div>
+
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm group-hover:text-indigo-600 transition-colors">
+                        {card.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                        {card.desc}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {card.tags.map((tag, idx) => (
+                        <span key={idx} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="font-bold text-indigo-600 text-xs shrink-0 group-hover:underline">
+                      Acessar →
+                    </span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Barra de Retorno e Breadcrumb para Seções Ativas */}
+      {activeSection !== 'hub' && (
+        <div className="bg-white px-5 py-3 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+            <button
+              type="button"
+              onClick={() => setActiveSection('hub')}
+              className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Central de Configurações</span>
+            </button>
+            <span className="text-slate-300">/</span>
+            <span className="text-slate-900 font-extrabold">{getSectionTitle(activeSection)}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveSection('hub')}
+            className="text-xs font-bold text-slate-500 hover:text-slate-800 px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+          >
+            ← Voltar ao Menu
+          </button>
+        </div>
+      )}
+
+      {/* SEÇÃO: EQUIPE & ACESSOS (Unificação de Profissionais + Equipe + Escala) */}
+      {activeSection === 'team' && <UnifiedTeamManagement />}
+
+      {/* SEÇÃO: AGENDA & OPERAÇÃO (Serviços e Salas) */}
+      {activeSection === 'services' && <ServicesView />}
+
+      {/* SEÇÃO: MÓDULOS & RECURSOS */}
+      {activeSection === 'resources' && <MyResourcesView />}
+
+      {/* SEÇÃO: IMPORTAÇÃO DE DADOS */}
+      {activeSection === 'import' && <ImportDataView onNavigate={onNavigateView} />}
+
+      {/* SEÇÃO: ASSINATURA & PLANO */}
+      {activeSection === 'billing' && <BillingView />}
+
+      {/* SEÇÃO: FINANCEIRO & REPASSES */}
+      {activeSection === 'financial' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-2 text-xs">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-bold text-slate-900 text-sm">Configurações Financeiras, Folha & Repasses</h3>
+            </div>
+            <p className="text-slate-500">
+              Acompanhe a folha consolidada dos profissionais e repasses da clínica.
+              As regras individuais de remuneração (comissão e salário) podem ser ajustadas diretamente na <strong>Ficha Única do Membro</strong> na aba Financeiro em Equipe & Acessos.
+            </p>
+          </div>
+          <ProfessionalPayrollView />
+        </div>
+      )}
+
+      {/* SEÇÃO: INTEGRAÇÕES (WhatsApp & Infobip) */}
+      {activeSection === 'integrations' && (
+        <div className="space-y-6">
+          <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <Share2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Integração Oficial: WhatsApp & Infobip</h3>
+                  <p className="text-slate-500 text-[11px] mt-0.5">
+                    Notificações automáticas de confirmação de consulta, lembretes de 24h e 2h antes, e canal interativo com pacientes.
+                  </p>
+                </div>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px] flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Canal Ativo
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
+                <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                  Confirmação Automática de Consulta
+                </h4>
+                <p className="text-slate-600 text-[11px]">
+                  Dispara mensagem no WhatsApp assim que um novo agendamento é criado. O paciente pode responder <strong>1</strong> para confirmar ou <strong>2</strong> para remarcar.
+                </p>
+                <div className="bg-white p-3 rounded-xl border border-slate-200 font-mono text-[11px] text-slate-700">
+                  "Olá, [Paciente]! Sua consulta na {currentTenant?.trade_name || currentTenant?.name || 'Clínica'} com [Profissional] está marcada para [Data] às [Horário]. Responda 1 para confirmar."
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-2">
+                <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                  Lembrete de Antecedência (24h e 2h)
+                </h4>
+                <p className="text-slate-600 text-[11px]">
+                  Reduz o índice de faltas e no-show em mais de 70%, alertando o paciente com antecedência programada.
+                </p>
+                <div className="bg-white p-3 rounded-xl border border-slate-200 font-mono text-[11px] text-slate-700">
+                  "Lembrete: sua consulta acontece amanhã às [Horário]. Endereço: {currentTenant?.address || 'Consulte o agendamento'}."
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 space-y-2">
+              <h4 className="font-bold text-indigo-900 text-xs flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                Infobip Cloud WhatsApp API
+              </h4>
+              <p className="text-indigo-800 text-[11px]">
+                A infraestrutura de mensageria da sua clínica opera conectada à Infobip oficial com templates aprovados pela Meta, garantindo entrega instantânea e segurança LGPD.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEÇÃO: PERFIL PROFISSIONAL (Não-Admin) */}
+      {activeSection === 'profile_professional' && (
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center font-bold">
+              <Briefcase className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Meu Perfil Profissional</h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Consulte suas informações profissionais, conselho, número de registro e especialidades ativas.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Nome Profissional</label>
+              <input
+                type="text"
+                disabled
+                value={currentUser?.name || ''}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">E-mail Cadastrado</label>
+              <input
+                type="text"
+                disabled
+                value={currentUser?.email || ''}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Profissão / Atuação</label>
+              <input
+                type="text"
+                disabled
+                value={(currentUser as any)?.professionName || (currentUser as any)?.profession_name || currentUser?.role || 'Profissional'}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Registro / Conselho</label>
+              <input
+                type="text"
+                disabled
+                value={`${(currentUser as any)?.registrationType || 'Conselho'}: ${(currentUser as any)?.registrationNumber || 'Pendente'}`}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
+              />
+            </div>
+          </div>
+          <p className="text-slate-400 text-[11px] italic">
+            * Para alterações em dados de conselho profissional ou profissão, solicite ao Gestor da Clínica através da Ficha Única em Equipe & Acessos.
           </p>
         </div>
+      )}
 
-        <button type="button" onClick={()=>setActiveTab(activeTab==='billing'?'profile':'billing')} className="px-4 py-2 rounded-xl bg-indigo-50 text-indigo-700 font-bold text-sm">{activeTab==='billing'?'Minha conta':'Assinatura e Plano'}</button>
-        {/* Abas de navegação */}
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
-          {isClinicAdmin && (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveTab('clinic')}
-                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'clinic' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Building2 className="w-3.5 h-3.5" />
-                Dados da Conta / Estabelecimento
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('document_templates')}
-                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'document_templates' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                Modelos de Documentos
-              </button>
+      {/* SEÇÃO: MINHA PÁGINA DE AGENDAMENTO (Não-Admin) */}
+      {activeSection === 'my_booking' && (
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Minha Página Pública de Agendamento</h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Compartilhe seu link exclusivo com seus pacientes para que agendem consultas online nos horários livres da sua escala.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <label className="block font-bold text-slate-800">Seu Link Exclusivo</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={`${window.location.origin}/agendar/${(currentUser as any)?.slug || 'meu-perfil'}`}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-mono text-slate-700"
+              />
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('insurances');
-                  fetchClinicInsurances();
+                  const url = `${window.location.origin}/agendar/${(currentUser as any)?.slug || 'meu-perfil'}`;
+                  navigator.clipboard.writeText(url);
+                  showToast('Link copiado com sucesso!', 'success');
                 }}
-                className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === 'insurances' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
               >
-                <CreditCard className="w-3.5 h-3.5" />
-                Convênios
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copiar</span>
               </button>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => setActiveTab('profile')}
-            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'profile' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <User className="w-3.5 h-3.5" />
-            Minha Conta
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('legal')}
-            className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'legal' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Scale className="w-3.5 h-3.5" />
-            Privacidade e Documentos Legais
-          </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ABA 1: Configurações da Clínica (Apenas Gestores / Admins) */}
-      {activeTab === 'billing' && <BillingView />}
-      {isClinicAdmin && activeTab === 'clinic' && (
+      {/* SEÇÃO: CLÍNICA & IDENTIDADE (Sub-abas: Dados, Modelos, Convênios) */}
+      {activeSection === 'clinic' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveTab('clinic')}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'clinic' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Dados da Conta / Estabelecimento</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('document_templates')}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'document_templates' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Modelos de Documentos</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('insurances');
+                fetchClinicInsurances();
+              }}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'insurances' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Convênios</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SEÇÃO: CONTA & SEGURANÇA (Sub-abas: Minha Conta, Privacidade) */}
+      {activeSection === 'account' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveTab('profile')}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'profile' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Minha Conta</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('legal')}
+              className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'legal' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5" />
+              <span>Privacidade e Documentos Legais</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FORMULÁRIO 1: Configurações da Clínica */}
+      {activeSection === 'clinic' && activeTab === 'clinic' && (
         <form onSubmit={handleSaveClinic} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
           {/* Seção Logotipo e Identidade da Clínica */}
           <div className="p-5 bg-slate-50/70 rounded-2xl border border-slate-200 space-y-3 text-xs">
@@ -1120,7 +1608,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ABA: MODELOS DE DOCUMENTOS (Item 11) */}
-      {isClinicAdmin && activeTab === 'document_templates' && (
+      {isClinicAdmin && activeSection === 'clinic' && activeTab === 'document_templates' && (
         <form onSubmit={handleSaveDocTemplate} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6 text-xs">
           <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
             <div>
@@ -1224,7 +1712,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ABA: GESTÃO DE CONVÊNIOS (Item 15) */}
-      {isClinicAdmin && activeTab === 'insurances' && (
+      {isClinicAdmin && activeSection === 'clinic' && activeTab === 'insurances' && (
         <div className="space-y-6">
           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4 text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -1491,7 +1979,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ABA: Minha Conta & Segurança (Disponível para TODOS os usuários) */}
-      {((!isClinicAdmin && activeTab !== 'billing') || activeTab === 'profile') && (
+      {((activeSection === 'account' && activeTab === 'profile') || activeSection === 'profile') && (
         <div className="space-y-6">
           {/* Card de Alteração de E-mail */}
           <form onSubmit={handleUpdateProfileEmail} className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4 text-xs">
@@ -1613,7 +2101,7 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ABA: Privacidade e Documentos Legais */}
-      {activeTab === 'legal' && (
+      {(activeSection === 'legal' || (activeSection === 'account' && activeTab === 'legal')) && (
         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-6">
           <div>
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">

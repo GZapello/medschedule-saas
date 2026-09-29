@@ -218,40 +218,34 @@ export const QuickAIAssistantShortcut: React.FC<QuickAIAssistantShortcutProps> =
         </div>
       )}
 
-      {/* Botão Flutuante de Atalho (Logo da Clínica + Fundo Transparente + Indicadores de IA) */}
+      {/* Botão Flutuante de Atalho — Avatar Circular com a Identidade/Logo do Zemda + Indicador de IA */}
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(prev => !prev)}
-        className="relative group flex items-center justify-center w-12 h-12 rounded-2xl bg-transparent hover:bg-white/10 active:scale-95 transition-all duration-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-400/50"
-        title={`Assistente IA • ${clinicName}\nClique para abrir os atalhos rápidos`}
-        aria-label="Assistente IA da Clínica"
+        className="relative group flex items-center justify-center w-13 h-13 rounded-full bg-transparent active:scale-95 transition-all duration-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-teal-400/50"
+        title="Assistente Zemda • Inteligência Clínica & Gestão (Clique para atalhos rápidos)"
+        aria-label="Assistente Zemda"
       >
         {/* Halo / Aura animada de Inteligência Artificial */}
-        <div className="absolute -inset-1 rounded-2xl bg-gradient-to-tr from-teal-400 via-cyan-400 to-indigo-500 opacity-75 group-hover:opacity-100 blur-xs group-hover:blur-sm transition-all duration-500 animate-pulse pointer-events-none" />
+        <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-teal-400 via-cyan-400 to-indigo-500 opacity-80 group-hover:opacity-100 blur-xs group-hover:blur-sm transition-all duration-500 animate-pulse pointer-events-none" />
 
-        {/* Container Central com Fundo Transparente e Borda Tecnológica */}
-        <div className="relative w-11 h-11 rounded-2xl bg-slate-950/20 backdrop-blur-xs flex items-center justify-center overflow-hidden border border-teal-400/60 group-hover:border-teal-300 shadow-lg shadow-teal-500/20 group-hover:shadow-teal-400/30 transition-all">
-          {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt={clinicName}
-              className="w-8 h-8 object-contain bg-transparent drop-shadow-sm group-hover:scale-105 transition-transform"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-transparent text-teal-300 font-black text-base drop-shadow-xs">
-              {(tenant?.name?.charAt(0) || 'Z').toUpperCase()}
-            </div>
-          )}
+        {/* Container Central Circular com a Logo Oficial do Zemda */}
+        <div className="relative w-12 h-12 rounded-full bg-slate-900 border-2 border-teal-400/80 group-hover:border-teal-300 shadow-xl shadow-teal-950/50 flex items-center justify-center overflow-hidden transition-all group-hover:scale-105">
+          <img
+            src="/brand/zemda-icon.png"
+            alt="Zemda"
+            className="w-7 h-7 object-contain drop-shadow-sm group-hover:rotate-6 transition-transform"
+          />
         </div>
 
         {/* Selo / Chip Superior Indicando ser IA */}
-        <div className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 rounded-full bg-gradient-to-r from-teal-500 to-indigo-600 border border-white/40 shadow-md flex items-center gap-0.5 text-white text-[8.5px] font-black tracking-wider uppercase pointer-events-none">
+        <div className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-teal-500 to-indigo-600 border border-white/40 shadow-md flex items-center gap-0.5 text-white text-[8.5px] font-black tracking-wider uppercase pointer-events-none">
           <Sparkles className="w-2 h-2 text-amber-300 fill-amber-300" />
           <span>IA</span>
         </div>
 
         {/* Ponto de Status Online da IA com efeito Radar/Ping */}
-        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-900 flex items-center justify-center pointer-events-none shadow-xs">
+        <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-slate-900 flex items-center justify-center pointer-events-none shadow-xs">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
         </div>
       </button>

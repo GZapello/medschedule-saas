@@ -7,23 +7,12 @@ import {
   FileText,
   Activity,
   ClipboardList,
-  UserCog,
-  CalendarClock,
-  Scissors,
   DollarSign,
-  Layers,
   BarChart3,
   ShieldCheck,
-  Settings,
   Globe,
-  Receipt,
-  UserPlus,
-  UploadCloud,
-  X,
-  Bot,
   Package,
   FileSpreadsheet,
-  Wallet,
   LifeBuoy,
   ChevronDown,
   ChevronRight,
@@ -36,9 +25,8 @@ import {
   GraduationCap,
   Stethoscope,
   Sparkles,
-  Sliders
+  X
 } from 'lucide-react';
-import { openZemdaAI } from '../../utils/aiHelper';
 
 interface SidebarProps {
   currentView: string;
@@ -70,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isSuperAdmin,
     isClinicAdmin,
     isProfessional,
+    isReceptionist,
     isPhysiotherapist,
     isZemdaFisio,
     isDentist,
@@ -91,11 +80,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     isEsthetician,
     isZemdaEstetic,
     hasCapability,
+    hasPermission,
     isZemdaBody,
     commercialModule,
     clinicalWorkspace,
     clientTermLabel
   } = useAuth();
+
+  const isEligibleClinical = isClinicAdmin || isProfessional;
 
   const categories: NavCategory[] = [
     {
@@ -103,25 +95,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Atendimento & Agenda',
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, visible: true },
-        { id: 'calendar', label: 'Agenda Interativa', icon: Calendar, visible: true },
-        { id: 'patients', label: `${clientTermLabel}s`, icon: Users, visible: true },
+        {
+          id: 'calendar',
+          label: 'Agenda Interativa',
+          icon: Calendar,
+          visible: isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_schedule')
+        },
+        {
+          id: 'patients',
+          label: `${clientTermLabel}s`,
+          icon: Users,
+          visible: isClinicAdmin || isProfessional || isReceptionist || hasPermission('create_patient') || hasPermission('edit_patient')
+        },
         {
           id: 'clinical',
           label: (commercialModule === null && (clinicalWorkspace === 'general' || isProfessional))
             ? 'Atendimento Clínico'
             : 'Prontuário & Evolução',
           icon: FileText,
-          visible: isClinicAdmin || isProfessional
+          visible: isEligibleClinical
         },
         {
           id: 'zemda-med',
           label: 'ZemdaMed (Medicina)',
           icon: Stethoscope,
-          visible: isDoctor || isZemdaMed || commercialModule === 'ZemdaMed'
+          visible: isEligibleClinical && (isDoctor || isZemdaMed || commercialModule === 'ZemdaMed')
         },
         {
           id: 'zemda-body',
-          label: 'Zemda360 (Mapeamento Anatômico)',
+          label: 'Zemda360 (Mapeamento)',
           icon: Activity,
           visible: isClinicAdmin || isZemdaBody
         },
@@ -129,103 +131,104 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'zemda-fisio',
           label: 'ZemdaFisio (Fisioterapia)',
           icon: Activity,
-          visible: isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio'
+          visible: isEligibleClinical && (isPhysiotherapist || isZemdaFisio || commercialModule === 'ZemdaFisio')
         },
         {
           id: 'zemda-odonto',
           label: 'ZemdaOdonto (Odontologia)',
           icon: Smile,
-          visible: isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto'
+          visible: isEligibleClinical && (isDentist || isZemdaOdonto || commercialModule === 'ZemdaOdonto')
         },
         {
           id: 'zemda-estetic',
           label: 'ZemdaEstetic (Estética)',
           icon: Sparkles,
-          visible: isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic'
+          visible: isEligibleClinical && (isEsthetician || isZemdaEstetic || commercialModule === 'ZemdaEstetic')
         },
         {
           id: 'zemda-nutri',
           label: 'ZemdaNutri (Nutrição)',
           icon: Apple,
-          visible: isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri'
+          visible: isEligibleClinical && (isNutritionist || isZemdaNutri || commercialModule === 'ZemdaNutri')
         },
         {
           id: 'zemda-to',
           label: 'ZemdaTO (Terapia Ocupacional)',
           icon: Hand,
-          visible: isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO'
+          visible: isEligibleClinical && (isOccupationalTherapist || isZemdaTO || commercialModule === 'ZemdaTO')
         },
         {
           id: 'zemda-fono',
           label: 'ZemdaFono (Fonoaudiologia)',
           icon: Mic,
-          visible: isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono'
+          visible: isEligibleClinical && (isSpeechTherapist || isZemdaFono || commercialModule === 'ZemdaFono')
         },
         {
           id: 'zemda-psico',
           label: 'ZemdaPsico (Psicologia)',
           icon: Brain,
-          visible: isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico'
+          visible: isEligibleClinical && (isPsychologist || isZemdaPsico || commercialModule === 'ZemdaPsico')
         },
         {
           id: 'zemda-pp',
           label: 'ZemdaPP (Psicopedagogia)',
           icon: GraduationCap,
-          visible: isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP'
+          visible: isEligibleClinical && (isPsychopedagogue || isZemdaPP || commercialModule === 'ZemdaPP')
         },
         {
           id: 'zemda-personal',
           label: 'ZemdaPersonal (Treinamento)',
           icon: Dumbbell,
-          visible: isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal'
+          visible: isEligibleClinical && (isPersonalTrainer || isZemdaPersonal || commercialModule === 'ZemdaPersonal')
         },
-        { id: 'pending-exams', label: 'Exames a Receber', icon: ClipboardList, visible: true },
+        {
+          id: 'pending-exams',
+          label: 'Exames a Receber',
+          icon: ClipboardList,
+          visible: isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_exams') || hasPermission('create_appointment')
+        },
       ]
     },
     {
-      id: 'team',
-      label: 'Cadastros & Equipe',
+      id: 'management',
+      label: 'Gestão',
       items: [
-        { id: 'professionals', label: 'Profissionais & Horários', icon: UserCog, visible: isClinicAdmin },
-        { id: 'work-schedules', label: 'Escala de Trabalho', icon: CalendarClock, visible: isClinicAdmin || isProfessional },
-        { id: 'services', label: 'Serviços & Salas', icon: Scissors, visible: isClinicAdmin },
-        { id: 'staff', label: 'Equipe & Acessos', icon: UserPlus, visible: isClinicAdmin },
+        {
+          id: 'financial',
+          label: 'Financeiro',
+          icon: DollarSign,
+          visible: isClinicAdmin || hasPermission('view_financial')
+        },
+        {
+          id: 'inventory',
+          label: 'Estoque de Insumos',
+          icon: Package,
+          visible: isClinicAdmin || hasPermission('manage_inventory') || hasPermission('view_inventory')
+        },
+        {
+          id: 'budgets',
+          label: 'Orçamentos',
+          icon: FileSpreadsheet,
+          visible: isClinicAdmin || isProfessional || hasPermission('view_budgets') || hasPermission('manage_budgets')
+        },
+        {
+          id: 'reports',
+          label: 'Relatórios',
+          icon: BarChart3,
+          visible: isClinicAdmin || hasPermission('view_reports')
+        },
       ]
     },
     {
-      id: 'operations',
-      label: 'Operação & Estoque',
+      id: 'support',
+      label: 'Suporte',
       items: [
-        { id: 'inventory', label: 'Estoque de Insumos', icon: Package, visible: isClinicAdmin },
-        { id: 'budgets', label: 'Orçamentos', icon: FileSpreadsheet, visible: isClinicAdmin || isProfessional },
-      ]
-    },
-    {
-      id: 'financial',
-      label: 'Financeiro & Gestão',
-      items: [
-        { id: 'financial', label: 'Financeiro', icon: DollarSign, visible: isClinicAdmin },
-        { id: 'payroll', label: 'Pagamentos & Comissões', icon: Wallet, visible: isClinicAdmin },
-        { id: 'receipts', label: 'Recibos Oficiais', icon: Receipt, visible: isClinicAdmin },
-        { id: 'reports', label: 'Relatórios & Exportação', icon: BarChart3, visible: isClinicAdmin },
-      ]
-    },
-    {
-      id: 'system',
-      label: 'Suporte & Sistema',
-      items: [
-        { id: 'ai-assistant', label: 'Assistente Zemda', icon: Bot, visible: true },
         { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: true },
-        { id: 'import', label: 'Importar Dados', icon: UploadCloud, visible: isClinicAdmin },
-        { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: isSuperAdmin },
-        { id: 'my-resources', label: 'Meus Recursos', icon: Sliders, visible: isProfessional || isClinicAdmin },
-        { id: 'settings', label: isClinicAdmin ? 'Configurações' : 'Minha Conta', icon: Settings, visible: true },
-        { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: isSuperAdmin },
       ]
     }
   ];
 
-  // Menu Simplificado do SuperAdmin (Item 20)
+  // Menu Simplificado do SuperAdmin
   const superAdminCategories: NavCategory[] = [
     {
       id: 'superadmin_main',
@@ -233,7 +236,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'superadmin', label: 'Painel Global', icon: Globe, visible: true },
         { id: 'support-tickets', label: 'Chamados', icon: LifeBuoy, visible: true },
-        { id: 'audit', label: 'Auditoria', icon: ShieldCheck, visible: true }
+        { id: 'audit', label: 'Auditoria LGPD', icon: ShieldCheck, visible: true }
       ]
     }
   ];
@@ -247,10 +250,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
     const initial: Record<string, boolean> = {
       attendance: true,
-      team: false,
-      operations: false,
-      financial: false,
-      system: false
+      management: true,
+      support: false
     };
     for (const cat of categories) {
       if (cat.items.some(item => item.id === currentView)) {
@@ -369,13 +370,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           data-nav-id={item.id}
                           data-clinical-module={isUserModule ? "true" : undefined}
                           onClick={() => {
-                            if (item.id === 'ai-assistant') {
-                              openZemdaAI();
-                              onClose();
-                            } else {
-                              onNavigate(item.id);
-                              onClose();
-                            }
+                            onNavigate(item.id);
+                            onClose();
                           }}
                           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                             isActive

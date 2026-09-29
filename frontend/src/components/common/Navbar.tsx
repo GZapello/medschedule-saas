@@ -3,26 +3,25 @@ import { useAuth } from '../../context/AuthContext';
 import { AccountSettingsModal } from '../profile/AccountSettingsModal';
 import { ApiClient } from '../../api/client';
 import {
-  Bot,
   ExternalLink,
   LogOut,
   Building2,
   UserCheck,
   Shield,
   Menu,
-  Key,
-  Monitor,
-  HelpCircle
+  Settings,
+  HelpCircle,
+  Key
 } from 'lucide-react';
 import { useOnboarding } from '../onboarding/OnboardingContext';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
-  onOpenAI: () => void;
+  onOpenAI?: () => void;
   onNavigate: (view: string) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNavigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) => {
   const {
     currentUser,
     currentTenant,
@@ -133,19 +132,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
           </button>
         )}
 
-        {/* Link para download do instalador Windows Desktop */}
-        <a
-          href={`${ApiClient.getBaseUrl()}/v1/public/download-windows`}
-          download="Zemda Setup 1.1.2.exe"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-teal-700 bg-slate-50 hover:bg-teal-50 rounded-lg transition-colors border border-slate-200"
-          title="Baixar Zemda para Windows Desktop (.exe)"
-        >
-          <Monitor className="w-3.5 h-3.5 text-teal-600" />
-          <span className="hidden lg:inline">Zemda Windows</span>
-        </a>
-
         {/* Central de Ajuda Permanente */}
         <button
           onClick={openHelp}
@@ -158,15 +144,16 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onOpenAI, onNav
           <span className="hidden sm:inline">Ajuda</span>
         </button>
 
-        {/* Botão do Assistente Zemda (acesso discreto e profissional) */}
+        {/* Central de Configurações */}
         <button
-          onClick={onOpenAI}
-          data-tour="nav-ai-assistant"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold rounded-lg border border-slate-200 transition-colors cursor-pointer"
-          title="Abrir Assistente Zemda"
+          onClick={() => onNavigate('settings')}
+          data-tour="nav-settings"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-teal-50 hover:text-teal-700 text-slate-700 text-xs font-bold rounded-lg border border-slate-200 hover:border-teal-200 transition-all cursor-pointer shadow-2xs"
+          title="Central de Configurações"
+          aria-label="Configurações"
         >
-          <Bot className="w-4 h-4 text-teal-600" />
-          <span className="hidden md:inline">Assistente Zemda</span>
+          <Settings className="w-4 h-4 text-slate-600" />
+          <span className="hidden sm:inline">Configurações</span>
         </button>
 
         {/* Perfil e Role */}

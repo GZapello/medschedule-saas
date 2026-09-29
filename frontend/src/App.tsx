@@ -222,6 +222,10 @@ const AppContent: React.FC = () => {
     loading,
     reloadSession,
     isSuperAdmin,
+    isClinicAdmin,
+    isProfessional,
+    isReceptionist,
+    hasPermission,
     isPhysiotherapist,
     isZemdaFisio,
     isDentist,
@@ -260,14 +264,68 @@ const AppContent: React.FC = () => {
     return { view: 'dashboard' };
   };
 
+  const getInitialSettingsSection = (): string => {
+    const clean = window.location.pathname.replace(/\/+$/, '') || '/';
+    if (['/profissionais', '/equipe', '/horarios'].includes(clean)) return 'team';
+    if (clean === '/servicos') return 'services';
+    if (clean === '/meus-recursos') return 'resources';
+    if (['/import', '/importar-dados'].includes(clean)) return 'import';
+    if (['/assinatura', '/billing'].includes(clean)) return 'billing';
+    if (['/comissoes', '/payroll'].includes(clean)) return 'financial';
+    return 'hub';
+  };
+
   const initialRoute = useRef(getInitialRoute()).current;
   const [currentView, setCurrentView] = useState<string>(initialRoute.view);
   const [subRouteId, setSubRouteId] = useState<string | null>(initialRoute.subId || null);
+  const [settingsSection, setSettingsSection] = useState<string>(getInitialSettingsSection);
 
   const handleNavigateView = (view: string, subId?: string | null, force?: boolean) => {
     if ((view === 'superadmin' || view === 'audit') && currentUserRef.current?.role !== 'superadmin' && !force) {
       return;
     }
+
+    if (['team', 'professionals', 'staff', 'schedules', 'work-schedules'].includes(view)) {
+      setSettingsSection('team');
+      setCurrentView('settings');
+      sessionStorage.setItem('activeView', 'settings');
+      const targetPath = VIEW_TO_PATH[view] || '/equipe';
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ view: 'settings', subId }, '', targetPath);
+      }
+      return;
+    }
+    if (view === 'services') {
+      setSettingsSection('services');
+      setCurrentView('settings');
+      sessionStorage.setItem('activeView', 'settings');
+      if (window.location.pathname !== '/servicos') {
+        window.history.pushState({ view: 'settings', subId }, '', '/servicos');
+      }
+      return;
+    }
+    if (['my-resources', 'resources'].includes(view)) {
+      setSettingsSection('resources');
+      setCurrentView('settings');
+      sessionStorage.setItem('activeView', 'settings');
+      if (window.location.pathname !== '/meus-recursos') {
+        window.history.pushState({ view: 'settings', subId }, '', '/meus-recursos');
+      }
+      return;
+    }
+    if (['import', 'importar-dados'].includes(view)) {
+      setSettingsSection('import');
+      setCurrentView('settings');
+      sessionStorage.setItem('activeView', 'settings');
+      if (window.location.pathname !== '/importar-dados') {
+        window.history.pushState({ view: 'settings', subId }, '', '/importar-dados');
+      }
+      return;
+    }
+    if (view === 'settings') {
+      setSettingsSection(subId || 'hub');
+    }
+
     setCurrentView(view);
     setSubRouteId(subId || null);
     sessionStorage.setItem('activeView', view);
@@ -605,9 +663,28 @@ const AppContent: React.FC = () => {
       if (currentUserRef.current) {
         const parsed = parseRouteFromPath(window.location.pathname);
         if (parsed) {
-          setCurrentView(parsed.view);
+          if (['professionals', 'staff', 'schedules', 'work-schedules'].includes(parsed.view)) {
+            setCurrentView('settings');
+            setSettingsSection('team');
+            sessionStorage.setItem('activeView', 'settings');
+          } else if (parsed.view === 'services') {
+            setCurrentView('settings');
+            setSettingsSection('services');
+            sessionStorage.setItem('activeView', 'settings');
+          } else if (['my-resources', 'resources'].includes(parsed.view)) {
+            setCurrentView('settings');
+            setSettingsSection('resources');
+            sessionStorage.setItem('activeView', 'settings');
+          } else if (['import', 'importar-dados'].includes(parsed.view)) {
+            setCurrentView('settings');
+            setSettingsSection('import');
+            sessionStorage.setItem('activeView', 'settings');
+          } else {
+            setCurrentView(parsed.view);
+            if (parsed.view === 'settings') setSettingsSection('hub');
+            sessionStorage.setItem('activeView', parsed.view);
+          }
           setSubRouteId(parsed.subId || null);
-          sessionStorage.setItem('activeView', parsed.view);
         } else if (window.location.pathname === '/' || window.location.pathname === '') {
           setCurrentView('dashboard');
           setSubRouteId(null);
@@ -1154,7 +1231,25 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'calendar' && (
-            <CalendarView onOpenNewAppointment={handleOpenNewAppointment} />
+            (isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_schedule')) ? (
+              <CalendarView onOpenNewAppointment={handleOpenNewAppointment} />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: Agenda</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para visualizar a agenda da clínica. Solicite autorização ao administrador da sua conta.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
           )}
 
           {currentView === 'patients' && (
@@ -1348,39 +1443,193 @@ const AppContent: React.FC = () => {
             )
           )}
 
-          {currentView === 'pending-exams' && <PendingExamsView />}
+          {currentView === 'pending-exams' && (
+            (isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_exams') || hasPermission('create_appointment')) ? (
+              <PendingExamsView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: Exames a Receber</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para visualizar ou registrar exames de pacientes.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
+          )}
 
-          {currentView === 'professionals' && <ProfessionalsView />}
+          {currentView === 'professionals' && (
+            <SettingsView initialSection="team" onNavigateView={handleNavigateView} />
+          )}
 
-          {currentView === 'work-schedules' && <WorkSchedulesView />}
+          {currentView === 'work-schedules' && (
+            <SettingsView initialSection="team" onNavigateView={handleNavigateView} />
+          )}
 
-          {currentView === 'services' && <ServicesView />}
+          {currentView === 'services' && (
+            <SettingsView initialSection="services" onNavigateView={handleNavigateView} />
+          )}
 
-          {currentView === 'inventory' && <InventoryView />}
+          {currentView === 'inventory' && (
+            (isClinicAdmin || hasPermission('manage_inventory') || hasPermission('view_inventory')) ? (
+              <InventoryView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: Estoque de Insumos</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para visualizar ou gerenciar o estoque de insumos.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
+          )}
 
-          {currentView === 'budgets' && <BudgetsView />}
+          {currentView === 'budgets' && (
+            (isClinicAdmin || isProfessional || hasPermission('view_budgets') || hasPermission('manage_budgets')) ? (
+              <BudgetsView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: Orçamentos</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para acessar os orçamentos da clínica.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
+          )}
 
-          {currentView === 'financial' && <FinancialView />}
+          {currentView === 'financial' && (
+            (isClinicAdmin || hasPermission('view_financial')) ? (
+              <FinancialView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: Financeiro</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para visualizar as movimentações financeiras da clínica.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
+          )}
 
-          {currentView === 'payroll' && <ProfessionalPayrollView />}
+          {currentView === 'payroll' && (
+            (isClinicAdmin || hasPermission('view_financial') || hasPermission('manage_staff')) ? (
+              <ProfessionalPayrollView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: Repasses e Comissões</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para visualizar os repasses e comissões da equipe.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
+          )}
 
-          {currentView === 'receipts' && <ReceiptsView />}
+          {currentView === 'receipts' && (
+            (isClinicAdmin || hasPermission('view_receipts') || hasPermission('issue_receipt')) ? (
+              <ReceiptsView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: Recibos</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para emitir ou visualizar recibos da clínica.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
+          )}
 
-          {currentView === 'staff' && <StaffManagementView />}
+          {currentView === 'staff' && (
+            <SettingsView initialSection="team" onNavigateView={handleNavigateView} />
+          )}
 
           {currentView === 'taxonomy' && isSuperAdmin && <TaxonomyView />}
 
-          {currentView === 'reports' && <ReportsView />}
+          {currentView === 'reports' && (
+            (isClinicAdmin || hasPermission('view_reports')) ? (
+              <ReportsView />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-lg mx-auto my-12">
+                <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">Acesso Restrito: Relatórios</h2>
+                <p className="text-sm text-slate-600 mb-4">
+                  Você não possui permissão para acessar os relatórios analíticos da clínica.
+                </p>
+                <button
+                  onClick={() => handleNavigateView('dashboard')}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors cursor-pointer"
+                >
+                  Voltar ao Início
+                </button>
+              </div>
+            )
+          )}
 
           {currentView === 'support-tickets' && <SupportTicketsView />}
 
-          {currentView === 'import' && <ImportDataView onNavigate={setCurrentView} />}
+          {currentView === 'import' && (
+            <SettingsView initialSection="import" onNavigateView={handleNavigateView} />
+          )}
 
           {currentView === 'audit' && <AuditView />}
 
-          {currentView === 'settings' && <SettingsView />}
+          {currentView === 'settings' && (
+            <SettingsView initialSection={settingsSection} onNavigateView={handleNavigateView} />
+          )}
 
-          {currentView === 'my-resources' && <MyResourcesView />}
+          {currentView === 'my-resources' && (
+            <SettingsView initialSection="resources" onNavigateView={handleNavigateView} />
+          )}
 
           {(currentView === 'sandbox' || currentView === 'laboratory') && isSuperAdmin && (
             <SuperAdminLaboratoryView />
