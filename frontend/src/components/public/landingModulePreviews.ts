@@ -150,12 +150,14 @@ export const LANDING_MODULE_PREVIEWS: readonly LandingModulePreview[] = [
   {
     id: 'personal', name: 'ZemdaPersonal', area: 'Educação Física',
     description: 'Avaliações físicas e treinos organizados por aluno.',
-    features: ['Avaliação física e antropometria', 'Composição corporal e TAV', 'Prescrição de treinos', 'Fichas e relatórios em PDF'],
+    features: ['Avaliação física e antropometria', 'Composição corporal e TAV', 'Prescrição de treinos', 'Fichas e relatórios em PDF', 'Avaliação postural', 'Histórico e comparações'],
     featureDescriptions: [
       "Registre avaliações físicas, medidas e perímetros para acompanhar cada aluno.",
       "Organize os dados de composição corporal e de tecido adiposo visceral (TAV).",
       "Monte treinos com exercícios e parâmetros de execução para cada aluno.",
-      "Prepare fichas de treino e relatórios de avaliação para impressão ou salvamento em PDF."
+      "Prepare fichas de treino e relatórios de avaliação para impressão ou salvamento em PDF.",
+      "Registre observações de postura por região e vista, vinculadas à avaliação física.",
+      "Compare medidas, composição corporal e registros posturais entre avaliações."
     ],
     focus: 'Consulte o histórico de avaliações, compare resultados e acompanhe a execução dos treinos.'
   },

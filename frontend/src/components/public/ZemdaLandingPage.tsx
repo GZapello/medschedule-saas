@@ -67,26 +67,25 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
               <span className="zl-hero-note">Médicos, consultórios individuais, equipes e clínicas multiprofissionais.</span>
             </div>
             <div className="zl-hero-grid">
-              <h1>{LANDING_HERO_TITLE_LINES[0]}<br />{' '}<span>{LANDING_HERO_TITLE_LINES[1]}</span></h1>
-              <div className="zl-hero-copy">
-                <p>{LANDING_HERO.description}</p>
-                <div className="zl-actions">
-                  <button className="zl-button" onClick={() => onRegisterClinic('SOLO', true)}>
-                    Testar grátis por 7 dias <ArrowRight size={17} />
-                  </button>
-                  <a className="zl-link" href="#profissoes">Conhecer os módulos <ArrowDown size={16} /></a>
+              <div className="zl-hero-text">
+                <h1>{LANDING_HERO_TITLE_LINES[0]}<br />{' '}<span>{LANDING_HERO_TITLE_LINES[1]}</span></h1>
+                <div className="zl-hero-copy">
+                  <p>{LANDING_HERO.description}</p>
+                  <div className="zl-actions">
+                    <button className="zl-button" onClick={() => onRegisterClinic('SOLO', true)}>
+                      Testar grátis por 7 dias <ArrowRight size={17} />
+                    </button>
+                    <a className="zl-link" href="#profissoes">Conhecer os módulos <ArrowDown size={16} /></a>
+                  </div>
+                  <div className="zl-hero-trial-copy">
+                    <p className="zl-hero-trial-highlight">Faça sua conta em 2 minutos. Teste o Zemda grátis por 7 dias.</p>
+                    <p className="zl-hero-trial-sub">Sem compromisso.</p>
+                  </div>
+                  <p className="zl-small">Feito para consultórios médicos, profissionais de saúde, equipes e clínicas multiprofissionais.</p>
                 </div>
-                <div className="zl-hero-trial-copy">
-                  <p className="zl-hero-trial-highlight">Faça sua conta em 2 minutos. Teste o Zemda grátis por 7 dias.</p>
-                  <p className="zl-hero-trial-sub">Sem compromisso.</p>
-                </div>
-                <p className="zl-small">Feito para consultórios médicos, profissionais de saúde, equipes e clínicas multiprofissionais.</p>
               </div>
+              <LandingProductDemo />
             </div>
-          </RevealItem>
-          <RevealItem autoAnimate delayMs={100} distancePx={16} durationMs={700}>
-            <LandingProductDemo />
-            <p className="zl-preview-note">Composição ilustrativa de funcionalidades. Não representa uma captura da interface.</p>
           </RevealItem>
         </div>
       </section>
@@ -100,7 +99,10 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
       <RevealSection id="profissoes" className="zl-section zl-tinted"><div className="zl-container">
         <RevealItem distancePx={16} durationMs={550}><Heading label="Ecossistema profissional" title="Ferramentas específicas para sua profissão.">Avalie, registre e acompanhe cada atendimento com os recursos da sua área.</Heading></RevealItem>
         <RevealItem distancePx={18} delayMs={100} durationMs={600}><article id="zemda360" className="zl-body"><span className="zl-body-symbol"><Crosshair size={48} strokeWidth={1.3} /></span><div><span className="zl-eyebrow">Módulo transversal</span><h3>Zemda360</h3><p>Mapeamento anatômico visual integrado ao atendimento. Um recurso compartilhado entre a medicina e as especialidades multiprofissionais para registro corporal e facial, marcações com caneta e borracha e histórico de avaliações.</p></div><div className="zl-body-tags"><span>Mapeamento anatômico visual</span><span>Mapeamento corporal e facial</span><span>Marcações e histórico</span></div></article></RevealItem>
-        <div className="zl-modules">{LANDING_MODULES.map((module, index) => { const Icon = moduleIcons[module.id] || Stethoscope; return <RevealItem key={module.id} distancePx={18} delayMs={(index % 4) * 60} durationMs={600} className="zl-full-height"><article id={`modulo-${module.id}`} className={`zl-module zl-module-${module.id}`}><span className="zl-module-icon"><Icon size={23} /></span><p className="zl-profession">{module.profession}</p><h3>{module.name}</h3><Bullets items={module.features} /><a href={moduleHref(module)} onClick={event => navigateModule(event, module)} className="zl-module-link" aria-label={`Conhecer módulo ${module.name}`}>Conhecer módulo <ArrowRight size={16} /></a></article></RevealItem>; })}</div>
+        <div className="zl-modules">{LANDING_MODULES.map((module, index) => { const Icon = moduleIcons[module.id] || Stethoscope; return <React.Fragment key={module.id}><RevealItem distancePx={18} delayMs={(index % 4) * 60} durationMs={600} className="zl-full-height"><article id={`modulo-${module.id}`} className={`zl-module zl-module-${module.id}`}><span className="zl-module-icon"><Icon size={23} /></span><p className="zl-profession">{module.profession}</p><h3>{module.name}</h3><Bullets items={module.features} /><a href={moduleHref(module)} onClick={event => navigateModule(event, module)} className="zl-module-link" aria-label={`Conhecer módulo ${module.name}`}>Conhecer módulo <ArrowRight size={16} /></a></article></RevealItem></React.Fragment>; })}</div>
+        <aside className="zl-care-editorial">
+          <div className="zl-care-copy"><span className="zl-eyebrow">Tecnologia a serviço do cuidado</span><h3>Feito para quem cuida.</h3><p>Da rotina clínica à gestão, o Zemda acompanha cada profissional.</p></div>
+        </aside>
       </div></RevealSection>
 
       <RevealSection id="funcionalidades" className="zl-section"><div className="zl-container">
