@@ -362,6 +362,20 @@
     "gif_sha256": "aafb01c423cfa3115df9a971430607a5f534046ea91510732af182e0a7109064"
   },
   {
+    "exercise_id": "ex-aquecimento-agachamento-alcance",
+    "dataset_id": "quads/squat-to-overhead-reach",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "quads/squat-to-overhead-reach.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "quads/squat-to-overhead-reach.gif",
+    "gif_url": "/exercise-media/ex-aquecimento-agachamento-alcance.gif",
+    "gif_sha256": "c6c3e206f8709a573d44916d537aeef2c213c966ae3951fe3cc706644d71704a",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "quads/squat-to-overhead-reach.thumb.webp",
+    "photo_url": "/exercise-media/ex-aquecimento-agachamento-alcance.webp",
+    "photo_sha256": "1505f2d33b76812fd5af3cdf53af2f1ca2b5b088ca07c04ae5d5d612aef17599"
+  },
+  {
     "exercise_id": "ex-avanco-passada",
     "dataset_id": "glutes/dumbbell-lunge",
     "source_repository": "JahelCuadrado/ExerciseGymGifsDB",

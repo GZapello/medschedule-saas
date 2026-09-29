@@ -24,20 +24,20 @@ async function main() {
   const newMedia = media.filter(m => m.source_repository === 'JahelCuadrado/ExerciseGymGifsDB');
   assert.deepEqual(oldMedia, supplement.preserved_manifest_entries.filter(e => e.exercise_id !== 'ex-stiff-halteres'), 'All 59 prior entries remain unchanged');
   assert.equal(oldMedia.length, 59);
-  assert.equal(media.length, 178);
-  assert.equal(newMedia.length, 119);
-  assert.equal(new Set(media.map(m => m.exercise_id)).size, 178);
-  assert.equal(new Set(media.map(m => m.gif_url)).size, 178);
-  assert.equal(new Set(media.map(m => m.gif_sha256)).size, 178, 'All 178 exercises have completely unique GIF hashes');
-  assert.equal(new Set(newMedia.map(m => m.source_path)).size, 119, 'Zero duplicate source_path');
+  assert.equal(media.length, 179);
+  assert.equal(newMedia.length, 120);
+  assert.equal(new Set(media.map(m => m.exercise_id)).size, 179);
+  assert.equal(new Set(media.map(m => m.gif_url)).size, 179);
+  assert.equal(new Set(media.map(m => m.gif_sha256)).size, 179, 'All 179 exercises have completely unique GIF hashes');
+  assert.equal(new Set(newMedia.map(m => m.source_path)).size, 120, 'Zero duplicate source_path');
   const withoutPhoto = rows => rows.map(({photo_url, ...row}) => row);
   assert.deepEqual(withoutPhoto(originalCatalog), withoutPhoto(supplement.catalog_before), 'IDs, names, instructions and all exercise metadata are unchanged');
   assert.deepEqual(supplement.exercises.map(e => e.zemda_id), mapping.map(e => e.zemda_id));
   assert.equal(supplement.exercises.length, 208);
   assert.equal(supplement.exercises.filter(e => e.resultado === 'rejeitado').length, 124);
   assert.equal(supplement.exercises.filter(e => e.resultado === 'pendente').length, 16);
-  assert.equal(catalog.filter(ex => media.some(m => m.exercise_id === ex.id)).length, 178);
-  assert.equal(newMedia.filter(m => m.photo_url).length, 118);
+  assert.equal(catalog.filter(ex => media.some(m => m.exercise_id === ex.id)).length, 179);
+  assert.equal(newMedia.filter(m => m.photo_url).length, 119);
   assert.equal(supplement.media_evidence.length, 271);
   const priorApprovedIds = new Set(supplement.exercises.filter(e => e.resultado === 'aprovado').map(e => e.zemda_id));
   for (const result of supplement.exercises) {
@@ -111,6 +111,6 @@ async function main() {
   assert.equal(response.exercises.length, 318);
   assert.equal(response.exercises.filter(e => e.gif_url).length, media.length);
   assert(!response.exercises.find(e => e.id === 'ex-trx-row').gif_url);
-  console.log(`PASS ${media.length} reviewed GIFs: 59 preserved + 119 added, 178 unique hashes, paths, both reports, API, attribution, immutable catalogue, preserved photos and idempotent upgrades`);
+  console.log(`PASS ${media.length} reviewed GIFs: 59 preserved + 120 added, 179 unique hashes, paths, both reports, API, attribution, immutable catalogue, preserved photos and idempotent upgrades`);
 }
 main().catch(error => { console.error(error); process.exitCode=1; });
