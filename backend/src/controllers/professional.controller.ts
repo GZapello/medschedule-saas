@@ -700,25 +700,25 @@ export class ProfessionalController {
         return;
       }
 
-      // Busca serviços do profissional (ou todos os ativos da clínica se não houver vinculação restrita)
+      // Busca serviços vinculados ao profissional (via services.professional_id ou professional_services)
       let services = db.prepare(`
         SELECT s.id, s.name, s.description,
                COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
                COALESCE(ps.custom_price, s.price) as price,
                s.modality
-        FROM professional_services ps
-        JOIN services s ON s.id = ps.service_id
-        WHERE ps.professional_id = ? AND s.active = 1
+        FROM services s
+        LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
+        WHERE (s.professional_id = ? OR ps.professional_id = ?) AND s.active = 1
         ORDER BY s.name ASC
-      `).all(profRow.id) as any[];
+      `).all(profRow.id, profRow.id, profRow.id) as any[];
 
       if (!services || services.length === 0) {
         services = db.prepare(`
           SELECT id, name, description, duration_minutes, price, modality
           FROM services
-          WHERE tenant_id = ? AND active = 1
+          WHERE tenant_id = ? AND active = 1 AND (professional_id = ? OR professional_id IS NULL)
           ORDER BY name ASC
-        `).all(profRow.tenant_id) as any[];
+        `).all(profRow.tenant_id, profRow.id) as any[];
       }
 
       res.json({

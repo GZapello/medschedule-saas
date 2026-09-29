@@ -210,21 +210,33 @@ export const UnifiedTeamManagement: React.FC = () => {
     try {
       setLoading(true);
       const [staffData, profsData, taxonomyProfs, taxonomySpecs, invitesData] = await Promise.all([
-        ApiClient.get<any[]>('/v1/staff').catch(() => []),
+        ApiClient.get<any>('/v1/staff').catch(() => ({ staff: [], invites: [] })),
         ApiClient.get<Professional[]>('/v1/professionals').catch(() => []),
         ApiClient.get<Profession[]>('/v1/taxonomy/professions').catch(() => []),
         ApiClient.get<Specialty[]>('/v1/taxonomy/specialties').catch(() => []),
-        ApiClient.get<any[]>('/v1/staff/invites').catch(() => [])
+        ApiClient.get<any>('/v1/staff/invites').catch(() => ({ invites: [] }))
       ]);
 
-      setStaffList(staffData || []);
-      setProfessionalsList(profsData || []);
-      setProfessions(taxonomyProfs || []);
-      setSpecialties(taxonomySpecs || []);
-      setClinicInvites(invitesData || []);
+      const staffArray = Array.isArray(staffData)
+        ? staffData
+        : (Array.isArray(staffData?.staff) ? staffData.staff : []);
+      const profsArray = Array.isArray(profsData) ? profsData : [];
+      const taxonomyProfsArray = Array.isArray(taxonomyProfs) ? taxonomyProfs : [];
+      const taxonomySpecsArray = Array.isArray(taxonomySpecs) ? taxonomySpecs : [];
+      const invitesArray = Array.isArray(invitesData)
+        ? invitesData
+        : (Array.isArray(invitesData?.invites)
+            ? invitesData.invites
+            : (Array.isArray(staffData?.invites) ? staffData.invites : []));
 
-      if (taxonomyProfs && taxonomyProfs.length > 0 && !newProfessionId) {
-        setNewProfessionId(taxonomyProfs[0].id);
+      setStaffList(staffArray);
+      setProfessionalsList(profsArray);
+      setProfessions(taxonomyProfsArray);
+      setSpecialties(taxonomySpecsArray);
+      setClinicInvites(invitesArray);
+
+      if (taxonomyProfsArray.length > 0 && !newProfessionId) {
+        setNewProfessionId(taxonomyProfsArray[0].id);
       }
     } catch (err: any) {
       showToast('Erro ao carregar dados da equipe', 'error');
@@ -240,16 +252,20 @@ export const UnifiedTeamManagement: React.FC = () => {
   // Consolidação de Staff e Professional
   const combinedMembers = React.useMemo(() => {
     const profMap = new Map<string, Professional>();
-    for (const p of professionalsList) {
+    const safeProfs = Array.isArray(professionalsList) ? professionalsList : [];
+    for (const p of safeProfs) {
+      if (!p) continue;
       if (p.user_id) profMap.set(p.user_id, p);
-      profMap.set(p.id, p);
+      if (p.id) profMap.set(p.id, p);
     }
 
     const processedUserIds = new Set<string>();
     const list: any[] = [];
 
     // 1. Itera por staffList
-    for (const s of staffList) {
+    const safeStaff = Array.isArray(staffList) ? staffList : [];
+    for (const s of safeStaff) {
+      if (!s) continue;
       processedUserIds.add(s.id);
       const matchedProf = profMap.get(s.id) || (s.professional_id ? profMap.get(s.professional_id) : null);
       list.push({
@@ -267,7 +283,8 @@ export const UnifiedTeamManagement: React.FC = () => {
     }
 
     // 2. Itera por profissionais que eventualmente não estejam em staffList
-    for (const p of professionalsList) {
+    for (const p of safeProfs) {
+      if (!p) continue;
       if (p.user_id && processedUserIds.has(p.user_id)) continue;
       list.push({
         id: p.user_id || p.id,
@@ -700,7 +717,7 @@ export const UnifiedTeamManagement: React.FC = () => {
             <LinkIcon className="w-3.5 h-3.5" />
             <span>Links de Convite</span>
             <span className="ml-1 px-1.5 py-0.2 bg-slate-200/80 text-slate-700 rounded-full text-[10px] font-extrabold">
-              {clinicInvites.length}
+              {Array.isArray(clinicInvites) ? clinicInvites.length : 0}
             </span>
           </button>
         </div>
@@ -740,7 +757,7 @@ export const UnifiedTeamManagement: React.FC = () => {
             </button>
           </div>
 
-          {clinicInvites.length === 0 ? (
+          {(!Array.isArray(clinicInvites) || clinicInvites.length === 0) ? (
             <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-xs text-slate-500">
               Nenhum link de convite ativo no momento. Clique no botão acima para gerar um novo link.
             </div>

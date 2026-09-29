@@ -22,8 +22,19 @@ import {
   Search,
   Check,
   X,
-  FileCheck
+  FileCheck,
+  Plus,
+  Files
 } from 'lucide-react';
+
+interface UploadedFileItem {
+  id: string;
+  name: string;
+  size: number;
+  format: string;
+  base64: string;
+  file: File;
+}
 
 interface ColumnMapping {
   sourceColumn: string;
@@ -71,11 +82,95 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
   const [activeTab, setActiveTab] = useState<'import' | 'history'>('import');
   const [currentStep, setCurrentStep] = useState<number>(1);
 
-  // Arquivo
-  const [file, setFile] = useState<File | null>(null);
-  const [fileBase64, setFileBase64] = useState<string>('');
+  // Arquivos
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFileItem[]>([]);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
   const [parsing, setParsing] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Formatar tamanho de arquivo em B, KB ou MB
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Leitura do Arquivo e Conversão Base64 Promisificada
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1] || '';
+        resolve(base64);
+      };
+      reader.onerror = err => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Adição de Arquivos (acumula sem limpar anteriores e ignora duplicatas de arquivo)
+  const handleAddFiles = async (fileList: FileList | File[]) => {
+    const filesArray = Array.from(fileList);
+    if (filesArray.length === 0) return;
+
+    const validExtensions = ['.docx', '.xlsx', '.xls', '.csv', '.txt'];
+    const newItems: UploadedFileItem[] = [];
+    let invalidCount = 0;
+
+    for (const f of filesArray) {
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      if (!validExtensions.includes(ext)) {
+        invalidCount++;
+        continue;
+      }
+
+      // Evita duplicar o mesmo arquivo já adicionado
+      const exists = uploadedFiles.some(existing => existing.name === f.name && existing.size === f.size);
+      if (exists) {
+        continue;
+      }
+
+      try {
+        const b64 = await readFileAsBase64(f);
+        newItems.push({
+          id: `${f.name}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          name: f.name,
+          size: f.size,
+          format: ext.replace('.', ''),
+          base64: b64,
+          file: f
+        });
+      } catch (err) {
+        console.error('Erro ao ler arquivo:', f.name, err);
+      }
+    }
+
+    if (invalidCount > 0) {
+      showToast(`${invalidCount} arquivo(s) ignorado(s) por terem formato não suportado.`, 'info');
+    }
+
+    if (newItems.length > 0) {
+      setUploadedFiles(prev => [...prev, ...newItems]);
+      showToast(`${newItems.length} arquivo(s) adicionado(s) à importação.`, 'success');
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Remoção individual de arquivo
+  const handleRemoveFile = (id: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.id !== id));
+  };
+
+  // Limpeza de todos os arquivos
+  const handleClearAllFiles = () => {
+    setUploadedFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   // Dados do Parse
   const [headers, setHeaders] = useState<string[]>([]);
@@ -115,40 +210,20 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
     }
   };
 
-  // Leitura do Arquivo e Conversão Base64
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-
-    const validExtensions = ['.docx', '.xlsx', '.xls', '.csv', '.txt'];
-    const ext = '.' + selectedFile.name.split('.').pop()?.toLowerCase();
-    if (!validExtensions.includes(ext)) {
-      showToast('Formato inválido. Selecione um arquivo .docx, .xlsx, .csv ou .txt', 'error');
-      return;
-    }
-
-    setFile(selectedFile);
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(',')[1] || '';
-      setFileBase64(base64);
-    };
-    reader.readAsDataURL(selectedFile);
-  };
-
-  // Enviar para API para Parse e Heurística
+  // Enviar para API para Parse e Heurística de Multi-Arquivos
   const handleProcessFile = async () => {
-    if (!file || !fileBase64) {
-      showToast('Selecione um arquivo para continuar', 'error');
+    if (uploadedFiles.length === 0) {
+      showToast('Selecione pelo menos um arquivo para continuar', 'error');
       return;
     }
 
     try {
       setParsing(true);
       const res = await ApiClient.post<any>('/v1/import/parse-file', {
-        fileName: file.name,
-        fileBase64
+        files: uploadedFiles.map(f => ({
+          fileName: f.name,
+          fileBase64: f.base64
+        }))
       });
 
       setHeaders(res.headers || []);
@@ -165,9 +240,14 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
       setDuplicateDecisions(decisions);
 
       setCurrentStep(2);
-      showToast('Arquivo analisado com sucesso! Revise o mapeamento de colunas.', 'success');
+      showToast(
+        uploadedFiles.length > 1
+          ? `${uploadedFiles.length} arquivos analisados e consolidados com sucesso! Revise o mapeamento.`
+          : 'Arquivo analisado com sucesso! Revise o mapeamento de colunas.',
+        'success'
+      );
     } catch (err: any) {
-      showToast(err.message || 'Erro ao analisar arquivo', 'error');
+      showToast(err.message || 'Erro ao analisar arquivos', 'error');
     } finally {
       setParsing(false);
     }
@@ -219,9 +299,14 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
         setProgressPercent(p => (p < 85 ? p + 15 : p));
       }, 400);
 
+      const batchFileName = uploadedFiles.length === 1
+        ? uploadedFiles[0].name
+        : `${uploadedFiles.length} arquivos (${uploadedFiles.map(f => f.name).join(', ')})`;
+      const fileType = uploadedFiles.length === 1 ? uploadedFiles[0].format : 'multi';
+
       const res = await ApiClient.post<any>('/v1/import/execute', {
-        fileName: file?.name,
-        fileType: file?.name.split('.').pop()?.toLowerCase(),
+        fileName: batchFileName,
+        fileType,
         columnMappings,
         rows: allRows,
         duplicateDecisions,
@@ -265,8 +350,7 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
 
   // Resetar para nova importação
   const resetImport = () => {
-    setFile(null);
-    setFileBase64('');
+    setUploadedFiles([]);
     setHeaders([]);
     setColumnMappings([]);
     setAllRows([]);
@@ -449,54 +533,167 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
             </div>
           </div>
 
-          {/* PASSO 1: UPLOAD DE ARQUIVO (.docx, .xlsx, .csv, .txt) */}
+          {/* PASSO 1: UPLOAD DE MÚLTIPLOS ARQUIVOS (.docx, .xlsx, .csv, .txt) */}
           {currentStep === 1 && (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-8 space-y-6">
               <div className="text-center max-w-lg mx-auto space-y-2">
-                <h3 className="text-base font-bold text-slate-900">Selecione o arquivo de prontuários ou pacientes</h3>
+                <h3 className="text-base font-bold text-slate-900">Selecione os arquivos de prontuários ou pacientes</h3>
                 <p className="text-xs text-slate-500">
-                  Suportamos documentos Word com tabelas (<span className="font-mono text-slate-700">.docx</span>), planilhas Excel (<span className="font-mono text-slate-700">.xlsx</span>), tabelas separadas por vírgula (<span className="font-mono text-slate-700">.csv</span>) ou texto formatado (<span className="font-mono text-slate-700">.txt</span>).
+                  Suportamos múltiplos documentos Word com tabelas (<span className="font-mono text-slate-700">.docx</span>), planilhas Excel (<span className="font-mono text-slate-700">.xlsx</span>), tabelas separadas por vírgula (<span className="font-mono text-slate-700">.csv</span>) ou texto (<span className="font-mono text-slate-700">.txt</span>).
                 </p>
               </div>
 
+              {/* Área Drag & Drop */}
               <div
+                onDragOver={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(true);
+                }}
+                onDragEnter={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(true);
+                }}
+                onDragLeave={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(false);
+                }}
+                onDrop={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDragging(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    handleAddFiles(e.dataTransfer.files);
+                  }
+                }}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${
-                  file ? 'border-teal-500 bg-teal-50/30' : 'border-slate-300 hover:border-teal-400 hover:bg-slate-50/60'
+                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+                  isDragging
+                    ? 'border-teal-500 bg-teal-50/70 scale-[1.005]'
+                    : uploadedFiles.length > 0
+                    ? 'border-teal-300 bg-teal-50/20 hover:border-teal-400 hover:bg-teal-50/40'
+                    : 'border-slate-300 hover:border-teal-400 hover:bg-slate-50/60'
                 }`}
               >
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   accept=".docx,.xlsx,.xls,.csv,.txt"
                   className="hidden"
-                  onChange={handleFileChange}
+                  onChange={e => {
+                    if (e.target.files) handleAddFiles(e.target.files);
+                  }}
                 />
 
                 <div className="flex flex-col items-center gap-3">
-                  <div className={`p-4 rounded-2xl ${file ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {file?.name.endsWith('.docx') ? (
-                      <FileText className="w-10 h-10" />
-                    ) : (
-                      <UploadCloud className="w-10 h-10" />
-                    )}
+                  <div
+                    className={`p-4 rounded-2xl transition-colors ${
+                      uploadedFiles.length > 0 ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    <UploadCloud className="w-10 h-10" />
                   </div>
 
-                  {file ? (
-                    <div>
-                      <p className="font-bold text-slate-900 text-sm">{file.name}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {(file.size / 1024).toFixed(1)} KB • Pronto para processamento
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="font-semibold text-slate-800 text-sm">Clique para selecionar ou arraste o arquivo aqui</p>
-                      <p className="text-xs text-slate-400 mt-1">DOCX, XLSX, XLS, CSV ou TXT (tamanho máx. 50MB)</p>
-                    </div>
-                  )}
+                  <div>
+                    <p className="font-semibold text-slate-800 text-sm">
+                      {uploadedFiles.length > 0
+                        ? 'Clique para adicionar mais arquivos ou arraste-os aqui'
+                        : 'Clique para selecionar ou arraste seus arquivos aqui'}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Selecione um ou vários arquivos DOCX, XLSX, XLS, CSV ou TXT simultaneamente (até 50MB cada)
+                    </p>
+                  </div>
                 </div>
               </div>
+
+              {/* LISTAGEM DE ARQUIVOS ADICIONADOS */}
+              {uploadedFiles.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Files className="w-4 h-4 text-teal-600" />
+                      <span className="text-xs font-bold text-slate-800">
+                        Arquivos no Lote ({uploadedFiles.length})
+                      </span>
+                      <span className="text-2xs text-slate-400 font-medium">
+                        • {formatFileSize(uploadedFiles.reduce((sum, f) => sum + f.size, 0))} total
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-2.5 py-1 text-2xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Adicionar Mais Arquivos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearAllFiles}
+                        className="px-2.5 py-1 text-2xs font-semibold text-slate-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        Limpar Todos
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
+                    {uploadedFiles.map(item => {
+                      const isWord = item.format === 'docx';
+                      const isExcel = ['xlsx', 'xls'].includes(item.format);
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-slate-100/70 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="p-2 rounded-lg bg-white border border-slate-200 shrink-0">
+                              {isWord ? (
+                                <FileText className="w-4 h-4 text-blue-500" />
+                              ) : isExcel ? (
+                                <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                              ) : (
+                                <FileCheck className="w-4 h-4 text-teal-600" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-slate-800 truncate max-w-[200px]" title={item.name}>
+                                {item.name}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="uppercase text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-200 text-slate-600">
+                                  {item.format}
+                                </span>
+                                <span className="text-2xs text-slate-400 font-medium">
+                                  {formatFileSize(item.size)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleRemoveFile(item.id);
+                            }}
+                            title="Remover arquivo"
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Opções de Importação Adicionais */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
@@ -519,27 +716,27 @@ export const ImportDataView: React.FC<ImportDataViewProps> = ({ onNavigate }) =>
               </div>
 
               <div className="flex justify-end gap-3 pt-2">
-                {file && (
+                {uploadedFiles.length > 0 && (
                   <button
-                    onClick={resetImport}
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl"
+                    onClick={handleClearAllFiles}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl cursor-pointer"
                   >
-                    Trocar Arquivo
+                    Limpar Arquivos
                   </button>
                 )}
                 <button
                   onClick={handleProcessFile}
-                  disabled={!file || parsing}
+                  disabled={uploadedFiles.length === 0 || parsing}
                   className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer"
                 >
                   {parsing ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      Analisando Estrutura com IA...
+                      Analisando e Consolidando Arquivos...
                     </>
                   ) : (
                     <>
-                      Continuar para Mapeamento
+                      Continuar para Mapeamento {uploadedFiles.length > 0 ? `(${uploadedFiles.length})` : ''}
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}

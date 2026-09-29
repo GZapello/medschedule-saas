@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -46,6 +46,26 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
 
+  // Filtra serviços pelo profissional selecionado
+  const filteredServices = useMemo(() => {
+    if (!professionalId) return services;
+    const match = services.filter(s => s.professional_id === professionalId);
+    if (match.length > 0) return match;
+    const unassigned = services.filter(s => !s.professional_id);
+    return unassigned.length > 0 ? unassigned : services;
+  }, [services, professionalId]);
+
+  // Ao alterar de profissional ou serviços disponíveis, atualiza serviceId
+  useEffect(() => {
+    if (filteredServices.length > 0) {
+      if (!filteredServices.some(s => s.id === serviceId)) {
+        setServiceId(filteredServices[0].id);
+      }
+    } else {
+      setServiceId('');
+    }
+  }, [filteredServices, professionalId]);
+
   useEffect(() => {
     if (isOpen) {
       setConflictError(null);
@@ -66,7 +86,12 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
           ? initialPrefill.professionalId
           : (profs.length > 0 ? profs[0].id : '');
         setProfessionalId(targetProfId);
-        if (srvs.length > 0) setServiceId(srvs[0].id);
+        const matchingSrvs = targetProfId ? srvs.filter(s => s.professional_id === targetProfId) : srvs;
+        if (matchingSrvs.length > 0) {
+          setServiceId(matchingSrvs[0].id);
+        } else if (srvs.length > 0) {
+          setServiceId(srvs[0].id);
+        }
       }).catch(() => {});
     }
   }, [isOpen, initialPrefill]);
@@ -196,11 +221,15 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 onChange={e => setServiceId(e.target.value)}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
               >
-                {services.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} (R$ {s.price})
-                  </option>
-                ))}
+                {filteredServices.length === 0 ? (
+                  <option value="">Nenhum serviço disponível para este profissional</option>
+                ) : (
+                  filteredServices.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (R$ {s.price})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
           </div>

@@ -171,6 +171,8 @@ export interface StaffMember {
 export interface Service {
   id: string;
   tenant_id: string;
+  professional_id?: string;
+  professional_name?: string;
   specialty_id?: string;
   specialty_name?: string;
   name: string;

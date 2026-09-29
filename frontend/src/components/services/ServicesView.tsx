@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { Service, Room, Specialty } from '../../types';
+import { Service, Room, Specialty, Professional } from '../../types';
 import {
   Scissors,
   Plus,
@@ -12,7 +12,9 @@ import {
   CheckCircle2,
   Pencil,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  User,
+  Users
 } from 'lucide-react';
 
 export const ServicesView: React.FC = () => {
@@ -20,10 +22,13 @@ export const ServicesView: React.FC = () => {
   const [services, setServices] = useState<Service[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [selectedProfFilter, setSelectedProfFilter] = useState<string>('all');
   const [loading, setLoading] = useState<boolean>(true);
 
   // Modal Novo Serviço
   const [showServiceModal, setShowServiceModal] = useState<boolean>(false);
+  const [professionalId, setProfessionalId] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [specialtyId, setSpecialtyId] = useState<string>('');
   const [durationMinutes, setDurationMinutes] = useState<number>(50);
@@ -34,6 +39,7 @@ export const ServicesView: React.FC = () => {
 
   // Modal Editar Serviço
   const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editProfessionalId, setEditProfessionalId] = useState<string>('');
   const [editName, setEditName] = useState<string>('');
   const [editSpecialtyId, setEditSpecialtyId] = useState<string>('');
   const [editDurationMinutes, setEditDurationMinutes] = useState<number>(50);
@@ -56,14 +62,20 @@ export const ServicesView: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [srvs, rms, specs] = await Promise.all([
+      const [srvs, rms, specs, profs] = await Promise.all([
         ApiClient.get<Service[]>('/v1/services'),
         ApiClient.get<Room[]>('/v1/rooms'),
-        ApiClient.get<Specialty[]>('/v1/taxonomy/specialties')
+        ApiClient.get<Specialty[]>('/v1/taxonomy/specialties'),
+        ApiClient.get<Professional[]>('/v1/professionals').catch(() => [])
       ]);
-      setServices(srvs);
-      setRooms(rms);
-      setSpecialties(specs);
+      setServices(srvs || []);
+      setRooms(rms || []);
+      setSpecialties(specs || []);
+      const profList = Array.isArray(profs) ? profs : [];
+      setProfessionals(profList);
+      if (profList.length > 0 && !professionalId) {
+        setProfessionalId(profList[0].id);
+      }
     } catch (err: any) {
       showToast('Erro ao carregar serviços e salas', 'error');
     } finally {
@@ -76,14 +88,20 @@ export const ServicesView: React.FC = () => {
   }, []);
 
   const handleCreateService = async () => {
-    if (!name || !price) {
+    if (!name.trim() || !price) {
       showToast('Nome e valor do serviço são obrigatórios', 'error');
+      return;
+    }
+
+    if (!professionalId) {
+      showToast('Selecione o profissional responsável pelo serviço', 'error');
       return;
     }
 
     try {
       await ApiClient.post('/v1/services', {
-        name,
+        professionalId,
+        name: name.trim(),
         specialtyId: specialtyId || null,
         durationMinutes: Number(durationMinutes),
         bufferMinutes: Number(bufferMinutes),
@@ -126,6 +144,7 @@ export const ServicesView: React.FC = () => {
 
   const handleOpenEdit = (s: Service) => {
     setEditingService(s);
+    setEditProfessionalId(s.professional_id || (professionals.length > 0 ? professionals[0].id : ''));
     setEditName(s.name);
     setEditSpecialtyId(s.specialty_id || '');
     setEditDurationMinutes(s.duration_minutes || 50);
@@ -143,9 +162,15 @@ export const ServicesView: React.FC = () => {
       return;
     }
 
+    if (!editProfessionalId) {
+      showToast('Selecione o profissional responsável pelo serviço', 'error');
+      return;
+    }
+
     try {
       setUpdating(true);
       await ApiClient.put(`/v1/services/${editingService.id}`, {
+        professionalId: editProfessionalId,
         name: editName.trim(),
         specialtyId: editSpecialtyId || null,
         durationMinutes: Number(editDurationMinutes),
@@ -183,90 +208,231 @@ export const ServicesView: React.FC = () => {
     }
   };
 
+  // Agrupamento dos serviços por profissional
+  const groupedServices = useMemo(() => {
+    const profMap = new Map<string, Professional>();
+    professionals.forEach(p => profMap.set(p.id, p));
+
+    // Se filtrou por um profissional específico
+    if (selectedProfFilter !== 'all') {
+      const prof = profMap.get(selectedProfFilter);
+      return [{
+        profId: selectedProfFilter,
+        profName: prof?.name || 'Profissional',
+        professionName: prof?.profession_name || '',
+        items: services.filter(s => s.professional_id === selectedProfFilter)
+      }];
+    }
+
+    // Se 'Todos', agrupa em seções por profissional
+    const groups: Array<{
+      profId: string | null;
+      profName: string;
+      professionName: string;
+      items: Service[];
+    }> = [];
+
+    for (const prof of professionals) {
+      const profServices = services.filter(s => s.professional_id === prof.id);
+      groups.push({
+        profId: prof.id,
+        profName: prof.name,
+        professionName: prof.profession_name || '',
+        items: profServices
+      });
+    }
+
+    // Serviços sem profissional atribuído (histórico ou geral)
+    const unassigned = services.filter(s => !s.professional_id || !profMap.has(s.professional_id));
+    if (unassigned.length > 0) {
+      groups.push({
+        profId: null,
+        profName: 'Geral da Clínica / Não Atribuído',
+        professionName: '',
+        items: unassigned
+      });
+    }
+
+    return groups;
+  }, [services, professionals, selectedProfFilter]);
+
+  const handleOpenCreateModalForProf = (profId?: string | null) => {
+    if (profId) {
+      setProfessionalId(profId);
+    } else if (professionals.length > 0 && !professionalId) {
+      setProfessionalId(professionals[0].id);
+    }
+    setShowServiceModal(true);
+  };
+
   return (
     <div className="space-y-8">
       {/* Serviços Section */}
       <div className="space-y-4">
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Catálogo de Serviços</h2>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Catálogo de Serviços por Profissional</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Defina duração, valor, modalidade e intervalo entre atendimentos.
+              Cada profissional possui seus próprios serviços, valores, durações e modalidades de atendimento.
             </p>
           </div>
           <button
-            onClick={() => setShowServiceModal(true)}
+            onClick={() => handleOpenCreateModalForProf(selectedProfFilter !== 'all' ? selectedProfFilter : null)}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Novo Serviço
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {services.map(s => {
-            const isActive = s.active === 1;
-            return (
-              <div
-                key={s.id}
-                className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-3 ${
-                  isActive ? 'bg-white border-slate-200 shadow-xs' : 'bg-slate-50/80 border-slate-200/80 opacity-80'
-                }`}
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-sm">{s.name}</h3>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        {isActive ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Ativo
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                            Inativo
-                          </span>
-                        )}
-                        {s.specialty_name && (
-                          <span className="text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full inline-block">
-                            {s.specialty_name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-sm font-extrabold text-indigo-600">
-                      {Number(s.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+        {/* Filtros e Seletores por Profissional */}
+        {professionals.length > 1 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setSelectedProfFilter('all')}
+              className={`px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                selectedProfFilter === 'all'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Todos os Profissionais</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedProfFilter === 'all' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                {services.length}
+              </span>
+            </button>
+            {professionals.map(p => {
+              const count = services.filter(s => s.professional_id === p.id).length;
+              const isSelected = selectedProfFilter === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelectedProfFilter(p.id)}
+                  className={`px-3.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>{p.name}</span>
+                  {p.profession_name && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-md ${isSelected ? 'bg-indigo-500 text-indigo-100' : 'bg-slate-100 text-slate-500'}`}>
+                      {p.profession_name}
                     </span>
-                  </div>
-                  {s.description && (
-                    <p className="text-xs text-slate-500 mt-2 line-clamp-2">{s.description}</p>
                   )}
-                </div>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                  <div className="flex items-center gap-1 font-medium text-slate-700">
-                    <Clock className="w-3.5 h-3.5 text-indigo-500" /> {s.duration_minutes} min (+{s.buffer_minutes}m buffer)
+        {/* Listagem Separada por Seções de Profissionais */}
+        <div className="space-y-6">
+          {groupedServices.map(group => (
+            <div key={group.profId || 'unassigned'} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+                    {group.profName.charAt(0).toUpperCase()}
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="capitalize font-semibold text-slate-600 text-[11px] mr-1">{s.modality}</span>
-                    <button
-                      onClick={() => handleOpenEdit(s)}
-                      className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                      title="Editar Serviço"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setServiceToDelete(s)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                      title="Excluir ou Inativar Serviço"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">{group.profName}</h3>
+                    {group.professionName && (
+                      <p className="text-[11px] text-slate-500 font-medium">{group.professionName}</p>
+                    )}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateModalForProf(group.profId)}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer hover:bg-indigo-50 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Adicionar Serviço
+                </button>
               </div>
-            );
-          })}
+
+              {group.items.length === 0 ? (
+                <div className="p-8 bg-slate-50/70 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400">
+                  Nenhum serviço cadastrado para este profissional ainda. Clique em "Adicionar Serviço" acima.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {group.items.map(s => {
+                    const isActive = s.active === 1;
+                    return (
+                      <div
+                        key={s.id}
+                        className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
+                          isActive ? 'bg-white border-slate-200 shadow-xs hover:border-slate-300' : 'bg-slate-50/80 border-slate-200/80 opacity-80'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="font-bold text-slate-900 text-sm">{s.name}</h4>
+                              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                {isActive ? (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    Ativo
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                                    Inativo
+                                  </span>
+                                )}
+                                {s.specialty_name && (
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full inline-block">
+                                    {s.specialty_name}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-sm font-extrabold text-indigo-600 whitespace-nowrap">
+                              {Number(s.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          {s.description && (
+                            <p className="text-xs text-slate-500 mt-2 line-clamp-2">{s.description}</p>
+                          )}
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                          <div className="flex items-center gap-1 font-medium text-slate-700">
+                            <Clock className="w-3.5 h-3.5 text-indigo-500" /> {s.duration_minutes} min (+{s.buffer_minutes}m buffer)
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="capitalize font-semibold text-slate-600 text-[11px] mr-1">
+                              {s.modality === 'both' ? 'Presencial/Online' : s.modality === 'presential' ? 'Presencial' : s.modality === 'online' ? 'Online' : 'Domiciliar'}
+                            </span>
+                            <button
+                              onClick={() => handleOpenEdit(s)}
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                              title="Editar Serviço"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setServiceToDelete(s)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Excluir ou Inativar Serviço"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -314,6 +480,23 @@ export const ServicesView: React.FC = () => {
             </div>
 
             <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
+                <select
+                  value={professionalId}
+                  onChange={e => setProfessionalId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
+                  required
+                >
+                  <option value="">Selecione o profissional...</option>
+                  {professionals.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.profession_name ? `(${p.profession_name})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Nome do Atendimento *</label>
                 <input
@@ -482,6 +665,23 @@ export const ServicesView: React.FC = () => {
             </div>
 
             <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
+                <select
+                  value={editProfessionalId}
+                  onChange={e => setEditProfessionalId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
+                  required
+                >
+                  <option value="">Selecione o profissional...</option>
+                  {professionals.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.profession_name ? `(${p.profession_name})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Nome do Atendimento *</label>
                 <input

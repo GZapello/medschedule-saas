@@ -12,18 +12,32 @@ export class ServiceController {
         return;
       }
 
-      const stmt = db.prepare(`
+      const { professionalId } = req.query;
+
+      let query = `
         SELECT 
-          s.id, s.tenant_id, s.specialty_id, s.name, s.description,
+          s.id, s.tenant_id, s.professional_id, s.specialty_id, s.name, s.description,
           s.duration_minutes, s.buffer_minutes, s.price, s.modality, s.active,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
+          p.name as professional_name,
+          COALESCE(prof.name, p.profession_name) as profession_name,
           spec.name as specialty_name, spec.color as specialty_color
         FROM services s
+        LEFT JOIN professionals p ON p.id = s.professional_id
+        LEFT JOIN professions prof ON prof.id = p.profession_id
         LEFT JOIN specialties spec ON spec.id = s.specialty_id
         WHERE s.tenant_id = ?
-        ORDER BY s.name ASC
-      `);
-      const services = stmt.all(tenantId);
+      `;
+
+      const params: any[] = [tenantId];
+      if (professionalId) {
+        query += ` AND s.professional_id = ?`;
+        params.push(professionalId);
+      }
+
+      query += ` ORDER BY COALESCE(p.name, 'zzz') ASC, s.name ASC`;
+      const stmt = db.prepare(query);
+      const services = stmt.all(...params);
       res.json(services);
     } catch (err: any) {
       console.error('[ServiceController.list] Erro:', err);
@@ -40,40 +54,59 @@ export class ServiceController {
       }
 
       const {
-        specialtyId, name, description, durationMinutes, bufferMinutes,
+        professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, minLeadTimeHours, maxAdvanceDays, cancellationPolicy
       } = req.body;
 
-      if (!name) {
+      if (!name || !name.trim()) {
         res.status(400).json({ error: 'Nome do serviço é obrigatório' });
+        return;
+      }
+
+      if (!professionalId) {
+        res.status(400).json({ error: 'A seleção do profissional é obrigatória para cadastrar o serviço.' });
+        return;
+      }
+
+      const prof = db.prepare('SELECT id, name FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId) as any;
+      if (!prof) {
+        res.status(400).json({ error: 'Profissional selecionado não encontrado na clínica' });
         return;
       }
 
       const id = 'srv-' + uuidv4().slice(0, 8);
       const insertStmt = db.prepare(`
         INSERT INTO services (
-          id, tenant_id, specialty_id, name, description, duration_minutes,
+          id, tenant_id, professional_id, specialty_id, name, description, duration_minutes,
           buffer_minutes, price, modality, active, min_lead_time_hours, max_advance_days, cancellation_policy
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
       `);
 
       insertStmt.run(
         id,
         tenantId,
+        professionalId,
         specialtyId || null,
-        name,
+        name.trim(),
         description || null,
-        durationMinutes || 50,
-        bufferMinutes || 10,
-        price || 0.0,
+        durationMinutes !== undefined ? Number(durationMinutes) : 50,
+        bufferMinutes !== undefined ? Number(bufferMinutes) : 10,
+        price !== undefined ? Number(price) : 0.0,
         modality || 'both',
         minLeadTimeHours || 2,
         maxAdvanceDays || 60,
         cancellationPolicy || null
       );
 
-      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price });
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
+          VALUES (?, ?, ?, ?, ?)
+        `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, price ? Number(price) : null, durationMinutes ? Number(durationMinutes) : null);
+      } catch (_) {}
+
+      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name });
       res.status(201).json({ id, name, message: 'Serviço criado com sucesso' });
     } catch (err: any) {
       console.error('[ServiceController.create] Erro:', err);
@@ -90,19 +123,28 @@ export class ServiceController {
         return;
       }
 
-      const existing = db.prepare('SELECT id, name FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const existing = db.prepare('SELECT id, name, professional_id FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Serviço não encontrado' });
         return;
       }
 
       const {
-        specialtyId, name, description, durationMinutes, bufferMinutes,
+        professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, active, minLeadTimeHours, maxAdvanceDays, cancellationPolicy
       } = req.body;
 
+      if (professionalId) {
+        const prof = db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId);
+        if (!prof) {
+          res.status(400).json({ error: 'Profissional selecionado não encontrado na clínica' });
+          return;
+        }
+      }
+
       const updateStmt = db.prepare(`
         UPDATE services SET
+          professional_id = CASE WHEN ? = 1 THEN ? ELSE professional_id END,
           specialty_id = CASE WHEN ? = 1 THEN ? ELSE specialty_id END,
           name = CASE WHEN ? = 1 THEN ? ELSE name END,
           description = CASE WHEN ? = 1 THEN ? ELSE description END,
@@ -119,6 +161,7 @@ export class ServiceController {
       `);
 
       updateStmt.run(
+        professionalId !== undefined ? 1 : 0, professionalId || null,
         specialtyId !== undefined ? 1 : 0, specialtyId || null,
         name !== undefined ? 1 : 0, name ? name.trim() : existing.name,
         description !== undefined ? 1 : 0, description !== null ? description : null,
@@ -134,7 +177,16 @@ export class ServiceController {
         tenantId
       );
 
-      logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name });
+      if (professionalId) {
+        try {
+          db.prepare(`
+            INSERT OR REPLACE INTO professional_services (id, professional_id, service_id, custom_price, custom_duration)
+            VALUES (?, ?, ?, ?, ?)
+          `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, price ? Number(price) : null, durationMinutes ? Number(durationMinutes) : null);
+        } catch (_) {}
+      }
+
+      logAudit(req, 'UPDATE_SERVICE', 'services', id, { name: name || existing.name, professionalId });
       res.json({ success: true, message: 'Serviço atualizado com sucesso' });
     } catch (err: any) {
       console.error('[ServiceController.update] Erro:', err);

@@ -221,6 +221,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 CREATE TABLE IF NOT EXISTS services (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL,
+  professional_id TEXT,
   specialty_id TEXT,
   name TEXT NOT NULL,
   description TEXT,
@@ -235,10 +236,12 @@ CREATE TABLE IF NOT EXISTS services (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+  FOREIGN KEY (professional_id) REFERENCES professionals(id) ON DELETE CASCADE,
   FOREIGN KEY (specialty_id) REFERENCES specialties(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_services_tenant ON services (tenant_id, active);
+CREATE INDEX IF NOT EXISTS idx_services_professional ON services (tenant_id, professional_id, active);
 
 -- 11. Associação Profissional x Serviços
 CREATE TABLE IF NOT EXISTS professional_services (

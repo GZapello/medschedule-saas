@@ -123,6 +123,9 @@ export function initializeDatabase(): void {
   try {
     rawDb.exec("ALTER TABLE email_verifications ADD COLUMN ip_address TEXT;");
   } catch (_) {}
+  try {
+    rawDb.exec("ALTER TABLE services ADD COLUMN professional_id TEXT REFERENCES professionals(id);");
+  } catch (_) {}
 
   let schemaPath = path.resolve(__dirname, 'schema.sql');
   if (!fs.existsSync(schemaPath)) {
@@ -433,6 +436,34 @@ export function initializeDatabase(): void {
     addColIfMissing('clinical_exam_requests', 'signed_by_name', 'TEXT');
     addColIfMissing('clinical_exam_requests', 'signed_by_registration', 'TEXT');
     addColIfMissing('clinical_exam_requests', 'is_sealed', 'INTEGER DEFAULT 0');
+
+    // Catálogo de Serviços por Profissional
+    addColIfMissing('services', 'professional_id', 'TEXT REFERENCES professionals(id)');
+    try {
+      rawDb.exec(`
+        UPDATE services 
+        SET professional_id = (
+          SELECT ps.professional_id 
+          FROM professional_services ps 
+          WHERE ps.service_id = services.id 
+          LIMIT 1
+        )
+        WHERE professional_id IS NULL 
+          AND EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = services.id);
+
+        UPDATE services
+        SET professional_id = (
+          SELECT p.id 
+          FROM professionals p 
+          WHERE p.tenant_id = services.tenant_id 
+          ORDER BY p.active DESC, p.created_at ASC 
+          LIMIT 1
+        )
+        WHERE professional_id IS NULL;
+      `);
+    } catch (migErr) {
+      console.warn('[Migration] Aviso ao vincular serviços aos profissionais existentes:', migErr);
+    }
 
     // Consentimento de telessaúde por profissão e metadados
     addColIfMissing('patient_consents', 'modality', "TEXT DEFAULT 'telehealth'");
