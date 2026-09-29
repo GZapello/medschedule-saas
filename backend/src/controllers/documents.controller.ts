@@ -1,4 +1,4 @@
-import { resolveClinicalModule } from '../utils/clinical-module';
+import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,13 +36,13 @@ export class DocumentsController {
     `).get(appt.service_id, appt.professional_id, req.tenantId) as any;
 
     let moduleType = resolveClinicalModule(appt, req.tenantId);
-    if (!moduleType) {
+    if (!moduleType || moduleType === 'general') {
       const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' AND module_type != 'general' LIMIT 1").get(appt.id, req.tenantId) as { module_type?: string } | undefined;
-      if (existingRec?.module_type) {
+      if (existingRec?.module_type && isPrimaryClinicalModule(existingRec.module_type)) {
         moduleType = existingRec.module_type;
       }
     }
-    if (!moduleType) {
+    if (!moduleType || moduleType === 'general') {
       const text = [prof?.profession_id, prof?.profession_slug, prof?.profession_name, prof?.practice_areas, prof?.service_name].filter(Boolean).join(' ').toLowerCase();
       if (
         prof?.profession_id === 'prof-psicopedagogo' ||
@@ -58,7 +58,10 @@ export class DocumentsController {
       else if (text.includes('odonto') || text.includes('dentis') || text.includes('cro')) moduleType = 'ZemdaOdonto';
       else if (text.includes('fisio') || text.includes('crefito') || text.includes('physio')) moduleType = 'ZemdaFisio';
       else if (text.includes('psicolog') || text.includes('psicólog') || text.includes('crp') || Number(prof?.zemda_psico_enabled) === 1) moduleType = 'ZemdaPsico';
-      else moduleType = 'general';
+      else if (text.includes('personal') || text.includes('muscula') || text.includes('cref')) moduleType = 'ZemdaPersonal';
+      else if (text.includes('estet') || text.includes('estétic')) moduleType = 'ZemdaEstetic';
+      else if (text.includes('medic') || text.includes('médic') || text.includes('crm')) moduleType = 'ZemdaMed';
+      else moduleType = moduleType || 'general';
     }
 
     res.json({ awaitingPayment: !!saved && !saved.completed_at && appt.status !== 'completed', alreadyCompleted: appt.status === 'completed', generatedDocs: saved ? JSON.parse(saved.generated_docs_json) : {}, payment, moduleType });
@@ -535,14 +538,23 @@ export class DocumentsController {
 
       // Validação anti-conflito de módulos clínicos no mesmo atendimento
       if (evolution?.moduleType) {
-        if (appt.clinical_module && appt.clinical_module !== evolution.moduleType) {
+        if (
+          isPrimaryClinicalModule(appt.clinical_module) &&
+          isPrimaryClinicalModule(evolution.moduleType) &&
+          appt.clinical_module !== evolution.moduleType
+        ) {
           res.status(409).json({
             error: `Este atendimento foi iniciado no módulo "${appt.clinical_module}". Não é permitido salvar ou finalizar em módulo diferente ("${evolution.moduleType}").`
           });
           return;
         }
         const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(appointmentId, tenantId) as { module_type?: string } | undefined;
-        if (existingRec?.module_type && existingRec.module_type !== evolution.moduleType) {
+        if (
+          existingRec?.module_type &&
+          isPrimaryClinicalModule(existingRec.module_type) &&
+          isPrimaryClinicalModule(evolution.moduleType) &&
+          existingRec.module_type !== evolution.moduleType
+        ) {
           res.status(409).json({
             error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
           });
@@ -653,8 +665,12 @@ export class DocumentsController {
       // Inicia transação atômica
       db.exec('BEGIN IMMEDIATE');
 
-      db.prepare("UPDATE appointments SET clinical_module = COALESCE(NULLIF(clinical_module, 'ZemdaBody'), ?) WHERE id=? AND tenant_id=?")
-        .run(appt.clinical_module || evolution?.moduleType || null, appointmentId, tenantId);
+      const targetModule = isPrimaryClinicalModule(evolution?.moduleType)
+        ? evolution.moduleType
+        : (appt.clinical_module || null);
+
+      db.prepare("UPDATE appointments SET clinical_module = COALESCE(?, NULLIF(clinical_module, 'ZemdaBody')) WHERE id=? AND tenant_id=?")
+        .run(targetModule, appointmentId, tenantId);
 
       if (!saved) {
 

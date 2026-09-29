@@ -226,7 +226,12 @@ export class ClinicalController {
       if (appointmentId) {
         const apptRow = db.prepare('SELECT id, professional_id, clinical_module FROM appointments WHERE id = ? AND tenant_id = ?').get(appointmentId, tenantId) as { clinical_module?: string } | undefined;
         if (apptRow) apptRow.clinical_module = resolveClinicalModule(apptRow, tenantId) || undefined;
-        if (apptRow?.clinical_module && isPrimaryClinicalModule(moduleType) && apptRow.clinical_module !== moduleType) {
+        if (
+          apptRow?.clinical_module &&
+          isPrimaryClinicalModule(apptRow.clinical_module) &&
+          isPrimaryClinicalModule(moduleType) &&
+          apptRow.clinical_module !== moduleType
+        ) {
           res.status(409).json({
             error: `O atendimento já foi iniciado com o módulo "${apptRow.clinical_module}". Não é permitido salvar em módulos diferentes.`
           });
@@ -234,7 +239,12 @@ export class ClinicalController {
         }
 
         const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(appointmentId, tenantId) as { module_type: string } | undefined;
-        if (existingRec && isPrimaryClinicalModule(moduleType) && existingRec.module_type !== moduleType) {
+        if (
+          existingRec &&
+          isPrimaryClinicalModule(existingRec.module_type) &&
+          isPrimaryClinicalModule(moduleType) &&
+          existingRec.module_type !== moduleType
+        ) {
           res.status(409).json({
             error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
           });
@@ -892,7 +902,15 @@ export class ClinicalController {
         return;
       }
 
-      const effectiveModule = moduleType || 'general';
+      let effectiveModule = moduleType;
+      if (!effectiveModule || !isPrimaryClinicalModule(effectiveModule)) {
+        const resolved = resolveClinicalModule({ professional_id: profId }, tenantId);
+        if (resolved && isPrimaryClinicalModule(resolved)) {
+          effectiveModule = resolved;
+        } else if (!effectiveModule) {
+          effectiveModule = resolved || 'general';
+        }
+      }
 
       // 1. Verifica se já existe um atendimento in_progress para este paciente na clínica
       const existingInProgress = db.prepare(`
@@ -906,9 +924,9 @@ export class ClinicalController {
       `).get(tenantId, patientId) as any;
 
       if (existingInProgress) {
-        if (moduleType && (!existingInProgress.clinical_module || existingInProgress.clinical_module === 'general')) {
-          db.prepare("UPDATE appointments SET clinical_module = ?, updated_at = datetime('now') WHERE id = ?").run(moduleType, existingInProgress.id);
-          existingInProgress.clinical_module = moduleType;
+        if (effectiveModule && (!existingInProgress.clinical_module || existingInProgress.clinical_module === 'general')) {
+          db.prepare("UPDATE appointments SET clinical_module = ?, updated_at = datetime('now') WHERE id = ?").run(effectiveModule, existingInProgress.id);
+          existingInProgress.clinical_module = effectiveModule;
         }
         res.json({
           appointmentId: existingInProgress.id,
@@ -932,16 +950,20 @@ export class ClinicalController {
       `).get(tenantId, patientId, today) as any;
 
       if (todayAppt) {
+        const targetModule = (todayAppt.clinical_module && isPrimaryClinicalModule(todayAppt.clinical_module))
+          ? todayAppt.clinical_module
+          : effectiveModule;
+
         db.prepare(`
           UPDATE appointments 
           SET status = 'in_progress', clinical_module = ?, updated_at = datetime('now')
           WHERE id = ? AND tenant_id = ?
-        `).run(effectiveModule, todayAppt.id, tenantId);
+        `).run(targetModule, todayAppt.id, tenantId);
 
         todayAppt.status = 'in_progress';
-        todayAppt.clinical_module = effectiveModule;
+        todayAppt.clinical_module = targetModule;
 
-        logAudit(req, 'START_CONSULTATION', 'appointments', todayAppt.id, { patientId, moduleType: effectiveModule });
+        logAudit(req, 'START_CONSULTATION', 'appointments', todayAppt.id, { patientId, moduleType: targetModule });
 
         res.json({
           appointmentId: todayAppt.id,

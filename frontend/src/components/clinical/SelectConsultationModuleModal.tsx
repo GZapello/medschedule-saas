@@ -295,6 +295,20 @@ export function getModuleForProfession(auth: {
   if (auth.isOccupationalTherapist || auth.isZemdaTO) return 'ZemdaTO';
   if (auth.isNutritionist || auth.isZemdaNutri) return 'ZemdaNutri';
   if (auth.isDentist || auth.isZemdaOdonto) return 'ZemdaOdonto';
+
+  // 3. Detecção por texto de profissão do usuário logado
+  const profText = `${auth.currentUser?.professionId || ''} ${auth.currentUser?.professionName || ''} ${auth.currentUser?.canonicalProfessionName || ''}`.toLowerCase();
+  if (profText.includes('dentis') || profText.includes('odonto') || profText.includes('cro')) return 'ZemdaOdonto';
+  if (profText.includes('fisio') || profText.includes('crefito') || profText.includes('fisioterap')) return 'ZemdaFisio';
+  if (profText.includes('nutri') || profText.includes('crn')) return 'ZemdaNutri';
+  if (profText.includes('psicolog') || profText.includes('psicólog') || profText.includes('crp')) return 'ZemdaPsico';
+  if (profText.includes('fono') || profText.includes('crfa')) return 'ZemdaFono';
+  if (profText.includes('psicopedag') || profText.includes('abpp')) return 'ZemdaPP';
+  if (profText.includes('personal') || profText.includes('muscula') || profText.includes('cref')) return 'ZemdaPersonal';
+  if (profText.includes('estet') || profText.includes('estétic')) return 'ZemdaEstetic';
+  if (profText.includes('médic') || profText.includes('medic') || profText.includes('crm')) return 'ZemdaMed';
+  if (profText.includes('ocupacional') || profText.includes('terapia ocupacional')) return 'ZemdaTO';
+
   return 'general';
 }
 

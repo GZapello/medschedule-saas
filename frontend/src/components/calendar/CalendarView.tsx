@@ -504,8 +504,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         payload.clinicalModule = selectedModule;
       }
       await ApiClient.put(`/v1/appointments/${appointment.id}/status`, payload);
-      setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any } : a));
-      const chosenModule = selectedModule || (appointment as any).clinical_module;
+      const chosenModule = selectedModule || (appointment as any).clinical_module || 'general';
+      setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, clinical_module: chosenModule } : a));
       setActiveConsultationModule(chosenModule);
       setActiveConsultationAppt({
         ...appointment,
@@ -527,15 +527,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
       return;
     }
 
-    // Se o agendamento já tiver módulo gravado previamente, abre direto nele sem modal
-    if ((appointment as any).clinical_module) {
-      executeStartConsultation(appointment, (appointment as any).clinical_module);
+    const autoModule = getModuleForProfession(auth);
+    const existingModule = (appointment as any).clinical_module;
+
+    // Se já tiver módulo PRIMÁRIO gravado e válido, mantém o módulo para respeitar a imutabilidade
+    if (existingModule && existingModule !== 'general' && existingModule !== 'ZemdaBody') {
+      executeStartConsultation(appointment, existingModule);
       return;
     }
 
-    // Acesso automático: detecta a profissão do usuário logado e abre diretamente o módulo correspondente
-    const autoModule = getModuleForProfession(auth);
-    executeStartConsultation(appointment, autoModule);
+    // Se o agendamento estava com 'general', 'ZemdaBody' ou null, promove com segurança para o módulo da profissão do usuário logado
+    const chosenModule = (autoModule && autoModule !== 'general') ? autoModule : (existingModule || autoModule || 'general');
+    executeStartConsultation(appointment, chosenModule);
   };
 
   const handleConfirmReschedule = async () => {

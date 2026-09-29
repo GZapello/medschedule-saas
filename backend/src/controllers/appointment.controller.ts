@@ -445,15 +445,30 @@ export class AppointmentController {
       const count = ((countStmt.get(tenantId) as { c: number }).c || 0) + 1;
       const appointmentNumber = `AG-${year}-${count.toString().padStart(4, '0')}`;
 
+      // Resolução antecipada do módulo clínico e profissão do agendamento
+      let initialClinicalModule: string | null = null;
+      let resolvedProfessionId: string | null = null;
+      if (professionalId) {
+        const resolvedModule = resolveClinicalModule({ professional_id: professionalId }, tenantId);
+        if (isPrimaryClinicalModule(resolvedModule)) {
+          initialClinicalModule = resolvedModule;
+        }
+        const profRow = db.prepare('SELECT profession_id FROM professionals WHERE (id = ? OR user_id = ?) AND tenant_id = ?').get(professionalId, professionalId, tenantId) as { profession_id?: string } | undefined;
+        if (profRow?.profession_id) {
+          resolvedProfessionId = profRow.profession_id;
+        }
+      }
+
       // Insere agendamento com os novos campos de convênio e encaminhamento
       const insertAppt = db.prepare(`
         INSERT INTO appointments (
           id, tenant_id, appointment_number, patient_id, professional_id, service_id,
           room_id, start_time, end_time, status, modality, patient_notes, internal_notes,
           insurance_id, referred_from_appointment_id, referred_by_professional_id, referral_reason,
+          clinical_module, profession_id,
           created_by
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertAppt.run(
@@ -473,6 +488,8 @@ export class AppointmentController {
         referredFromAppointmentId || null,
         referredByProfessionalId || null,
         referralReason || null,
+        initialClinicalModule,
+        resolvedProfessionId,
         req.user ? req.user.userId : 'online_booking'
       );
 
@@ -556,32 +573,62 @@ export class AppointmentController {
         }
       }
 
-      current.clinical_module = resolveClinicalModule(current, tenantId) || undefined;
-      const clinicalModule = isPrimaryClinicalModule(requestedModule) ? requestedModule : current.clinical_module;
+      // Resolução antecipada do módulo atual e do módulo canônico da profissão
+      const rawCurrentModule = current.clinical_module;
+      const resolvedProfModule = resolveClinicalModule(current, tenantId) || undefined;
 
-      // Regra: Bloqueia tentativa de alterar para módulo conflitante no mesmo atendimento
-      if (current.clinical_module && clinicalModule && current.clinical_module !== clinicalModule) {
+      // Determinação do módulo alvo:
+      // Se requestedModule for módulo primário válido, prioriza-o
+      // Caso contrário, se o profissional resolver para módulo primário, adota-o
+      // Caso contrário, se o agendamento já tiver módulo não-nulo e diferente de 'ZemdaBody', mantém-no
+      // Se for transição para 'in_progress', fallback para 'general' se nada específico foi resolvido
+      let clinicalModule: string | undefined = undefined;
+      if (isPrimaryClinicalModule(requestedModule)) {
+        clinicalModule = requestedModule;
+      } else if (isPrimaryClinicalModule(resolvedProfModule)) {
+        clinicalModule = resolvedProfModule;
+      } else if (rawCurrentModule && rawCurrentModule !== 'ZemdaBody') {
+        clinicalModule = rawCurrentModule;
+      } else if (status === 'in_progress') {
+        clinicalModule = resolvedProfModule || 'general';
+      }
+
+      // Regra de Imutabilidade Estrita:
+      // Bloqueia troca APENAS quando for mudança REAL e conflitante entre módulos clínicos específicos diferentes
+      // (ex.: ZemdaOdonto -> ZemdaFisio, ou ZemdaFono -> ZemdaPsico).
+      // Se o módulo atual for 'general', nulo ou 'ZemdaBody' e o alvo for módulo primário, é PROMOÇÃO SEGURA.
+      if (
+        isPrimaryClinicalModule(rawCurrentModule) &&
+        isPrimaryClinicalModule(clinicalModule) &&
+        rawCurrentModule !== clinicalModule
+      ) {
         res.status(409).json({
-          error: `O atendimento já foi iniciado com o módulo "${current.clinical_module}". Não é permitido alterar o módulo clínico durante o atendimento.`
+          error: `O atendimento já foi iniciado com o módulo "${rawCurrentModule}". Não é permitido alterar o módulo clínico durante o atendimento.`
         });
         return;
       }
 
       // Verifica se já existe evolução salva em outro módulo para este agendamento
       if (clinicalModule) {
-        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(id, tenantId) as { module_type: string } | undefined;
-        if (existingRec && existingRec.module_type && existingRec.module_type !== clinicalModule) {
-          res.status(409).json({
-            error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
-          });
-          return;
+        const existingRec = db.prepare("SELECT id, module_type, clinical_evolution, module_data_json FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(id, tenantId) as any;
+        if (existingRec && existingRec.module_type) {
+          if (isPrimaryClinicalModule(existingRec.module_type) && existingRec.module_type !== clinicalModule) {
+            res.status(409).json({
+              error: `O prontuário deste atendimento já foi registrado no módulo "${existingRec.module_type}". Não é permitido salvar em módulos diferentes.`
+            });
+            return;
+          }
+          // Promoção segura de prontuário legado 'general' quando promovendo agendamento para módulo canônico
+          if (existingRec.module_type === 'general' && isPrimaryClinicalModule(clinicalModule)) {
+            db.prepare("UPDATE records SET module_type = ? WHERE id = ?").run(clinicalModule, existingRec.id);
+          }
         }
       }
 
       // Resolução segura de profession_id
       let resolvedProfessionId = professionId || current.profession_id || null;
       if (!resolvedProfessionId && current.professional_id) {
-        const profRow = db.prepare('SELECT profession_id FROM professionals WHERE id = ? AND tenant_id = ?').get(current.professional_id, tenantId) as { profession_id?: string } | undefined;
+        const profRow = db.prepare('SELECT profession_id FROM professionals WHERE (id = ? OR user_id = ?) AND tenant_id = ?').get(current.professional_id, current.professional_id, tenantId) as { profession_id?: string } | undefined;
         if (profRow?.profession_id) resolvedProfessionId = profRow.profession_id;
       }
       if (!resolvedProfessionId && (req.user as any)?.professionId) {
@@ -601,8 +648,8 @@ export class AppointmentController {
           cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END,
           cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END,
           cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END,
-          clinical_module = COALESCE(NULLIF(clinical_module, 'ZemdaBody'), ?),
-          profession_id = COALESCE(profession_id, ?),
+          clinical_module = COALESCE(?, NULLIF(clinical_module, 'ZemdaBody')),
+          profession_id = COALESCE(?, profession_id),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);

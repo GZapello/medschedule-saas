@@ -88,7 +88,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
       await ApiClient.put(`/v1/appointments/${appointmentId}/status`, payload);
       const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
-      const chosenModule = selectedModule || appt?.clinical_module;
+      const chosenModule = selectedModule || (appt?.clinical_module !== 'general' && appt?.clinical_module !== 'ZemdaBody' ? appt?.clinical_module : undefined) || 'general';
       setActiveConsultationModule(chosenModule);
       setQuickConsultAppt({
         ...appt,
@@ -113,14 +113,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       if (newStatus === 'in_progress') {
         const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
-        if (appt?.clinical_module) {
-          executeStartConsultation(appointmentId, appt.clinical_module);
+        const autoModule = getModuleForProfession(auth);
+        const existingModule = appt?.clinical_module;
+
+        // Se já tiver módulo PRIMÁRIO gravado e válido, mantém o módulo para respeitar a imutabilidade
+        if (existingModule && existingModule !== 'general' && existingModule !== 'ZemdaBody') {
+          executeStartConsultation(appointmentId, existingModule);
           return;
         }
 
-        // Acesso automático: detecta a profissão do usuário logado e abre diretamente o módulo correspondente
-        const autoModule = getModuleForProfession(auth);
-        executeStartConsultation(appointmentId, autoModule);
+        // Se for 'general', 'ZemdaBody' ou null, promove com segurança para o módulo da profissão do usuário logado
+        const chosenModule = (autoModule && autoModule !== 'general') ? autoModule : (existingModule || autoModule || 'general');
+        executeStartConsultation(appointmentId, chosenModule);
         return;
       }
 
