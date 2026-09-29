@@ -188,14 +188,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return true;
   });
 
+  const firstName = (() => {
+    const raw = auth.currentUser?.name?.trim() || '';
+    if (!raw) return '';
+    const parts = raw.split(/\s+/);
+    if ((parts[0].toLowerCase() === 'dr.' || parts[0].toLowerCase() === 'dra.' || parts[0].toLowerCase() === 'dr' || parts[0].toLowerCase() === 'dra') && parts.length > 1) {
+      return parts[1];
+    }
+    return parts[0];
+  })();
+
   return (
     <div className="space-y-6">
       {/* Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Painel Operacional</h2>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Olá{firstName ? `, ${firstName}` : ''}! 👋
+          </h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Visão geral dos atendimentos, ocupação e financeiro em tempo real.
+            Aqui está um resumo da sua rotina hoje.
           </p>
         </div>
 
