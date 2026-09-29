@@ -165,13 +165,16 @@ const conditioning: Row[] = [
 ];
 
 function region(target: string): string {
-  if (/Quadr|Posterior|Glúte|Adutor|Abdutor|Panturr|Sóleo|Gastro|quadril|tornozelo|Joelho|Tornozelo/.test(target)) return 'Membros Inferiores';
-  if (/Core|Lombar|Costas|torácica|posterior|Oblíquos/.test(target)) return 'Tronco / Core';
+  if (/Quadr|Posterior|Glúte|Adutor|Abdutor|Panturr|Sóleo|Gastro|quadril|tornozelo|Joelho|Tornozelo/.test(target) && !/Deltoide/i.test(target)) return 'Membros Inferiores';
+  if (/Core|Lombar|torácica|Oblíquos|Cadeia|Costas/.test(target)) return 'Tronco / Core';
+  if (/Ombro|Deltoide|Peitoral|Bíceps|Tríceps|Antebraço|Braço|Punho|Escápula|Cervical|Trapézio|Mão/.test(target)) return 'Membros Superiores';
   return target === 'Corpo inteiro' || target === 'Cardiorrespiratórios' ? 'Corpo Inteiro' : 'Membros Superiores';
 }
 function movement(row: Row, category: string): SeedExercise {
   const [id, name, muscle_group, equipment, instructions, muscles] = row;
-  return { id: `ex-${id}`, name, muscle_group, secondary_muscles: muscles.split('|'), body_region: region(muscle_group), equipment, category,
+  const resolvedCategory = id === 'suitcase-carry' ? 'Funcional' : category;
+  const resolvedRegion = muscle_group === 'Costas' ? 'Membros Superiores' : region(muscle_group);
+  return { id: `ex-${id}`, name, muscle_group, secondary_muscles: muscles.split('|'), body_region: resolvedRegion, equipment, category: resolvedCategory,
     execution_type: /Unilateral|Unipodal/.test(name) ? 'unilateral' : 'bilateral',
     mechanics: equipment === 'Máquina' ? 'máquina' : equipment === 'Cabo / Polia' ? 'cabo/polia' : equipment === 'Peso Corporal' ? 'peso corporal' : 'resistido',
     level: /Turco|Clean|Copenhagen|Trap Bar/.test(name) ? 'avancado' : 'intermediario', instructions,

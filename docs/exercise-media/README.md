@@ -1,6 +1,15 @@
-# Mídias revisadas do catálogo
+# Mídias revisadas do catálogo — Auditoria Completa ZemdaPersonal
 
-Estado atual: **128 exercícios com GIF**, entre 268 existentes. A complementação com ExerciseGymGifsDB preservou os 60 anteriores e aprovou 68 novos; dos 208 candidatos, 124 foram rejeitados e 16 permanecem pendentes.
+Estado atual auditado: **151 exercícios com GIF verificado**, entre **318 exercícios existentes** no catálogo global.
+A biblioteca prioriza fidelidade biomecânica absoluta (**REAL MATCH > COVERAGE**), eliminando aproximações indevidas ou associações forçadas.
+
+- **59** demonstrações originais GymVisual preservadas
+- **68** demonstrações ExerciseGymGifsDB validadas e aprovadas
+- **22** demonstrações de expansão prioritária estritamente validadas
+- **2** substituições biomecânicas exatas:
+  - `ex-extensao-quadril-banco`: substituído de máquina (`lever-back-extension`) para banco romano livre (`hyperextension-on-bench`)
+  - `ex-stiff-halteres`: associado ao arquivo exato (`dumbbell-stiff-leg-deadlift`), garantindo unicidade absoluta de SHA-256 e eliminando colisão de hash com `ex-rdl-halteres`
+- **167** exercícios sem correspondência 100% fiel mantidos de forma limpa sem GIF (`gif_url: null` / placeholder de fallback estável)
 
 - [Complementação: decisões individuais, lista completa sem GIF, arquivos e testes](exercisegymgifs-validation.md)
 - [Complementação: relatório estruturado e evidências por arquivo](exercisegymgifs-validation.json)

@@ -688,6 +688,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
 
 
+  const specialtyAssessment = (<SpecialtySectionRenderer previousLesions={consultationsHistory.find(row => Array.isArray(row.specialtyNotes?.dermatoNotes?.lesions))?.specialtyNotes?.dermatoNotes?.lesions} specialty={activePreset} value={specialtyNotes[activeNoteKey] || {}} onChange={specialtySetters[activeNoteKey]} patientId={selectedPatientId} appointmentId={initialAppointmentId} />);
+
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       <ClinicalDraftRecoveryModal isOpen={autosave.conflictModalOpen} moduleName="ZemdaMed" onSelectVersion={autosave.resolveConflict} onClose={() => {}} />
@@ -1003,6 +1005,11 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
               </div>
 
               <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Antecedentes Familiares</label>
+                <textarea rows={2} value={familyHistory} onChange={e => setFamilyHistory(e.target.value)} className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none" />
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Hábitos e estilo de vida
                 </label>
@@ -1015,26 +1022,37 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                 />
               </div>
             </div>
+            {activePreset === 'clinica-medica' && specialtyAssessment}
           </div>
 
-          {/* Exame Físico Especializado Adaptativo à Especialidade */}
+          {activePreset !== 'clinica-medica' && (
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
             <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
               <Stethoscope className="w-4 h-4 text-teal-600" />
-              Exame Especializado ({allowedPresets.find(p => p.id === activePreset)?.name || 'Consulta Médica'})
+              Avaliação da Especialidade — {allowedPresets.find(p => p.id === activePreset)?.name || 'Consulta Médica'}
+            </h2>
+            {specialtyAssessment}
+          </div>
+          )}
+
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+            <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
+              <Activity className="w-4 h-4 text-teal-600" />
+              Avaliações Complementares
             </h2>
 
-            <SpecialtySectionRenderer previousLesions={consultationsHistory.find(row => Array.isArray(row.specialtyNotes?.dermatoNotes?.lesions))?.specialtyNotes?.dermatoNotes?.lesions} specialty={activePreset} value={specialtyNotes[activeNoteKey] || {}} onChange={specialtySetters[activeNoteKey]} patientId={selectedPatientId} appointmentId={initialAppointmentId} />
-
             <MedicalCapabilityTools key={selectedPatientId + activePreset} capabilities={activeCapabilities} patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} value={sharedAssessments} onChange={setSharedAssessments} saveDraft={autosave.forceSaveDraft} />
-            <details className="rounded-xl border border-slate-200 p-3"><summary className="text-xs font-bold cursor-pointer">Antecedentes familiares e SOAP</summary>
-              <label className="block text-xs font-bold mt-3">Antecedentes familiares<textarea value={familyHistory} onChange={e => setFamilyHistory(e.target.value)} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" /></label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">{([['subjective', 'Subjetivo'], ['objective', 'Objetivo'], ['assessment', 'Avaliação'], ['plan', 'Plano']] as const).map(([key, label]) => <label key={key} className="text-xs font-bold">{label}<textarea value={soapNotes[key]} onChange={e => setSoapNotes(prev => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" /></label>)}</div>
-            </details>
-            {/* EXAME FÍSICO GERAL DE BASE (SEMPRE DISPONÍVEL COMO BASE OU CLÍNICA MÉDICA) */}
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+            <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
+              <Stethoscope className="w-4 h-4 text-teal-600" />
+              Exame Físico
+            </h2>
+
             {(
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-                {([['generalStatus', 'Estado geral'], ['headAndNeck', 'Cabeça e pescoço'], ['skin', 'Pele'], ['additionalNotes', 'Observações do exame físico']] as const).map(([key, label]) => <label key={key} className="text-xs font-bold text-slate-700">{label}<textarea rows={2} value={physicalExam[key] || ''} onChange={e => setPhysicalExam(prev => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" /></label>)}
+                {([['generalStatus', 'Estado geral'], ['headAndNeck', 'Cabeça e pescoço'], ['skin', 'Pele']] as const).map(([key, label]) => <label key={key} className="text-xs font-bold text-slate-700">{label}<textarea rows={2} value={physicalExam[key] || ''} onChange={e => setPhysicalExam(prev => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" /></label>)}
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Aparelho Cardiovascular</label>
@@ -1072,15 +1090,26 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
                   />
                 </div>
+                <label className="text-xs font-bold text-slate-700 md:col-span-2">Observações do exame físico
+                  <textarea rows={2} value={physicalExam.additionalNotes || ''} onChange={e => setPhysicalExam(prev => ({ ...prev, additionalNotes: e.target.value }))} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" />
+                </label>
               </div>
             )}
           </div>
 
-          {/* Notas SOAP & Hipóteses Diagnósticas com CID-10 */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+            <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
+              <FileText className="w-4 h-4 text-teal-600" />
+              Registro SOAP
+            </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">{([['subjective', 'Subjetivo'], ['objective', 'Objetivo'], ['assessment', 'Avaliação'], ['plan', 'Plano']] as const).map(([key, label]) => <label key={key} className="text-xs font-bold">{label}<textarea value={soapNotes[key]} onChange={e => setSoapNotes(prev => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" /></label>)}</div>
+          </div>
+
+          {/* Hipóteses Diagnósticas com CID-10 */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
             <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
               <Brain className="w-4 h-4 text-teal-600" />
-              Diagnóstico, CID-10 & Conduta Médica
+              Diagnóstico, CID-10 & Hipóteses
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1146,6 +1175,13 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
               )}
             </div>
 
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+            <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
+              <FileText className="w-4 h-4 text-teal-600" />
+              Conduta Médica
+            </h2>
             {/* Conduta Médica & Prescrição */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -1161,6 +1197,13 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
               />
             </div>
 
+          </div>
+
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
+            <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
+              <CheckCircle2 className="w-4 h-4 text-teal-600" />
+              Retorno / Finalização
+            </h2>
             <div className="flex items-center gap-3">
               <label className="text-xs font-bold text-slate-700">Retorno em:</label>
               <input
@@ -1172,7 +1215,6 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
               />
               <span className="text-xs text-slate-500 font-medium">dias</span>
             </div>
-          </div>
 
           {/* Botão de Finalização */}
           <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
@@ -1185,6 +1227,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
               <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
               <span>{isFinishing ? 'Finalizando e Selando...' : 'Finalizar Consulta e Registrar no Prontuário'}</span>
             </button>
+          </div>
           </div>
         </div>
       ) : (

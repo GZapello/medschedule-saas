@@ -803,8 +803,8 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
   {
     id: 'ex-farmers-walk',
     name: 'Caminhada do Fazendeiro (Farmer\'s Walk)',
-    muscle_group: 'Antebraços',
-    secondary_muscles: ['Trapézio', 'Abdômen/Core', 'Glúteos'],
+    muscle_group: 'Corpo inteiro',
+    secondary_muscles: ['Antebraços', 'Trapézio', 'Abdômen/Core', 'Glúteos'],
     body_region: 'Corpo Inteiro',
     equipment: 'Halteres',
     category: 'Funcional',
@@ -1882,6 +1882,31 @@ export function seedExerciseLibrary(rawDb: any): void {
       for (const media of reviewedMedia) {
         if (media.photo_url && !licensedPhotos.some(photo => photo.exercise_id === media.exercise_id))
           upgradePhoto.run(media.photo_url, media.exercise_id, `/exercise-fallbacks/${media.exercise_id}.webp`);
+      }
+      // Revert standard global exercises without reviewed media back to fallback placeholder
+      const revertToFallback = rawDb.prepare("UPDATE personal_exercises SET photo_url = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND photo_url LIKE '/exercise-media/%'");
+      for (const ex of DEFAULT_EXERCISE_LIBRARY) {
+        if (!reviewedMedia.some(m => m.exercise_id === ex.id && m.photo_url)) {
+          revertToFallback.run(`/exercise-fallbacks/${ex.id}.webp`, ex.id);
+        }
+      }
+      // Keep classifications up to date for standard global exercises
+      const syncClassification = rawDb.prepare(`
+        UPDATE personal_exercises SET
+          muscle_group = ?,
+          secondary_muscles_json = ?,
+          body_region = ?,
+          category = ?
+        WHERE id = ? AND tenant_id = 'global' AND is_custom = 0
+      `);
+      for (const ex of DEFAULT_EXERCISE_LIBRARY) {
+        syncClassification.run(
+          ex.muscle_group,
+          JSON.stringify(ex.secondary_muscles || []),
+          ex.body_region,
+          ex.category,
+          ex.id
+        );
       }
       for (const ex of DEFAULT_EXERCISE_LIBRARY) duration.run(ex.suggested_duration || (ex.category === 'Alongamento' ? 'Referência opcional: 15–30 segundos; ajustar com o profissional.' : null), ex.id);
       // Only detach provably dangling references in the standard catalogue. Never delete attachments or historical rows.
