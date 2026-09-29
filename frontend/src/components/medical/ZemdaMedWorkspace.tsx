@@ -586,6 +586,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       const hM = vitalSigns.height > 3 ? vitalSigns.height / 100 : vitalSigns.height;
       const calculatedBmi = Number((vitalSigns.weight / (hM * hM)).toFixed(1));
       setVitalSigns(prev => ({ ...prev, bmi: calculatedBmi }));
+    } else {
+      setVitalSigns(prev => prev.bmi === undefined ? prev : ({ ...prev, bmi: undefined }));
     }
   }, [vitalSigns.weight, vitalSigns.height]);
 

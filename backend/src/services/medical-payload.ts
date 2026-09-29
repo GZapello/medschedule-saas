@@ -15,6 +15,22 @@ export function medicalSpecialtyNotes(body: Record<string, any>): Record<string,
   return Object.fromEntries(MEDICAL_NOTE_KEYS.filter(key => body[key] != null).map(key => [key, medicalObject(body[key])]));
 }
 
+export function consultationFromLegacy(row: Record<string, any>): Record<string, any> {
+  const specialtyNotes = medicalObject(row.specialty_notes_json);
+  const neurologicalExam = medicalObject(row.neurological_exam_json);
+  if (Object.keys(neurologicalExam).length && !specialtyNotes.neurologicalExam) {
+    specialtyNotes.neurologicalExam = neurologicalExam;
+  }
+  let diagnoses: unknown = row.diagnostic_hypotheses_json;
+  try { if (typeof diagnoses === 'string') diagnoses = JSON.parse(diagnoses); } catch { diagnoses = []; }
+  return {
+    ...row, specialtyNotes, neurologicalExam,
+    vitalSigns: medicalObject(row.vital_signs_json), physicalExam: medicalObject(row.physical_exam_json),
+    soapNotes: medicalObject(row.soap_notes_json),
+    diagnosticHypotheses: Array.isArray(diagnoses) ? diagnoses.filter(item => typeof item === 'string') : []
+  };
+}
+
 export function consultationFromRecord(row: Record<string, any>): Record<string, any> {
   const payload = medicalObject(row.technical_notes);
   return {

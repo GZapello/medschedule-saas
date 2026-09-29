@@ -65,6 +65,11 @@ assert.deepEqual(invoke('getConsultationById', {}, { id: created.data.id }).data
 const legacy = invoke('createConsultation', { patientId: 'medical-patient', specialtyPreset: 'clinica-medica' });
 assert.equal(legacy.code, 201);
 assert.deepEqual(invoke('getConsultationById', {}, { id: legacy.data.id }).data.specialtyNotes, {});
+db.prepare('UPDATE medical_consultations SET diagnostic_hypotheses_json = ?, neurological_exam_json = ? WHERE id = ?').run('broken JSON', JSON.stringify({ cranialI: 'Preservado' }), legacy.data.id);
+const oldRead = invoke('getConsultationById', {}, { id: legacy.data.id });
+assert.equal(oldRead.code, 200);
+assert.deepEqual(oldRead.data.diagnosticHypotheses, []);
+assert.equal(oldRead.data.specialtyNotes.neurologicalExam.cranialI, 'Preservado');
 const history = invoke('listConsultationsByPatient', {}, { patientId: 'medical-patient' });
 assert.equal(history.code, 200);
 assert.equal(history.data.length, 17);

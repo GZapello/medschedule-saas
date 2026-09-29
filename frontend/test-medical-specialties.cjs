@@ -14,6 +14,18 @@ buildSync({
     import { ClinicalTrendChart } from './src/components/clinical/ClinicalTrendChart';
     import { ADLAssessment, emptyAdlItems } from './src/components/clinical/ADLAssessment';
     import { ClinicalScales } from './src/components/clinical/ClinicalScales';
+    import { mergeMedicalRegional } from './src/components/medical/shared/medicalRegional';
+    import { medicalComparisonValues } from './src/components/medical/shared/medicalComparisonValues';
+    const oldRegional = { strength_json: [{ score: 4 }], pain_json: { score: 7 }, functional_scales_json: [{ score: 12 }] };
+    const patched = mergeMedicalRegional(oldRegional, { strength_json: [], pain_json: { score: 0 }, functional_scales_json: [] }, ['PAIN_ASSESSMENT']);
+    assert.deepEqual(patched.strength_json, oldRegional.strength_json);
+    assert.deepEqual(patched.functional_scales_json, oldRegional.functional_scales_json);
+    assert.equal(patched.pain_json.score, 0);
+    assert.equal(oldRegional.pain_json.score, 7);
+    const comparison = medicalComparisonValues({ lesions: [{ id: 'stable', size: 0, photos: ['private-url'] }], regional: { knee: { pain: 0 } } });
+    assert.equal(comparison['lesions / stable / size'], '0');
+    assert.equal(comparison['regional / knee / pain'], '0');
+    assert.ok(!JSON.stringify(comparison).includes('private-url'));
     const specialties = Object.keys(specialtySections).filter(key => key !== 'ginecologia');
     assert.equal(specialties.length, 15);
     for (const specialty of specialties) {

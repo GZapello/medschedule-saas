@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { EvolutionComparisonModal, ComparisonItem } from '../../common/EvolutionComparisonModal';
 import { MedicalConsultation } from '../../../types/capabilities';
 import { specialtyNoteKeys, specialtySections } from '../specialties/specialtySections';
+import { medicalComparisonValues } from './medicalComparisonValues';
 
 export const MedicalComparison: React.FC<{ history: MedicalConsultation[]; specialty: string }> = ({ history, specialty }) => {
   const [open, setOpen] = useState(false);
@@ -14,6 +15,15 @@ export const MedicalComparison: React.FC<{ history: MedicalConsultation[]; speci
     initialValue: initial.specialtyNotes?.[key]?.[field], previousValue: previous.specialtyNotes?.[key]?.[field], currentValue: current.specialtyNotes?.[key]?.[field],
     status: 'not_evaluated' as const
   }))).filter(item => [item.initialValue, item.previousValue, item.currentValue].some(value => value !== undefined && value !== null && value !== ''));
+  const shared = [initial, previous, current].map(record => medicalComparisonValues({
+    'Avaliações compartilhadas': record.specialtyNotes?.sharedAssessments,
+    'Lesões': record.specialtyNotes?.[key]?.lesions,
+    'Sinais vitais': record.vitalSigns
+  }));
+  for (const path of new Set(shared.flatMap(values => Object.keys(values)))) {
+    items.push({ id: `shared:${path}`, category: path.split(' / ')[0], name: path.split(' / ').slice(1).join(' / '),
+      initialValue: shared[0][path], previousValue: shared[1][path], currentValue: shared[2][path], status: 'not_evaluated' });
+  }
   return <>
     <button type="button" onClick={() => setOpen(true)} className="text-xs font-bold text-teal-700">Comparar consultas da especialidade ativa</button>
     <EvolutionComparisonModal isOpen={open} onClose={() => setOpen(false)} title="Comparação clínica" subtitle="A interpretação da evolução cabe ao profissional." initialDate={new Date(initial.created_at).toLocaleDateString('pt-BR')} previousDate={new Date(previous.created_at).toLocaleDateString('pt-BR')} currentDate={new Date(current.created_at).toLocaleDateString('pt-BR')} items={items} />

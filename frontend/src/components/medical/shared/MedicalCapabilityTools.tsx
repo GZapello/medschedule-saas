@@ -1,4 +1,5 @@
 import { PostureGait } from '../../clinical/PostureGait';
+import { mergeMedicalRegional } from './medicalRegional';
 import React, { lazy, Suspense, useState } from 'react';
 import { ClinicalScales } from '../../clinical/ClinicalScales';
 import { ADLAssessment, emptyAdlItems } from '../../clinical/ADLAssessment';
@@ -15,7 +16,7 @@ const regions = ['Coluna', 'Ombro', 'Braço', 'Cotovelo', 'Antebraço', 'Punho',
 const regionalIds = ['spine', 'shoulder', 'arm', 'elbow', 'forearm', 'wrist', 'hand', 'hip', 'knee', 'leg', 'ankle', 'foot'];
 interface Props {
   capabilities: string[]; patientId: string; patient: any; appointmentId?: string;
-  value: Record<string, any>; onChange: (value: Record<string, any>) => void;
+  value: Record<string, any>; onChange: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   saveDraft: () => Promise<boolean>;
 }
 export const MedicalCapabilityTools: React.FC<Props> = ({ capabilities, patientId, patient, appointmentId, value, onChange, saveDraft }) => {
@@ -23,7 +24,7 @@ export const MedicalCapabilityTools: React.FC<Props> = ({ capabilities, patientI
   const [side, setSide] = useState<'right' | 'left' | 'midline'>('right');
   const [region, setRegion] = useState(0);
   const has = (cap: string) => capabilities.includes(cap);
-  const update = (key: string, next: any) => onChange({ ...value, [key]: next });
+  const update = (key: string, next: any) => onChange(previous => ({ ...previous, [key]: next }));
   const tabs: Array<'pain' | 'adm' | 'strength' | 'tests' | 'palpation'> = [];
   if (has('PAIN_ASSESSMENT')) tabs.push('pain');
   if (has('MOBILITY_ASSESSMENT')) tabs.push('adm');
@@ -32,11 +33,10 @@ export const MedicalCapabilityTools: React.FC<Props> = ({ capabilities, patientI
   if (tabs.length) tabs.push('palpation');
   const regionalKey = regionalIds[region] + '_' + side;
   const updateRegional = (payload: any) => {
-    const filtered = { ...payload };
-    for (const [cap, field] of [['PAIN_ASSESSMENT', 'pain_json'], ['MOBILITY_ASSESSMENT', 'adm_json'], ['MUSCLE_STRENGTH', 'strength_json']]) if (!has(cap)) delete filtered[field];
-    if (!has('FUNCTIONAL_TESTS') && !has('FUNCTIONAL_ASSESSMENT')) delete filtered.tests_json;
-    delete filtered.functional_scales_json; delete filtered.plan_link_json;
-    update('regional', { ...value.regional, [regionalKey]: filtered });
+    onChange(previous => ({ ...previous, regional: {
+      ...previous.regional,
+      [regionalKey]: mergeMedicalRegional(previous.regional?.[regionalKey], payload, capabilities)
+    } }));
   };
   const button = (id: string, label: string) => <button key={id} type="button" onClick={() => setTool(tool === id ? '' : id)} className="px-3 py-2 text-xs font-bold rounded-xl border border-slate-200 text-teal-700 bg-slate-50">{label}</button>;
   return <div className="space-y-4 border-t border-slate-100 pt-4">

@@ -1,4 +1,4 @@
-import { medicalObject, medicalSpecialtyNotes, consultationFromRecord } from '../services/medical-payload';
+import { medicalObject, medicalSpecialtyNotes, consultationFromRecord, consultationFromLegacy } from '../services/medical-payload';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -88,15 +88,7 @@ export class MedicalController {
       `);
 
       const rows = stmt.all(patientId, tenantId) as any[];
-      const consultations = rows.map(r => ({
-        ...r,
-        specialtyNotes: medicalObject(r.specialty_notes_json),
-        vitalSigns: medicalObject(r.vital_signs_json),
-        physicalExam: medicalObject(r.physical_exam_json),
-        neurologicalExam: medicalObject(r.neurological_exam_json),
-        diagnosticHypotheses: r.diagnostic_hypotheses_json ? JSON.parse(r.diagnostic_hypotheses_json) : [],
-        soapNotes: medicalObject(r.soap_notes_json)
-      }));
+      const consultations = rows.map(consultationFromLegacy);
 
       const records = db.prepare(`SELECT r.*, p.name AS professional_name FROM records r LEFT JOIN professionals p ON p.id = r.professional_id AND p.tenant_id = r.tenant_id WHERE r.patient_id = ? AND r.tenant_id = ? AND r.module_type = 'ZemdaMed' ORDER BY r.created_at DESC`).all(patientId, tenantId) as any[];
       res.json([...consultations, ...records.map(consultationFromRecord)].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))));
@@ -144,15 +136,7 @@ export class MedicalController {
       }
 
       if (!hasClinicalAccess(req, row.patient_id)) { res.status(403).json({ error: 'Acesso clínico restrito' }); return; }
-      const consultation = {
-        specialtyNotes: medicalObject(row.specialty_notes_json),
-        ...row,
-        vitalSigns: medicalObject(row.vital_signs_json),
-        physicalExam: medicalObject(row.physical_exam_json),
-        neurologicalExam: medicalObject(row.neurological_exam_json),
-        diagnosticHypotheses: row.diagnostic_hypotheses_json ? JSON.parse(row.diagnostic_hypotheses_json) : [],
-        soapNotes: medicalObject(row.soap_notes_json)
-      };
+      const consultation = consultationFromLegacy(row);
 
       res.json(consultation);
     } catch (err: any) {
