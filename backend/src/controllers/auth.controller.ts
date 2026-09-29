@@ -13,6 +13,7 @@ import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { EmailService } from '../services/email.service';
 import { AdminNotificationService } from '../services/admin-notification.service';
 import { CapabilityService } from '../services/capability.service';
+import { generateProfessionalSlug } from '../utils/slug';
 
 export class AuthController {
   static async login(req: Request, res: Response): Promise<void> {
@@ -1304,12 +1305,7 @@ export class AuthController {
         if (userRole === 'professional' || professionName || professionId) {
           const profId = 'pro-' + uuidv4().slice(0, 8);
           createdProfessionalId = profId;
-          const baseSlug = finalName
-            .toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/(^-|-$)/g, '');
-          const finalSlug = `${baseSlug}-${profId.slice(-4)}`;
+          const finalSlug = generateProfessionalSlug(finalName, tenantId, profId);
 
           db.prepare(`
             INSERT INTO professionals (

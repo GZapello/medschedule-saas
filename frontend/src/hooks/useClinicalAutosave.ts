@@ -44,6 +44,8 @@ export function useClinicalAutosave({
   const [localDraftData, setLocalDraftData] = useState<any>(null);
 
   const initialLoadedRef = useRef<boolean>(false);
+  const clearingDraftRef = useRef(false);
+  const pendingSavesRef = useRef(new Set<Promise<unknown>>());
   const debounceTimerRef = useRef<any>(null);
   const payloadRef = useRef<Record<string, any>>(payload);
   payloadRef.current = payload;
@@ -56,6 +58,7 @@ export function useClinicalAutosave({
 
   // 1. Recuperação Inicial ao alterar Paciente ou Appointment
   useEffect(() => {
+    clearingDraftRef.current = false;
     if (!patientId || !enabled) {
       initialLoadedRef.current = false;
       setIsDirty(false);
@@ -144,7 +147,7 @@ export function useClinicalAutosave({
 
   // 2. Função de Persistência (Backend + Contingência Local)
   const performSaveDraft = useCallback(async (): Promise<boolean> => {
-    if (!patientId || !enabled) return false;
+    if (!patientId || !enabled || clearingDraftRef.current) return false;
 
     const now = new Date();
     const clientUpdatedAt = now.toISOString();
@@ -170,13 +173,15 @@ export function useClinicalAutosave({
         return true;
       }
 
-      await ApiClient.post('/v1/clinical/draft', {
+      const request = ApiClient.post('/v1/clinical/draft', {
         moduleType,
         patientId,
         appointmentId: resolvedAppId,
         draftData: currentPayload,
         clientUpdatedAt
       });
+      pendingSavesRef.current.add(request);
+      try { await request; } finally { pendingSavesRef.current.delete(request); }
 
       const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       setLastSavedTime(timeStr);
@@ -267,6 +272,9 @@ export function useClinicalAutosave({
 
   // 6. Limpeza de Rascunho (chamado ao concluir atendimento)
   const clearDraft = async () => {
+    clearingDraftRef.current = true;
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    await Promise.allSettled([...pendingSavesRef.current]);
     if (localDraftKey) {
       try {
         localStorage.removeItem(localDraftKey);
@@ -280,6 +288,7 @@ export function useClinicalAutosave({
     }
     setIsDirty(false);
     setAutosaveStatus('idle');
+    clearingDraftRef.current = false;
   };
 
   return {

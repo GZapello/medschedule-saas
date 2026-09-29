@@ -15,6 +15,8 @@ export interface Idv10Record {
 }
 
 interface Idv10AssessmentSectionProps {
+  initialDraft?: Record<string, any>;
+  onDraftChange?: (value: Record<string, any>) => void;
   patientId: string;
   appointmentId?: string | null;
   onScoreCalculated?: (totalScore: number) => void;
@@ -44,15 +46,16 @@ export const LIKERT_OPTIONS = [
 ];
 
 export const Idv10AssessmentSection: React.FC<Idv10AssessmentSectionProps> = ({
+  initialDraft, onDraftChange,
   patientId,
   appointmentId,
   onScoreCalculated
 }) => {
   const { showToast } = useToast();
-  const [answers, setAnswers] = useState<number[]>(Array(10).fill(0));
-  const [notes, setNotes] = useState<string>('');
+  const [answers, setAnswers] = useState<number[]>(Array.isArray(initialDraft?.answers) && initialDraft.answers.length === 10 ? initialDraft.answers : Array(10).fill(0));
+  const [notes, setNotes] = useState<string>(initialDraft?.notes || '');
   const [assessmentDate, setAssessmentDate] = useState<string>(
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+    initialDraft?.assessmentDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
   );
   const [history, setHistory] = useState<Idv10Record[]>([]);
   const [saving, setSaving] = useState<boolean>(false);
@@ -67,6 +70,8 @@ export const Idv10AssessmentSection: React.FC<Idv10AssessmentSectionProps> = ({
     onScoreCalculated?.(totalScore);
   }, [totalScore, onScoreCalculated]);
 
+  const draftChangeRef = React.useRef(onDraftChange); draftChangeRef.current = onDraftChange;
+  useEffect(() => { draftChangeRef.current?.({ answers, notes, assessmentDate }); }, [answers, notes, assessmentDate]);
   // Carrega histórico
   useEffect(() => {
     if (!patientId) return;

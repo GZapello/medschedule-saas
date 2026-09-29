@@ -1,6 +1,9 @@
 import { db } from '../config/database';
 
 export interface MedicalPracticeAreaItem {
+  defaultCapabilities: string[];
+  optionalCapabilities: string[];
+  hiddenCapabilities: string[];
   id: string;
   medicalSpecialtyId: string;
   name: string;
@@ -51,6 +54,7 @@ export class MedicalTreeService {
       FROM medical_specialty_capabilities
     `).all() as any[];
 
+    const areaCapabilities = db.prepare('SELECT medical_practice_area_id, capability_id, rule FROM medical_practice_area_capabilities').all() as any[];
     // Agrupa áreas de atuação por especialidade
     const areasBySpec = new Map<string, MedicalPracticeAreaItem[]>();
     for (const pa of practiceAreasRows) {
@@ -61,6 +65,9 @@ export class MedicalTreeService {
         name: pa.name,
         slug: pa.slug,
         description: pa.description || undefined,
+        defaultCapabilities: areaCapabilities.filter(cap => cap.medical_practice_area_id === pa.id && cap.rule === 'DEFAULT').map(cap => cap.capability_id),
+        optionalCapabilities: areaCapabilities.filter(cap => cap.medical_practice_area_id === pa.id && cap.rule === 'OPTIONAL').map(cap => cap.capability_id),
+        hiddenCapabilities: areaCapabilities.filter(cap => cap.medical_practice_area_id === pa.id && cap.rule === 'HIDDEN').map(cap => cap.capability_id),
         sortOrder: pa.sort_order
       });
       areasBySpec.set(pa.medical_specialty_id, list);

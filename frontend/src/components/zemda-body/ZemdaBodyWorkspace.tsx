@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 
 interface ZemdaBodyWorkspaceProps {
+  onAssessmentSaved?: (id: string) => void;
   patientId: string;
   initialAssessmentId?: string;
   appointmentId?: string;
@@ -41,7 +42,7 @@ interface ZemdaBodyWorkspaceProps {
 }
 
 export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
-  patientId,
+  onAssessmentSaved, patientId,
   initialAssessmentId,
   appointmentId,
   professionalId,
@@ -63,7 +64,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
   const [focusedRegion,setFocusedRegion]=useState(initialRegion || '');
   const [available,setAvailable]=useState<string[]>([]);
   const [history,setHistory]=useState<any[]|null>(null),[historyRecord,setHistoryRecord]=useState<any>(null);
-  const state=useAnatomicalAssessment({patientId,initialAssessmentId,appointmentId,professionalId,module,initialBodyModel,initialMapType,readOnly,notify:showToast});
+  const state=useAnatomicalAssessment({onAssessmentSaved,patientId,initialAssessmentId,appointmentId,professionalId,module,initialBodyModel,initialMapType,readOnly,notify:showToast});
   const {layer,loading,loadError,savingStatus}=state;
   useEffect(()=>{registerSave?.(()=>state.save());});
   const {sexVariant:bodyModel,selectedRegions,drawings,clinicalNotes,mapType}=layer;

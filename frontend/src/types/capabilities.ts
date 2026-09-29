@@ -47,6 +47,9 @@ export interface ComputedUserCapabilities {
 }
 
 export interface MedicalPracticeAreaItem {
+  defaultCapabilities?: string[];
+  optionalCapabilities?: string[];
+  hiddenCapabilities?: string[];
   id: string;
   medicalSpecialtyId: string;
   name: string;
@@ -144,6 +147,7 @@ export interface MedicalSoapNotes {
 }
 
 export interface MedicalConsultation {
+  specialtyNotes?: Record<string, Record<string, any>>;
   id: string;
   tenant_id: string;
   patient_id: string;

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { AnatomicalDocument, AnatomicalLayer, AnatomicalView, MapType, SexVariant, emptyLayer, layerKey, readAnatomicalDocument, serializeAnatomicalDocument } from './anatomicalDocument';
 
-export function useAnatomicalAssessment(options: {patientId:string;initialAssessmentId?:string;appointmentId?:string;professionalId?:string;module:string;initialBodyModel:SexVariant;initialMapType?:MapType;readOnly:boolean;notify:(message:string,type:any)=>void}) {
+export function useAnatomicalAssessment(options: {onAssessmentSaved?:(id:string)=>void;patientId:string;initialAssessmentId?:string;appointmentId?:string;professionalId?:string;module:string;initialBodyModel:SexVariant;initialMapType?:MapType;readOnly:boolean;notify:(message:string,type:any)=>void}) {
   const initial=()=>readAnatomicalDocument({},options.initialBodyModel,options.initialMapType);
   const [document,setDocument]=useState<AnatomicalDocument>(initial);
   const docRef=useRef(document), idRef=useRef(options.initialAssessmentId);
@@ -48,6 +48,7 @@ export function useAnatomicalAssessment(options: {patientId:string;initialAssess
         });
         if(version!==epoch.current)return false;
         idRef.current=result.assessmentId;
+        if (result.assessmentId) optionsRef.current.onAssessmentSaved?.(result.assessmentId);
         if(docRef.current===snapshot){dirty.current=false;setStatus('saved');}
         if(manual)context.notify('Mapeamento e marcações salvos com sucesso!','success');
         return true;

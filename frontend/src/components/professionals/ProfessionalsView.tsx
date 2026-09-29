@@ -19,7 +19,8 @@ import {
   Link,
   Wallet,
   DollarSign,
-  AlertTriangle
+  AlertTriangle,
+  Copy
 } from 'lucide-react';
 import { formatDoctorName } from '../../utils/formatters';
 
@@ -46,7 +47,7 @@ const getCouncilForProfession = (prof?: Profession | null, profNameOrId?: string
 
 export const ProfessionalsView: React.FC = () => {
   const { showToast } = useToast();
-  const { reloadSession } = useAuth();
+  const { reloadSession, currentTenant } = useAuth();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [professions, setProfessions] = useState<Profession[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -56,29 +57,6 @@ export const ProfessionalsView: React.FC = () => {
   const [isProfessionUnlocked, setIsProfessionUnlocked] = useState<boolean>(false);
   const [showConfirmChangeModal, setShowConfirmChangeModal] = useState<boolean>(false);
   const professionSelectRef = useRef<HTMLSelectElement>(null);
-
-  // Modal Novo Profissional (Item 9: Sexo e Tratamento Dr./Dra.)
-  const [showNewModal, setShowNewModal] = useState<boolean>(false);
-  const [name, setName] = useState<string>('');
-  const [gender, setGender] = useState<'M' | 'F'>('M');
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('123456');
-  const [phone, setPhone] = useState<string>('');
-  const [professionId, setProfessionId] = useState<string>('');
-  const [specialtyId, setSpecialtyId] = useState<string>('');
-  const [specialtyName, setSpecialtyName] = useState<string>('');
-  const [registrationType, setRegistrationType] = useState<string>('CRP');
-  const [registrationNumber, setRegistrationNumber] = useState<string>('');
-  const [bio, setBio] = useState<string>('');
-  const [practiceAreas, setPracticeAreas] = useState<string>('');
-  const [bufferMinutes, setBufferMinutes] = useState<number>(10);
-  const [slug, setSlug] = useState<string>('');
-  const [publicBookingEnabled, setPublicBookingEnabled] = useState<boolean>(true);
-  const [systemRole, setSystemRole] = useState<string>('professional');
-  const [remunerationType, setRemunerationType] = useState<'commission' | 'salary' | 'both'>('commission');
-  const [commissionPercentage, setCommissionPercentage] = useState<number>(50);
-  const [fixedSalary, setFixedSalary] = useState<number>(0);
-  const [paymentDay, setPaymentDay] = useState<number>(5);
 
   // Modal Editar Profissional
   const [editingProf, setEditingProf] = useState<Professional | null>(null);
@@ -100,8 +78,9 @@ export const ProfessionalsView: React.FC = () => {
   const [editPaymentDay, setEditPaymentDay] = useState<number>(5);
 
   const handleCopyBookingLink = (prof: Professional) => {
-    const slugVal = prof.slug || (prof.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-' + prof.id.slice(-4));
-    const url = `${window.location.origin}/agendar/${slugVal}`;
+    const clinicSlug = currentTenant?.slug || 'clinica';
+    const slugVal = prof.slug || (prof.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
+    const url = `${window.location.origin}/agendar/${clinicSlug}/${slugVal}`;
     navigator.clipboard.writeText(url);
     showToast(`Link de agendamento copiado: ${url}`, 'success');
   };
@@ -125,9 +104,6 @@ export const ProfessionalsView: React.FC = () => {
       setProfessionals(profs);
       setProfessions(taxonomyProfs);
       setSpecialties(taxonomySpecs);
-      if (taxonomyProfs.length > 0 && !professionId) {
-        setProfessionId(taxonomyProfs[0].id);
-      }
     } catch (err: any) {
       showToast('Erro ao carregar equipe de profissionais', 'error');
     } finally {
@@ -138,56 +114,6 @@ export const ProfessionalsView: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
-
-  const handleCreateProfessional = async () => {
-    if (!name || !email) {
-      showToast('Nome e e-mail são obrigatórios', 'error');
-      return;
-    }
-
-    try {
-      await ApiClient.post('/v1/professionals', {
-        name,
-        email,
-        password,
-        phone,
-        professionId,
-        specialtyId: specialtyId || null,
-        specialtyName: specialtyName.trim(),
-        specialtyCustom: specialtyName.trim(),
-        role: systemRole,
-        registrationType: registrationType || null,
-        registrationNumber: registrationNumber || null,
-        bio: bio || null,
-        practiceAreas: practiceAreas || null,
-        bufferMinutes: Number(bufferMinutes),
-        gender,
-        slug: slug.trim() || null,
-        publicBookingEnabled,
-        remunerationType,
-        commissionPercentage: Number(commissionPercentage),
-        fixedSalary: Number(fixedSalary),
-        paymentDay: Number(paymentDay)
-      });
-
-      showToast('Profissional cadastrado com sucesso!', 'success');
-      setShowNewModal(false);
-      setName('');
-      setGender('M');
-      setEmail('');
-      setPhone('');
-      setSpecialtyName('');
-      setRegistrationNumber('');
-      setBio('');
-      setPracticeAreas('');
-      setSlug('');
-      fetchData();
-      window.dispatchEvent(new CustomEvent('zemda-schedule-updated'));
-      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao cadastrar profissional', 'error');
-    }
-  };
 
   const handleSaveEditProfessional = async () => {
     if (!editingProf || !editName) {
@@ -283,15 +209,9 @@ export const ProfessionalsView: React.FC = () => {
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setShowBlockModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all border border-amber-200"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all border border-amber-200 cursor-pointer"
           >
             <Ban className="w-4 h-4" /> Bloquear Horário / Férias
-          </button>
-          <button
-            onClick={() => setShowNewModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
-          >
-            <Plus className="w-4 h-4" /> Novo Profissional
           </button>
         </div>
       </div>
@@ -394,306 +314,7 @@ export const ProfessionalsView: React.FC = () => {
         ))}
       </div>
 
-      {/* Modal Novo Profissional */}
-      {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Cadastrar Profissional</h3>
-              <button onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block font-semibold text-slate-700 mb-1">Nome Completo *</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Ex: Ana Paula Silveira"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Sexo / Prefixo *</label>
-                  <select
-                    value={gender}
-                    onChange={e => setGender(e.target.value as 'M' | 'F')}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-semibold"
-                  >
-                    <option value="M">Masculino (Dr.)</option>
-                    <option value="F">Feminino (Dra.)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">E-mail de Acesso *</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="dra.ana@clinica.com"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Telefone / WhatsApp</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    placeholder="(11) 99999-9999"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Profissão *</label>
-                  <select
-                    value={professionId}
-                    onChange={e => {
-                      const newPId = e.target.value;
-                      setProfessionId(newPId);
-                      const selProf = professions.find(p => p.id === newPId);
-                      setRegistrationType(getCouncilForProfession(selProf, newPId));
-                      const matching = specialties.filter(s => s.profession_id === newPId || (s as any).professionId === newPId);
-                      setSpecialtyId(matching.length > 0 ? matching[0].id : '');
-                    }}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                  >
-                    {professions.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-semibold text-slate-700">Especialidade Principal</label>
-                    <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded">Catálogo / Livre</span>
-                  </div>
-                  {(() => {
-                    const selProf = professions.find(p => p.id === professionId);
-                    const matching = specialties.filter(s => s.profession_id === professionId || (s as any).professionId === professionId);
-                    if (matching.length > 0) {
-                      return (
-                        <select
-                          value={specialtyId}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setSpecialtyId(val);
-                            const found = matching.find(m => m.id === val);
-                            if (found) setSpecialtyName(found.name);
-                          }}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                        >
-                          <option value="">Selecione ou digite abaixo...</option>
-                          {matching.map(m => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                          ))}
-                        </select>
-                      );
-                    }
-                    return (
-                      <input
-                        type="text"
-                        value={specialtyName}
-                        onChange={e => setSpecialtyName(e.target.value)}
-                        placeholder="Ex: Fisioterapia Traumato-Ortopédica, Neuro..."
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
-                      />
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Função no Sistema *</label>
-                  <select
-                    value={systemRole}
-                    onChange={e => setSystemRole(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
-                  >
-                    <option value="professional">Profissional Clínico</option>
-                    <option value="clinic_admin">Gestor da Clínica (Admin)</option>
-                    <option value="clinical_coordinator">Coordenação Clínica</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Tipo de Registro</label>
-                  <input
-                    type="text"
-                    value={registrationType}
-                    onChange={e => setRegistrationType(e.target.value)}
-                    placeholder="Ex: CRP, CRM, CRO"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Número do Registro</label>
-                  <input
-                    type="text"
-                    value={registrationNumber}
-                    onChange={e => setRegistrationNumber(e.target.value)}
-                    placeholder="Ex: 06/12345"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Biografia / Apresentação</label>
-                <textarea
-                  rows={2}
-                  value={bio}
-                  onChange={e => setBio(e.target.value)}
-                  placeholder="Breve currículo exibido na página pública para os clientes..."
-                  className="w-full border border-slate-200 rounded-xl p-2.5 text-xs"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-semibold text-slate-700">Atendimentos e áreas de atuação</label>
-                  <span className="text-[10px] text-slate-400 font-medium">Texto livre</span>
-                </div>
-                <textarea
-                  rows={2}
-                  value={practiceAreas}
-                  onChange={e => setPracticeAreas(e.target.value)}
-                  placeholder="Ex: TEA, TDAH, Ansiedade, Depressão, Orientação de Pais, Avaliação Neuropsicológica..."
-                  className="w-full border border-slate-200 rounded-xl p-2.5 text-xs"
-                />
-              </div>
-
-              {/* Seção de Remuneração e Financeiro (Exclusivo Gerenciador) */}
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-indigo-600" />
-                  <span className="font-bold text-slate-800 text-xs">Remuneração e Pagamento (Gestão da Clínica)</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Modalidade de Remuneração</label>
-                    <select
-                      value={remunerationType}
-                      onChange={e => setRemunerationType(e.target.value as any)}
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
-                    >
-                      <option value="commission">Comissão (% por atendimento)</option>
-                      <option value="salary">Salário Fixo Mensal</option>
-                      <option value="both">Fixo + Comissão</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Dia Previsto de Pagamento</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={paymentDay}
-                      onChange={e => setPaymentDay(Number(e.target.value))}
-                      placeholder="Ex: 5"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
-                    />
-                  </div>
-                </div>
-
-                {(remunerationType === 'commission' || remunerationType === 'both') && (
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Percentual de Comissão Individual (%)</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.5}
-                        value={commissionPercentage}
-                        onChange={e => setCommissionPercentage(Number(e.target.value))}
-                        placeholder="Ex: 50"
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
-                      />
-                      <span className="absolute right-3 top-2 text-slate-400 font-bold">%</span>
-                    </div>
-                  </div>
-                )}
-
-                {(remunerationType === 'salary' || remunerationType === 'both') && (
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Salário Fixo Mensal (R$)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      step={50}
-                      value={fixedSalary}
-                      onChange={e => setFixedSalary(Number(e.target.value))}
-                      placeholder="Ex: 3500.00"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Seção Página Pública e Link de Agendamento */}
-              <div className="bg-teal-50/70 border border-teal-200 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Share2 className="w-4 h-4 text-teal-700" />
-                    <span className="font-bold text-teal-900 text-xs">Página Pública de Agendamento</span>
-                  </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-teal-800">
-                    <input
-                      type="checkbox"
-                      checked={publicBookingEnabled}
-                      onChange={e => setPublicBookingEnabled(e.target.checked)}
-                      className="rounded text-teal-600 focus:ring-teal-500"
-                    />
-                    <span>Ativar link público</span>
-                  </label>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-teal-900 mb-1">Identificador no Link (Slug opcional)</label>
-                  <div className="flex items-center bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs">
-                    <span className="text-slate-400 select-none">zemda.com.br/agendar/</span>
-                    <input
-                      type="text"
-                      value={slug}
-                      onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                      placeholder="nome-do-profissional"
-                      className="flex-1 border-0 p-0 text-xs font-semibold text-teal-700 focus:ring-0 focus:outline-hidden"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-                <button
-                  onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleCreateProfessional}
-                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
-                >
-                  Cadastrar Profissional
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal Editar Profissional */}
       {editingProf && (
@@ -953,16 +574,23 @@ export const ProfessionalsView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-teal-900 mb-1">Identificador no Link (Slug)</label>
-                  <div className="flex items-center bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs">
-                    <span className="text-slate-400 select-none">zemda.com.br/agendar/</span>
-                    <input
-                      type="text"
-                      value={editSlug}
-                      onChange={e => setEditSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                      placeholder="nome-do-profissional"
-                      className="flex-1 border-0 p-0 text-xs font-semibold text-teal-700 focus:ring-0 focus:outline-hidden"
-                    />
+                  <label className="block font-semibold text-teal-900 mb-1">Link de Agendamento</label>
+                  <div className="flex items-center gap-2 bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs">
+                    <span className="flex-1 font-mono text-teal-800 truncate select-all">
+                      {`${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${editSlug || 'profissional'}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = `${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${editSlug || 'profissional'}`;
+                        navigator.clipboard.writeText(url);
+                        showToast('Link de agendamento copiado!', 'success');
+                      }}
+                      className="text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Copiar</span>
+                    </button>
                   </div>
                 </div>
               </div>

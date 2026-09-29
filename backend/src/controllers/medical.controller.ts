@@ -1,3 +1,4 @@
+import { medicalObject, medicalSpecialtyNotes, consultationFromRecord } from '../services/medical-payload';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -81,7 +82,7 @@ export class MedicalController {
       const stmt = db.prepare(`
         SELECT mc.*, p.name as professional_name, p.registration_type, p.registration_number
         FROM medical_consultations mc
-        JOIN professionals p ON p.id = mc.professional_id
+        LEFT JOIN professionals p ON p.id = mc.professional_id AND p.tenant_id = mc.tenant_id
         WHERE mc.patient_id = ? AND mc.tenant_id = ?
         ORDER BY mc.created_at DESC
       `);
@@ -89,14 +90,16 @@ export class MedicalController {
       const rows = stmt.all(patientId, tenantId) as any[];
       const consultations = rows.map(r => ({
         ...r,
-        vitalSigns: r.vital_signs_json ? JSON.parse(r.vital_signs_json) : null,
-        physicalExam: r.physical_exam_json ? JSON.parse(r.physical_exam_json) : null,
-        neurologicalExam: r.neurological_exam_json ? JSON.parse(r.neurological_exam_json) : null,
+        specialtyNotes: medicalObject(r.specialty_notes_json),
+        vitalSigns: medicalObject(r.vital_signs_json),
+        physicalExam: medicalObject(r.physical_exam_json),
+        neurologicalExam: medicalObject(r.neurological_exam_json),
         diagnosticHypotheses: r.diagnostic_hypotheses_json ? JSON.parse(r.diagnostic_hypotheses_json) : [],
-        soapNotes: r.soap_notes_json ? JSON.parse(r.soap_notes_json) : null
+        soapNotes: medicalObject(r.soap_notes_json)
       }));
 
-      res.json(consultations);
+      const records = db.prepare(`SELECT r.*, p.name AS professional_name FROM records r LEFT JOIN professionals p ON p.id = r.professional_id AND p.tenant_id = r.tenant_id WHERE r.patient_id = ? AND r.tenant_id = ? AND r.module_type = 'ZemdaMed' ORDER BY r.created_at DESC`).all(patientId, tenantId) as any[];
+      res.json([...consultations, ...records.map(consultationFromRecord)].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))));
     } catch (err: any) {
       console.error('[MedicalController.listConsultationsByPatient] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar consultas médicas' });
@@ -121,25 +124,34 @@ export class MedicalController {
         return;
       }
 
-      const row = db.prepare(`
+      let row = db.prepare(`
         SELECT mc.*, p.name as professional_name, p.registration_type, p.registration_number
         FROM medical_consultations mc
-        JOIN professionals p ON p.id = mc.professional_id
+        LEFT JOIN professionals p ON p.id = mc.professional_id AND p.tenant_id = mc.tenant_id
         WHERE mc.id = ? AND mc.tenant_id = ?
       `).get(id, tenantId) as any;
 
+      if (!row) {
+        const record = db.prepare("SELECT * FROM records WHERE id = ? AND tenant_id = ? AND module_type = 'ZemdaMed'").get(id, tenantId) as any;
+        if (record) {
+          if (!hasClinicalAccess(req, record.patient_id)) { res.status(403).json({ error: 'Acesso clínico restrito' }); return; }
+          res.json(consultationFromRecord(record)); return;
+        }
+      }
       if (!row) {
         res.status(404).json({ error: 'Consulta médica não encontrada' });
         return;
       }
 
+      if (!hasClinicalAccess(req, row.patient_id)) { res.status(403).json({ error: 'Acesso clínico restrito' }); return; }
       const consultation = {
+        specialtyNotes: medicalObject(row.specialty_notes_json),
         ...row,
-        vitalSigns: row.vital_signs_json ? JSON.parse(row.vital_signs_json) : null,
-        physicalExam: row.physical_exam_json ? JSON.parse(row.physical_exam_json) : null,
-        neurologicalExam: row.neurological_exam_json ? JSON.parse(row.neurological_exam_json) : null,
+        vitalSigns: medicalObject(row.vital_signs_json),
+        physicalExam: medicalObject(row.physical_exam_json),
+        neurologicalExam: medicalObject(row.neurological_exam_json),
         diagnosticHypotheses: row.diagnostic_hypotheses_json ? JSON.parse(row.diagnostic_hypotheses_json) : [],
-        soapNotes: row.soap_notes_json ? JSON.parse(row.soap_notes_json) : null
+        soapNotes: medicalObject(row.soap_notes_json)
       };
 
       res.json(consultation);
@@ -177,6 +189,13 @@ export class MedicalController {
         return;
       }
 
+      if (!hasClinicalAccess(req, patientId)) { res.status(403).json({ error: 'Acesso clínico restrito' }); return; }
+      if (appointmentId && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)) {
+        res.status(400).json({ error: 'Agendamento não pertence ao paciente' }); return;
+      }
+      if (req.body.professionalId && !db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ?').get(req.body.professionalId, tenantId)) {
+        res.status(400).json({ error: 'Profissional inválido' }); return;
+      }
       let profId: string | null = null;
       if (req.user.role === 'professional') {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
@@ -199,21 +218,21 @@ export class MedicalController {
           family_history, habits_lifestyle, vital_signs_json, physical_exam_json,
           neurological_exam_json, diagnostic_hypotheses_json, cid_code,
           cid_description, clinical_conduct, soap_notes_json, return_in_days,
-          created_at, updated_at
+          specialty_notes_json, created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?,
           ?, ?, ?, ?,
           ?, ?, ?, ?,
           ?, ?, ?,
           ?, ?, ?, ?,
-          datetime('now'), datetime('now')
+          ?, datetime('now'), datetime('now')
         )
       `).run(
         id, tenantId, patientId, appointmentId || null, profId,
         specialtyPreset || 'clinica-medica', chiefComplaint || null, hpi || null, pastMedicalHistory || null,
         familyHistory || null, habitsLifestyle || null, vitalSigns ? JSON.stringify(vitalSigns) : null, physicalExam ? JSON.stringify(physicalExam) : null,
         neurologicalExam ? JSON.stringify(neurologicalExam) : null, diagnosticHypotheses ? JSON.stringify(diagnosticHypotheses) : null, cidCode || null,
-        cidDescription || null, clinicalConduct || null, soapNotes ? JSON.stringify(soapNotes) : null, returnInDays || null
+        cidDescription || null, clinicalConduct || null, soapNotes ? JSON.stringify(soapNotes) : null, returnInDays || null, JSON.stringify(medicalSpecialtyNotes(req.body))
       );
 
       logAudit(req, 'CREATE_MEDICAL_CONSULTATION', 'medical_consultations', id, { patientId, specialtyPreset });
@@ -254,6 +273,13 @@ export class MedicalController {
         return;
       }
 
+      if (!hasClinicalAccess(req, patientId)) { res.status(403).json({ error: 'Acesso clínico restrito' }); return; }
+      if (appointmentId && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)) {
+        res.status(400).json({ error: 'Agendamento não pertence ao paciente' }); return;
+      }
+      if (req.body.professionalId && !db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ?').get(req.body.professionalId, tenantId)) {
+        res.status(400).json({ error: 'Profissional inválido' }); return;
+      }
       let profId: string | null = null;
       if (req.user.role === 'professional') {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;
@@ -274,6 +300,10 @@ export class MedicalController {
         : (finalConduct || 'Consulta médica realizada.'));
 
       const clinicalPayload = JSON.stringify({
+        ...medicalSpecialtyNotes(req.body),
+        pastMedicalHistory: req.body.pastMedicalHistory,
+        familyHistory: req.body.familyHistory,
+        habitsLifestyle: req.body.habitsLifestyle,
         specialtyPreset,
         chiefComplaint,
         hpi,
@@ -289,27 +319,35 @@ export class MedicalController {
         moduleType: 'ZemdaMed'
       });
 
-      // 1. Grava no Prontuário Geral do Paciente
-      db.prepare(`
-        INSERT INTO records (
-          id, tenant_id, patient_id, appointment_id, professional_id,
-          session_date, title, clinical_evolution, technical_notes, is_sealed, module_type,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'ZemdaMed', datetime('now'), datetime('now'))
-      `).run(
-        recordId, tenantId, patientId, appointmentId || null, profId,
-        recDate, recTitle, fullEvolutionText, clinicalPayload
-      );
-
-      // 2. Se houver appointmentId, atualiza status do agendamento
-      if (appointmentId) {
+      db.transaction(() => {
+        // 1. Grava no Prontuário Geral do Paciente
         db.prepare(`
-          UPDATE appointments
-          SET status = 'completed', clinical_module = 'ZemdaMed', updated_at = datetime('now')
-          WHERE id = ? AND tenant_id = ?
-        `).run(appointmentId, tenantId);
-      }
+          INSERT INTO records (
+            id, tenant_id, patient_id, appointment_id, professional_id,
+            session_date, title, clinical_evolution, technical_notes, is_sealed, module_type,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'ZemdaMed', datetime('now'), datetime('now'))
+        `).run(
+          recordId, tenantId, patientId, appointmentId || null, profId,
+          recDate, recTitle, fullEvolutionText, clinicalPayload
+        );
 
+        // 2. Se houver appointmentId, atualiza status do agendamento
+        if (appointmentId) {
+          db.prepare(`
+            UPDATE appointments
+            SET status = 'completed', clinical_module = 'ZemdaMed', updated_at = datetime('now')
+            WHERE id = ? AND tenant_id = ?
+          `).run(appointmentId, tenantId);
+        }
+
+        db.prepare(`
+          DELETE FROM clinical_drafts
+          WHERE tenant_id = ? AND patient_id = ? AND module_type = 'medical'
+            AND COALESCE(NULLIF(appointment_id, ''), 'none') = ?
+        `).run(tenantId, patientId, appointmentId || 'none');
+
+      })();
       logAudit(req, 'FINISH_MEDICAL_CONSULTATION', 'records', recordId, { patientId, recordId, specialtyPreset });
       res.status(201).json({
         recordId,

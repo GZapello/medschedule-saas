@@ -131,7 +131,7 @@ const getCouncilForProfession = (profNameOrId?: string): string => {
 };
 
 export const UnifiedTeamManagement: React.FC = () => {
-  const { isClinicAdmin, reloadSession } = useAuth();
+  const { isClinicAdmin, reloadSession, currentTenant } = useAuth();
   const { showToast } = useToast();
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -186,19 +186,6 @@ export const UnifiedTeamManagement: React.FC = () => {
   const [sheetPaymentDay, setSheetPaymentDay] = useState<number>(5);
   const [savingFinancial, setSavingFinancial] = useState<boolean>(false);
 
-  // Modal Novo Membro / Profissional
-  const [showNewModal, setShowNewModal] = useState<boolean>(false);
-  const [newName, setNewName] = useState<string>('');
-  const [newGender, setNewGender] = useState<'M' | 'F'>('M');
-  const [newEmail, setNewEmail] = useState<string>('');
-  const [newPassword, setNewPassword] = useState<string>('123456');
-  const [newPhone, setNewPhone] = useState<string>('');
-  const [newProfessionId, setNewProfessionId] = useState<string>('');
-  const [newRegistrationType, setNewRegistrationType] = useState<string>('CRP');
-  const [newRegistrationNumber, setNewRegistrationNumber] = useState<string>('');
-  const [newSystemRole, setNewSystemRole] = useState<string>('professional');
-  const [creatingMember, setCreatingMember] = useState<boolean>(false);
-
   // Modal de Convite
   const [showInviteModal, setShowInviteModal] = useState<boolean>(false);
   const [inviteRole, setInviteRole] = useState<string>('professional');
@@ -234,10 +221,6 @@ export const UnifiedTeamManagement: React.FC = () => {
       setProfessions(taxonomyProfsArray);
       setSpecialties(taxonomySpecsArray);
       setClinicInvites(invitesArray);
-
-      if (taxonomyProfsArray.length > 0 && !newProfessionId) {
-        setNewProfessionId(taxonomyProfsArray[0].id);
-      }
     } catch (err: any) {
       showToast('Erro ao carregar dados da equipe', 'error');
     } finally {
@@ -571,40 +554,6 @@ export const UnifiedTeamManagement: React.FC = () => {
     }
   };
 
-  // Criar Novo Profissional Diretamente
-  const handleCreateProfessional = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim() || !newEmail.trim()) {
-      showToast('Nome e e-mail são obrigatórios', 'error');
-      return;
-    }
-    try {
-      setCreatingMember(true);
-      await ApiClient.post('/v1/professionals', {
-        name: newName.trim(),
-        gender: newGender,
-        email: newEmail.trim().toLowerCase(),
-        password: newPassword || '123456',
-        phone: newPhone.trim(),
-        professionId: newProfessionId,
-        registrationType: newRegistrationType,
-        registrationNumber: newRegistrationNumber.trim(),
-        systemRole: newSystemRole
-      });
-      showToast('Novo profissional cadastrado com sucesso!', 'success');
-      setShowNewModal(false);
-      setNewName('');
-      setNewEmail('');
-      setNewPhone('');
-      setNewRegistrationNumber('');
-      fetchData();
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao cadastrar profissional', 'error');
-    } finally {
-      setCreatingMember(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Cabeçalho da Seção de Equipe */}
@@ -624,19 +573,10 @@ export const UnifiedTeamManagement: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowInviteModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
-              <LinkIcon className="w-3.5 h-3.5 text-indigo-600" />
+              <LinkIcon className="w-3.5 h-3.5" />
               <span>Gerar Convite</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowNewModal(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Novo Profissional</span>
             </button>
           </div>
         )}
@@ -1157,17 +1097,17 @@ export const UnifiedTeamManagement: React.FC = () => {
 
                     {sheetPublicBookingEnabled && (
                       <div className="flex items-center gap-2 pt-1">
-                        <span className="text-[11px] font-mono text-slate-500 bg-white px-3 py-2 rounded-xl border border-slate-200 flex-1 truncate">
-                          {window.location.origin}/agendar/{sheetSlug || 'profissional'}
+                        <span className="text-[11px] font-mono text-slate-500 bg-white px-3 py-2 rounded-xl border border-slate-200 flex-1 truncate select-all">
+                          {window.location.origin}/agendar/{currentTenant?.slug || 'clinica'}/{sheetSlug || 'profissional'}
                         </span>
                         <button
                           type="button"
                           onClick={() => {
-                            const url = `${window.location.origin}/agendar/${sheetSlug || 'profissional'}`;
+                            const url = `${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${sheetSlug || 'profissional'}`;
                             navigator.clipboard.writeText(url);
                             showToast('Link de agendamento copiado!', 'success');
                           }}
-                          className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
                         >
                           <Copy className="w-3.5 h-3.5" />
                           <span>Copiar</span>
@@ -1650,149 +1590,7 @@ export const UnifiedTeamManagement: React.FC = () => {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: NOVO PROFISSIONAL DIRETAMENTE */}
-      {/* ========================================================================= */}
-      {showNewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-600" />
-                Cadastrar Novo Profissional
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowNewModal(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreateProfessional} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Nome Completo *</label>
-                <input
-                  type="text"
-                  required
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  placeholder="Ex: Dra. Mariana Silva"
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Tratamento / Gênero</label>
-                  <select
-                    value={newGender}
-                    onChange={e => setNewGender(e.target.value as 'M' | 'F')}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
-                  >
-                    <option value="M">Dr. (Masculino)</option>
-                    <option value="F">Dra. (Feminino)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Profissão *</label>
-                  <select
-                    value={newProfessionId}
-                    onChange={e => {
-                      setNewProfessionId(e.target.value);
-                      const sel = professions.find(p => p.id === e.target.value);
-                      if (sel) setNewRegistrationType(getCouncilForProfession(sel.name));
-                    }}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
-                  >
-                    {professions.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">E-mail de Acesso *</label>
-                  <input
-                    type="email"
-                    required
-                    value={newEmail}
-                    onChange={e => setNewEmail(e.target.value)}
-                    placeholder="mariana@clinica.com"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Telefone / WhatsApp</label>
-                  <input
-                    type="text"
-                    value={newPhone}
-                    onChange={e => setNewPhone(e.target.value)}
-                    placeholder="(00) 00000-0000"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Conselho</label>
-                  <input
-                    type="text"
-                    value={newRegistrationType}
-                    onChange={e => setNewRegistrationType(e.target.value)}
-                    placeholder="CRM, CRO, CRP..."
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Número de Registro</label>
-                  <input
-                    type="text"
-                    value={newRegistrationNumber}
-                    onChange={e => setNewRegistrationNumber(e.target.value)}
-                    placeholder="12345/SP"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Senha Inicial de Acesso</label>
-                <input
-                  type="text"
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white font-mono"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 font-bold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={creatingMember}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  {creatingMember ? 'Cadastrando...' : 'Cadastrar Profissional'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ========================================================================= */}
       {/* MODAL: NOVO BLOQUEIO / FÉRIAS */}

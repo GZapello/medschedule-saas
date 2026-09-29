@@ -1,4 +1,11 @@
+import { MedicalComparison } from './shared/MedicalComparison';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
+import { ClinicalSnapshot } from '../clinical/ClinicalSnapshot';
+import { MedicalCapabilityTools } from './shared/MedicalCapabilityTools';
+import { MedicalTrends } from './shared/MedicalTrends';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { SpecialtySectionRenderer } from './specialties/SpecialtySectionRenderer';
+import { specialtyNoteKeys, specialtySections } from './specialties/specialtySections';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -37,6 +44,8 @@ import {
   MedicalSoapNotes,
   MedicalConsultation
 } from '../../types/capabilities';
+
+const MedicalBodyHistory = React.lazy(() => import('../zemda-body/ZemdaBodyModal').then(m => ({ default: m.ZemdaBodyModal })));
 
 interface ZemdaMedWorkspaceProps {
   initialPatientId?: string;
@@ -157,11 +166,14 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   initialAppointmentId,
   onFinishConsultation
 }) => {
-  const { currentUser, clientTermLabel, practiceAreaIds } = useAuth();
+  const { currentUser, clientTermLabel, practiceAreaIds, hasCapability } = useAuth();
   const { showToast } = useToast();
 
   // Árvore Médica Centralizada e Especialidades do Usuário
   const [medicalTree, setMedicalTree] = useState<MedicalSpecialtyItem[]>([]);
+  const restoredSpecialtyRef = useRef<string | null>(null);
+  const [resourceCapabilities, setResourceCapabilities] = useState<string[] | null>(null);
+  const [medicalAreaIds, setMedicalAreaIds] = useState<string[]>([]);
   const [userSpecialtyIds, setUserSpecialtyIds] = useState<string[]>([]);
 
   // Carrega a árvore médica e especialidades do médico
@@ -178,6 +190,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         setMedicalTree(treeRes.specialties);
       }
 
+      if (Array.isArray(resData?.activeCapabilities)) setResourceCapabilities(resData.activeCapabilities);
+      setMedicalAreaIds(resData?.medicalPracticeAreaIds || resData?.medicalHierarchy?.practiceAreaIds || []);
       if (resData?.medicalSpecialtyIds && Array.isArray(resData.medicalSpecialtyIds)) {
         setUserSpecialtyIds(resData.medicalSpecialtyIds);
       } else if (resData?.medicalHierarchy?.specialtyIds) {
@@ -210,6 +224,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     // Se o médico possui especialidades médicas vinculadas (ex: Neurologia + Psiquiatria)
     if (userSpecialtyIds.length > 0) {
       const filtered = catalogSource.filter(p =>
+        medicalTree.some(s => s.slug === p.id && userSpecialtyIds.includes(s.id)) ||
         userSpecialtyIds.includes(p.id) ||
         userSpecialtyIds.some(id => id.includes(p.id) || p.id.includes(id.replace('med-spec-', '')))
       );
@@ -261,6 +276,9 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
   // Atualiza preset ativo quando allowedPresets for carregado
   useEffect(() => {
+    if (restoredSpecialtyRef.current && allowedPresets.some(p => p.id === restoredSpecialtyRef.current)) {
+      setActivePreset(restoredSpecialtyRef.current); restoredSpecialtyRef.current = null; return;
+    }
     if (allowedPresets.length > 0 && !allowedPresets.some(p => p.id === activePreset)) {
       setActivePreset(allowedPresets[0].id);
     }
@@ -300,108 +318,118 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
   // Exame Neurológico (Neurologia)
   const [neurologicalExam, setNeurologicalExam] = useState<MedicalNeurologicalExam>({
-    mentalStatus: 'Vigil, orientado no tempo e espaço, discurso coerente.',
-    cranialNerves: 'Pares cranianos (I a XII) sem déficits aparentes.',
-    motorSystem: 'Força muscular preservada grau V/V nos 4 membros, tônus normal.',
-    reflexes: 'Reflexos bicipital, tricipital, patelar e aquileu presentes e simétricos (+2/+4).',
-    sensorySystem: 'Sensibilidade tátil, dolorosa e proprioceptiva preservadas bilateralmente.',
-    coordinationAndGait: 'Prova índex-nariz adequada, marcha atípica sem ataxia.',
-    meningealSigns: 'Ausência de rigidez de nuca, sinais de Kernig e Brudzinski negativos.',
+    mentalStatus: '',
+    cranialNerves: '',
+    motorSystem: '',
+    reflexes: '',
+    sensorySystem: '',
+    coordinationAndGait: '',
+    meningealSigns: '',
     painMapMarkers: []
   });
 
   // Avaliação Psiquiátrica (Psiquiatria)
-  const [psychiatricNotes, setPsychiatricNotes] = useState({
-    mood: 'Eutímico',
-    affect: 'Adequado e modulado',
-    thoughtProcess: 'Lógico e linear, sem delírios ou ideação suicida',
-    perception: 'Sem alucinações auditivas ou visuais',
-    sleepApetite: 'Sono preservado (7h/noite), apetite estável'
+  const [psychiatricNotes, setPsychiatricNotes] = useState<Record<string, any>>({
+    mood: '',
+    affect: '',
+    thoughtProcess: '',
+    perception: '',
+    sleepApetite: ''
   });
 
   // Avaliação Pediátrica (Pediatria)
-  const [pediatricNotes, setPediatricNotes] = useState({
-    growthPercentileWeight: 'P50',
-    growthPercentileHeight: 'P50',
-    vaccinationStatus: 'Vacinação em dia conforme PNI',
-    dnpmMilestones: 'Marcos de desenvolvimento neuropsicomotor adequados para a idade',
-    feedingType: 'Aleitamento materno / Alimentação da família'
+  const [pediatricNotes, setPediatricNotes] = useState<Record<string, any>>({
+    growthPercentileWeight: '',
+    growthPercentileHeight: '',
+    vaccinationStatus: '',
+    dnpmMilestones: '',
+    feedingType: ''
   });
 
   // Avaliação Geriátrica Ampla (Geriatria)
-  const [geriatricNotes, setGeriatricNotes] = useState({
-    fallRisk: 'Baixo risco de quedas (Timed Up and Go < 10s)',
-    polypharmacy: 'Uso de até 3 medicações de uso contínuo (sem polifarmácia excessiva)',
-    katsIndexAVD: 'Independente para AVDs básicas (6/6)',
-    lawtonIndexAIVD: 'Independente para AIVDs instrumentais (8/8)',
-    cognitiveScreening: 'Mini-Mental: sem indícios de declínio cognitivo significativo'
+  const [geriatricNotes, setGeriatricNotes] = useState<Record<string, any>>({
+    fallRisk: '',
+    polypharmacy: '',
+    katsIndexAVD: '',
+    lawtonIndexAIVD: '',
+    cognitiveScreening: ''
   });
 
   // Avaliações Específicas das Demais Especialidades
-  const [cardioNotes, setCardioNotes] = useState({
-    rhythm: 'Ritmo sinusal regular',
-    murmurs: 'Sem sopros patológicos',
-    cvRisk: 'Risco cardiovascular intermediário',
-    edema: 'Sem edema de membros inferiores'
+  const [cardioNotes, setCardioNotes] = useState<Record<string, any>>({
+    rhythm: '',
+    murmurs: '',
+    cvRisk: '',
+    edema: ''
   });
 
-  const [dermatoNotes, setDermatoNotes] = useState({
-    phototype: 'Fototipo III (Fitzpatrick)',
-    lesionExam: 'Ectoscopia dermatológica sem lesões suspeitas de malignidade',
-    abcdeCriteria: 'Ausência de assimetria, bordas regulares, cor uniforme, diâmetro < 6mm'
+  const [dermatoNotes, setDermatoNotes] = useState<Record<string, any>>({
+    phototype: '',
+    lesionExam: '',
+    abcdeCriteria: ''
   });
 
-  const [orthoNotes, setOrthoNotes] = useState({
-    mobilityROM: 'Amplitude de movimento preservada nos segmentos avaliados',
-    jointStability: 'Articulações estáveis, sem gaveta ou frouxidão ligamentar',
-    palpationPain: 'Sem pontos gatilho dolorosos ou crepitações articulares'
+  const [orthoNotes, setOrthoNotes] = useState<Record<string, any>>({
+    mobilityROM: '',
+    jointStability: '',
+    palpationPain: ''
   });
 
-  const [rheumaNotes, setRheumaNotes] = useState({
-    tenderJointCount: '0 articulações dolorosas',
-    swollenJointCount: '0 articulações edemaciadas',
-    morningStiffnessMinutes: 'Sem rigidez matinal significativa (< 15 min)'
+  const [rheumaNotes, setRheumaNotes] = useState<Record<string, any>>({
+    tenderJointCount: '',
+    swollenJointCount: '',
+    morningStiffnessMinutes: ''
   });
 
-  const [gynecoNotes, setGynecoNotes] = useState({
+  const [gynecoNotes, setGynecoNotes] = useState<Record<string, any>>({
     lmpDate: '',
-    breastExam: 'Mamas simétricas, sem nódulos palpáveis ou secreção papilar',
-    cervixExam: 'Colo uterino de aspecto eutrófico, sem lesões aparentes',
-    preventiveStatus: 'Preventivo Papanicolau em dia'
+    breastExam: '',
+    cervixExam: '',
+    preventiveStatus: ''
   });
 
-  const [endocrinoNotes, setEndocrinoNotes] = useState({
+  const [endocrinoNotes, setEndocrinoNotes] = useState<Record<string, any>>({
     fastingGlucose: '',
     hba1c: '',
-    thyroidPalpation: 'Tireoide normopalpável, indolor, sem nódulos',
+    thyroidPalpation: '',
     waistCircumference: ''
   });
 
-  const [gastroNotes, setGastroNotes] = useState({
-    bristolScale: 'Tipo 4 (forma de salsicha, lisa e suave)',
-    abdominalExam: 'Abdome indolor, sem visceromegalias palpáveis',
-    gerdSymptoms: 'Sem queixas de pirose ou regurgitação'
+  const [gastroNotes, setGastroNotes] = useState<Record<string, any>>({
+    bristolScale: '',
+    abdominalExam: '',
+    gerdSymptoms: ''
   });
 
-  const [ophtalmoNotes, setOphtalmoNotes] = useState({
-    visualAcuityOD: '20/20',
-    visualAcuityOE: '20/20',
-    intraocularPressure: '14 mmHg bilateral',
-    fundusExam: 'Fundo de olho com papila nítida, rácio E/P normal, vasos preservados'
+  const [ophtalmoNotes, setOphtalmoNotes] = useState<Record<string, any>>({
+    visualAcuityOD: '',
+    visualAcuityOE: '',
+    intraocularPressure: '',
+    fundusExam: ''
   });
 
-  const [otorrinoNotes, setOtorrinoNotes] = useState({
-    otoscopy: 'Membrana timpânica íntegra, translúcida bilateralmente',
-    rhinoscopy: 'Mucosa nasal corada, cornetos normotróficos, sem secreção',
-    oropharynx: 'Orofaringe sem hiperemia, amígdalas grau I, palato íntegro'
+  const [otorrinoNotes, setOtorrinoNotes] = useState<Record<string, any>>({
+    otoscopy: '',
+    rhinoscopy: '',
+    oropharynx: ''
   });
 
-  const [uroNotes, setUroNotes] = useState({
-    ipssScore: 'Sintomas obstrutivos ausentes ou leves',
-    urinaryFlow: 'Micção sem esforço, jato urinário satisfatório',
-    prostateExam: 'Próstata normotrófica, fibroelástica, indolor'
+  const [uroNotes, setUroNotes] = useState<Record<string, any>>({
+    ipssScore: '',
+    urinaryFlow: '',
+    prostateExam: ''
   });
 
+  const [internalMedicineNotes, setInternalMedicineNotes] = useState<Record<string, any>>({});
+  const specialtyNotes: Record<string, Record<string, any>> = { internalMedicineNotes, neurologicalExam, psychiatricNotes, pediatricNotes, geriatricNotes, cardioNotes, dermatoNotes, orthoNotes, rheumaNotes, gynecoNotes, endocrinoNotes, gastroNotes, ophtalmoNotes, otorrinoNotes, uroNotes };
+  const specialtySetters: Record<string, (value: any) => void> = { internalMedicineNotes: setInternalMedicineNotes, neurologicalExam: setNeurologicalExam, psychiatricNotes: setPsychiatricNotes, pediatricNotes: setPediatricNotes, geriatricNotes: setGeriatricNotes, cardioNotes: setCardioNotes, dermatoNotes: setDermatoNotes, orthoNotes: setOrthoNotes, rheumaNotes: setRheumaNotes, gynecoNotes: setGynecoNotes, endocrinoNotes: setEndocrinoNotes, gastroNotes: setGastroNotes, ophtalmoNotes: setOphtalmoNotes, otorrinoNotes: setOtorrinoNotes, uroNotes: setUroNotes };
+  const activeNoteKey = specialtyNoteKeys[activePreset];
+
+  const [sharedAssessments, setSharedAssessments] = useState<Record<string, any>>({});
+  const activeSpecialty = medicalTree.find(item => item.slug === activePreset || item.id === activePreset);
+  const selectedMedicalAreas = activeSpecialty?.practiceAreas.filter(area => medicalAreaIds.includes(area.id)) || [];
+  const hiddenByArea = new Set(selectedMedicalAreas.flatMap(area => area.hiddenCapabilities || []));
+  const activeCapabilities = Array.from(new Set([...(activeSpecialty?.defaultCapabilities || []), ...(activeSpecialty?.optionalCapabilities || []), ...selectedMedicalAreas.flatMap(area => [...(area.defaultCapabilities || []), ...(area.optionalCapabilities || [])])])).filter(cap => !hiddenByArea.has(cap) && (resourceCapabilities ? resourceCapabilities.includes(cap) : hasCapability(cap)));
   // SOAP
   const [soapNotes, setSoapNotes] = useState<MedicalSoapNotes>({
     subjective: '',
@@ -422,9 +450,20 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   const [consultationsHistory, setConsultationsHistory] = useState<MedicalConsultation[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<'consultation' | 'history'>('consultation');
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+  const [bodyHistoryId, setBodyHistoryId] = useState<string | null>(null);
 
   // Controle de Submissão
   const [isFinishing, setIsFinishing] = useState(false);
+
+  React.useLayoutEffect(() => {
+    Object.values(specialtySetters).forEach(set => set({}));
+    setSharedAssessments({}); setVitalSigns({}); setPhysicalExam({});
+    setChiefComplaint(''); setHpi(''); setPastMedicalHistory(''); setFamilyHistory(''); setHabitsLifestyle('');
+    setSoapNotes({ subjective: '', objective: '', assessment: '', plan: '' });
+    setCidCode(''); setCidDescription(''); setDiagnosticHypotheses([]); setNewHypothesis(''); setClinicalConduct(''); setReturnInDays(undefined);
+    setConsultationsHistory([]); setBodyHistoryId(null); setExpandedHistoryId(null);
+  }, [selectedPatientId, initialAppointmentId]);
 
   // Sincroniza Paciente Selecionado
   useEffect(() => {
@@ -432,6 +471,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       if (!selectedPatient || selectedPatient.id !== selectedPatientId) {
         ApiClient.get<any>(`/v1/patients/${selectedPatientId}`)
           .then(res => {
+            if (currentPatientRef.current !== selectedPatientId) return;
             const p = res?.patient || res;
             setSelectedPatient(p || null);
           })
@@ -445,22 +485,26 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   }, [selectedPatientId]);
 
   // Carrega Histórico Médico do Paciente
+  const currentPatientRef = useRef(selectedPatientId); currentPatientRef.current = selectedPatientId;
   const loadPatientConsultations = async (pId: string) => {
     try {
       setLoadingHistory(true);
       const res = await ApiClient.get<MedicalConsultation[]>(`/v1/medical/consultations/patient/${pId}`);
-      if (Array.isArray(res)) {
+      if (currentPatientRef.current === pId && Array.isArray(res)) {
         setConsultationsHistory(res);
       }
     } catch (err) {
       console.error('Erro ao carregar histórico médico:', err);
     } finally {
-      setLoadingHistory(false);
+      if (currentPatientRef.current === pId) setLoadingHistory(false);
     }
   };
 
   // Autosave Rascunho Clínico do Atendimento Médico
   const currentDraftPayload = useMemo(() => ({
+    specialtyPreset: activePreset,
+    sharedAssessments,
+    internalMedicineNotes,
     chiefComplaint,
     hpi,
     pastMedicalHistory,
@@ -489,7 +533,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     clinicalConduct,
     returnInDays
   }), [
-    chiefComplaint, hpi, pastMedicalHistory, familyHistory, habitsLifestyle,
+    activePreset, sharedAssessments, internalMedicineNotes, chiefComplaint, hpi, pastMedicalHistory, familyHistory, habitsLifestyle,
     vitalSigns, physicalExam, neurologicalExam, psychiatricNotes, pediatricNotes,
     geriatricNotes, cardioNotes, dermatoNotes, orthoNotes, rheumaNotes, gynecoNotes,
     endocrinoNotes, gastroNotes, ophtalmoNotes, otorrinoNotes, uroNotes, soapNotes,
@@ -502,12 +546,15 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     appointmentId: initialAppointmentId,
     payload: currentDraftPayload,
     onRestoreDraft: (restored: any) => {
-      if (!restored) return;
-      if (restored.chiefComplaint !== undefined) setChiefComplaint(restored.chiefComplaint);
-      if (restored.hpi !== undefined) setHpi(restored.hpi);
-      if (restored.pastMedicalHistory !== undefined) setPastMedicalHistory(restored.pastMedicalHistory);
-      if (restored.familyHistory !== undefined) setFamilyHistory(restored.familyHistory);
-      if (restored.habitsLifestyle !== undefined) setHabitsLifestyle(restored.habitsLifestyle);
+      if (!restored || typeof restored !== 'object') return;
+      if (typeof restored.specialtyPreset === 'string') { restoredSpecialtyRef.current = restored.specialtyPreset; if (allowedPresets.some(p => p.id === restored.specialtyPreset)) { setActivePreset(restored.specialtyPreset); restoredSpecialtyRef.current = null; } }
+      if (typeof restored.chiefComplaint === 'string') setChiefComplaint(restored.chiefComplaint);
+      if (typeof restored.hpi === 'string') setHpi(restored.hpi);
+      if (restored.sharedAssessments) setSharedAssessments(restored.sharedAssessments);
+      if (restored.internalMedicineNotes) setInternalMedicineNotes(restored.internalMedicineNotes);
+      if (typeof restored.pastMedicalHistory === 'string') setPastMedicalHistory(restored.pastMedicalHistory);
+      if (typeof restored.familyHistory === 'string') setFamilyHistory(restored.familyHistory);
+      if (typeof restored.habitsLifestyle === 'string') setHabitsLifestyle(restored.habitsLifestyle);
       if (restored.vitalSigns !== undefined) setVitalSigns(prev => ({ ...prev, ...restored.vitalSigns }));
       if (restored.physicalExam !== undefined) setPhysicalExam(prev => ({ ...prev, ...restored.physicalExam }));
       if (restored.neurologicalExam !== undefined) setNeurologicalExam(prev => ({ ...prev, ...restored.neurologicalExam }));
@@ -524,11 +571,11 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       if (restored.ophtalmoNotes !== undefined) setOphtalmoNotes(prev => ({ ...prev, ...restored.ophtalmoNotes }));
       if (restored.otorrinoNotes !== undefined) setOtorrinoNotes(prev => ({ ...prev, ...restored.otorrinoNotes }));
       if (restored.uroNotes !== undefined) setUroNotes(prev => ({ ...prev, ...restored.uroNotes }));
-      if (restored.soapNotes !== undefined) setSoapNotes(prev => ({ ...prev, ...restored.soapNotes }));
-      if (restored.cidCode !== undefined) setCidCode(restored.cidCode);
-      if (restored.cidDescription !== undefined) setCidDescription(restored.cidDescription);
-      if (restored.diagnosticHypotheses !== undefined) setDiagnosticHypotheses(restored.diagnosticHypotheses);
-      if (restored.clinicalConduct !== undefined) setClinicalConduct(restored.clinicalConduct);
+      if (restored.soapNotes && typeof restored.soapNotes === 'object') setSoapNotes({ subjective: String(restored.soapNotes.subjective || ''), objective: String(restored.soapNotes.objective || ''), assessment: String(restored.soapNotes.assessment || ''), plan: String(restored.soapNotes.plan || '') });
+      if (typeof restored.cidCode === 'string') setCidCode(restored.cidCode);
+      if (typeof restored.cidDescription === 'string') setCidDescription(restored.cidDescription);
+      if (Array.isArray(restored.diagnosticHypotheses)) setDiagnosticHypotheses(restored.diagnosticHypotheses);
+      if (typeof restored.clinicalConduct === 'string') setClinicalConduct(restored.clinicalConduct);
       if (restored.returnInDays !== undefined) setReturnInDays(restored.returnInDays);
     }
   });
@@ -544,6 +591,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
   const getBmiBadge = (bmi?: number) => {
     if (!bmi) return null;
+    if (activePreset === 'pediatria') return { label: 'IMC registrado', color: 'bg-slate-100 text-slate-700' };
     if (bmi < 18.5) return { label: 'Abaixo do peso', color: 'bg-amber-100 text-amber-800' };
     if (bmi < 25) return { label: 'Peso saudável', color: 'bg-emerald-100 text-emerald-800' };
     if (bmi < 30) return { label: 'Sobrepeso', color: 'bg-amber-100 text-amber-800' };
@@ -587,42 +635,18 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         (vitalSigns.bloodPressureSystolic ? `• Sinais Vitais: PA ${vitalSigns.bloodPressureSystolic}/${vitalSigns.bloodPressureDiastolic || ''} mmHg, FC ${vitalSigns.heartRate || '-'} bpm, SpO2 ${vitalSigns.oxygenSaturation || '-'}%, Temp ${vitalSigns.temperature || '-'}°C, IMC ${vitalSigns.bmi || '-'}\n` : '');
 
       // Anexa achados do exame físico especializado
-      if (activePreset === 'neurologia') {
-        evolutionText += `\n[EXAME NEUROLÓGICO]:\n• Mental: ${neurologicalExam.mentalStatus}\n• Pares Cranianos: ${neurologicalExam.cranialNerves}\n• Motor: ${neurologicalExam.motorSystem}\n• Reflexos: ${neurologicalExam.reflexes}\n• Marcha: ${neurologicalExam.coordinationAndGait}\n`;
-      } else if (activePreset === 'psiquiatria') {
-        evolutionText += `\n[EXAME DO ESTADO MENTAL]:\n• Humor: ${psychiatricNotes.mood} | Afeto: ${psychiatricNotes.affect}\n• Pensamento: ${psychiatricNotes.thoughtProcess}\n• Sensopercepção: ${psychiatricNotes.perception}\n• Sono/Apetite: ${psychiatricNotes.sleepApetite}\n`;
-      } else if (activePreset === 'pediatria') {
-        evolutionText += `\n[PUERICULTURA & CRESCIMENTO]:\n• Percentil Peso/Estatura: ${pediatricNotes.growthPercentileWeight} / ${pediatricNotes.growthPercentileHeight}\n• Vacinação: ${pediatricNotes.vaccinationStatus}\n• DNPM: ${pediatricNotes.dnpmMilestones}\n`;
-      } else if (activePreset === 'geriatria') {
-        evolutionText += `\n[AVALIAÇÃO GERIÁTRICA AMPLA (AGA)]:\n• Quedas: ${geriatricNotes.fallRisk}\n• Polifarmácia: ${geriatricNotes.polypharmacy}\n• AVD (Katz): ${geriatricNotes.katsIndexAVD} | AIVD (Lawton): ${geriatricNotes.lawtonIndexAIVD}\n`;
-      } else if (activePreset === 'cardiologia') {
-        evolutionText += `\n[AVALIAÇÃO CARDIOVASCULAR]:\n• Ausculta: ${cardioNotes.murmurs} | Ritmo: ${cardioNotes.rhythm}\n• Estratificação de Risco: ${cardioNotes.cvRisk}\n`;
-      } else if (activePreset === 'dermatologia') {
-        evolutionText += `\n[EXAME DERMATOLÓGICO]:\n• Lesões: ${dermatoNotes.lesionExam}\n• Fototipo: ${dermatoNotes.phototype} | ABCDE: ${dermatoNotes.abcdeCriteria}\n`;
-      } else if (activePreset === 'ortopedia') {
-        evolutionText += `\n[EXAME ORTOPÉDICO]:\n• Amplitude/Mobilidade: ${orthoNotes.mobilityROM}\n• Estabilidade: ${orthoNotes.jointStability}\n• Palpação: ${orthoNotes.palpationPain}\n`;
-      } else if (activePreset === 'reumatologia') {
-        evolutionText += `\n[AVALIAÇÃO REUMATOLÓGICA]:\n• Articulações Dolorosas: ${rheumaNotes.tenderJointCount} | Edemaciadas: ${rheumaNotes.swollenJointCount}\n• Rigidez Matinal: ${rheumaNotes.morningStiffnessMinutes}\n`;
-      } else if (activePreset === 'ginecologia' || activePreset === 'ginecologia-obstetricia') {
-        evolutionText += `\n[EXAME GINECOLÓGICO / OBSTÉTRICO]:\n• DUM: ${gynecoNotes.lmpDate || 'Não informada'}\n• Mamas: ${gynecoNotes.breastExam}\n• Rastreamento: ${gynecoNotes.preventiveStatus}\n`;
-      } else if (activePreset === 'endocrinologia') {
-        evolutionText += `\n[METABOLISMO & TIREOIDE]:\n• Glicemia: ${endocrinoNotes.fastingGlucose || '-'} | HbA1c: ${endocrinoNotes.hba1c || '-'}\n• Tireoide: ${endocrinoNotes.thyroidPalpation}\n`;
-      } else if (activePreset === 'gastroenterologia') {
-        evolutionText += `\n[EXAME GASTROENTEROLÓGICO]:\n• Escala de Bristol: ${gastroNotes.bristolScale}\n• Abdome: ${gastroNotes.abdominalExam}\n`;
-      } else if (activePreset === 'oftalmologia') {
-        evolutionText += `\n[EXAME OFTALMOLÓGICO]:\n• Acuidade OD/OE: ${ophtalmoNotes.visualAcuityOD} / ${ophtalmoNotes.visualAcuityOE}\n• Pressão Intraocular: ${ophtalmoNotes.intraocularPressure}\n`;
-      } else if (activePreset === 'otorrinolaringologia') {
-        evolutionText += `\n[EXAME OTORRINOLARINGOLÓGICO]:\n• Otoscopia: ${otorrinoNotes.otoscopy}\n• Rinoscopia/Orofaringe: ${otorrinoNotes.rhinoscopy}\n`;
-      } else if (activePreset === 'urologia') {
-        evolutionText += `\n[EXAME UROLÓGICO]:\n• Próstata: ${uroNotes.prostateExam}\n• Sintomas IPSS: ${uroNotes.ipssScore}\n`;
-      }
-
       evolutionText += (cidCode ? `\n• CID-10: ${cidCode} - ${cidDescription || ''}\n` : '') +
         (diagnosticHypotheses.length > 0 ? `• Hipóteses: ${diagnosticHypotheses.join(', ')}\n` : '') +
         `\n[CONDUTA MÉDICA / PRESCRIÇÃO]:\n${clinicalConduct || soapNotes.plan}\n` +
         (returnInDays ? `\n• Retorno previsto em: ${returnInDays} dias` : '');
 
+      const activeNotes = specialtyNotes[activeNoteKey] || {};
+      for (const section of specialtySections[activePreset] || []) {
+        const findings = section.fields.filter(([key]) => activeNotes[key] !== undefined && activeNotes[key] !== '').map(([key, label]) => label + ': ' + activeNotes[key]);
+        if (findings.length) evolutionText += '\n[' + section.title + ']\n' + findings.join('\n') + '\n';
+      }
       await ApiClient.post('/v1/medical/finish-consultation', {
+        ...currentDraftPayload,
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId || null,
         title: `Consulta Médica — ${specName}`,
@@ -646,6 +670,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
       showToast('Consulta médica finalizada com sucesso e registrada no prontuário do paciente!', 'success');
       await autosave.clearDraft();
+      setActiveTab('history');
       loadPatientConsultations(selectedPatientId);
 
       if (onFinishConsultation) {
@@ -663,6 +688,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      <ClinicalDraftRecoveryModal isOpen={autosave.conflictModalOpen} moduleName="ZemdaMed" onSelectVersion={autosave.resolveConflict} onClose={() => {}} />
+      {bodyHistoryId && <React.Suspense fallback={null}><MedicalBodyHistory isOpen readOnly patientId={selectedPatientId} assessmentId={bodyHistoryId} onClose={() => setBodyHistoryId(null)} /></React.Suspense>}
       {/* CABEÇALHO DO MÓDULO ZEMDAMED */}
       <ProfessionalModuleHeader
         icon={Stethoscope}
@@ -697,7 +724,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
           selectedPatient={selectedPatient}
           clientTermLabel={clientTermLabel}
           disabled={!!initialAppointmentId}
-          onChange={(id, pat) => {
+          onChange={async (id, pat) => {
+            if (selectedPatientId && !await autosave.forceSaveDraft()) { showToast('Salve o rascunho antes de trocar de paciente.', 'error'); return; }
             setSelectedPatientId(id);
             if (pat) {
               setSelectedPatient(pat);
@@ -974,11 +1002,11 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Histórico Familiar (HF) & Hábitos de Vida
+                  Hábitos e estilo de vida
                 </label>
                 <textarea
                   rows={2}
-                  placeholder="Doenças cardiovasculares, neoplasias na família, tabagismo, etilismo, atividade física..."
+                  placeholder="Tabagismo, etilismo, atividade física, rotina..."
                   value={habitsLifestyle}
                   onChange={e => setHabitsLifestyle(e.target.value)}
                   className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
@@ -994,511 +1022,18 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
               Exame Especializado ({allowedPresets.find(p => p.id === activePreset)?.name || 'Consulta Médica'})
             </h2>
 
-            {/* NEUROLOGIA */}
-            {activePreset === 'neurologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Estado Mental & Funções Corticais</label>
-                  <textarea
-                    rows={2}
-                    value={neurologicalExam.mentalStatus}
-                    onChange={e => setNeurologicalExam({ ...neurologicalExam, mentalStatus: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Pares Cranianos (I a XII)</label>
-                  <textarea
-                    rows={2}
-                    value={neurologicalExam.cranialNerves}
-                    onChange={e => setNeurologicalExam({ ...neurologicalExam, cranialNerves: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Sistema Motor & Força (0 a V)</label>
-                  <textarea
-                    rows={2}
-                    value={neurologicalExam.motorSystem}
-                    onChange={e => setNeurologicalExam({ ...neurologicalExam, motorSystem: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Coordenação, Marcha & Sinais Meníngeos</label>
-                  <textarea
-                    rows={2}
-                    value={neurologicalExam.coordinationAndGait}
-                    onChange={e => setNeurologicalExam({ ...neurologicalExam, coordinationAndGait: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
+            <SpecialtySectionRenderer previousLesions={consultationsHistory.find(row => Array.isArray(row.specialtyNotes?.dermatoNotes?.lesions))?.specialtyNotes?.dermatoNotes?.lesions} specialty={activePreset} value={specialtyNotes[activeNoteKey] || {}} onChange={specialtySetters[activeNoteKey]} patientId={selectedPatientId} appointmentId={initialAppointmentId} />
 
-            {/* PSIQUIATRIA */}
-            {activePreset === 'psiquiatria' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Humor & Afeto</label>
-                  <input
-                    type="text"
-                    value={psychiatricNotes.mood}
-                    onChange={e => setPsychiatricNotes({ ...psychiatricNotes, mood: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Processo do Pensamento & Ideação</label>
-                  <input
-                    type="text"
-                    value={psychiatricNotes.thoughtProcess}
-                    onChange={e => setPsychiatricNotes({ ...psychiatricNotes, thoughtProcess: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Sensopercepção</label>
-                  <input
-                    type="text"
-                    value={psychiatricNotes.perception}
-                    onChange={e => setPsychiatricNotes({ ...psychiatricNotes, perception: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Sono & Apetite</label>
-                  <input
-                    type="text"
-                    value={psychiatricNotes.sleepApetite}
-                    onChange={e => setPsychiatricNotes({ ...psychiatricNotes, sleepApetite: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* PEDIATRIA */}
-            {activePreset === 'pediatria' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Curvas e Percentis de Crescimento</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Peso P50, Estatura P50, PC P50"
-                    value={`${pediatricNotes.growthPercentileWeight} / ${pediatricNotes.growthPercentileHeight}`}
-                    onChange={e => setPediatricNotes({ ...pediatricNotes, growthPercentileWeight: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Situação Vacinal (PNI)</label>
-                  <input
-                    type="text"
-                    value={pediatricNotes.vaccinationStatus}
-                    onChange={e => setPediatricNotes({ ...pediatricNotes, vaccinationStatus: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Marcos do Desenvolvimento (DNPM)</label>
-                  <textarea
-                    rows={2}
-                    value={pediatricNotes.dnpmMilestones}
-                    onChange={e => setPediatricNotes({ ...pediatricNotes, dnpmMilestones: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* GERIATRIA */}
-            {activePreset === 'geriatria' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Rastreamento de Quedas & Fragilidade</label>
-                  <input
-                    type="text"
-                    value={geriatricNotes.fallRisk}
-                    onChange={e => setGeriatricNotes({ ...geriatricNotes, fallRisk: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Polifarmácia & Desprescrição</label>
-                  <input
-                    type="text"
-                    value={geriatricNotes.polypharmacy}
-                    onChange={e => setGeriatricNotes({ ...geriatricNotes, polypharmacy: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Autonomia AVD (Índice de Katz)</label>
-                  <input
-                    type="text"
-                    value={geriatricNotes.katsIndexAVD}
-                    onChange={e => setGeriatricNotes({ ...geriatricNotes, katsIndexAVD: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Autonomia AIVD (Escala de Lawton)</label>
-                  <input
-                    type="text"
-                    value={geriatricNotes.lawtonIndexAIVD}
-                    onChange={e => setGeriatricNotes({ ...geriatricNotes, lawtonIndexAIVD: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* CARDIOLOGIA */}
-            {activePreset === 'cardiologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Ausculta Cardíaca & Sopros</label>
-                  <input
-                    type="text"
-                    value={cardioNotes.murmurs}
-                    onChange={e => setCardioNotes({ ...cardioNotes, murmurs: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Ritmo & Frequência</label>
-                  <input
-                    type="text"
-                    value={cardioNotes.rhythm}
-                    onChange={e => setCardioNotes({ ...cardioNotes, rhythm: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Estratificação de Risco Cardiovascular</label>
-                  <input
-                    type="text"
-                    value={cardioNotes.cvRisk}
-                    onChange={e => setCardioNotes({ ...cardioNotes, cvRisk: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Edema de MMII & Sinais Congestivos</label>
-                  <input
-                    type="text"
-                    value={cardioNotes.edema}
-                    onChange={e => setCardioNotes({ ...cardioNotes, edema: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* DERMATOLOGIA */}
-            {activePreset === 'dermatologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Fototipo de Fitzpatrick</label>
-                  <input
-                    type="text"
-                    value={dermatoNotes.phototype}
-                    onChange={e => setDermatoNotes({ ...dermatoNotes, phototype: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Critérios ABCDE de Lesões Pigmentadas</label>
-                  <input
-                    type="text"
-                    value={dermatoNotes.abcdeCriteria}
-                    onChange={e => setDermatoNotes({ ...dermatoNotes, abcdeCriteria: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Ectoscopia & Dermatoscopia de Lesões</label>
-                  <textarea
-                    rows={2}
-                    value={dermatoNotes.lesionExam}
-                    onChange={e => setDermatoNotes({ ...dermatoNotes, lesionExam: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ORTOPEDIA */}
-            {activePreset === 'ortopedia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Amplitude Articular (ADM) & Mobilidade</label>
-                  <input
-                    type="text"
-                    value={orthoNotes.mobilityROM}
-                    onChange={e => setOrthoNotes({ ...orthoNotes, mobilityROM: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Estabilidade Articular & Testes Especiais</label>
-                  <input
-                    type="text"
-                    value={orthoNotes.jointStability}
-                    onChange={e => setOrthoNotes({ ...orthoNotes, jointStability: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Pontos Dolorosos & Crepitações Ósseas</label>
-                  <input
-                    type="text"
-                    value={orthoNotes.palpationPain}
-                    onChange={e => setOrthoNotes({ ...orthoNotes, palpationPain: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* REUMATOLOGIA */}
-            {activePreset === 'reumatologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Contagem Articular Dolorosa</label>
-                  <input
-                    type="text"
-                    value={rheumaNotes.tenderJointCount}
-                    onChange={e => setRheumaNotes({ ...rheumaNotes, tenderJointCount: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Contagem Articular Edemaciada (Sinovite)</label>
-                  <input
-                    type="text"
-                    value={rheumaNotes.swollenJointCount}
-                    onChange={e => setRheumaNotes({ ...rheumaNotes, swollenJointCount: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Rigidez Matinal (Duração em minutos)</label>
-                  <input
-                    type="text"
-                    value={rheumaNotes.morningStiffnessMinutes}
-                    onChange={e => setRheumaNotes({ ...rheumaNotes, morningStiffnessMinutes: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* GINECOLOGIA E OBSTETRÍCIA */}
-            {(activePreset === 'ginecologia' || activePreset === 'ginecologia-obstetricia') && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Data da Última Menstruação (DUM)</label>
-                  <input
-                    type="date"
-                    value={gynecoNotes.lmpDate}
-                    onChange={e => setGynecoNotes({ ...gynecoNotes, lmpDate: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Exame Preventivo (Papanicolau)</label>
-                  <input
-                    type="text"
-                    value={gynecoNotes.preventiveStatus}
-                    onChange={e => setGynecoNotes({ ...gynecoNotes, preventiveStatus: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Exame das Mamas</label>
-                  <input
-                    type="text"
-                    value={gynecoNotes.breastExam}
-                    onChange={e => setGynecoNotes({ ...gynecoNotes, breastExam: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Exame Especular / Colo Uterino</label>
-                  <input
-                    type="text"
-                    value={gynecoNotes.cervixExam}
-                    onChange={e => setGynecoNotes({ ...gynecoNotes, cervixExam: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ENDOCRINOLOGIA */}
-            {activePreset === 'endocrinologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Glicemia de Jejum / HGT</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 95 mg/dL"
-                    value={endocrinoNotes.fastingGlucose}
-                    onChange={e => setEndocrinoNotes({ ...endocrinoNotes, fastingGlucose: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Hemoglobina Glicada (HbA1c)</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 5.6%"
-                    value={endocrinoNotes.hba1c}
-                    onChange={e => setEndocrinoNotes({ ...endocrinoNotes, hba1c: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Palpação da Tireoide</label>
-                  <input
-                    type="text"
-                    value={endocrinoNotes.thyroidPalpation}
-                    onChange={e => setEndocrinoNotes({ ...endocrinoNotes, thyroidPalpation: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* GASTROENTEROLOGIA */}
-            {activePreset === 'gastroenterologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Escala de Bristol (Fezes)</label>
-                  <input
-                    type="text"
-                    value={gastroNotes.bristolScale}
-                    onChange={e => setGastroNotes({ ...gastroNotes, bristolScale: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Sintomas Dispépticos / DRGE</label>
-                  <input
-                    type="text"
-                    value={gastroNotes.gerdSymptoms}
-                    onChange={e => setGastroNotes({ ...gastroNotes, gerdSymptoms: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Palpação Abdominal & Visceromegalias</label>
-                  <input
-                    type="text"
-                    value={gastroNotes.abdominalExam}
-                    onChange={e => setGastroNotes({ ...gastroNotes, abdominalExam: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* OFTALMOLOGIA */}
-            {activePreset === 'oftalmologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Acuidade Visual (OD / OE)</label>
-                  <input
-                    type="text"
-                    placeholder="OD: 20/20 | OE: 20/20"
-                    value={`${ophtalmoNotes.visualAcuityOD} / ${ophtalmoNotes.visualAcuityOE}`}
-                    onChange={e => setOphtalmoNotes({ ...ophtalmoNotes, visualAcuityOD: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Pressão Intraocular (Tonometria)</label>
-                  <input
-                    type="text"
-                    value={ophtalmoNotes.intraocularPressure}
-                    onChange={e => setOphtalmoNotes({ ...ophtalmoNotes, intraocularPressure: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Fundo de Olho & Biomicroscopia</label>
-                  <input
-                    type="text"
-                    value={ophtalmoNotes.fundusExam}
-                    onChange={e => setOphtalmoNotes({ ...ophtalmoNotes, fundusExam: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* OTORRINOLARINGOLOGIA */}
-            {activePreset === 'otorrinolaringologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Otoscopia Bilateral</label>
-                  <input
-                    type="text"
-                    value={otorrinoNotes.otoscopy}
-                    onChange={e => setOtorrinoNotes({ ...otorrinoNotes, otoscopy: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Rinoscopia & Seios Nasais</label>
-                  <input
-                    type="text"
-                    value={otorrinoNotes.rhinoscopy}
-                    onChange={e => setOtorrinoNotes({ ...otorrinoNotes, rhinoscopy: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Orofaringe & Laringe</label>
-                  <input
-                    type="text"
-                    value={otorrinoNotes.oropharynx}
-                    onChange={e => setOtorrinoNotes({ ...otorrinoNotes, oropharynx: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* UROLOGIA */}
-            {activePreset === 'urologia' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Exame / Toque Prostático</label>
-                  <input
-                    type="text"
-                    value={uroNotes.prostateExam}
-                    onChange={e => setUroNotes({ ...uroNotes, prostateExam: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Escore de Sintomas Prostáticos (IPSS)</label>
-                  <input
-                    type="text"
-                    value={uroNotes.ipssScore}
-                    onChange={e => setUroNotes({ ...uroNotes, ipssScore: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
+            <MedicalCapabilityTools key={selectedPatientId + activePreset} capabilities={activeCapabilities} patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} value={sharedAssessments} onChange={setSharedAssessments} saveDraft={autosave.forceSaveDraft} />
+            <details className="rounded-xl border border-slate-200 p-3"><summary className="text-xs font-bold cursor-pointer">Antecedentes familiares e SOAP</summary>
+              <label className="block text-xs font-bold mt-3">Antecedentes familiares<textarea value={familyHistory} onChange={e => setFamilyHistory(e.target.value)} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" /></label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">{([['subjective', 'Subjetivo'], ['objective', 'Objetivo'], ['assessment', 'Avaliação'], ['plan', 'Plano']] as const).map(([key, label]) => <label key={key} className="text-xs font-bold">{label}<textarea value={soapNotes[key]} onChange={e => setSoapNotes(prev => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" /></label>)}</div>
+            </details>
             {/* EXAME FÍSICO GERAL DE BASE (SEMPRE DISPONÍVEL COMO BASE OU CLÍNICA MÉDICA) */}
-            {(activePreset === 'clinica-medica' || !['neurologia', 'psiquiatria'].includes(activePreset)) && (
+            {(
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                {([['generalStatus', 'Estado geral'], ['headAndNeck', 'Cabeça e pescoço'], ['skin', 'Pele'], ['additionalNotes', 'Observações do exame físico']] as const).map(([key, label]) => <label key={key} className="text-xs font-bold text-slate-700">{label}<textarea rows={2} value={physicalExam[key] || ''} onChange={e => setPhysicalExam(prev => ({ ...prev, [key]: e.target.value }))} className="mt-1 w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50" /></label>)}
+
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Aparelho Cardiovascular</label>
                   <textarea
@@ -1658,6 +1193,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             Histórico Médico Longitudinal {selectedPatient ? `— ${selectedPatient.name}` : ''}
           </h2>
 
+          <MedicalComparison history={consultationsHistory} specialty={activePreset} />
+          <MedicalTrends history={consultationsHistory} />
           {loadingHistory ? (
             <div className="p-8 text-center text-xs text-slate-400">Carregando consultas anteriores...</div>
           ) : consultationsHistory.length === 0 ? (
@@ -1677,6 +1214,10 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                       {new Date(item.created_at).toLocaleDateString('pt-BR')} às {new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
+                  <button type="button" onClick={() => setExpandedHistoryId(expandedHistoryId === item.id ? null : item.id)} className="text-xs font-bold text-teal-700" aria-expanded={expandedHistoryId === item.id}>Ver avaliação completa</button>
+                  {expandedHistoryId === item.id && <SpecialtySectionRenderer specialty={item.specialty_preset} value={item.specialtyNotes?.[specialtyNoteKeys[item.specialty_preset]] || {}} patientId={selectedPatientId} readOnly />}
+                  {expandedHistoryId === item.id && <details className="text-xs border-t border-slate-200 pt-2"><summary className="cursor-pointer font-bold">Dados completos da consulta</summary><ClinicalSnapshot record={{ module_type: 'ZemdaMed', module_data_json: { vitalSigns: item.vitalSigns, physicalExam: item.physicalExam, neurologicalExam: item.neurologicalExam, soapNotes: item.soapNotes, ...item.specialtyNotes } }} /></details>}
+                  {item.specialtyNotes?.sharedAssessments?.zemda360?.assessmentId && <button type="button" onClick={() => setBodyHistoryId(item.specialtyNotes!.sharedAssessments.zemda360.assessmentId)} className="text-xs font-bold text-teal-700">Ver Zemda360 desta consulta</button>}
                   {item.chief_complaint && (
                     <p className="text-xs text-slate-700">
                       <strong>QP:</strong> {item.chief_complaint}

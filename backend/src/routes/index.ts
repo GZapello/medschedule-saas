@@ -116,7 +116,9 @@ api.get('/v1/public/tenants/:slug', TenantController.getPublicProfile);
 api.get('/v1/public/slots/available', SlotController.getAvailableSlots);
 api.post('/v1/public/appointments', AppointmentController.create);
 
-// Página Pública do Profissional & Agendamento Direto (/agendar/:slug)
+// Página Pública do Profissional & Agendamento Direto (/agendar/:clinicSlug/:professionalSlug ou /agendar/:slug)
+api.get('/v1/public/professionals/:clinicSlug/:professionalSlug', ProfessionalController.getPublicProfile);
+api.get('/v1/public/professionals/:clinicSlug/:professionalSlug/slots', ProfessionalController.getPublicSlots);
 api.get('/v1/public/professionals/:slug', ProfessionalController.getPublicProfile);
 api.get('/v1/public/professionals/:slug/slots', ProfessionalController.getPublicSlots);
 

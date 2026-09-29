@@ -1,3 +1,4 @@
+import { CapabilityService } from '../services/capability.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -9,6 +10,10 @@ import { DocumentsController } from './documents.controller';
 /**
  * Validação de acesso exclusivo para Fonoaudiologia (ZemdaFono - Regras 1 e 2)
  */
+function hasSharedSpeechCapability(req: Request, capability: string): boolean {
+  return Boolean(req.user && req.tenantId && ['professional', 'clinic_admin'].includes(req.user.role) && CapabilityService.hasCapability(req.user.userId, req.tenantId, capability));
+}
+
 export function isSpeechTherapistOrClinicManager(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
 
@@ -977,7 +982,7 @@ export class SpeechTherapyController {
     try {
       const patientId = String(req.params.patientId);
       const tenantId = req.tenantId;
-      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+      if (!(isSpeechTherapistOrClinicManager(req) || hasSharedSpeechCapability(req, 'AUDIOLOGY')) || !hasClinicalAccess(req, patientId)) {
         res.status(403).json({ error: 'Acesso restrito' });
         return;
       }
@@ -1013,7 +1018,7 @@ export class SpeechTherapyController {
         return;
       }
 
-      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, String(patientId))) {
+      if (!(isSpeechTherapistOrClinicManager(req) || hasSharedSpeechCapability(req, 'AUDIOLOGY')) || !hasClinicalAccess(req, String(patientId))) {
         res.status(403).json({ error: 'Acesso restrito' });
         return;
       }
@@ -1546,7 +1551,7 @@ export class SpeechTherapyController {
       const patientId = String(req.params.patientId);
       const tenantId = req.tenantId;
 
-      if (!isSpeechTherapistOrClinicManager(req) || !hasClinicalAccess(req, patientId)) {
+      if (!(isSpeechTherapistOrClinicManager(req) || hasSharedSpeechCapability(req, 'COMMUNICATION_ASSESSMENT')) || !hasClinicalAccess(req, patientId)) {
         res.status(403).json({ error: 'Acesso restrito' });
         return;
       }
@@ -1582,7 +1587,7 @@ export class SpeechTherapyController {
   static saveIdv10(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
-      if (!isSpeechTherapistOrClinicManager(req)) {
+      if (!(isSpeechTherapistOrClinicManager(req) || hasSharedSpeechCapability(req, 'COMMUNICATION_ASSESSMENT'))) {
         res.status(403).json({ error: 'Acesso restrito' });
         return;
       }
@@ -1619,6 +1624,8 @@ export class SpeechTherapyController {
         return;
       }
 
+      if (!hasClinicalAccess(req, String(patientId))) { res.status(403).json({ error: 'Acesso restrito' }); return; }
+      if (appointmentId && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)) { res.status(400).json({ error: 'Agendamento inválido' }); return; }
       let profId: string | null = null;
       if (req.user?.role === 'professional') {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;

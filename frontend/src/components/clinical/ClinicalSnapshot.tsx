@@ -38,7 +38,9 @@ function Value({ value }: { value: any }): React.ReactElement | null {
   return <span>{typeof value === 'boolean' ? value ? 'Sim' : 'Não' : String(value)}</span>;
 }
 export function ClinicalSnapshot({ record }: { record: any }) {
+  const medicalPayload = record.module_type === 'ZemdaMed' && record.technical_notes && !record.module_data_json && !record.clinical_data_json;
   return <section className="space-y-3 text-xs text-slate-800">
+    {medicalPayload && <div><h4 className="font-bold mb-2">Dados da consulta médica</h4><Value value={record.technical_notes} /></div>}
     {record.procedure_name && <p><strong>Procedimentos:</strong> {record.procedure_name}</p>}
     {record.conducts && <p className="whitespace-pre-wrap"><strong>Condutas:</strong> {record.conducts}</p>}
     {record.module_data_json && <div><h4 className="font-bold mb-2">Dados do atendimento — {record.module_type || 'Clínico'}</h4><Value value={record.module_data_json} /></div>}

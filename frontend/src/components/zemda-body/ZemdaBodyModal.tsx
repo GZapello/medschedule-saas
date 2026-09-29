@@ -3,6 +3,7 @@ import { ZemdaBodyWorkspace } from './ZemdaBodyWorkspace';
 import { X, Activity, User, ShieldCheck } from 'lucide-react';
 
 interface ZemdaBodyModalProps {
+  onAssessmentSaved?: (id: string) => void;
   isOpen: boolean;
   onClose: () => void;
   patientId: string;
@@ -19,6 +20,7 @@ interface ZemdaBodyModalProps {
 }
 
 export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
+  onAssessmentSaved,
   isOpen,
   onClose,
   patientId,
@@ -83,7 +85,7 @@ export const ZemdaBodyModal: React.FC<ZemdaBodyModalProps> = ({
 
         {/* Conteúdo do Workspace */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          <ZemdaBodyWorkspace
+          <ZemdaBodyWorkspace onAssessmentSaved={onAssessmentSaved}
             key={`${patientId}:${assessmentId || appointmentId || 'new'}`}
             registerSave={save=>{saveRef.current=save;}}
             patientId={patientId}

@@ -362,12 +362,15 @@ const AppContent: React.FC = () => {
   };
   const [activeSeoSlug, setActiveSeoSlug] = useState<string | null>(getInitialSeoSlug);
 
-  // Roteamento para agendamento individual de profissional (/agendar/:slug)
-  const getInitialProfSlug = (): string | null => {
-    const match = window.location.pathname.match(/^\/agendar\/([^/]+)/);
-    return match ? match[1] : null;
+  // Roteamento para agendamento individual de profissional (/agendar/:clinicSlug/:profSlug ou /agendar/:slug)
+  const getInitialBookingRoute = (): { clinicSlug?: string; profSlug: string } | null => {
+    const doubleMatch = window.location.pathname.match(/^\/agendar\/([^/]+)\/([^/]+)/);
+    if (doubleMatch) return { clinicSlug: doubleMatch[1], profSlug: doubleMatch[2] };
+    const singleMatch = window.location.pathname.match(/^\/agendar\/([^/]+)/);
+    if (singleMatch) return { profSlug: singleMatch[1] };
+    return null;
   };
-  const [activeProfSlug, setActiveProfSlug] = useState<string | null>(getInitialProfSlug);
+  const [activeBooking, setActiveBooking] = useState<{ clinicSlug?: string; profSlug: string } | null>(getInitialBookingRoute);
 
   // Roteamento para convite único de clínica (/convite/:clinicSlug/:token ou /convite/:token)
   const getInitialInvite = (): { clinicSlug?: string; token: string } | null => {
@@ -419,7 +422,7 @@ const AppContent: React.FC = () => {
 
   useLayoutEffect(() => {
     const publicScreen = !loading && !currentUser && publicView === 'landing'
-      && currentView !== 'public_preview' && !activeProfSlug && !activeInvite
+      && currentView !== 'public_preview' && !activeBooking && !activeInvite
       && !activeTrialToken && !activeVerificationToken && !activeWorkoutToken;
     updateMetaPixelContext(publicScreen ? window.location.pathname : null);
   });
@@ -545,7 +548,7 @@ const AppContent: React.FC = () => {
     if (loading) return;
     const path = window.location.pathname;
     const route = getRouteByPath(path);
-    const sensitiveScreen = activeProfSlug || activeInvite || activeTrialToken || activeVerificationToken || activeWorkoutToken || currentView === 'public_preview';
+    const sensitiveScreen = Boolean(activeBooking) || activeInvite || activeTrialToken || activeVerificationToken || activeWorkoutToken || currentView === 'public_preview';
     const publicScreen = !currentUser && !sensitiveScreen && (publicView === 'landing' || activeSeoSlug || activeLegalPage || path === '/planos');
     if (publicScreen && route) {
       updatePublicSeo(route);
@@ -584,7 +587,7 @@ const AppContent: React.FC = () => {
     const title = currentUser ? (viewTitles[currentView] ? `Zemda • ${viewTitles[currentView]}` : `Zemda • ${currentView}`) : !isValidApplicationRoute(path) ? 'Página não encontrada (404) | Zemda' : 'Zemda • Acesso Seguro';
     updateDocumentSeo({title, description:'Acesso à plataforma Zemda.', robots:'noindex, nofollow'});
     trackPageView(currentUser ? `/${currentView}` : '/login', title);
-  }, [loading, currentUser, currentView, publicView, activeSeoSlug, activeProfSlug, activeInvite, activeLegalPage, activeTrialToken, activeVerificationToken, activeWorkoutToken]);
+  }, [loading, currentUser, currentView, publicView, activeSeoSlug, activeBooking, activeInvite, activeLegalPage, activeTrialToken, activeVerificationToken, activeWorkoutToken]);
 
   // Tratamento do botão Voltar nativo do Android
   useEffect(() => {
@@ -637,8 +640,8 @@ const AppContent: React.FC = () => {
         return;
       }
       // 4. Se estiver na página pública individual do profissional, volta para a home
-      if (activeProfSlug) {
-        setActiveProfSlug(null);
+      if (activeBooking) {
+        setActiveBooking(null);
         window.history.pushState(null, '', '/');
         return;
       }
@@ -722,8 +725,13 @@ const AppContent: React.FC = () => {
       const workoutMatch = window.location.pathname.match(/^\/treino\/([^/]+)/);
       setActiveWorkoutToken(workoutMatch ? workoutMatch[1] : null);
 
-      const match = window.location.pathname.match(/^\/agendar\/([^/]+)/);
-      setActiveProfSlug(match ? match[1] : null);
+      const doubleBookingMatch = window.location.pathname.match(/^\/agendar\/([^/]+)\/([^/]+)/);
+      if (doubleBookingMatch) {
+        setActiveBooking({ clinicSlug: doubleBookingMatch[1], profSlug: doubleBookingMatch[2] });
+      } else {
+        const singleBookingMatch = window.location.pathname.match(/^\/agendar\/([^/]+)/);
+        setActiveBooking(singleBookingMatch ? { profSlug: singleBookingMatch[1] } : null);
+      }
 
       const doubleInviteMatch = window.location.pathname.match(/^\/convite\/([^/]+)\/([^/]+)/);
       if (doubleInviteMatch) {
@@ -912,13 +920,14 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // Se o usuário está acessando a página pública individual do profissional (/agendar/:slug)
-  if (activeProfSlug) {
+  // Se o usuário está acessando a página pública individual do profissional (/agendar/:clinicSlug/:profSlug ou /agendar/:slug)
+  if (activeBooking) {
     return (
       <PublicProfessionalBookingView
-        slug={activeProfSlug}
+        slug={activeBooking.profSlug}
+        clinicSlug={activeBooking.clinicSlug}
         onBackToApp={() => {
-          setActiveProfSlug(null);
+          setActiveBooking(null);
           window.history.pushState(null, '', '/');
           if (currentUser) {
             setCurrentView('dashboard');

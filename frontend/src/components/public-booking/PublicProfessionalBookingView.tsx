@@ -21,12 +21,14 @@ import {
 
 interface PublicProfessionalBookingViewProps {
   slug: string;
+  clinicSlug?: string;
   onBackToLanding?: () => void;
   onBackToApp?: () => void;
 }
 
 export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingViewProps> = ({
   slug,
+  clinicSlug,
   onBackToLanding,
   onBackToApp
 }) => {
@@ -67,7 +69,10 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
     async function loadProf() {
       try {
         setLoading(true);
-        const data = await ApiClient.get<any>(`/v1/public/professionals/${slug}`);
+        const endpoint = clinicSlug
+          ? `/v1/public/professionals/${clinicSlug}/${slug}`
+          : `/v1/public/professionals/${slug}`;
+        const data = await ApiClient.get<any>(endpoint);
         setProfessional(data.professional);
         setTenant(data.tenant);
         const srvs = data.services || [];
@@ -76,6 +81,7 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
           setSelectedService(srvs[0]);
         }
       } catch (err: any) {
+        setProfessional(null);
         showToast(err.message || 'Profissional não encontrado ou agendamento desativado', 'error');
       } finally {
         setLoading(false);
@@ -84,7 +90,7 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
     if (slug) {
       loadProf();
     }
-  }, [slug]);
+  }, [slug, clinicSlug]);
 
   // Consulta slots disponíveis pela escala oficial quando muda data ou serviço
   useEffect(() => {
@@ -93,9 +99,10 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
     async function loadSlots() {
       try {
         setLoadingSlots(true);
-        const data = await ApiClient.get<any>(
-          `/v1/public/professionals/${slug}/slots?date=${selectedDate}&serviceId=${selectedService.id}`
-        );
+        const endpoint = clinicSlug
+          ? `/v1/public/professionals/${clinicSlug}/${slug}/slots?date=${selectedDate}&serviceId=${selectedService.id}`
+          : `/v1/public/professionals/${slug}/slots?date=${selectedDate}&serviceId=${selectedService.id}`;
+        const data = await ApiClient.get<any>(endpoint);
         setAvailableSlots(data.slots || []);
         setSelectedSlot(null);
       } catch (err: any) {
@@ -107,7 +114,7 @@ export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingVi
     }
 
     loadSlots();
-  }, [slug, selectedService, selectedDate, professional]);
+  }, [slug, clinicSlug, selectedService, selectedDate, professional]);
 
   const handleConfirmBooking = async (e: React.FormEvent) => {
     e.preventDefault();

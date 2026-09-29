@@ -54,6 +54,10 @@ export interface AnthropometricRecord {
 }
 
 interface AnthropometricAssessmentViewProps {
+  initialDraft?: Record<string, any>;
+  onDraftChange?: (value: Record<string, any>) => void;
+  measurementsOnly?: boolean;
+  showBodyComposition?: boolean;
   patientId: string;
   appointmentId?: string;
   patientSex?: 'female' | 'male';
@@ -62,6 +66,7 @@ interface AnthropometricAssessmentViewProps {
 }
 
 const BODY_PARTS_LIST = [
+  'Perímetro cefálico',
   'Pescoço',
   'Ombros',
   'Tórax',
@@ -79,6 +84,7 @@ const BODY_PARTS_LIST = [
 ];
 
 export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentViewProps> = ({
+  initialDraft, onDraftChange, measurementsOnly = false, showBodyComposition = true,
   patientId,
   appointmentId,
   patientSex = 'female',
@@ -93,20 +99,20 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
   const [activeTab, setActiveTab] = useState<'form' | 'history' | 'evolution'>('form');
 
   // Estado do formulário
-  const [selectedSex, setSelectedSex] = useState<'female' | 'male'>(patientSex);
-  const [selectedAge, setSelectedAge] = useState<number>(patientAge || 30);
-  const [assessmentDate, setAssessmentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedSex, setSelectedSex] = useState<'female' | 'male'>(initialDraft?.selectedSex || patientSex);
+  const [selectedAge, setSelectedAge] = useState<number>(initialDraft?.selectedAge ?? patientAge ?? 30);
+  const [assessmentDate, setAssessmentDate] = useState<string>(initialDraft?.assessmentDate || new Date().toISOString().split('T')[0]);
 
-  const [weight, setWeight] = useState<string>('');
-  const [height, setHeight] = useState<string>('');
-  const [waist, setWaist] = useState<string>('');
-  const [abdomen, setAbdomen] = useState<string>('');
-  const [hip, setHip] = useState<string>('');
-  const [bodyFat, setBodyFat] = useState<string>('');
-  const [fatMass, setFatMass] = useState<string>('');
-  const [muscleMass, setMuscleMass] = useState<string>('');
-  const [visceralFat, setVisceralFat] = useState<string>('');
-  const [generalNotes, setGeneralNotes] = useState<string>('');
+  const [weight, setWeight] = useState<string>(initialDraft?.weight || '');
+  const [height, setHeight] = useState<string>(initialDraft?.height || '');
+  const [waist, setWaist] = useState<string>(initialDraft?.waist || '');
+  const [abdomen, setAbdomen] = useState<string>(initialDraft?.abdomen || '');
+  const [hip, setHip] = useState<string>(initialDraft?.hip || '');
+  const [bodyFat, setBodyFat] = useState<string>(initialDraft?.bodyFat || '');
+  const [fatMass, setFatMass] = useState<string>(initialDraft?.fatMass || '');
+  const [muscleMass, setMuscleMass] = useState<string>(initialDraft?.muscleMass || '');
+  const [visceralFat, setVisceralFat] = useState<string>(initialDraft?.visceralFat || '');
+  const [generalNotes, setGeneralNotes] = useState<string>(initialDraft?.generalNotes || '');
 
   // Tabela de medidas corporais
   const [measures, setMeasures] = useState<Record<string, { cm: string; obs: string }>>(() => {
@@ -114,9 +120,15 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
     BODY_PARTS_LIST.forEach(part => {
       initial[part] = { cm: '', obs: '' };
     });
+    const saved = initialDraft?.measures;
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) for (const key of Object.keys(initial)) {
+      if (saved[key] && typeof saved[key] === 'object') initial[key] = { cm: String(saved[key].cm ?? ''), obs: String(saved[key].obs ?? '') };
+    }
     return initial;
   });
 
+  const draftChangeRef = React.useRef(onDraftChange); draftChangeRef.current = onDraftChange;
+  useEffect(() => { draftChangeRef.current?.({ weight, height, waist, abdomen, hip, bodyFat, fatMass, muscleMass, visceralFat, generalNotes, measures, assessmentDate, selectedSex, selectedAge }); }, [weight, height, waist, abdomen, hip, bodyFat, fatMass, muscleMass, visceralFat, generalNotes, measures, assessmentDate, selectedSex, selectedAge]);
   // Carrega histórico do paciente
   const loadHistory = async () => {
     try {
@@ -244,7 +256,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
 
   // 4. Classificação do % de Gordura por Sexo e Idade
   const fatCategoryInfo = useMemo(() => {
-    if (numFatPct <= 0) return null;
+    if (measurementsOnly || numFatPct <= 0) return null;
 
     // Thresholds: Muito baixo | Baixo | Adequado | Elevado | Muito elevado
     let t = { vLow: 14, low: 17, ok: 24, high: 29 };
@@ -283,7 +295,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
     }
 
     return { category, activeIndex };
-  }, [numFatPct, selectedSex, selectedAge]);
+  }, [numFatPct, selectedSex, selectedAge, measurementsOnly]);
 
   // Comparação Evolutiva: Mais recente x Anterior
   const evolutionData = useMemo(() => {
@@ -518,7 +530,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
                     min="1"
                     max="120"
                     value={selectedAge}
-                    onChange={e => setSelectedAge(parseInt(e.target.value) || 30)}
+                    onChange={e => setSelectedAge(Math.max(0, Number(e.target.value) || 0))}
                     className="w-20 px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-800 text-center"
                   />
                 </div>
@@ -535,7 +547,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
             <div>
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
                 <Scale className="w-4 h-4 text-emerald-600" />
-                1. Dados Antropométricos e Composição Corporal
+                {showBodyComposition ? '1. Dados Antropométricos e Composição Corporal' : '1. Dados Antropométricos'}
               </h4>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
@@ -614,6 +626,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
                   />
                 </div>
 
+                {showBodyComposition && <>
                 {/* % Gordura Corporal */}
                 <div className="bg-amber-50/50 p-3 rounded-2xl border border-amber-200">
                   <label className="block text-[11px] font-bold text-amber-900 mb-1">
@@ -672,6 +685,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
+                </>}
               </div>
             </div>
 
@@ -691,8 +705,8 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
                   {bmiInfo ? (
                     <div>
                       <div className="text-2xl font-black text-slate-900">{bmiInfo.val} <span className="text-xs text-slate-400 font-normal">kg/m²</span></div>
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold mt-1.5 border ${bmiInfo.color}`}>
-                        {bmiInfo.label}
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold mt-1.5 border ${measurementsOnly ? 'text-slate-700 bg-slate-100 border-slate-200' : bmiInfo.color}`}>
+                        {measurementsOnly ? 'IMC registrado' : bmiInfo.label}
                       </span>
                     </div>
                   ) : (
@@ -708,8 +722,8 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
                   {whrInfo ? (
                     <div>
                       <div className="text-2xl font-black text-slate-900">{whrInfo.val}</div>
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold mt-1.5 border ${whrInfo.color}`}>
-                        {whrInfo.label}
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold mt-1.5 border ${measurementsOnly ? 'text-slate-700 bg-slate-100 border-slate-200' : whrInfo.color}`}>
+                        {measurementsOnly ? 'Relação registrada' : whrInfo.label}
                       </span>
                     </div>
                   ) : (
@@ -725,8 +739,8 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
                   {whtrInfo ? (
                     <div>
                       <div className="text-2xl font-black text-slate-900">{whtrInfo.val}</div>
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold mt-1.5 border ${whtrInfo.color}`}>
-                        {whtrInfo.label}
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-bold mt-1.5 border ${measurementsOnly ? 'text-slate-700 bg-slate-100 border-slate-200' : whtrInfo.color}`}>
+                        {measurementsOnly ? 'Relação registrada' : whtrInfo.label}
                       </span>
                     </div>
                   ) : (
@@ -736,7 +750,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
               </div>
 
               {/* Escala Visual de Gordura Corporal */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+              {showBodyComposition && !measurementsOnly && <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-700">
                     Escala de Gordura Corporal ({selectedSex === 'female' ? 'Mulheres' : 'Homens'}, {selectedAge} anos):
@@ -773,7 +787,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
                     );
                   })}
                 </div>
-              </div>
+              </div>}
             </div>
 
             {/* Grid 2: Tabela de Medidas Corporais (Circunferências) */}

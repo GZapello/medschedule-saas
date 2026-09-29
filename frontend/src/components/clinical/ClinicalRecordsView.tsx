@@ -381,7 +381,7 @@ export const ClinicalRecordsView: React.FC = () => {
                           </p>
                         </div>
 
-                        {r.technical_notes && (
+                        {r.technical_notes && r.module_type !== 'ZemdaMed' && (
                           <div>
                             <h5 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] mb-1">
                               Anotações Técnicas & Encaminhamentos
@@ -606,7 +606,7 @@ export const ClinicalRecordsView: React.FC = () => {
               </div>
             </div>
 
-            {viewingRecord.technical_notes && (
+            {viewingRecord.technical_notes && viewingRecord.module_type !== 'ZemdaMed' && (
               <div>
                 <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Orientações Complementares

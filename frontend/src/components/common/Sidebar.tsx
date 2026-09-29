@@ -218,13 +218,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           visible: isClinicAdmin || hasPermission('view_reports')
         },
       ]
-    },
-    {
-      id: 'support',
-      label: 'Suporte',
-      items: [
-        { id: 'support-tickets', label: 'Central de Chamados', icon: LifeBuoy, visible: true },
-      ]
     }
   ];
 
@@ -250,8 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
     const initial: Record<string, boolean> = {
       attendance: true,
-      management: true,
-      support: false
+      management: true
     };
     for (const cat of categories) {
       if (cat.items.some(item => item.id === currentView)) {

@@ -13,6 +13,7 @@ import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
 import { migrateEstetic } from './estetic.migration';
 import { migrateProfessionsNormalization } from './professions-normalization.migration';
+import { migrateProfessionalSlugs } from './slug-migration';
 import { dbPath } from './db-path';
 
 const dbDir = path.dirname(dbPath);
@@ -2217,6 +2218,7 @@ export function initializeDatabase(): void {
         results_json TEXT,
         attachment_url TEXT,
         notes TEXT,
+        referred_by TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
         FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
@@ -3674,6 +3676,10 @@ function repairLegacyPhotoUrls(rawDb: any): void {
 
   try {
     migrateMedicalTree(rawDb);
+    const medicalColumns = rawDb.prepare('PRAGMA table_info(medical_consultations)').all() as { name: string }[];
+    if (!medicalColumns.some(column => column.name === 'specialty_notes_json')) {
+      rawDb.exec('ALTER TABLE medical_consultations ADD COLUMN specialty_notes_json TEXT');
+    }
   } catch (err) {
     console.error('[Database] Erro ao executar migrateMedicalTree:', err);
   }
@@ -3704,5 +3710,11 @@ function repairLegacyPhotoUrls(rawDb: any): void {
     `);
   } catch (err) {
     console.error('[Database] Erro ao migrar status de próteses:', err);
+  }
+
+  try {
+    migrateProfessionalSlugs(rawDb);
+  } catch (err) {
+    console.error('[Database] Erro ao executar migrateProfessionalSlugs:', err);
   }
 }

@@ -49,6 +49,8 @@ import {
 } from './audiology-calculations';
 
 export interface AudiologyWorkspaceSectionProps {
+  initialDraft?: Record<string, any>;
+  onDraftChange?: (value: Record<string, any>) => void;
   patientId: string;
   patient: any;
   onRecordSaved?: (recordId: string) => void;
@@ -197,6 +199,7 @@ const EMPTY_RECORD: AudiologyRecordPayload = {
 };
 
 export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps> = ({
+  initialDraft, onDraftChange,
   patientId,
   patient,
   onRecordSaved
@@ -207,9 +210,16 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
   // Estado do exame em edição
   const [recordId, setRecordId] = useState<string | null>(null);
   const [examDate, setExamDate] = useState<string>(
-    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+    initialDraft?.examDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
   );
-  const [record, setRecord] = useState<AudiologyRecordPayload>(() => JSON.parse(JSON.stringify(EMPTY_RECORD)));
+  const [record, setRecord] = useState<AudiologyRecordPayload>(() => {
+    const base = JSON.parse(JSON.stringify(EMPTY_RECORD));
+    if (initialDraft?.record && typeof initialDraft.record === 'object') for (const key of Object.keys(base)) {
+      const next = initialDraft.record[key];
+      if (next != null) base[key] = typeof base[key] === 'object' && !Array.isArray(base[key]) ? { ...base[key], ...next } : next;
+    }
+    return base;
+  });
 
   // Sexo canônico do paciente (editável e sincronizável com o cadastro central)
   const [patientGender, setPatientGender] = useState<string>(patient?.gender || 'not_informed');
@@ -244,6 +254,8 @@ export const AudiologyWorkspaceSection: React.FC<AudiologyWorkspaceSectionProps>
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
 
+  const draftChangeRef = React.useRef(onDraftChange); draftChangeRef.current = onDraftChange;
+  useEffect(() => { draftChangeRef.current?.({ record, examDate }); }, [record, examDate]);
   // Carrega histórico de exames ao montar ou ao trocar paciente
   const loadHistory = async () => {
     if (!patientId) return;

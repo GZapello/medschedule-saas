@@ -147,229 +147,9 @@ export class ProfessionalController {
   }
 
   static async create(req: Request, res: Response): Promise<void> {
-    try {
-      const tenantId = req.tenantId;
-      if (!tenantId) {
-        res.status(400).json({ error: 'Tenant não informado' });
-        return;
-      }
-
-      const {
-        name, email, password, phone, professionId, specialtyId, specialtyName, specialtyCustom,
-        registrationType, registrationNumber, bio, practiceAreas, bufferMinutes, photoUrl, gender,
-        slug: userSlug, publicBookingEnabled, remunerationType, commissionPercentage, fixedSalary, paymentDay
-      } = req.body;
-
-      if (!name || !email) {
-        res.status(400).json({ error: 'Nome e e-mail são obrigatórios' });
-        return;
-      }
-
-      const assignedRole = req.body.role || req.body.systemRole || 'professional';
-      const isManager = (assignedRole === 'clinic_admin' || assignedRole === 'clinical_coordinator') ? 1 : 0;
-
-      // Verifica ou cria usuário
-      let userId: string;
-      const existingUser = db.prepare('SELECT id, role FROM users WHERE email = ?').get(email.trim().toLowerCase()) as { id: string; role: string } | undefined;
-
-      if (existingUser) {
-        userId = existingUser.id;
-        if (assignedRole && existingUser.role !== 'superadmin' && existingUser.role !== 'clinic_admin') {
-          db.prepare('UPDATE users SET role = ? WHERE id = ?').run(assignedRole, userId);
-        }
-      } else {
-        userId = uuidv4();
-        const pwdHash = await hashPassword(password || '123456');
-        const insertUser = db.prepare(`
-          INSERT INTO users (id, tenant_id, name, email, password_hash, role, phone, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'active')
-        `);
-        insertUser.run(userId, tenantId, name, email.trim().toLowerCase(), pwdHash, assignedRole, phone || null);
-      }
-
-      const profId = 'pro-' + uuidv4().slice(0, 8);
-      const customSpec = specialtyCustom || specialtyName || null;
-      
-      // Gera slug único caso não informado
-      let finalSlug = userSlug ? String(userSlug).trim().toLowerCase() : '';
-      if (!finalSlug) {
-        const base = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-        finalSlug = `${base}-${profId.slice(-4)}`;
-      }
-
-      const rawProfId = professionId ? String(professionId).trim() : null;
-      const canonicalProfId = rawProfId ? ((REGISTRATION_PROFESSION_ALIASES as Record<string, string>)[rawProfId] || rawProfId) : null;
-
-      let profName = '';
-      let profSlug = '';
-      if (canonicalProfId) {
-        const pRow = db.prepare('SELECT id, name, slug FROM professions WHERE id = ?').get(canonicalProfId) as any;
-        if (pRow) {
-          profName = pRow.name || '';
-          profSlug = pRow.slug || '';
-        }
-      }
-
-      const { module: targetModule, flags } = resolveProfessionModule({
-        id: canonicalProfId || undefined,
-        name: profName,
-        slug: profSlug,
-        registrationType
-      });
-
-      const insertProf = db.prepare(`
-        INSERT INTO professionals (
-          id, tenant_id, user_id, name, slug, public_booking_enabled, photo_url, profession_id, profession_name, specialty_id, specialty_custom,
-          registration_type, registration_number, bio, practice_areas, buffer_minutes, gender,
-          remuneration_type, commission_percentage, fixed_salary, payment_day, active,
-          zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      insertProf.run(
-        profId,
-        tenantId,
-        userId,
-        name,
-        finalSlug,
-        publicBookingEnabled !== undefined ? (publicBookingEnabled ? 1 : 0) : 1,
-        photoUrl || null,
-        canonicalProfId || null,
-        profName || null,
-        specialtyId || null,
-        customSpec,
-        registrationType || null,
-        registrationNumber || null,
-        bio || null,
-        practiceAreas || null,
-        bufferMinutes || 10,
-        gender === 'F' ? 'F' : 'M',
-        remunerationType || 'commission',
-        commissionPercentage !== undefined ? Number(commissionPercentage) : 0,
-        fixedSalary !== undefined ? Number(fixedSalary) : 0,
-        paymentDay !== undefined ? Number(paymentDay) : 5,
-        flags.zemda_fisio_enabled,
-        flags.zemda_odonto_enabled,
-        flags.zemda_nutri_enabled,
-        flags.zemda_to_enabled,
-        flags.zemda_fono_enabled,
-        flags.zemda_pp_enabled,
-        flags.zemda_psico_enabled,
-        flags.zemda_personal_enabled,
-        flags.zemda_med_enabled,
-        flags.zemda_estetic_enabled || 0
-      );
-
-      // Atualiza usuário vinculado com profissão e flags
-      db.prepare(`
-        UPDATE users SET
-          profession_id = ?,
-          profession_name = ?,
-          registration_type = ?,
-          registration_number = ?,
-          practice_areas = ?,
-          zemda_fisio_enabled = ?,
-          zemda_odonto_enabled = ?,
-          zemda_nutri_enabled = ?,
-          zemda_to_enabled = ?,
-          zemda_fono_enabled = ?,
-          zemda_pp_enabled = ?,
-          zemda_psico_enabled = ?,
-          zemda_personal_enabled = ?,
-          zemda_med_enabled = ?,
-          zemda_estetic_enabled = ?
-        WHERE id = ?
-      `).run(
-        canonicalProfId || null,
-        profName || null,
-        registrationType || null,
-        registrationNumber || null,
-        practiceAreas || null,
-        flags.zemda_fisio_enabled,
-        flags.zemda_odonto_enabled,
-        flags.zemda_nutri_enabled,
-        flags.zemda_to_enabled,
-        flags.zemda_fono_enabled,
-        flags.zemda_pp_enabled,
-        flags.zemda_psico_enabled,
-        flags.zemda_personal_enabled,
-        flags.zemda_med_enabled,
-        flags.zemda_estetic_enabled || 0,
-        userId
-      );
-
-      // Cria grade de horários padrão de segunda a sexta (ativo) e fim de semana (inativo)
-      createDefaultSchedules(db, tenantId, profId);
-
-      let permissions = ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient'];
-      if (targetModule === 'ZemdaPersonal') {
-        permissions.push('access_zemda_personal');
-      } else if (targetModule === 'ZemdaEstetic') {
-        permissions.push('access_zemda_estetic');
-      } else if (targetModule === 'ZemdaMed') {
-        permissions.push('access_zemda_med');
-      }
-
-      // Garante vínculo ativo na clínica com permissões e flags
-      db.prepare(`
-        INSERT INTO clinic_users (
-          id, tenant_id, user_id, role, status, is_manager, permissions_json, practice_areas,
-          profession_id, profession_name, profession_custom,
-          zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-          zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled
-        )
-        VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(tenant_id, user_id) DO UPDATE SET
-          role = excluded.role,
-          status = 'active',
-          is_manager = CASE WHEN excluded.is_manager = 1 THEN 1 ELSE clinic_users.is_manager END,
-          profession_id = excluded.profession_id,
-          profession_name = excluded.profession_name,
-          profession_custom = excluded.profession_custom,
-          permissions_json = excluded.permissions_json,
-          practice_areas = COALESCE(excluded.practice_areas, clinic_users.practice_areas),
-          zemda_fisio_enabled = excluded.zemda_fisio_enabled,
-          zemda_odonto_enabled = excluded.zemda_odonto_enabled,
-          zemda_nutri_enabled = excluded.zemda_nutri_enabled,
-          zemda_to_enabled = excluded.zemda_to_enabled,
-          zemda_fono_enabled = excluded.zemda_fono_enabled,
-          zemda_pp_enabled = excluded.zemda_pp_enabled,
-          zemda_psico_enabled = excluded.zemda_psico_enabled,
-          zemda_personal_enabled = excluded.zemda_personal_enabled,
-          zemda_med_enabled = excluded.zemda_med_enabled,
-          zemda_estetic_enabled = excluded.zemda_estetic_enabled
-      `).run(
-        'cu-' + uuidv4().slice(0, 8),
-        tenantId,
-        userId,
-        assignedRole,
-        isManager,
-        JSON.stringify(permissions),
-        practiceAreas || null,
-        canonicalProfId || null,
-        profName || null,
-        profName || null,
-        flags.zemda_fisio_enabled,
-        flags.zemda_odonto_enabled,
-        flags.zemda_nutri_enabled,
-        flags.zemda_to_enabled,
-        flags.zemda_fono_enabled,
-        flags.zemda_pp_enabled,
-        flags.zemda_psico_enabled,
-        flags.zemda_personal_enabled,
-        flags.zemda_med_enabled,
-        flags.zemda_estetic_enabled || 0
-      );
-
-      logAudit(req, 'CREATE_PROFESSIONAL', 'professionals', profId, { name, email, slug: finalSlug });
-      res.status(201).json({ id: profId, name, slug: finalSlug, message: 'Profissional cadastrado com sucesso' });
-    } catch (err: any) {
-      if (respondBillingError(res, err)) return;
-      console.error('[ProfessionalController.create] Erro:', err);
-      res.status(500).json({ error: 'Erro ao cadastrar profissional' });
-    }
+    res.status(403).json({
+      error: 'O cadastro manual de profissionais está desativado. Novos membros devem ser integrados exclusivamente através do fluxo de "Gerar Convite".'
+    });
   }
 
   static update(req: Request, res: Response): void {
@@ -664,62 +444,92 @@ export class ProfessionalController {
 
   static getPublicProfile(req: Request, res: Response): void {
     try {
-      const { slug } = req.params;
-      if (!slug) {
+      const { clinicSlug, professionalSlug, slug } = req.params;
+      const targetClinicSlug = clinicSlug ? String(clinicSlug).trim().toLowerCase() : null;
+      const targetProfSlug = professionalSlug
+        ? String(professionalSlug).trim().toLowerCase()
+        : (slug ? String(slug).trim().toLowerCase() : null);
+
+      if (!targetProfSlug) {
         res.status(400).json({ error: 'Slug do profissional não informado' });
         return;
       }
 
-      const profRow = db.prepare(`
-        SELECT 
-          p.id, p.tenant_id, p.name, p.slug, p.photo_url, p.bio,
-          p.registration_type, p.registration_number, p.practice_areas, p.gender,
-          COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
-          prof.name as profession_name
-        FROM professionals p
-        LEFT JOIN specialties spec ON spec.id = p.specialty_id
-        LEFT JOIN professions prof ON prof.id = p.profession_id
-        WHERE p.slug = ? AND p.active = 1 AND p.public_booking_enabled = 1
-      `).get(String(slug).trim().toLowerCase()) as any;
+      let tenantRow: any = null;
+      let profRow: any = null;
 
-      if (!profRow) {
-        res.status(404).json({ error: 'Página pública do profissional não encontrada ou agendamento online desativado.' });
-        return;
+      if (targetClinicSlug) {
+        tenantRow = db.prepare(`
+          SELECT id, name, trade_name, slug, logo_url, phone, mobile, whatsapp, email,
+                 address, street, number, neighborhood, city, state, zip_code, description
+          FROM tenants
+          WHERE slug = ? AND status = 'active'
+        `).get(targetClinicSlug) as any;
+
+        if (!tenantRow) {
+          res.status(404).json({ error: 'Clínica não encontrada ou inativa' });
+          return;
+        }
+
+        profRow = db.prepare(`
+          SELECT 
+            p.id, p.tenant_id, p.name, p.slug, p.photo_url, p.bio,
+            p.registration_type, p.registration_number, p.practice_areas, p.gender,
+            COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
+            prof.name as profession_name
+          FROM professionals p
+          LEFT JOIN specialties spec ON spec.id = p.specialty_id
+          LEFT JOIN professions prof ON prof.id = p.profession_id
+          WHERE p.tenant_id = ? 
+            AND (p.slug = ? OR p.id = ?)
+            AND p.active = 1 
+            AND p.public_booking_enabled = 1
+        `).get(tenantRow.id, targetProfSlug, targetProfSlug) as any;
+      } else {
+        // Fallback para rota pública legado /agendar/:slug
+        profRow = db.prepare(`
+          SELECT 
+            p.id, p.tenant_id, p.name, p.slug, p.photo_url, p.bio,
+            p.registration_type, p.registration_number, p.practice_areas, p.gender,
+            COALESCE(p.specialty_custom, spec.name, p.practice_areas, '') as specialty_name,
+            prof.name as profession_name
+          FROM professionals p
+          LEFT JOIN specialties spec ON spec.id = p.specialty_id
+          LEFT JOIN professions prof ON prof.id = p.profession_id
+          WHERE (p.slug = ? OR p.id = ?) AND p.active = 1 AND p.public_booking_enabled = 1
+        `).get(targetProfSlug, targetProfSlug) as any;
+
+        if (profRow) {
+          tenantRow = db.prepare(`
+            SELECT id, name, trade_name, slug, logo_url, phone, mobile, whatsapp, email,
+                   address, street, number, neighborhood, city, state, zip_code, description
+            FROM tenants
+            WHERE id = ? AND status = 'active'
+          `).get(profRow.tenant_id) as any;
+        }
       }
 
-      // Busca dados públicos da clínica
-      const tenantRow = db.prepare(`
-        SELECT id, name, trade_name, slug, logo_url, phone, mobile, whatsapp, email,
-               address, street, number, neighborhood, city, state, zip_code, description
-        FROM tenants
-        WHERE id = ? AND status = 'active'
-      `).get(profRow.tenant_id) as any;
+      if (!profRow) {
+        res.status(404).json({ error: 'Profissional não encontrado ou agendamento online desativado.' });
+        return;
+      }
 
       if (!tenantRow) {
         res.status(404).json({ error: 'Clínica não encontrada ou inativa' });
         return;
       }
 
-      // Busca serviços vinculados ao profissional (via services.professional_id ou professional_services)
-      let services = db.prepare(`
+      // Busca serviços ESTRITAMENTE vinculados a esse profissional
+      const services = db.prepare(`
         SELECT s.id, s.name, s.description,
                COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
                COALESCE(ps.custom_price, s.price) as price,
                s.modality
         FROM services s
         LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
-        WHERE (s.professional_id = ? OR ps.professional_id = ?) AND s.active = 1
+        WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
         ORDER BY s.name ASC
-      `).all(profRow.id, profRow.id, profRow.id) as any[];
-
-      if (!services || services.length === 0) {
-        services = db.prepare(`
-          SELECT id, name, description, duration_minutes, price, modality
-          FROM services
-          WHERE tenant_id = ? AND active = 1 AND (professional_id = ? OR professional_id IS NULL)
-          ORDER BY name ASC
-        `).all(profRow.tenant_id, profRow.id) as any[];
-      }
+      `).all(profRow.id, profRow.tenant_id, profRow.id, profRow.id) as any[];
 
       res.json({
         professional: profRow,
@@ -735,30 +545,53 @@ export class ProfessionalController {
 
   static getPublicSlots(req: Request, res: Response): void {
     try {
-      const { slug } = req.params;
+      const { clinicSlug, professionalSlug, slug } = req.params;
       const { date, serviceId } = req.query;
 
-      if (!slug || !date) {
+      const targetClinicSlug = clinicSlug ? String(clinicSlug).trim().toLowerCase() : null;
+      const targetProfSlug = professionalSlug
+        ? String(professionalSlug).trim().toLowerCase()
+        : (slug ? String(slug).trim().toLowerCase() : null);
+
+      if (!targetProfSlug || !date) {
         res.status(400).json({ error: 'Slug do profissional e data (YYYY-MM-DD) são obrigatórios' });
         return;
       }
 
-      const profRow = db.prepare(`
-        SELECT id, tenant_id FROM professionals
-        WHERE slug = ? AND active = 1 AND public_booking_enabled = 1
-      `).get(String(slug).trim().toLowerCase()) as { id: string; tenant_id: string } | undefined;
+      let profRow: { id: string; tenant_id: string } | undefined;
+
+      if (targetClinicSlug) {
+        const tenant = db.prepare("SELECT id FROM tenants WHERE slug = ? AND status = 'active'").get(targetClinicSlug) as { id: string } | undefined;
+        if (!tenant) {
+          res.status(404).json({ error: 'Clínica não encontrada ou inativa' });
+          return;
+        }
+        profRow = db.prepare(`
+          SELECT id, tenant_id FROM professionals
+          WHERE tenant_id = ? AND (slug = ? OR id = ?) AND active = 1 AND public_booking_enabled = 1
+        `).get(tenant.id, targetProfSlug, targetProfSlug) as { id: string; tenant_id: string } | undefined;
+      } else {
+        profRow = db.prepare(`
+          SELECT id, tenant_id FROM professionals
+          WHERE (slug = ? OR id = ?) AND active = 1 AND public_booking_enabled = 1
+        `).get(targetProfSlug, targetProfSlug) as { id: string; tenant_id: string } | undefined;
+      }
 
       if (!profRow) {
-        res.status(404).json({ error: 'Profissional não encontrado' });
+        res.status(404).json({ error: 'Profissional não encontrado ou agendamento online desativado.' });
         return;
       }
 
-      // Se serviceId não foi passado, pega o primeiro serviço ativo
+      // Se serviceId não foi passado, pega o primeiro serviço ativo vinculado ao profissional
       let targetServiceId = serviceId ? String(serviceId) : null;
       if (!targetServiceId) {
         const firstSrv = db.prepare(`
-          SELECT id FROM services WHERE tenant_id = ? AND active = 1 LIMIT 1
-        `).get(profRow.tenant_id) as { id: string } | undefined;
+          SELECT s.id
+          FROM services s
+          LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
+          WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
+          LIMIT 1
+        `).get(profRow.id, profRow.tenant_id, profRow.id, profRow.id) as { id: string } | undefined;
         if (firstSrv) targetServiceId = firstSrv.id;
       }
 

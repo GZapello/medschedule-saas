@@ -963,13 +963,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
               <input
                 type="text"
                 readOnly
-                value={`${window.location.origin}/agendar/${(currentUser as any)?.slug || 'meu-perfil'}`}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-mono text-slate-700"
+                value={`${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${currentUser?.professionalSlug || (currentUser as any)?.slug || 'profissional'}`}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-mono text-slate-700 select-all"
               />
               <button
                 type="button"
                 onClick={() => {
-                  const url = `${window.location.origin}/agendar/${(currentUser as any)?.slug || 'meu-perfil'}`;
+                  const url = `${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${currentUser?.professionalSlug || (currentUser as any)?.slug || 'profissional'}`;
                   navigator.clipboard.writeText(url);
                   showToast('Link copiado com sucesso!', 'success');
                 }}

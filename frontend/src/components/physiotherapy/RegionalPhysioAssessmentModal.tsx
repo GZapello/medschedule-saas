@@ -1,3 +1,4 @@
+import { ClinicalScales } from '../clinical/ClinicalScales';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -32,6 +33,12 @@ import {
 } from './regionalData';
 
 interface RegionalPhysioAssessmentModalProps {
+  lockSide?: boolean;
+  clinicalDetails?: boolean;
+  allowedTabs?: Array<'pain' | 'adm' | 'strength' | 'tests' | 'palpation' | 'plan'>;
+  title?: string;
+  onDraftChange?: (payload: Record<string, any>) => void;
+  onSavePayload?: (payload: Record<string, any>) => Promise<any>;
   isOpen: boolean;
   onClose: () => void;
   onSaved: (evaluation: PhysioRegionalEvaluation) => void;
@@ -45,6 +52,7 @@ interface RegionalPhysioAssessmentModalProps {
 }
 
 export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentModalProps> = ({
+  lockSide = false, clinicalDetails = false, allowedTabs, title = 'Avaliação Fisioterapêutica da Região', onDraftChange, onSavePayload,
   isOpen,
   onClose,
   onSaved,
@@ -57,7 +65,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
   initialData
 }) => {
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'pain' | 'adm' | 'strength' | 'tests' | 'palpation' | 'plan'>('pain');
+  const [activeTab, setActiveTab] = useState<'pain' | 'adm' | 'strength' | 'tests' | 'palpation' | 'plan'>(allowedTabs?.[0] || 'pain');
   const [saving, setSaving] = useState(false);
 
   // Metadados básicos
@@ -82,7 +90,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
     if (!val) return fallback;
     try {
       const parsed = typeof val === 'string' ? JSON.parse(val) : val;
-      return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+      return Array.isArray(parsed) ? parsed.filter(item => item && typeof item === 'object' && !Array.isArray(item)) as T[] : fallback;
     } catch {
       return fallback;
     }
@@ -163,8 +171,15 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
   );
 
   const [plan, setPlan] = useState<PhysioPlanLink>(initialPlan);
+  const [inspection, setInspection] = useState<string>((initialData as any)?.inspection || '');
+  const [stability, setStability] = useState<string>((initialData as any)?.stability || '');
   const [generalNotes, setGeneralNotes] = useState<string>(initialData?.notes || '');
 
+  const draftChangeRef = React.useRef(onDraftChange);
+  draftChangeRef.current = onDraftChange;
+  useEffect(() => {
+    draftChangeRef.current?.({ patient_id: patientId, appointment_id: appointmentId || null, region_id: regionId, region_label: regionLabel, side, evaluation_date: evaluationDate, pain_json: pain, adm_json: admList, strength_json: strengthList, tests_json: specialTests, palpation_json: palpation, edema_json: edema, functional_scales_json: scales, plan_link_json: plan, notes: generalNotes, ...(clinicalDetails ? { inspection, stability } : {}) });
+  }, [patientId, appointmentId, regionId, regionLabel, side, evaluationDate, pain, admList, strengthList, specialTests, palpation, edema, scales, plan, generalNotes, inspection, stability, clinicalDetails]);
   if (!isOpen) return null;
 
   const handleSave = async () => {
@@ -186,10 +201,11 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
         edema_json: edema,
         functional_scales_json: scales,
         plan_link_json: plan,
-        notes: generalNotes
+        notes: generalNotes,
+        ...(clinicalDetails ? { inspection, stability } : {})
       };
 
-      const res = await ApiClient.post<any>('/v1/physiotherapy/regional-evaluations', payload);
+      const res = onSavePayload ? await onSavePayload(payload) : await ApiClient.post<any>('/v1/physiotherapy/regional-evaluations', payload);
       const saved = res.data || res;
       showToast(`Avaliação regional de "${regionLabel}" salva com sucesso!`, 'success');
       onSaved(saved);
@@ -214,7 +230,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 <HeartPulse className="w-5 h-5" />
               </span>
               <h2 className="text-base font-extrabold text-slate-800">
-                Avaliação Fisioterapêutica da Região
+                {title}
               </h2>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-50 text-teal-800 border border-teal-200">
                 {regionLabel}
@@ -235,6 +251,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
 
           <div className="flex items-center gap-2">
             <select
+              disabled={lockSide}
               value={side}
               onChange={e => setSide(e.target.value as any)}
               className="text-xs font-semibold px-2 py-1.5 rounded-lg border border-slate-300 bg-white"
@@ -261,6 +278,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
         {/* Abas Internas da Avaliação Regional */}
         <div className="flex border-b border-slate-200 px-6 bg-slate-50/40 gap-1 overflow-x-auto text-xs font-bold">
           <button
+            hidden={!!allowedTabs && !allowedTabs.includes('pain')}
             onClick={() => setActiveTab('pain')}
             className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'pain'
@@ -272,6 +290,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
           </button>
 
           <button
+            hidden={!!allowedTabs && !allowedTabs.includes('adm')}
             onClick={() => setActiveTab('adm')}
             className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'adm'
@@ -283,6 +302,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
           </button>
 
           <button
+            hidden={!!allowedTabs && !allowedTabs.includes('strength')}
             onClick={() => setActiveTab('strength')}
             className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'strength'
@@ -294,6 +314,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
           </button>
 
           <button
+            hidden={!!allowedTabs && !allowedTabs.includes('tests')}
             onClick={() => setActiveTab('tests')}
             className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'tests'
@@ -305,6 +326,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
           </button>
 
           <button
+            hidden={!!allowedTabs && !allowedTabs.includes('palpation')}
             onClick={() => setActiveTab('palpation')}
             className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'palpation'
@@ -316,6 +338,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
           </button>
 
           <button
+            hidden={!!allowedTabs && !allowedTabs.includes('plan')}
             onClick={() => setActiveTab('plan')}
             className={`py-3 px-3 border-b-2 flex items-center gap-1.5 transition-colors whitespace-nowrap ${
               activeTab === 'plan'
@@ -984,67 +1007,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
           {activeTab === 'plan' && (
             <div className="space-y-5 animate-in fade-in">
               {/* Escalas Funcionais */}
-              <div className="p-4 bg-purple-50/40 rounded-xl border border-purple-100 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-purple-900">Escalas Funcionais Aplicadas</h4>
-                  <button
-                    type="button"
-                    onClick={() => setScales([...scales, { scaleName: '', score: '', interpretation: '' }])}
-                    className="flex items-center gap-1 text-[11px] font-bold text-purple-700 hover:text-purple-900"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Adicionar Escala
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {scales.map((s, idx) => (
-                    <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-white p-2.5 rounded-lg border border-purple-100">
-                      <div>
-                        <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Nome da Escala:</label>
-                        <input
-                          type="text"
-                          value={s.scaleName}
-                          onChange={e => {
-                            const updated = [...scales];
-                            updated[idx].scaleName = e.target.value;
-                            setScales(updated);
-                          }}
-                          placeholder="Ex: SPADI, DASH, LEFS, Roland-Morris..."
-                          className="w-full text-xs px-2 py-1 rounded border border-slate-200"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Score / Pontuação:</label>
-                        <input
-                          type="text"
-                          value={s.score || ''}
-                          onChange={e => {
-                            const updated = [...scales];
-                            updated[idx].score = e.target.value;
-                            setScales(updated);
-                          }}
-                          placeholder="Ex: 48 / 100 (48%)"
-                          className="w-full text-xs px-2 py-1 rounded border border-slate-200"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-400 font-semibold mb-0.5">Interpretação:</label>
-                        <input
-                          type="text"
-                          value={s.interpretation || ''}
-                          onChange={e => {
-                            const updated = [...scales];
-                            updated[idx].interpretation = e.target.value;
-                            setScales(updated);
-                          }}
-                          placeholder="Ex: Incapacidade funcional moderada"
-                          className="w-full text-xs px-2 py-1 rounded border border-slate-200"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <ClinicalScales scales={scales} setScales={setScales} />
 
               {/* Vínculo com Metas e Exercícios em Casa */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1106,6 +1069,11 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
 
         </div>
 
+        {clinicalDetails && <div className="px-6 py-3 grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-slate-100">
+          <label className="text-xs font-bold">Inspeção<textarea className="w-full p-2 text-xs border rounded-xl" value={inspection} onChange={e => setInspection(e.target.value)} /></label>
+          <label className="text-xs font-bold">Estabilidade<textarea className="w-full p-2 text-xs border rounded-xl" value={stability} onChange={e => setStability(e.target.value)} /></label>
+          <label className="text-xs font-bold">Observações<textarea className="w-full p-2 text-xs border rounded-xl" value={generalNotes} onChange={e => setGeneralNotes(e.target.value)} /></label>
+        </div>}
         {/* Rodapé com Ações */}
         <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
           <div className="text-xs text-slate-500">
@@ -1117,7 +1085,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
               onClick={onClose}
               className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-all"
             >
-              Cancelar
+              {onDraftChange ? 'Fechar' : 'Cancelar'}
             </button>
             <button
               type="button"
