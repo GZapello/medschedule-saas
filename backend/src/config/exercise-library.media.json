@@ -174,6 +174,20 @@
     "photo_sha256": "c498cbcee05b7f2ff555db0857efd44c46385176563657d74adf8fd9f091293e"
   },
   {
+    "exercise_id": "ex-agachamento-sissy",
+    "dataset_id": "quads/sissy-squat",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "quads/sissy-squat.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "quads/sissy-squat.gif",
+    "gif_url": "/exercise-media/ex-agachamento-sissy.gif",
+    "gif_sha256": "91938e826a58e63fe7fc71a1a4b3add4f41e820a46f70424c962fc91a2680459",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "quads/sissy-squat.thumb.webp",
+    "photo_url": "/exercise-media/ex-agachamento-sissy.webp",
+    "photo_sha256": "8190d75f7bf0cc4050d6c7eb2e68e535d92044daa42cbc1a38b31c7e3b59c337"
+  },
+  {
     "exercise_id": "ex-agachamento-smith",
     "dataset_id": "quads/smith-chair-squat",
     "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
@@ -216,6 +230,34 @@
     "photo_sha256": "446c9e7965f9663680057fd8dee6f79d05083d06762b9b7f22b2c453124fe591"
   },
   {
+    "exercise_id": "ex-along-adutores-frog",
+    "dataset_id": "glutes/rocking-frog-stretch",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "glutes/rocking-frog-stretch.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "glutes/rocking-frog-stretch.gif",
+    "gif_url": "/exercise-media/ex-along-adutores-frog.gif",
+    "gif_sha256": "84397a6f02d648d46d7e3aa4a397f056ab947c615b10bfd63e60d12ce8efc34a",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "glutes/rocking-frog-stretch.thumb.webp",
+    "photo_url": "/exercise-media/ex-along-adutores-frog.webp",
+    "photo_sha256": "c395f9ea1116f53ebbc1dd33b2400f704ca38ec61984aaba85e3ffb6cc142a63"
+  },
+  {
+    "exercise_id": "ex-along-cervical-lateral",
+    "dataset_id": "levator-scapulae/neck-side-stretch",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "levator-scapulae/neck-side-stretch.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "levator-scapulae/neck-side-stretch.gif",
+    "gif_url": "/exercise-media/ex-along-cervical-lateral.gif",
+    "gif_sha256": "00cfd3c8f361daf0f60a0eefb083e96d8d165e3aa147fca940be23515ddeea1c",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "levator-scapulae/neck-side-stretch.thumb.webp",
+    "photo_url": "/exercise-media/ex-along-cervical-lateral.webp",
+    "photo_sha256": "bc7fac36c213d64135f10d0b9e16fba83f0b8cab9160bff97db9856f8ad3ae26"
+  },
+  {
     "exercise_id": "ex-along-gastrocnemio-parede",
     "dataset_id": "1377",
     "source_commit": "2c041b35557d7aae47dfac87b291f095476db191",
@@ -242,6 +284,20 @@
     "photo_sha256": "d6eb503556e7030718eff59158c28480b4f3051136c46c59296824750b3df3ad"
   },
   {
+    "exercise_id": "ex-along-inchworm",
+    "dataset_id": "abs/inchworm-v-2",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "abs/inchworm-v-2.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "abs/inchworm-v-2.gif",
+    "gif_url": "/exercise-media/ex-along-inchworm.gif",
+    "gif_sha256": "89ea3187cb542dc7ac1b9bd07b0fa68cc36a5f76363612302a5a9ffec690de0f",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "abs/inchworm-v-2.thumb.webp",
+    "photo_url": "/exercise-media/ex-along-inchworm.webp",
+    "photo_sha256": "ccb2e97eb5d23b9c9d7f46401260f72551518dcbfb3d505aaabffb81273ea5be"
+  },
+  {
     "exercise_id": "ex-along-ombro-cruzado",
     "dataset_id": "0669",
     "source_commit": "2c041b35557d7aae47dfac87b291f095476db191",
@@ -252,6 +308,20 @@
     "attribution": "© Gym visual — https://gymvisual.com/",
     "jpg_sha256": "b61e7126bcf21f4e8e395e8b5253c9995d028cce95706a0f43121b92090795f6",
     "gif_sha256": "2d42e9c20b91854dcec55c2e5532275ccb1433531cfce9ee652502479c9b7543"
+  },
+  {
+    "exercise_id": "ex-along-trapezio-superior",
+    "dataset_id": "levator-scapulae/side-push-neck-stretch",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "levator-scapulae/side-push-neck-stretch.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "levator-scapulae/side-push-neck-stretch.gif",
+    "gif_url": "/exercise-media/ex-along-trapezio-superior.gif",
+    "gif_sha256": "9c37cd0a61e08a6dfcc9da8bbdcc0735066681f46928f155b548d6699c0091e9",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "levator-scapulae/side-push-neck-stretch.thumb.webp",
+    "photo_url": "/exercise-media/ex-along-trapezio-superior.webp",
+    "photo_sha256": "03dbfd18edc7e0db3f819d4f5f87ae6126ec1dd5eb68af4b837b2fa48cff1b4f"
   },
   {
     "exercise_id": "ex-along-triceps-acima",
@@ -266,6 +336,20 @@
     "gif_sha256": "bf2c32f5ad8b3b9cccb69164f07a16cc8a3660b87823ff5e8272e4bbe75210b0"
   },
   {
+    "exercise_id": "ex-along-tronco-extensao",
+    "dataset_id": "spine/sphinx",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "spine/sphinx.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "spine/sphinx.gif",
+    "gif_url": "/exercise-media/ex-along-tronco-extensao.gif",
+    "gif_sha256": "e8d05ed75d34b358ee479b6b81ab318732deff8c5a2d171090d08625a35656ef",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "spine/sphinx.thumb.webp",
+    "photo_url": "/exercise-media/ex-along-tronco-extensao.webp",
+    "photo_sha256": "9f2119278518ab3eced552173825f071122d6fdb27027fee0b8d0f9b09626927"
+  },
+  {
     "exercise_id": "ex-along-tronco-lateral",
     "dataset_id": "0794",
     "source_commit": "2c041b35557d7aae47dfac87b291f095476db191",
@@ -276,6 +360,34 @@
     "attribution": "© Gym visual — https://gymvisual.com/",
     "jpg_sha256": "cd8e70b7d7c1039717fc1d65d1a1486e7ec9e0fd706f9bc3ab6879f80bd2cc99",
     "gif_sha256": "aafb01c423cfa3115df9a971430607a5f534046ea91510732af182e0a7109064"
+  },
+  {
+    "exercise_id": "ex-avanco-passada",
+    "dataset_id": "glutes/dumbbell-lunge",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "glutes/dumbbell-lunge.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "glutes/dumbbell-lunge.gif",
+    "gif_url": "/exercise-media/ex-avanco-passada.gif",
+    "gif_sha256": "a5a7bc30add78a15ff98521e7fe825e7487260112012aa20a0b1d55616319727",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "glutes/dumbbell-lunge.thumb.webp",
+    "photo_url": "/exercise-media/ex-avanco-passada.webp",
+    "photo_sha256": "db8badfe2bd30230bc32076fff95091ee096e9fb5c408a0d6e55033e35c57885"
+  },
+  {
+    "exercise_id": "ex-avanco-reverso",
+    "dataset_id": "glutes/dumbbell-rear-lunge",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "glutes/dumbbell-rear-lunge.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "glutes/dumbbell-rear-lunge.gif",
+    "gif_url": "/exercise-media/ex-avanco-reverso.gif",
+    "gif_sha256": "b72a1e6cf4fdd01f8f30e6769e039678bbf9e724796db8938743d78a33fcb476",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "glutes/dumbbell-rear-lunge.thumb.webp",
+    "photo_url": "/exercise-media/ex-avanco-reverso.webp",
+    "photo_sha256": "edd4a3516711ee4db1bf185e3f7c0dc3372325538bf096523f38cf3f087cf09d"
   },
   {
     "exercise_id": "ex-barra-fixa-assistida",
@@ -330,6 +442,20 @@
     "attribution": "© Gym visual — https://gymvisual.com/",
     "jpg_sha256": "9f01cd735f668ebea0aa46ae44a117c3bc3eee0cf119ed5369e357bf86feff4d",
     "gif_sha256": "a2a0d527fed8d859ea55c2bb41e8345108fdcdf7838352849b66540393333e53"
+  },
+  {
+    "exercise_id": "ex-bear-crawl",
+    "dataset_id": "cardio/bear-crawl",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "cardio/bear-crawl.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "cardio/bear-crawl.gif",
+    "gif_url": "/exercise-media/ex-bear-crawl.gif",
+    "gif_sha256": "7a5aabd17d341bf59ba88e9b68568da10103b44f13fba077d906018605a91ff7",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "cardio/bear-crawl.thumb.webp",
+    "photo_url": "/exercise-media/ex-bear-crawl.webp",
+    "photo_sha256": "382f784556cbcf722dbe70cfe7e1bb0b0d25811cd168dc3f605c8f51dd8a1019"
   },
   {
     "exercise_id": "ex-bike-spinning",
@@ -432,6 +558,20 @@
     "gif_sha256": "9c1cc6ebe8edd8bba7893b72b9c44371ffc4f46be333a213a2b1e1a473fb480e"
   },
   {
+    "exercise_id": "ex-corda-naval",
+    "dataset_id": "delts/battling-ropes",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "delts/battling-ropes.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "delts/battling-ropes.gif",
+    "gif_url": "/exercise-media/ex-corda-naval.gif",
+    "gif_sha256": "b4b531a560bc06c69781e1d781175b0629de79bbd306b82c9352b41ee67c04be",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "delts/battling-ropes.thumb.webp",
+    "photo_url": "/exercise-media/ex-corda-naval.webp",
+    "photo_sha256": "6a0d76f37798ff9ec5dc7bf906f3d2a95e7a5c2a03dab5fba24b250b6b0570c8"
+  },
+  {
     "exercise_id": "ex-corrida-estacionaria",
     "dataset_id": "cardio/run",
     "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
@@ -458,6 +598,34 @@
     "image_path": "pectorals/cable-standing-fly.thumb.webp",
     "photo_url": "/exercise-media/ex-crossover-alta.webp",
     "photo_sha256": "d666542271737a797f0b31f95310d2bc58aaf09c0c9be4caf4d8e919bd2c3035"
+  },
+  {
+    "exercise_id": "ex-crossover-baixa",
+    "dataset_id": "pectorals/cable-upper-chest-crossovers",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "pectorals/cable-upper-chest-crossovers.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "pectorals/cable-upper-chest-crossovers.gif",
+    "gif_url": "/exercise-media/ex-crossover-baixa.gif",
+    "gif_sha256": "2765fe7c19a106425f4abcf3f1604b0a621228d64cc8d6a8d2bfc14c9ebadc17",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "pectorals/cable-upper-chest-crossovers.thumb.webp",
+    "photo_url": "/exercise-media/ex-crossover-baixa.webp",
+    "photo_sha256": "6cd40a51dcd40c49c4430dc7fb1dc0eda56aee64bdf1444d33a06408a9482726"
+  },
+  {
+    "exercise_id": "ex-crossover-media",
+    "dataset_id": "pectorals/cable-standing-up-straight-crossovers",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "pectorals/cable-standing-up-straight-crossovers.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "pectorals/cable-standing-up-straight-crossovers.gif",
+    "gif_url": "/exercise-media/ex-crossover-media.gif",
+    "gif_sha256": "d7cbf49d787b321cf1fb01741c3312b1dab0c836e64530d83dc8a720dd78bbb1",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "pectorals/cable-standing-up-straight-crossovers.thumb.webp",
+    "photo_url": "/exercise-media/ex-crossover-media.webp",
+    "photo_sha256": "15ef0334de295fc4635b20ca35ab0284ed2a05c59e2fc387351c8ccc92fbf9da"
   },
   {
     "exercise_id": "ex-crucifixo-inclinado",
@@ -766,6 +934,20 @@
     "photo_sha256": "ec9e2e259d29daca057d4f083850128e9ad5aceee60e88a8e69715c4f2b431eb"
   },
   {
+    "exercise_id": "ex-farmers-walk",
+    "dataset_id": "quads/farmers-walk",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "quads/farmers-walk.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "quads/farmers-walk.gif",
+    "gif_url": "/exercise-media/ex-farmers-walk.gif",
+    "gif_sha256": "3fd4146f9342ea3b84cd9e462ace73612d19731a9a56293061f249cf0552ffc3",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "quads/farmers-walk.thumb.webp",
+    "photo_url": "/exercise-media/ex-farmers-walk.webp",
+    "photo_sha256": "63c713e0ea62438adf1a387b1be16eea968f5b9b846e0e938119c25784fd17f7"
+  },
+  {
     "exercise_id": "ex-flexao-arqueiro",
     "dataset_id": "pectorals/archer-push-up",
     "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
@@ -862,6 +1044,20 @@
     "photo_sha256": "d110353e940cad2fa8bd0dada485952773c7bdeee3f545905b40114b6972de64"
   },
   {
+    "exercise_id": "ex-gemeos-smith",
+    "dataset_id": "calves/smith-reverse-calf-raises",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "calves/smith-reverse-calf-raises.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "calves/smith-reverse-calf-raises.gif",
+    "gif_url": "/exercise-media/ex-gemeos-smith.gif",
+    "gif_sha256": "24bf7bc5960bab5f91f0f505ca21a095d597b36d460691062c3171d4427cc722",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "calves/smith-reverse-calf-raises.thumb.webp",
+    "photo_url": "/exercise-media/ex-gemeos-smith.webp",
+    "photo_sha256": "794ff0e5672a3906c7411d07fc23933f66b49ec7976cbba4399c0f3903dfa03b"
+  },
+  {
     "exercise_id": "ex-glute-ham-raise",
     "dataset_id": "hamstrings/glute-ham-raise",
     "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
@@ -874,6 +1070,20 @@
     "image_path": "hamstrings/glute-ham-raise.thumb.webp",
     "photo_url": "/exercise-media/ex-glute-ham-raise.webp",
     "photo_sha256": "61f0ecda9e38daf03a0c3046b4fb868d477876763e8864f0ed17cc54787d6ebb"
+  },
+  {
+    "exercise_id": "ex-gluteo-cabo-coice",
+    "dataset_id": "glutes/cable-standing-hip-extension",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "glutes/cable-standing-hip-extension.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "glutes/cable-standing-hip-extension.gif",
+    "gif_url": "/exercise-media/ex-gluteo-cabo-coice.gif",
+    "gif_sha256": "af49591c8676a3a8a69be2355bad5231e138e203bca8364c3793abfa5e4d20dd",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "glutes/cable-standing-hip-extension.thumb.webp",
+    "photo_url": "/exercise-media/ex-gluteo-cabo-coice.webp",
+    "photo_sha256": "7eb5cbcf5ef8b121a126d618375b8b37cef96676c11e78a36450daa6dd77c8ba"
   },
   {
     "exercise_id": "ex-hack-machine",
@@ -914,6 +1124,34 @@
     "gif_sha256": "1a6e5c9e21658e330f3b3f05b54693b05ee84dece68eb3b25b38297de2c3ae8e"
   },
   {
+    "exercise_id": "ex-kettlebell-clean-press",
+    "dataset_id": "delts/kettlebell-one-arm-clean-and-jerk",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "delts/kettlebell-one-arm-clean-and-jerk.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "delts/kettlebell-one-arm-clean-and-jerk.gif",
+    "gif_url": "/exercise-media/ex-kettlebell-clean-press.gif",
+    "gif_sha256": "a3044b34b3f33430f5a6b7c2c2fef1a3f1ada2f3c98de7354685be3cd99d2a29",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "delts/kettlebell-one-arm-clean-and-jerk.thumb.webp",
+    "photo_url": "/exercise-media/ex-kettlebell-clean-press.webp",
+    "photo_sha256": "0705ffe3ff8675dc40b0249ff277a3029cb1bd5751af93ef274b37181567f710"
+  },
+  {
+    "exercise_id": "ex-kettlebell-overhead-press",
+    "dataset_id": "delts/kettlebell-one-arm-military-press-to-the-side",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "delts/kettlebell-one-arm-military-press-to-the-side.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "delts/kettlebell-one-arm-military-press-to-the-side.gif",
+    "gif_url": "/exercise-media/ex-kettlebell-overhead-press.gif",
+    "gif_sha256": "7d2c2d7fcbeb96acd5f23c40126b51e37b346732f148f61f66314a1faa445ece",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "delts/kettlebell-one-arm-military-press-to-the-side.thumb.webp",
+    "photo_url": "/exercise-media/ex-kettlebell-overhead-press.webp",
+    "photo_sha256": "7201470ea1b322ad37055fd85dbedd4197f8ed614049780fd5b5d281752b480c"
+  },
+  {
     "exercise_id": "ex-kettlebell-row",
     "dataset_id": "upper-back/kettlebell-alternating-row",
     "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
@@ -950,6 +1188,20 @@
     "attribution": "© Gym visual — https://gymvisual.com/",
     "jpg_sha256": "f3325cd473f6ab249fd6dc3cfbb34faec805c2edd1476ac9035302673ed514b3",
     "gif_sha256": "4e4afb16a87ff94ecebf835cd56358e3ac3bbdf66f5743f211651400137ddec3"
+  },
+  {
+    "exercise_id": "ex-legpress-unilateral",
+    "dataset_id": "glutes/sled-45-degrees-one-leg-press",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "glutes/sled-45-degrees-one-leg-press.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "glutes/sled-45-degrees-one-leg-press.gif",
+    "gif_url": "/exercise-media/ex-legpress-unilateral.gif",
+    "gif_sha256": "574cd38eb55813120275fc1e6e9eeed3d7e00139ede48eb143d32a4334d44445",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "glutes/sled-45-degrees-one-leg-press.thumb.webp",
+    "photo_url": "/exercise-media/ex-legpress-unilateral.webp",
+    "photo_sha256": "917e12791c1936c90a0d90ccbf901ada21b49c6d323c4b8ab7de10e9b1b10e4e"
   },
   {
     "exercise_id": "ex-levantamento-terra-convencional",
@@ -1123,6 +1375,20 @@
     "photo_sha256": "beb2661bc43653173fcf74991a81084b3fc425af2d58b57d78dfadcbc5efd3b7"
   },
   {
+    "exercise_id": "ex-pronacao-supinacao",
+    "dataset_id": "forearms/dumbbell-seated-one-arm-rotate",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "forearms/dumbbell-seated-one-arm-rotate.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "forearms/dumbbell-seated-one-arm-rotate.gif",
+    "gif_url": "/exercise-media/ex-pronacao-supinacao.gif",
+    "gif_sha256": "f2ba74726cde6a85dc2c106606aa9bb488a6603ba67726c397fd1591ec99fcae",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "forearms/dumbbell-seated-one-arm-rotate.thumb.webp",
+    "photo_url": "/exercise-media/ex-pronacao-supinacao.webp",
+    "photo_sha256": "4e1030b2938994de3aad0de5f0bec91205b2fef50144f954837035d913b64f86"
+  },
+  {
     "exercise_id": "ex-pular-corda",
     "dataset_id": "2612",
     "source_commit": "2c041b35557d7aae47dfac87b291f095476db191",
@@ -1145,6 +1411,20 @@
     "attribution": "© Gym visual — https://gymvisual.com/",
     "jpg_sha256": "d6e9c48a99d3dfa0e953ec9acc10c76d5a822cb06b45dbef12798ed3b16d1687",
     "gif_sha256": "ab812b1ad7755c568d77f0a2ad7127d0038d30cef4d60dea6ac59740a939b949"
+  },
+  {
+    "exercise_id": "ex-pulldown-corda",
+    "dataset_id": "lats/cable-straight-arm-pulldown-with-rope",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "lats/cable-straight-arm-pulldown-with-rope.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "lats/cable-straight-arm-pulldown-with-rope.gif",
+    "gif_url": "/exercise-media/ex-pulldown-corda.gif",
+    "gif_sha256": "31579bbeb1879359c3d6a4838451c9c4f95f3195da55073effe394445f329269",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "lats/cable-straight-arm-pulldown-with-rope.thumb.webp",
+    "photo_url": "/exercise-media/ex-pulldown-corda.webp",
+    "photo_sha256": "2d8c7eba77fef9ae0048ebf6686e7a329947defb5a712d747fcdcaa9288b7064"
   },
   {
     "exercise_id": "ex-pullover-halter",
@@ -1667,6 +1947,48 @@
     "photo_sha256": "f13dc2312b5a07a01b85a85e820efef67b46c75813e466a9bbaeda3aecfca19c"
   },
   {
+    "exercise_id": "ex-serratus-punch",
+    "dataset_id": "serratus-anterior/dumbbell-incline-shoulder-raise",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "serratus-anterior/dumbbell-incline-shoulder-raise.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "serratus-anterior/dumbbell-incline-shoulder-raise.gif",
+    "gif_url": "/exercise-media/ex-serratus-punch.gif",
+    "gif_sha256": "284b79c61a036c9ea317ddf5ee5a75e8b03d2f1ded9e2a7292103baff82d71a8",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "serratus-anterior/dumbbell-incline-shoulder-raise.thumb.webp",
+    "photo_url": "/exercise-media/ex-serratus-punch.webp",
+    "photo_sha256": "9af912ceb0bfb5317b0face54fc22db11dba0bf38b6d79315ae46c80a9d3f6a6"
+  },
+  {
+    "exercise_id": "ex-simulador-escada",
+    "dataset_id": "cardio/walking-on-stepmill",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "cardio/walking-on-stepmill.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "cardio/walking-on-stepmill.gif",
+    "gif_url": "/exercise-media/ex-simulador-escada.gif",
+    "gif_sha256": "00bd5487aca0e86eb5427aecff935c64ad41fab96d61d5f0b92cc8b511a01645",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "cardio/walking-on-stepmill.thumb.webp",
+    "photo_url": "/exercise-media/ex-simulador-escada.webp",
+    "photo_sha256": "b25626e6d5a25b277eb04e788d777913e276176293ac98ee17149e61179b3d25"
+  },
+  {
+    "exercise_id": "ex-skater-jump",
+    "dataset_id": "cardio/skater-hops",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "cardio/skater-hops.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "cardio/skater-hops.gif",
+    "gif_url": "/exercise-media/ex-skater-jump.gif",
+    "gif_sha256": "ea090f479ba047f7e101f3cf1226fa5260a0244b6276bf96da485665e8cb4650",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "cardio/skater-hops.thumb.webp",
+    "photo_url": "/exercise-media/ex-skater-jump.webp",
+    "photo_sha256": "a4b4bc0d2d264c4c5320f461a385935685ec9e9c4491e43a50f2ce7c1df86008"
+  },
+  {
     "exercise_id": "ex-ski-erg",
     "dataset_id": "2142",
     "source_commit": "2c041b35557d7aae47dfac87b291f095476db191",
@@ -1785,6 +2107,20 @@
     "gif_sha256": "d05bbfcc6c7283d35069e51cdf56df66e55a5c4182ca192f50750857fdcd7be0"
   },
   {
+    "exercise_id": "ex-supino-inclinado-halteres",
+    "dataset_id": "pectorals/dumbbell-incline-bench-press",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "pectorals/dumbbell-incline-bench-press.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "pectorals/dumbbell-incline-bench-press.gif",
+    "gif_url": "/exercise-media/ex-supino-inclinado-halteres.gif",
+    "gif_sha256": "c4ce59a2a8024750599c5e62d3e71679adf52056e76fb52f3f54ec48827154f6",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "pectorals/dumbbell-incline-bench-press.thumb.webp",
+    "photo_url": "/exercise-media/ex-supino-inclinado-halteres.webp",
+    "photo_sha256": "c74b6b3c84664f6c5e84576cb7ef9f99750d0a7291e2a20ce9c44a6c1b8cc0c8"
+  },
+  {
     "exercise_id": "ex-supino-inclinado-maquina",
     "dataset_id": "pectorals/lever-incline-chest-press",
     "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
@@ -1825,6 +2161,20 @@
     "image_path": "pectorals/lever-chest-press.thumb.webp",
     "photo_url": "/exercise-media/ex-supino-maquina.webp",
     "photo_sha256": "0a2f2999be7f1054fda76520ff4f2a9c6ac96d2e85c33cca1767c4103dc38099"
+  },
+  {
+    "exercise_id": "ex-supino-neutro-halteres",
+    "dataset_id": "triceps/dumbbell-neutral-grip-bench-press",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "triceps/dumbbell-neutral-grip-bench-press.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "triceps/dumbbell-neutral-grip-bench-press.gif",
+    "gif_url": "/exercise-media/ex-supino-neutro-halteres.gif",
+    "gif_sha256": "9019f455460d6f9cde89a69c75a01f18992d9f0c1163015e37e0fcfa01187547",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "triceps/dumbbell-neutral-grip-bench-press.thumb.webp",
+    "photo_url": "/exercise-media/ex-supino-neutro-halteres.webp",
+    "photo_sha256": "69c8e80604ac5b3d407d97f3926aaf450da3c0fa3c89b6712625ab966ec167d3"
   },
   {
     "exercise_id": "ex-supino-reto-barra",
@@ -1979,6 +2329,20 @@
     "gif_sha256": "4d2a66d4f19614125cd360b150f4fdc731e03436e5b0ef054e49ef5d7ca27d27"
   },
   {
+    "exercise_id": "ex-triceps-testa-barra",
+    "dataset_id": "triceps/barbell-lying-triceps-extension-skull-crusher",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "triceps/barbell-lying-triceps-extension-skull-crusher.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "triceps/barbell-lying-triceps-extension-skull-crusher.gif",
+    "gif_url": "/exercise-media/ex-triceps-testa-barra.gif",
+    "gif_sha256": "a848fd4a82a8797da3f23414a98e338b4150b2d0b05bbf9103278f5a6d332197",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "triceps/barbell-lying-triceps-extension-skull-crusher.thumb.webp",
+    "photo_url": "/exercise-media/ex-triceps-testa-barra.webp",
+    "photo_sha256": "8c18b984b530cc416486e6a9f8634095d94ccea0225ee23dc7b9fb33fef74f76"
+  },
+  {
     "exercise_id": "ex-triceps-unilateral-cabo",
     "dataset_id": "triceps/cable-one-arm-tricep-pushdown",
     "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
@@ -1991,5 +2355,19 @@
     "image_path": "triceps/cable-one-arm-tricep-pushdown.thumb.webp",
     "photo_url": "/exercise-media/ex-triceps-unilateral-cabo.webp",
     "photo_sha256": "16d2aabcfd38d23b4738198d059880f80f6209327ccfa2655955d479f891671c"
+  },
+  {
+    "exercise_id": "ex-turkish-getup",
+    "dataset_id": "glutes/kettlebell-turkish-get-up-squat-style",
+    "source_repository": "JahelCuadrado/ExerciseGymGifsDB",
+    "source_path": "glutes/kettlebell-turkish-get-up-squat-style.gif",
+    "source_commit": "f6d16e977fbee3c04295311c44cb8374ca8ff182",
+    "gif_path": "glutes/kettlebell-turkish-get-up-squat-style.gif",
+    "gif_url": "/exercise-media/ex-turkish-getup.gif",
+    "gif_sha256": "de21878aaec78c295c8d4a51adfd5bad019aa4e2e29d7092bf86be228cf10ee3",
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "image_path": "glutes/kettlebell-turkish-get-up-squat-style.thumb.webp",
+    "photo_url": "/exercise-media/ex-turkish-getup.webp",
+    "photo_sha256": "fa0a19f44f7d10893f87a4fbfd0bd3f131df1e551bb43f9f2423b0ede6110cf4"
   }
 ]

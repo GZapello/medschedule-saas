@@ -1022,10 +1022,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                 />
               </div>
             </div>
-            {activePreset === 'clinica-medica' && specialtyAssessment}
           </div>
 
-          {activePreset !== 'clinica-medica' && (
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
             <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
               <Stethoscope className="w-4 h-4 text-teal-600" />
@@ -1033,7 +1031,6 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             </h2>
             {specialtyAssessment}
           </div>
-          )}
 
           <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-4">
             <h2 className="text-sm font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider border-b border-slate-100 pb-3">
