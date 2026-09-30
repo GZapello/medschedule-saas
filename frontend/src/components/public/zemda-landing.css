@@ -264,27 +264,43 @@
   .zl-hero-copy>.zl-small { order:4; }
 }
 
-/* Mobile decoration: reuse only the original landing backgrounds. */
+/* Original desktop backgrounds, restored from the state before 91c133f. */
+.zemda-landing #como-funciona,
+.zemda-landing #profissoes,
+.zemda-landing #faq { position:relative;isolation:isolate;overflow:hidden; }
+.zemda-landing #como-funciona::before,
+.zemda-landing #profissoes::after,
+.zemda-landing #faq::before {
+  content:'';position:absolute;z-index:-1;pointer-events:none;
+  background-repeat:no-repeat;background-size:cover;mask-composite:intersect;
+}
+.zemda-landing #como-funciona::before {
+  right:-70px;top:60px;width:clamp(280px,28vw,440px);height:210px;opacity:.42;
+  background-image:url('/landing/backgrounds/physio-care.jpg');background-position:60% center;
+  mask-image:linear-gradient(to right,transparent,black 45%),linear-gradient(to bottom,transparent,black 20%,black 65%,transparent);
+}
+.zemda-landing #profissoes::after {
+  right:-40px;bottom:0;width:40%;height:190px;opacity:.8;
+  background-image:url('/landing/backgrounds/clinical-care.jpg');background-position:center 40%;
+  mask-image:linear-gradient(to right,transparent,black 35%),linear-gradient(to bottom,transparent,black 25%,black 80%,transparent);
+}
+.zemda-landing #faq::before {
+  left:-50px;bottom:0;width:clamp(270px,29vw,430px);height:230px;opacity:.85;
+  background-image:url('/landing/backgrounds/speech-care.png');background-position:65% center;
+  mask-image:linear-gradient(to left,transparent,black 22%),linear-gradient(to bottom,transparent,black 18%,black 85%,transparent);
+}
+@media(max-width:1100px) {
+  .zemda-landing #como-funciona::before,.zemda-landing #faq::before { display:none; }
+}
+@media(max-width:700px) {
+  .zemda-landing #profissoes::after { display:none; }
+}
+/* Mobile adjusts presentation only; all assets come from the base rules. */
 @media (max-width:640px) {
-  .zemda-landing #como-funciona,
-  .zemda-landing #profissoes,
-  .zemda-landing #faq { position:relative;isolation:isolate;overflow:hidden; }
   .zemda-landing #como-funciona::before,
   .zemda-landing #profissoes::after,
   .zemda-landing #faq::before {
-    content:'';position:absolute;z-index:-1;pointer-events:none;
-    right:-28px;bottom:0;width:190px;height:170px;
-    background-repeat:no-repeat;background-size:cover;opacity:.14;
+    display:block;left:auto;top:auto;right:-28px;bottom:0;width:190px;height:170px;opacity:.14;
     mask-image:linear-gradient(to right,transparent,black 55%),linear-gradient(to bottom,transparent,black 40%,black 75%,transparent);
-    mask-composite:intersect;
-  }
-  .zemda-landing #como-funciona::before {
-    background-image:url('/landing/backgrounds/physio-care.jpg');background-position:60% center;
-  }
-  .zemda-landing #profissoes::after {
-    background-image:url('/landing/backgrounds/clinical-care.jpg');background-position:center 40%;
-  }
-  .zemda-landing #faq::before {
-    background-image:url('/landing/backgrounds/speech-care.png');background-position:65% center;
   }
 }
