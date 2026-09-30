@@ -1358,7 +1358,9 @@
     "gif_path": "cardio/astride-jumps-male.gif",
     "gif_url": "/exercise-media/ex-polichinelo.gif",
     "gif_sha256": "51fe2ccdcad303ff5cfa5fac074171066799b884d02d3accbf836687a4a7cc5f",
-    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB"
+    "attribution": "Fonte: JahelCuadrado/ExerciseGymGifsDB",
+    "photo_url": "/exercise-media/ex-polichinelo.webp",
+    "photo_sha256": "f1c2f27450e7443a428fcde710b10ab7f9b0401728d3189de9e3a91b727c227f"
   },
   {
     "exercise_id": "ex-ponte-gluteos-solo",
@@ -2383,5 +2385,66 @@
     "image_path": "glutes/kettlebell-turkish-get-up-squat-style.thumb.webp",
     "photo_url": "/exercise-media/ex-turkish-getup.webp",
     "photo_sha256": "fa0a19f44f7d10893f87a4fbfd0bd3f131df1e551bb43f9f2423b0ede6110cf4"
+  },
+  {
+    "exercise_id": "ex-abdominal-infra-solo",
+    "dataset_id": "abs/leg-raise-floor",
+    "photo_url": "/exercise-media/ex-abdominal-infra-solo.webp",
+    "photo_sha256": "8bc937962b556b55f359cadf389121871a4a6a8877f40dba1da02333ac0dcd42",
+    "attribution": "Demonstração: Acervo do Profissional",
+    "gif_url": "/exercise-media/ex-abdominal-infra-solo.gif",
+    "gif_sha256": "9056ae33e9d3964f7ac12ccfd2b2618575ca76671299e6af46fd32c2cf369abb"
+  },
+  {
+    "exercise_id": "ex-abdominal-obliquo-solo",
+    "dataset_id": "abs/cross-body-crunch",
+    "photo_url": "/exercise-media/ex-abdominal-obliquo-solo.webp",
+    "photo_sha256": "d94fcf1a2b47d13089c5cbd71231a00112a1fd1e491777ed3cb9f37e632bd31c",
+    "attribution": "Foto: Acervo do Profissional"
+  },
+  {
+    "exercise_id": "ex-spanish-squat",
+    "dataset_id": "quadriceps/spanish-squat",
+    "photo_url": "/exercise-media/ex-spanish-squat.webp",
+    "photo_sha256": "9a9460756448a3bef6e5edbbdbb5023d032a122dfe44542fe8d19d84d7674fa5",
+    "attribution": "Demonstração: Acervo do Profissional",
+    "gif_url": "/exercise-media/ex-spanish-squat.gif",
+    "gif_sha256": "358514cb454cf2e9240a317f362dd03dabc23e60ad27493d0bdee2577c513483"
+  },
+  {
+    "exercise_id": "ex-along-panturrilha-degrau",
+    "dataset_id": "calves/step-calf-stretch",
+    "photo_url": "/exercise-media/ex-along-panturrilha-degrau.webp",
+    "photo_sha256": "ae8fdb265d82c07dca967bc0cabdb228aecdfcc591bd03ec1d4f9ad9be41dac3",
+    "attribution": "Demonstração: Acervo do Profissional",
+    "gif_url": "/exercise-media/ex-along-panturrilha-degrau.gif",
+    "gif_sha256": "a07b18b0e258a508e90c6283f33b07156c504c8ad72feb7dca3c0fbbbdfbd5d0"
+  },
+  {
+    "exercise_id": "ex-elevacao-pelvica-barra",
+    "dataset_id": "glutes/barbell-hip-thrust",
+    "photo_url": "/exercise-media/ex-elevacao-pelvica-barra.webp",
+    "photo_sha256": "fefb252d55e827e0628356f1e92d5a0c5974efa45144560b2dc279fbb682e921",
+    "attribution": "Demonstração: Acervo do Profissional",
+    "gif_url": "/exercise-media/ex-elevacao-pelvica-barra.gif",
+    "gif_sha256": "6745ea2a0c9cb3d8b4a0678fe0f2ac863b6c22b11dbec65f5e1362c4fb382640"
+  },
+  {
+    "exercise_id": "ex-puxada-unilateral",
+    "dataset_id": "back/single-arm-lat-pulldown",
+    "photo_url": "/exercise-media/ex-puxada-unilateral.webp",
+    "photo_sha256": "f800d795935434ecb07be9bbc5e3fe480cb6b8c7880debcb772ced185f05cb5e",
+    "attribution": "Demonstração: Acervo do Profissional",
+    "gif_url": "/exercise-media/ex-puxada-unilateral.gif",
+    "gif_sha256": "137a2f78c36b1e8a321d00ed1a77bfa34b196b2a4c7540c90a657d48c8432d3c"
+  },
+  {
+    "exercise_id": "ex-remada-alta-barra",
+    "dataset_id": "shoulders/ez-bar-upright-row",
+    "photo_url": "/exercise-media/ex-remada-alta-barra.webp",
+    "photo_sha256": "5717b70996b931e761d428eb4b5f164bfb977f22e29839440a5dbb9fe2b1a686",
+    "attribution": "Demonstração: Acervo do Profissional",
+    "gif_url": "/exercise-media/ex-remada-alta-barra.gif",
+    "gif_sha256": "862dae86cfae86f974a44ac625112cf4feaa5fbe26629050236498d37442315a"
   }
 ]

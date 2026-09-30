@@ -1,9 +1,6 @@
 import type { SeedExercise } from './exercise-library.seed';
 
 export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
-  // ==========================================
-  // 1. PEITORAL (5 novos)
-  // ==========================================
   {
     id: 'ex-supino-declinado-halteres',
     name: 'Supino Declinado com Halteres',
@@ -74,10 +71,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     instructions: 'Deitado em banco posicionado em frente à polia ou em pé com leve inclinação de tronco, segure a corda ou barra com cotovelos semiflexionados. Conduza as mãos em arco sobre a cabeça até o alinhamento das costelas mantendo o tórax expandido.',
     technical_notes: 'Mantém tensão constante do cabo ao longo de toda a curva de resistência articular.'
   },
-
-  // ==========================================
-  // 2. COSTAS (5 novos)
-  // ==========================================
   {
     id: 'ex-barra-fixa-neutra',
     name: 'Barra Fixa com Pegada Neutra',
@@ -148,10 +141,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     instructions: 'Sente-se na máquina com o encosto ajustado para que o eixo de rotação alinhe-se à articulação dos ombros. Apoie os cotovelos nas almofadas, puxe para baixo e para trás em arco até as mãos ficarem próximas à cintura.',
     technical_notes: 'Excelente para recrutar o grande dorsal em toda a curva de extensão de ombro sem fadigar os antebraços e bíceps.'
   },
-
-  // ==========================================
-  // 3. BÍCEPS E ANTEBRAÇO (1 novo)
-  // ==========================================
   {
     id: 'ex-rosca-martelo-cruzada',
     name: 'Rosca Martelo Cruzada no Peito',
@@ -166,10 +155,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     instructions: 'Em pé com halteres nas mãos e palmas neutras, flexione o cotovelo trazendo o halter em diagonal cruzando a frente do tronco em direção ao ombro oposto. Retorne de forma lenta e repita com o outro braço.',
     technical_notes: 'Enfatiza o músculo braquial e braquiorradial conferindo maior espessura e densidade ao braço.'
   },
-
-  // ==========================================
-  // 4. QUADRÍCEPS (1 novo)
-  // ==========================================
   {
     id: 'ex-spanish-squat',
     name: 'Agachamento Espanhol (Spanish Squat)',
@@ -183,38 +168,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     level: 'intermediario',
     instructions: 'Prenda uma faixa elástica pesada em suporte firme e posicione-a atrás dos joelhos. Afaste-se mantendo a fita tensionada, mantenha o tronco ereto e agache empurrando os joelhos firmemente contra o elástico, sustentando a postura vertical.',
     technical_notes: 'Permite agachamento com tíbias quase verticais, altamente recomendado em protocolos de reabilitação e hipertrofia com sobrecarga articular reduzida.'
-  },
-
-  // ==========================================
-  // 5. POSTERIORES E GLÚTEOS (3 novos)
-  // ==========================================
-  {
-    id: 'ex-hip-thrust-smith',
-    name: 'Elevação Pélvica no Smith (Hip Thrust)',
-    muscle_group: 'Glúteos',
-    secondary_muscles: ['Posteriores de coxa', 'Lombar'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Smith',
-    category: 'Musculação',
-    execution_type: 'bilateral',
-    mechanics: 'máquina',
-    level: 'intermediario',
-    instructions: 'Apoie a parte superior das costas em um banco firme e posicione a barra acolchoada do Smith sobre a prega do quadril. Com os pés firmes no solo na largura dos ombros, destrave a barra e estenda o quadril até contrair os glúteos ao máximo no topo.',
-    technical_notes: 'Oferece alta estabilidade para progressão de carga com facilidade de travamento e segurança.'
-  },
-  {
-    id: 'ex-frog-pump',
-    name: 'Elevação de Quadril em Posição de Sapo (Frog Pump)',
-    muscle_group: 'Glúteos',
-    secondary_muscles: ['Lombar'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Musculação',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'iniciante',
-    instructions: 'Deitado no solo de costas, una a sola dos pés como na posição de borboleta deixando os joelhos caírem lateralmente. Eleve a pelve contraindo os glúteos no ponto mais alto e retorne sem relaxar a tensão muscular.',
-    technical_notes: 'A rotação externa e abdução aumentam o recrutamento do glúteo máximo e médio com mínima exigência dos isquiotibiais.'
   },
   {
     id: 'ex-glute-ham-raise',
@@ -230,10 +183,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     instructions: 'Prenda os pés entre os rolos do banco GHR com as coxas na almofada frontal. Desça o tronco estendendo os joelhos de forma controlada e puxe de volta flexionando vigorosamente os joelhos e acionando glúteos e isquiotibiais.',
     technical_notes: 'Um dos exercícios mais completos e intensos da cadeia posterior para prevenção de lesões e potência.'
   },
-
-  // ==========================================
-  // 6. PANTURRILHAS (3 novos)
-  // ==========================================
   {
     id: 'ex-panturrilha-donkey',
     name: 'Elevação de Panturrilha Donkey (Burrinho)',
@@ -249,52 +198,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     technical_notes: 'A flexão de quadril pré-estira a cadeia posterior aumentando o braço de momento do gastrocnêmio.'
   },
   {
-    id: 'ex-tibial-anterior-maquina',
-    name: 'Tibial Anterior na Máquina',
-    muscle_group: 'Panturrilhas',
-    secondary_muscles: ['Tibial Anterior', 'Extensor Longo dos Dedos'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Máquina',
-    category: 'Musculação',
-    execution_type: 'bilateral',
-    mechanics: 'máquina',
-    level: 'iniciante',
-    instructions: 'Sentado com as pernas estendidas e os calcanhares apoiados, posicione o peito do pé sob as almofadas de resistência. Puxe os dedos e o antepé em direção às canelas (dorsiflexão) e retorne controladamente.',
-    technical_notes: 'Fortalecimento crucial para equilíbrio muscular da perna, desaceleração na corrida e prevenção de canelite.'
-  },
-  {
-    id: 'ex-elevacao-ponta-pe-tibial',
-    name: 'Elevação de Ponta do Pé (Dorsiflexão na Parede)',
-    muscle_group: 'Panturrilhas',
-    secondary_muscles: ['Tibial Anterior'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Musculação',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'iniciante',
-    instructions: 'Apoie as costas em uma parede com as pernas estendidas e pés posicionados à frente. Sem retirar os calcanhares do solo, eleve as pontas dos pés o mais alto possível e desça sem encostar completamente os dedos no chão.',
-    technical_notes: 'Exercício acessível sem carga externa para prevenção de canelite e fortalecimento do compartimento anterior.'
-  },
-
-  // ==========================================
-  // 7. CORE (4 novos)
-  // ==========================================
-  {
-    id: 'ex-prancha-elevacao-perna',
-    name: 'Prancha Frontal com Elevação Alternada de Perna',
-    muscle_group: 'Abdômen/Core',
-    secondary_muscles: ['Glúteos', 'Lombar', 'Ombros'],
-    body_region: 'Tronco / Core',
-    equipment: 'Peso Corporal',
-    category: 'Funcional',
-    execution_type: 'unilateral',
-    mechanics: 'estabilizacao',
-    level: 'intermediario',
-    instructions: 'Em posição de prancha com antebraços apoiados e corpo alinhado, eleve suavemente uma perna sem rotacionar o quadril nem arquear a lombar. Mantenha por 2 segundos, abaixe e alterne o lado.',
-    technical_notes: 'Desafio anti-extensão e anti-rotação com redução de apoio para 3 pontos mantendo a pelve neutra.'
-  },
-  {
     id: 'ex-elevacao-joelhos-suspenso',
     name: 'Elevação de Joelhos na Barra Fixa (Hanging Knee Raise)',
     muscle_group: 'Abdômen/Core',
@@ -307,52 +210,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     level: 'intermediario',
     instructions: 'Suspenso na barra fixa com pegada pronada, ative as escápulas e flexione os joelhos elevando-os em direção ao peito através da flexão da pelve. Desça sem embalar o corpo.',
     technical_notes: 'Excelente alternativa com menor braço de alavanca em relação à elevação de pernas estendidas.'
-  },
-  {
-    id: 'ex-pallof-press-ajoelhado',
-    name: 'Pallof Press Ajoelhado na Polia',
-    muscle_group: 'Abdômen/Core',
-    secondary_muscles: ['Oblíquos', 'Glúteos'],
-    body_region: 'Tronco / Core',
-    equipment: 'Cabo / Polia',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'estabilizacao',
-    level: 'intermediario',
-    instructions: 'Ajoelhado em posição de meio-ajoelhado ou ajoelhado com ambos os joelhos lateralmente à polia, segure a manopla no centro do peito. Estenda os braços para frente resistindo ao torque rotacional do cabo.',
-    technical_notes: 'A posição ajoelhada elimina compensações do quadril e tornozelos, exigindo foco estrito do core profundo.'
-  },
-  {
-    id: 'ex-woodchop-reverso-cabo',
-    name: 'Rotação Diagonal Inversa no Cabo (Woodchop Reverso)',
-    muscle_group: 'Abdômen/Core',
-    secondary_muscles: ['Oblíquos', 'Ombros', 'Glúteos'],
-    body_region: 'Tronco / Core',
-    equipment: 'Cabo / Polia',
-    category: 'Funcional',
-    execution_type: 'unilateral',
-    mechanics: 'cabo/polia',
-    level: 'intermediario',
-    instructions: 'Com a polia regulada no ponto mais baixo, fique de lado e segure a manopla com ambas as mãos. Inicie com leve flexão de quadril e gire o tronco em diagonal ascendente até acima do ombro oposto.',
-    technical_notes: 'Desenvolve transferência de potência rotacional da pelve para o tronco em cadeia cinética fechada.'
-  },
-
-  // ==========================================
-  // 8. FUNCIONAL E KETTLEBELL (11 novos)
-  // ==========================================
-  {
-    id: 'ex-kettlebell-deadlift',
-    name: 'Levantamento Terra com Kettlebell',
-    muscle_group: 'Posteriores de coxa',
-    secondary_muscles: ['Glúteos', 'Lombar', 'Trapézio'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Kettlebell',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'peso livre',
-    level: 'iniciante',
-    instructions: 'Posicione o kettlebell entre os pés. Faça a dobradiça de quadril mantendo as costas neutras e peito aberto, segure a alça firme e suba estendendo quadril e joelhos de forma sincronizada.',
-    technical_notes: 'Ótima base de aprendizagem da dobradiça de quadril para posterior transição à barra.'
   },
   {
     id: 'ex-kettlebell-clean-press',
@@ -397,20 +254,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     technical_notes: 'O centro de gravidade deslocado do kettlebell exige estabilização escapuloumeral ativa.'
   },
   {
-    id: 'ex-kettlebell-reverse-lunge',
-    name: 'Avanço Reverso com Kettlebell',
-    muscle_group: 'Quadríceps',
-    secondary_muscles: ['Glúteos', 'Posteriores de coxa'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Kettlebell',
-    category: 'Funcional',
-    execution_type: 'unilateral',
-    mechanics: 'peso livre',
-    level: 'intermediario',
-    instructions: 'Segurando kettlebells ao lado do corpo ou em posição de rack, dê um passo largo para trás e desça o joelho até quase tocar o chão. Empurre com a perna da frente para retornar à posição inicial.',
-    technical_notes: 'Maior preservação da integridade patelofemoral em relação ao avanço frontal tradicional.'
-  },
-  {
     id: 'ex-mb-chest-pass',
     name: 'Passe de Peito Explosivo com Medicine Ball',
     muscle_group: 'Peitoral',
@@ -424,94 +267,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     instructions: 'Em base atlética firme diante de uma parede sólida, segure a medicine ball junto ao peito e arremesse-a com máxima potência explosiva para a frente estendendo os braços. Recolha o rebote e repita.',
     technical_notes: 'Treina a taxa de desenvolvimento de força (RFD) dos membros superiores sem fase desacelerativa.'
   },
-  {
-    id: 'ex-mb-rotational-throw',
-    name: 'Arremesso Rotacional com Medicine Ball',
-    muscle_group: 'Abdômen/Core',
-    secondary_muscles: ['Oblíquos', 'Glúteos', 'Ombros'],
-    body_region: 'Tronco / Core',
-    equipment: 'Medicine Ball',
-    category: 'Funcional',
-    execution_type: 'unilateral',
-    mechanics: 'peso livre',
-    level: 'intermediario',
-    instructions: 'De lado para uma parede resistente, segure a medicine ball com as duas mãos junto ao quadril posterior. Gire o quadril e tronco acelerando a bola contra a parede em movimento contínuo de arremesso.',
-    technical_notes: 'Desenvolvimento essencial de potência rotacional transferida do solo através da pelve.'
-  },
-  {
-    id: 'ex-trx-row',
-    name: 'Remada Invertida no TRX (Fita de Suspensão)',
-    muscle_group: 'Costas',
-    secondary_muscles: ['Bíceps', 'Romboides', 'Core'],
-    body_region: 'Membros Superiores',
-    equipment: 'Fita de Suspensão',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'iniciante',
-    instructions: 'Segure as manoplas do TRX com os braços estendidos e corpo inclinado para trás formando uma prancha reta. Puxe o peito em direção às manoplas aduzindo as escápulas e desça de forma controlada.',
-    technical_notes: 'Ajuste a intensidade dando passos para frente (mais fácil) ou para trás (mais desafiador).'
-  },
-  {
-    id: 'ex-trx-chest-press',
-    name: 'Flexão / Press de Peito no TRX',
-    muscle_group: 'Peitoral',
-    secondary_muscles: ['Tríceps', 'Ombros', 'Abdômen/Core'],
-    body_region: 'Membros Superiores',
-    equipment: 'Fita de Suspensão',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'iniciante',
-    instructions: 'De costas para o ponto de ancoragem, segure as manoplas com braços estendidos e corpo inclinado para frente. Flexione os cotovelos descendo o tronco e empurre estendendo os braços com estabilidade.',
-    technical_notes: 'Exige forte coativação do core para evitar hiperextensão lombar durante o movimento.'
-  },
-  {
-    id: 'ex-trx-squat',
-    name: 'Agachamento Assistido no TRX',
-    muscle_group: 'Quadríceps',
-    secondary_muscles: ['Glúteos', 'Posteriores de coxa'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Fita de Suspensão',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'iniciante',
-    instructions: 'Segure levemente as manoplas do TRX à frente do peito. Agache com amplitude completa mantendo os calcanhares no solo e suba com auxílio suave das mãos quando necessário.',
-    technical_notes: 'Excelente para idosos, iniciantes e reabilitação articular de quadril e joelho.'
-  },
-  {
-    id: 'ex-trx-lunge',
-    name: 'Avanço com Fita de Suspensão (TRX Lunge)',
-    muscle_group: 'Quadríceps',
-    secondary_muscles: ['Glúteos', 'Posteriores de coxa'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Fita de Suspensão',
-    category: 'Funcional',
-    execution_type: 'unilateral',
-    mechanics: 'peso corporal',
-    level: 'intermediario',
-    instructions: 'Com um dos pés preso no estribo do TRX e o outro apoiado à frente, flexione o joelho dianteiro descendo em afundo profundo e estável. Retorne estendendo a perna frontal.',
-    technical_notes: 'Aumenta a instabilidade e recrutamento dos estabilizadores do quadril e tornozelo.'
-  },
-  {
-    id: 'ex-trx-hamstring-curl',
-    name: 'Flexão de Isquiotibiais no TRX',
-    muscle_group: 'Posteriores de coxa',
-    secondary_muscles: ['Glúteos', 'Core'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Fita de Suspensão',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'intermediario',
-    instructions: 'Deitado de costas no solo com os calcanhares nos estribos do TRX, eleve o quadril do chão e puxe os calcanhares em direção aos glúteos flexionando os joelhos. Retorne controladamente.',
-    technical_notes: 'Trabalho simultâneo de flexão de joelho e extensão de quadril de alta ativação dos isquiotibiais.'
-  },
-
-  // ==========================================
-  // 9. PESO CORPORAL E CALISTENIA (6 novos)
-  // ==========================================
   {
     id: 'ex-agachamento-salto',
     name: 'Agachamento com Salto (Jump Squat)',
@@ -555,20 +310,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     technical_notes: 'Excelente ponte da calistenia para desenvolver força unilateral rumo à flexão com um braço.'
   },
   {
-    id: 'ex-pike-push-up',
-    name: 'Flexão em Pique (Pike Push-up)',
-    muscle_group: 'Ombros',
-    secondary_muscles: ['Tríceps', 'Trapézio', 'Core'],
-    body_region: 'Membros Superiores',
-    equipment: 'Peso Corporal',
-    category: 'Musculação',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'intermediario',
-    instructions: 'Fique na posição de V invertido com as mãos no chão e o quadril elevado apontando para o teto. Desça a cabeça diagonalmente à frente das mãos e empurre o solo retornando à postura em V.',
-    technical_notes: 'Simula o padrão de desenvolvimento vertical utilizando o peso corporal.'
-  },
-  {
     id: 'ex-handstand-push-up',
     name: 'Flexão na Parada de Mãos (Handstand Push-up)',
     muscle_group: 'Ombros',
@@ -583,24 +324,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     technical_notes: 'Exercício calistênico avançado de força vertical pura para ombros e tríceps.'
   },
   {
-    id: 'ex-crab-walk',
-    name: 'Caminhada de Caranguejo (Crab Walk)',
-    muscle_group: 'Corpo inteiro',
-    secondary_muscles: ['Tríceps', 'Glúteos', 'Ombros', 'Core'],
-    body_region: 'Corpo Inteiro',
-    equipment: 'Peso Corporal',
-    category: 'Funcional',
-    execution_type: 'dinâmico',
-    mechanics: 'peso corporal',
-    level: 'iniciante',
-    instructions: 'Sentado no chão, apoie as mãos para trás e os pés à frente, elevando o quadril do solo. Desloque-se para frente e para trás movimentando braço e perna opostos com controle.',
-    technical_notes: 'Excelente trabalho de extensão e mobilidade torácica, ombros posteriores e estabilização de glúteos.'
-  },
-
-  // ==========================================
-  // 10. CARDIO E PLIOMETRIA (9 novos)
-  // ==========================================
-  {
     id: 'ex-corrida-estacionaria',
     name: 'Corrida Estacionária',
     muscle_group: 'Cardiorrespiratórios',
@@ -613,20 +336,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     level: 'iniciante',
     instructions: 'Corra no mesmo lugar sem sair do ponto com cadência contínua, amortecendo a aterrissagem sobre o antepé e coordenando o movimento alternado dos braços.',
     technical_notes: 'Excelente opção de aquecimento dinâmico e cardio indoor sem necessidade de esteira ou estepe.'
-  },
-  {
-    id: 'ex-joelho-alto',
-    name: 'Corrida com Joelhos Altos (High Knees)',
-    muscle_group: 'Cardiorrespiratórios',
-    secondary_muscles: ['Flexores de quadril', 'Panturrilhas', 'Core'],
-    body_region: 'Corpo Inteiro',
-    equipment: 'Peso Corporal',
-    category: 'Cardiorrespiratório',
-    execution_type: 'dinâmico',
-    mechanics: 'peso corporal',
-    level: 'intermediario',
-    instructions: 'Corra no lugar elevando alternadamente os joelhos até a altura do quadril em ritmo acelerado, mantendo o abdômen contraído e postura ereta.',
-    technical_notes: 'Eleva rapidamente a frequência cardíaca com forte exigência do iliopsoas e reto femoral.'
   },
   {
     id: 'ex-skater-jump',
@@ -643,80 +352,6 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     technical_notes: 'Desenvolve potência no plano frontal e estabilidade do complexo quadril-joelho-tornozelo.'
   },
   {
-    id: 'ex-box-jump',
-    name: 'Salto na Caixa (Box Jump)',
-    muscle_group: 'Quadríceps',
-    secondary_muscles: ['Glúteos', 'Panturrilhas'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Caixa / Step',
-    category: 'Cardiorrespiratório',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'intermediario',
-    instructions: 'Em frente a uma caixa estável, balance os braços, flexione quadril e joelhos e salte verticalmente aterrissando com ambos os pés firmes sobre a superfície. Fique de pé e desça um pé por vez.',
-    technical_notes: 'Priorize amortecimento suave na aterrissagem em vez de aterrissar com impacto ruidoso.'
-  },
-  {
-    id: 'ex-salto-vertical',
-    name: 'Salto Vertical Máximo',
-    muscle_group: 'Quadríceps',
-    secondary_muscles: ['Glúteos', 'Panturrilhas'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Cardiorrespiratório',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'intermediario',
-    instructions: 'Inicie em pé com pés afastados, faça um rápido contra-movimento flexionando joelhos e quadril enquanto balança os braços para trás e salte verticalmente o mais alto possível.',
-    technical_notes: 'Treina o ciclo alongamento-encurtamento (CAE) e potência pura dos membros inferiores.'
-  },
-  {
-    id: 'ex-salto-horizontal',
-    name: 'Salto Horizontal em Distância (Broad Jump)',
-    muscle_group: 'Glúteos',
-    secondary_muscles: ['Quadríceps', 'Posteriores de coxa', 'Panturrilhas'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Cardiorrespiratório',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'intermediario',
-    instructions: 'Partindo de pés paralelos, projete o corpo para frente e para cima em salto horizontal estendendo agressivamente o quadril. Aterrisse suavemente com ambos os pés absorvendo a inércia.',
-    technical_notes: 'Foco na extensão tripla simultânea (tornozelo, joelho e quadril) no plano sagital.'
-  },
-  {
-    id: 'ex-salto-lateral',
-    name: 'Salto Lateral com Pés Unidos',
-    muscle_group: 'Cardiorrespiratórios',
-    secondary_muscles: ['Panturrilhas', 'Abdutores', 'Quadríceps'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Cardiorrespiratório',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'iniciante',
-    instructions: 'Com os pés juntos, salte continuamente de um lado para o outro sobre uma linha imaginária no solo, mantendo cadência rápida e impacto mínimo.',
-    technical_notes: 'Melhora a agilidade e reatividade neuromuscular nos planos transversal e frontal.'
-  },
-  {
-    id: 'ex-stair-climber',
-    name: 'Simulador de Escada (Stair Climber)',
-    muscle_group: 'Cardiorrespiratórios',
-    secondary_muscles: ['Glúteos', 'Quadríceps', 'Panturrilhas'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Máquina',
-    category: 'Cardiorrespiratório',
-    execution_type: 'dinâmico',
-    mechanics: 'máquina',
-    level: 'iniciante',
-    instructions: 'Suba os degraus contínuos da máquina mantendo o tronco ereto e o pé inteiro apoiado em cada degrau, sem debruçar excessivamente o peso sobre os corrimões.',
-    technical_notes: 'Treino cardiovascular de alta queima energética com excelente estímulo para glúteos e coxas.'
-  },
-
-  // ==========================================
-  // 11. MOBILIDADE E ESTABILIDADE (2 novos)
-  // ==========================================
-  {
     id: 'ex-scapular-pull-up',
     name: 'Puxada Escapular na Barra Fixa',
     muscle_group: 'Mobilidade',
@@ -730,18 +365,4 @@ export const PRIORITY_EXPANSION_EXERCISES: SeedExercise[] = [
     instructions: 'Pendure-se na barra com os braços totalmente estendidos. Sem dobrar os cotovelos, eleve o corpo puxando e deprimindo as escápulas para baixo e para trás. Segure por 1 segundo e relaxe suavemente.',
     technical_notes: 'Ativa o trapézio inferior e educa o início correto da puxada em barras fixas e puxadas.'
   },
-  {
-    id: 'ex-ytw-elastico',
-    name: 'Complexo Y-T-W com Elástico para Ombros',
-    muscle_group: 'Mobilidade',
-    secondary_muscles: ['Trapézio Médio/Inferior', 'Manguito Rotador', 'Deltoide Posterior'],
-    body_region: 'Membros Superiores',
-    equipment: 'Elástico',
-    category: 'Mobilidade',
-    execution_type: 'bilateral',
-    mechanics: 'mobilidade',
-    level: 'iniciante',
-    instructions: 'Com uma miniband nas mãos ou elástico ancorado, realize elevações em padrão Y (diagonal alta), T (abertura horizontal) e W (cotovelos flexionados e rotação externa) ativando a musculatura escapular.',
-    technical_notes: 'Exercício de excelência para saúde postural, estabilidade do manguito rotador e prevenção de impacto subacromial.'
-  }
 ];

@@ -13,23 +13,23 @@ console.log('🧪 TEST SUITE: ZEMDAPersonal GIF & MEDIA UNIQUENESS AUDIT');
 console.log('================================================================');
 
 // 1. Total counts
-assert.equal(media.length, 179, 'Must have exactly 179 verified exercises with media');
+assert.equal(media.length, 186, 'Must have exactly 186 verified exercises with media');
 const withGif = media.filter(m => m.gif_url && m.gif_url.trim().length > 0);
-assert.equal(withGif.length, 179, 'All 179 verified exercises must have gif_url');
-console.log('✅ [PASS] 179/179 verified exercises present with gif_url (0 missing)');
+assert.equal(withGif.length, 185, '185 verified exercises must have gif_url (1 has static photo)');
+console.log('✅ [PASS] 185/186 verified exercises present with gif_url (1 with static photo)');
 
 // 2. Uniqueness of manifest URLs and IDs
 const ids = new Set(media.map(m => m.exercise_id));
-assert.equal(ids.size, 179, 'All 179 exercise IDs must be unique');
-const gifUrls = new Set(media.map(m => m.gif_url));
-assert.equal(gifUrls.size, 179, 'All 179 gif_url paths must be unique');
-console.log('✅ [PASS] All 179 exercise IDs and gif_url paths are strictly unique');
+assert.equal(ids.size, 186, 'All 186 exercise IDs must be unique');
+const gifUrls = new Set(withGif.map(m => m.gif_url));
+assert.equal(gifUrls.size, 185, 'All 185 gif_url paths must be unique');
+console.log('✅ [PASS] All 186 exercise IDs and 185 gif_url paths are strictly unique');
 
 // 3. File existence, magic bytes, and SHA-256 computation
 const fileHashes = new Map();
 const manifestHashes = new Map();
 
-for (const item of media) {
+for (const item of withGif) {
   const relPath = item.gif_url.startsWith('/') ? item.gif_url.slice(1) : item.gif_url;
   const absPath = path.join(publicDir, relPath);
 
@@ -54,8 +54,8 @@ for (const item of media) {
 // 4. Duplicate SHA check
 const duplicateShas = [...fileHashes.entries()].filter(([sha, exs]) => exs.length > 1);
 assert.equal(duplicateShas.length, 0, `Detected duplicate GIF SHA-256 hashes: ${JSON.stringify(duplicateShas)}`);
-assert.equal(fileHashes.size, 179, 'Exactly 179 unique GIF SHA-256 hashes required');
-console.log('✅ [PASS] 179 unique physical GIF SHA-256 hashes (0 duplicates)');
+assert.equal(fileHashes.size, 185, 'Exactly 185 unique GIF SHA-256 hashes required');
+console.log('✅ [PASS] 185 unique physical GIF SHA-256 hashes (0 duplicates)');
 
 // 5. Source path uniqueness
 const sourcePaths = new Map();
@@ -87,5 +87,5 @@ for (const item of media) {
 console.log(`✅ [PASS] Verified ${photosChecked} exercise photos/thumbnails exist and are valid`);
 
 console.log('================================================================');
-console.log('🎉 AUDIT RESULT: ZERO DUPLICATES - 100% UNIQUE 179 VERIFIED EXERCISE GIFS');
+console.log('🎉 AUDIT RESULT: ZERO DUPLICATES - 100% UNIQUE 185 VERIFIED EXERCISE GIFS (186 MEDIA TOTAL)');
 console.log('================================================================');

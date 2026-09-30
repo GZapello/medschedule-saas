@@ -21,9 +21,6 @@ export interface SeedExercise {
 }
 
 export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
-  // ==========================================
-  // 1. PEITORAL (13 variações)
-  // ==========================================
   {
     id: 'ex-supino-reto-barra',
     name: 'Supino Reto com Barra',
@@ -206,10 +203,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Incline o tronco cerca de 30 graus para frente, afaste ligeiramente os cotovelos e desça até 90 graus de flexão de cotovelos, subindo focado no peitoral.',
     technical_notes: 'A inclinação do tronco direciona a sobrecarga do tríceps para o peitoral.'
   },
-
-  // ==========================================
-  // 2. COSTAS (12 variações)
-  // ==========================================
   {
     id: 'ex-puxada-frontal-aberta',
     name: 'Puxada Frontal com Pegada Aberta no Pulley',
@@ -378,10 +371,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Suspenso na barra com pegada supinada na largura dos ombros, puxe o peito em direção à barra.',
     technical_notes: 'Combina alto estímulo no grande dorsal e na hipertrofia dos flexores de cotovelo.'
   },
-
-  // ==========================================
-  // 3. OMBROS (12 variações)
-  // ==========================================
   {
     id: 'ex-desenvolvimento-halteres',
     name: 'Desenvolvimento com Halteres Sentado',
@@ -550,10 +539,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Pegada na largura dos ombros, puxe a barra verticalmente até a altura do peito conduzindo pelos cotovelos.',
     technical_notes: 'Não utilize pegada excessivamente fechada para evitar pinçamento subacromial.'
   },
-
-  // ==========================================
-  // 4. BÍCEPS (8 variações)
-  // ==========================================
   {
     id: 'ex-rosca-direta-barra',
     name: 'Rosca Direta com Barra Reta / W',
@@ -666,10 +651,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Peito apoiado no lado reto do banco inclinado, braços verticais para o chão, flexione a barra para cima.',
     technical_notes: 'Tensão máxima no topo do movimento.'
   },
-
-  // ==========================================
-  // 5. TRÍCEPS (7 variações)
-  // ==========================================
   {
     id: 'ex-triceps-corda',
     name: 'Tríceps na Polia com Corda',
@@ -768,10 +749,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Posição de flexão com polegares e indicadores unidos formando um triângulo/diamante, desça o peito e empurre.',
     technical_notes: 'Grande ativação mecânica do tríceps em cadeia cinética fechada.'
   },
-
-  // ==========================================
-  // 6. ANTEBRAÇOS (3 variações)
-  // ==========================================
   {
     id: 'ex-rosca-punho-barra',
     name: 'Rosca Punho (Flexão de Punho) com Barra',
@@ -814,10 +791,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Segurando dois halteres pesados ao lado do corpo, caminhe mantendo postura ereta e abdômen firme.',
     technical_notes: 'Excelente para força isométrica de preensão manual e estabilidade de core.'
   },
-
-  // ==========================================
-  // 7. ABDÔMEN / CORE (9 variações)
-  // ==========================================
   {
     id: 'ex-crunch-solo',
     name: 'Abdominal Tradicional (Crunch) no Solo',
@@ -889,20 +862,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     technical_notes: 'Não deixe o quadril ceder ou subir em excesso.'
   },
   {
-    id: 'ex-prancha-lateral',
-    name: 'Prancha Lateral Isométrica',
-    muscle_group: 'Abdômen/Core',
-    secondary_muscles: ['Quadrado Lombar', 'Glúteo Médio'],
-    body_region: 'Tronco / Core',
-    equipment: 'Peso Corporal',
-    category: 'Funcional',
-    execution_type: 'unilateral',
-    mechanics: 'isométrico',
-    level: 'iniciante',
-    instructions: 'De lado com apoio no antebraço e lateral do pé, eleve o quadril mantendo alinhamento de coluna.',
-    technical_notes: 'Fundamental para estabilização da coluna lombar no plano frontal.'
-  },
-  {
     id: 'ex-roda-abdominal',
     name: 'Abdominal com Roda / Rolinho (Ab Wheel Rollout)',
     muscle_group: 'Abdômen/Core',
@@ -944,10 +903,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Deitado de barriga para cima, estenda braço e perna opostos mantendo a lombar colada ao solo.',
     technical_notes: 'Excelente reeducação proprioceptiva do transverso abdominal.'
   },
-
-  // ==========================================
-  // 8. LOMBAR (3 variações)
-  // ==========================================
   {
     id: 'ex-hiperextensao-lombar',
     name: 'Hiperextensão Lombar no Banco Romano 45°',
@@ -976,24 +931,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Barra no trapézio, flexione o quadril para trás com joelhos destravados e tronco reto, depois retorne estendendo.',
     technical_notes: 'Carga leve a moderada mantendo curvatura neutra em toda a descida.'
   },
-  {
-    id: 'ex-superman-solo',
-    name: 'Superman Isométrico no Solo',
-    muscle_group: 'Lombar',
-    secondary_muscles: ['Glúteos', 'Deltoides'],
-    body_region: 'Tronco / Core',
-    equipment: 'Peso Corporal',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'isométrico',
-    level: 'iniciante',
-    instructions: 'Deitado de barriga para baixo, eleve simultaneamente braços e pernas do chão segurando a posição.',
-    technical_notes: 'Fortalecimento seguro da cadeia posterior sem cargas compressivas axiais.'
-  },
-
-  // ==========================================
-  // 9. QUADRÍCEPS (10 variações)
-  // ==========================================
   {
     id: 'ex-agachamento-livre-barra',
     name: 'Agachamento Livre com Barra Costas (Back Squat)',
@@ -1049,20 +986,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     level: 'iniciante',
     instructions: 'Pés no meio da plataforma na largura dos ombros, empurre a plataforma e desça em amplitude completa sem descolar o quadril do banco.',
     technical_notes: 'Nunca bloqueie a articulação dos joelhos (evite hiperextensão) no topo.'
-  },
-  {
-    id: 'ex-leg-press-horizontal',
-    name: 'Leg Press Horizontal',
-    muscle_group: 'Quadríceps',
-    secondary_muscles: ['Glúteos'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Máquina',
-    category: 'Musculação',
-    execution_type: 'bilateral',
-    mechanics: 'máquina',
-    level: 'iniciante',
-    instructions: 'Sentado com as costas firmes no encosto, empurre o carrinho estendendo os joelhos com controle.',
-    technical_notes: 'Excelente para idosos, reabilitação ou iniciantes.'
   },
   {
     id: 'ex-hack-machine',
@@ -1134,10 +1057,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Com os tornozelos travados no banco sissy, incline o tronco para trás flexionando os joelhos e empurre estendendo.',
     technical_notes: 'Intensidade extrema no reto femoral com alongamento profundo.'
   },
-
-  // ==========================================
-  // 10. POSTERIORES DE COXA (7 variações)
-  // ==========================================
   {
     id: 'ex-mesa-flexora',
     name: 'Mesa Flexora Deitada',
@@ -1165,20 +1084,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     level: 'iniciante',
     instructions: 'Sentado com a trava acima das coxas e rolo nos calcanhares, flexione os joelhos empurrando para baixo.',
     technical_notes: 'Com o quadril a 90 graus de flexão, os isquiotibiais já iniciam sob maior alongamento passivo.'
-  },
-  {
-    id: 'ex-flexora-em-pe',
-    name: 'Flexora em Pé Unilateral na Máquina / Cabo',
-    muscle_group: 'Posteriores de coxa',
-    secondary_muscles: ['Glúteos'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Máquina',
-    category: 'Musculação',
-    execution_type: 'unilateral',
-    mechanics: 'máquina',
-    level: 'iniciante',
-    instructions: 'Apoiado de frente para a máquina, flexione um joelho levando o calcanhar ao glúteo.',
-    technical_notes: 'Ideal para corrigir assimetrias de força muscular nos isquiotibiais.'
   },
   {
     id: 'ex-stiff-barra',
@@ -1223,24 +1128,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     technical_notes: 'Foque na desaceleração excêntrica para recrutar fibras em alongamento ativo.'
   },
   {
-    id: 'ex-nordic-hamstring',
-    name: 'Flexão Nórdica Excêntrica (Nordic Hamstring Curl)',
-    muscle_group: 'Posteriores de coxa',
-    secondary_muscles: ['Glúteos', 'Abdômen/Core'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'peso corporal',
-    level: 'avancado',
-    instructions: 'De joelhos com tornozelos travados, desça o corpo para frente controlando a descida apenas com os posteriores de coxa.',
-    technical_notes: 'Padrão ouro científico para prevenção de lesões musculares em esportes e sprints.'
-  },
-
-  // ==========================================
-  // 11. GLÚTEOS (5 variações)
-  // ==========================================
-  {
     id: 'ex-elevacao-pelvica-barra',
     name: 'Elevação Pélvica com Barra no Banco (Hip Thrust)',
     muscle_group: 'Glúteos',
@@ -1253,20 +1140,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     level: 'intermediario',
     instructions: 'Escápulas apoiadas no banco, barra sobre o quadril com almofada protetora. Empurre os calcanhares no chão e eleve o quadril até travar no topo com 1s de contração.',
     technical_notes: 'No topo, mantenha queixo apontado para o peito e costelas abaixadas para não hiperextender a lombar.'
-  },
-  {
-    id: 'ex-elevacao-pelvica-unilateral',
-    name: 'Elevação Pélvica Unilateral no Solo / Banco',
-    muscle_group: 'Glúteos',
-    secondary_muscles: ['Posteriores de coxa', 'Core'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Halteres',
-    category: 'Musculação',
-    execution_type: 'unilateral',
-    mechanics: 'peso livre',
-    level: 'iniciante',
-    instructions: 'Apoie um pé no solo e a outra perna elevada, empurre o quadril para cima com a perna de apoio.',
-    technical_notes: 'Excelente para ativação isolada e nivelamento de força unilateral do glúteo máximo.'
   },
   {
     id: 'ex-cadeira-abdutora',
@@ -1297,24 +1170,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     technical_notes: 'A leve rotação externa alinha com as fibras oblíquas do glúteo máximo.'
   },
   {
-    id: 'ex-gluteo-caneleira-4-apoios',
-    name: 'Glúteo 4 Apoios com Caneleira no Solo',
-    muscle_group: 'Glúteos',
-    secondary_muscles: ['Posteriores de coxa'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Musculação',
-    execution_type: 'unilateral',
-    mechanics: 'peso livre',
-    level: 'iniciante',
-    instructions: 'Em 4 apoios com cotovelos apoiados, eleve o calcanhar em direção ao teto mantendo o joelho a 90 graus.',
-    technical_notes: 'Mantenha a pelve alinhada sem girar o quadril para os lados.'
-  },
-
-  // ==========================================
-  // 12. ADUTORES (3 variações)
-  // ==========================================
-  {
     id: 'ex-cadeira-adutora',
     name: 'Cadeira Adutora na Máquina',
     muscle_group: 'Adutores',
@@ -1342,56 +1197,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Em pé ao lado da polia com o cabo preso na perna proximal, puxe a perna para dentro cruzando à frente.',
     technical_notes: 'Mantenha o tronco ereto segurando no suporte.'
   },
-  {
-    id: 'ex-agachamento-sumo',
-    name: 'Agachamento Sumô com Halter no Step',
-    muscle_group: 'Adutores',
-    secondary_muscles: ['Glúteos', 'Quadríceps'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Halteres',
-    category: 'Musculação',
-    execution_type: 'bilateral',
-    mechanics: 'peso livre',
-    level: 'intermediario',
-    instructions: 'Pés bem afastados apontando para fora em 45 graus, segure o halter entre as pernas e agache profundo.',
-    technical_notes: 'Os steps aumentam a amplitude de descida sem bater o halter no chão.'
-  },
-
-  // ==========================================
-  // 13. ABDUTORES (2 variações)
-  // ==========================================
-  {
-    id: 'ex-abducao-polia-baixa',
-    name: 'Abdução de Quadril na Polia Baixa',
-    muscle_group: 'Abdutores',
-    secondary_muscles: ['Glúteo Médio', 'Tensor da Fáscia Lata'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Cabo / Polia',
-    category: 'Musculação',
-    execution_type: 'unilateral',
-    mechanics: 'cabo/polia',
-    level: 'iniciante',
-    instructions: 'De lado para a polia com o cabo na perna distal, afaste a perna lateralmente com o pé apontando para frente.',
-    technical_notes: 'Não gire a ponta do pé para fora para manter a ativação no glúteo médio.'
-  },
-  {
-    id: 'ex-abducao-solo-elastico',
-    name: 'Abdução de Quadril no Solo com Mini-Band (Clamshell / Ostra)',
-    muscle_group: 'Abdutores',
-    secondary_muscles: ['Glúteo Médio', 'Rotadores Externos'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Elástico',
-    category: 'Funcional',
-    execution_type: 'unilateral',
-    mechanics: 'elástico',
-    level: 'iniciante',
-    instructions: 'Deitado de lado com joelhos a 90 graus e elástico nas coxas, abra o joelho de cima mantendo pés unidos.',
-    technical_notes: 'Exercício chave para estabilidade do joelho contra o valgo dinâmico.'
-  },
-
-  // ==========================================
-  // 14. PANTURRILHAS (4 variações)
-  // ==========================================
   {
     id: 'ex-gemeos-smith',
     name: 'Gêmeos em Pé no Smith Machine sobre Degrau',
@@ -1435,24 +1240,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     technical_notes: 'Mantenha as travas de segurança acionadas para evitar riscos de deslizamento dos pés.'
   },
   {
-    id: 'ex-panturrilha-unilateral-halter',
-    name: 'Panturrilha Unilateral em Pé com Halter',
-    muscle_group: 'Panturrilhas',
-    secondary_muscles: ['Gastrocnêmio', 'Sóleo'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Halteres',
-    category: 'Musculação',
-    execution_type: 'unilateral',
-    mechanics: 'peso livre',
-    level: 'iniciante',
-    instructions: 'Apoie um pé no degrau segurando um halter do mesmo lado e a outra mão em suporte para equilíbrio.',
-    technical_notes: 'Excelente para equalizar força entre as duas panturrilhas.'
-  },
-
-  // ==========================================
-  // 15. CORPO INTEIRO & COMPOSTOS (4 variações)
-  // ==========================================
-  {
     id: 'ex-levantamento-terra-convencional',
     name: 'Levantamento Terra Convencional com Barra',
     muscle_group: 'Corpo inteiro',
@@ -1494,24 +1281,6 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Do apoio em pé, agache, jogue os pés para trás em prancha, toque o peito no chão, puxe os pés e salte estendendo os braços acima.',
     technical_notes: 'Exercício metabólico de alta demanda cardiorrespiratória e de potência.'
   },
-  {
-    id: 'ex-thruster-halteres',
-    name: 'Thruster (Agachamento + Desenvolvimento) com Halteres',
-    muscle_group: 'Corpo inteiro',
-    secondary_muscles: ['Quadríceps', 'Glúteos', 'Ombros', 'Tríceps'],
-    body_region: 'Corpo Inteiro',
-    equipment: 'Halteres',
-    category: 'Funcional',
-    execution_type: 'bilateral',
-    mechanics: 'composto',
-    level: 'intermediario',
-    instructions: 'Segure os halteres nos ombros, realize um agachamento completo e utilize o impulso da subida para empurrar os pesos acima da cabeça.',
-    technical_notes: 'Transição fluida entre agachamento e desenvolvimento em um único tempo.'
-  },
-
-  // ==========================================
-  // 16. CARDIORRESPIRATÓRIOS (7 variações)
-  // ==========================================
   {
     id: 'ex-esteira-hiit',
     name: 'Corrida / Caminhada Inclinada na Esteira',
@@ -1596,173 +1365,15 @@ export const DEFAULT_EXERCISE_LIBRARY: SeedExercise[] = [
     instructions: 'Salte nas pontas dos pés com rotação rápida dos punhos.',
     technical_notes: 'Aprimora rigidez tendínea do tornozelo e ritmo cardiorrespiratório.'
   },
-  {
-    id: 'ex-remo-indoor',
-    name: 'Remo Indoor (Ergômetro)',
-    muscle_group: 'Cardiorrespiratórios',
-    secondary_muscles: ['Costas', 'Pernas', 'Bíceps', 'Core'],
-    body_region: 'Corpo Inteiro',
-    equipment: 'Máquina',
-    category: 'Cardiorrespiratório',
-    execution_type: 'bilateral',
-    mechanics: 'aeróbico',
-    level: 'intermediario',
-    instructions: 'Inicie pela empurrada das pernas, incline o tronco e finalize puxando com os braços.',
-    technical_notes: 'Recruta mais de 80% da massa muscular do corpo em um único ciclo de remada.'
-  },
-
-  // ==========================================
-  // 17. MOBILIDADE (5 variações)
-  // ==========================================
-  {
-    id: 'ex-mobilidade-quadril-9090',
-    name: 'Mobilidade de Quadril 90/90',
-    muscle_group: 'Mobilidade',
-    secondary_muscles: ['Rotadores Internos e Externos do Quadril'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Mobilidade',
-    execution_type: 'bilateral',
-    mechanics: 'mobilidade',
-    level: 'todos',
-    instructions: 'Sentado no chão com ambas as pernas flexionadas a 90 graus (uma na frente e outra ao lado), alterne os lados girando o quadril.',
-    technical_notes: 'Melhora amplitude de agachamento profundo e previne dores lombares.'
-  },
-  {
-    id: 'ex-mobilidade-tornozelo-parede',
-    name: 'Mobilidade de Tornozelo contra a Parede (Dorsiflexão)',
-    muscle_group: 'Mobilidade',
-    secondary_muscles: ['Sóleo', 'Tendão de Aquiles'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Mobilidade',
-    execution_type: 'unilateral',
-    mechanics: 'mobilidade',
-    level: 'todos',
-    instructions: 'Pé a alguns centímetros da parede, avance o joelho em direção à parede sem tirar o calcanhar do chão.',
-    technical_notes: 'Dorsiflexão adequada é pré-requisito indispensável para agachamento seguro.'
-  },
-  {
-    id: 'ex-mobilidade-toracica-4apoios',
-    name: 'Rotação Torácica em 4 Apoios',
-    muscle_group: 'Mobilidade',
-    secondary_muscles: ['Coluna Torácica', 'Romboides'],
-    body_region: 'Tronco / Core',
-    equipment: 'Peso Corporal',
-    category: 'Mobilidade',
-    execution_type: 'unilateral',
-    mechanics: 'mobilidade',
-    level: 'todos',
-    instructions: 'Em 4 apoios com uma mão atrás da cabeça, gire o tronco apontando o cotovelo para o teto e depois para baixo.',
-    technical_notes: 'Libera rigidez da coluna dorsal causada pelo sedentarismo postural.'
-  },
-  {
-    id: 'ex-gato-camelo',
-    name: 'Gato-Camelo (Cat-Cow) Mobilidade da Coluna',
-    muscle_group: 'Mobilidade',
-    secondary_muscles: ['Toda a Coluna Vertebral'],
-    body_region: 'Tronco / Core',
-    equipment: 'Peso Corporal',
-    category: 'Mobilidade',
-    execution_type: 'bilateral',
-    mechanics: 'mobilidade',
-    level: 'todos',
-    instructions: 'Em 4 apoios, alterne suavemente entre arquear as costas para cima e empurrar o abdômen para o chão com elevação da cabeça.',
-    technical_notes: 'Mobilização articular suave indicada para aquecimento e alívio de tensões axiais.'
-  },
-  {
-    id: 'ex-passagem-bacao-elastico',
-    name: 'Passagem de Bastão / Elástico para Ombros (Dislocates)',
-    muscle_group: 'Mobilidade',
-    secondary_muscles: ['Cintura Escapular', 'Peitoral'],
-    body_region: 'Membros Superiores',
-    equipment: 'Elástico',
-    category: 'Mobilidade',
-    execution_type: 'bilateral',
-    mechanics: 'mobilidade',
-    level: 'todos',
-    instructions: 'Segurando um bastão ou elástico com pegada aberta, passe os braços estendidos da frente para trás do corpo e retorne.',
-    technical_notes: 'Aumenta flexibilidade da cápsula anterior e peitoral sem forçar o manguito.'
-  },
-
-  // ==========================================
-  // 18. ALONGAMENTOS (5 variações)
-  // ==========================================
-  {
-    id: 'ex-alongamento-isquiotibiais',
-    name: 'Alongamento Estático de Isquiotibiais (Posteriores)',
-    muscle_group: 'Alongamentos',
-    secondary_muscles: ['Posteriores de coxa'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Alongamento',
-    execution_type: 'bilateral',
-    mechanics: 'flexibilidade',
-    level: 'todos',
-    instructions: 'Sentado com pernas estendidas à frente, incline o tronco em direção aos pés até sentir tensão confortável nos posteriores, segurando por 30 segundos.',
-    technical_notes: 'Mantenha respiração profunda e evite puxões bruscos.'
-  },
-  {
-    id: 'ex-alongamento-quadriceps',
-    name: 'Alongamento em Pé de Quadríceps',
-    muscle_group: 'Alongamentos',
-    secondary_muscles: ['Quadríceps', 'Psoas'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Alongamento',
-    execution_type: 'unilateral',
-    mechanics: 'flexibilidade',
-    level: 'todos',
-    instructions: 'Em pé, flexione um joelho segurando o tornozelo atrás e aproxime o calcanhar do glúteo mantendo os joelhos alinhados.',
-    technical_notes: 'Projete levemente a pelve para frente para alongar o reto femoral.'
-  },
-  {
-    id: 'ex-alongamento-peitoral-parede',
-    name: 'Alongamento de Peitoral no Batente / Parede',
-    muscle_group: 'Alongamentos',
-    secondary_muscles: ['Peitoral', 'Bíceps'],
-    body_region: 'Membros Superiores',
-    equipment: 'Peso Corporal',
-    category: 'Alongamento',
-    execution_type: 'unilateral',
-    mechanics: 'flexibilidade',
-    level: 'todos',
-    instructions: 'Apoie o antebraço a 90 graus na parede ou batente e gire o tronco para o lado oposto suavemente.',
-    technical_notes: 'Alivia retração peitoral típica de postura cifótica de escritório.'
-  },
-  {
-    id: 'ex-alongamento-gluteo-piriforme',
-    name: 'Alongamento de Glúteo e Piriforme Deitado (Figura 4)',
-    muscle_group: 'Alongamentos',
-    secondary_muscles: ['Glúteos', 'Piriforme'],
-    body_region: 'Membros Inferiores',
-    equipment: 'Peso Corporal',
-    category: 'Alongamento',
-    execution_type: 'unilateral',
-    mechanics: 'flexibilidade',
-    level: 'todos',
-    instructions: 'Deitado de barriga para cima, cruze um tornozelo sobre o joelho oposto e puxe a coxa em direção ao peito.',
-    technical_notes: 'Essencial para descompressão do nervo ciático e alívio do piriforme.'
-  },
-  {
-    id: 'ex-alongamento-dorsal-barra',
-    name: 'Alongamento Suspenso de Grande Dorsal na Barra',
-    muscle_group: 'Alongamentos',
-    secondary_muscles: ['Grande Dorsal', 'Redondo Maior', 'Ombros'],
-    body_region: 'Membros Superiores',
-    equipment: 'Peso Corporal',
-    category: 'Alongamento',
-    execution_type: 'bilateral',
-    mechanics: 'flexibilidade',
-    level: 'todos',
-    instructions: 'Segure na barra fixa e relaxe o peso do corpo deixando a gravidade descomprimir as escápulas e a coluna toracolombar.',
-    technical_notes: 'Descompressão espinhal poderosa pós-treino.'
-  }
 ];
 
 DEFAULT_EXERCISE_LIBRARY.push(...EXPANDED_EXERCISES);
 DEFAULT_EXERCISE_LIBRARY.push(...PRIORITY_EXPANSION_EXERCISES);
-for (const ex of DEFAULT_EXERCISE_LIBRARY) ex.photo_url = licensedPhotos.find(photo => photo.exercise_id === ex.id)?.photo_url || reviewedMedia.find(media => media.exercise_id === ex.id)?.photo_url || `/exercise-fallbacks/${ex.id}.webp`;
+for (const ex of DEFAULT_EXERCISE_LIBRARY) {
+  const photo = licensedPhotos.find(p => p.exercise_id === ex.id);
+  const media = reviewedMedia.find(m => m.exercise_id === ex.id);
+  ex.photo_url = photo?.photo_url || media?.photo_url;
+}
 
 export function seedExerciseLibrary(rawDb: any): void {
   try {
@@ -1874,22 +1485,26 @@ export function seedExerciseLibrary(rawDb: any): void {
         );
       }
       const duration = rawDb.prepare("UPDATE personal_exercises SET suggested_duration = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND suggested_duration IS NULL");
-      const fallback = rawDb.prepare("UPDATE personal_exercises SET photo_url = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND (photo_url IS NULL OR photo_url = '')");
-      for (const ex of DEFAULT_EXERCISE_LIBRARY) fallback.run(ex.photo_url, ex.id);
-      const upgradePhoto = rawDb.prepare("UPDATE personal_exercises SET photo_url = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND photo_url = ?");
-      for (const photo of licensedPhotos) upgradePhoto.run(photo.photo_url, photo.exercise_id, `/exercise-fallbacks/${photo.exercise_id}.webp`);
-      // Replace only our generated placeholder; preserve real photos and attachments.
-      for (const media of reviewedMedia) {
-        if (media.photo_url && !licensedPhotos.some(photo => photo.exercise_id === media.exercise_id))
-          upgradePhoto.run(media.photo_url, media.exercise_id, `/exercise-fallbacks/${media.exercise_id}.webp`);
-      }
-      // Revert standard global exercises without reviewed media back to fallback placeholder
-      const revertToFallback = rawDb.prepare("UPDATE personal_exercises SET photo_url = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0 AND photo_url LIKE '/exercise-media/%'");
+      // Sincroniza fotos e GIFs reais para todos os exercícios do catálogo oficial
+      const syncPhoto = rawDb.prepare("UPDATE personal_exercises SET photo_url = ? WHERE id = ? AND tenant_id = 'global' AND is_custom = 0");
       for (const ex of DEFAULT_EXERCISE_LIBRARY) {
-        if (!reviewedMedia.some(m => m.exercise_id === ex.id && m.photo_url)) {
-          revertToFallback.run(`/exercise-fallbacks/${ex.id}.webp`, ex.id);
+        if (ex.photo_url) {
+          syncPhoto.run(ex.photo_url, ex.id);
         }
       }
+      // Remove exercícios globais antigos que não pertencem ao catálogo com mídia verificada
+      const validIdSet = new Set(DEFAULT_EXERCISE_LIBRARY.map(e => e.id));
+      const allGlobalExercises = rawDb.prepare("SELECT id FROM personal_exercises WHERE tenant_id = 'global' AND is_custom = 0").all() as { id: string }[];
+      const obsoleteExercises = allGlobalExercises.filter(e => !validIdSet.has(e.id));
+      if (obsoleteExercises.length > 0) {
+        const deleteStmt = rawDb.prepare("DELETE FROM personal_exercises WHERE tenant_id = 'global' AND is_custom = 0 AND id = ?");
+        for (const obs of obsoleteExercises) {
+          deleteStmt.run(obs.id);
+        }
+      }
+      // Purga qualquer registro global que ainda aponte para fallbacks ou sem foto
+      rawDb.exec("DELETE FROM personal_exercises WHERE tenant_id = 'global' AND is_custom = 0 AND (photo_url LIKE '/exercise-fallbacks/%' OR photo_url IS NULL OR photo_url = '')");
+      // Fallback loop removed - all standard exercises have genuine media
       // Keep classifications up to date for standard global exercises
       const syncClassification = rawDb.prepare(`
         UPDATE personal_exercises SET
