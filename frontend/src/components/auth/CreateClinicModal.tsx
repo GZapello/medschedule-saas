@@ -11,6 +11,7 @@ import {
   trackSignupSubmit,
   trackSignupError
 } from '../../utils/registrationAnalytics';
+import { trackGoogleConversionSignup } from '../../utils/googleAds';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -733,6 +734,13 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
             planCode: plan.code,
             professionCode: formData.profession || undefined
           });
+          trackGoogleConversionSignup({
+            accountId: data.user.id,
+            planCode: plan.code,
+            isTrial: data.isTrial === true,
+            trialPeriodDays: data.isTrial === true ? plan.trial_days : undefined,
+            value: data.isTrial === true ? 0 : plan.monthly_price
+          });
         }
         loginWithToken(data.token, data.user, data.tenant);
 
@@ -758,6 +766,12 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         trackCompletedRegistration(data.clinicId, undefined, {
           planCode: plan.code,
           professionCode: formData.profession || undefined
+        });
+        trackGoogleConversionSignup({
+          accountId: data.clinicId,
+          planCode: plan.code,
+          isTrial: false,
+          value: plan.monthly_price
         });
         setSuccessData(data);
       } else {

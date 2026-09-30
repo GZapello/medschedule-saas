@@ -40,25 +40,28 @@ export function getStoredCookieConsent(): CookieConsentState | null {
 /**
  * Atualiza o Google Consent Mode v2 via gtag('consent', 'update', ...)
  */
-export function applyGtagConsent(analyticsGranted: boolean): void {
+export function applyGtagConsent(analyticsGranted: boolean, marketingGranted: boolean = false): void {
   if (typeof window === 'undefined') return;
+
+  const analyticsVal = analyticsGranted ? 'granted' : 'denied';
+  const marketingVal = marketingGranted ? 'granted' : 'denied';
 
   if (typeof window.gtag === 'function') {
     window.gtag('consent', 'update', {
-      analytics_storage: analyticsGranted ? 'granted' : 'denied',
-      ad_storage: 'denied',
-      ad_user_data: 'denied',
-      ad_personalization: 'denied'
+      analytics_storage: analyticsVal,
+      ad_storage: marketingVal,
+      ad_user_data: marketingVal,
+      ad_personalization: marketingVal
     });
   } else if (Array.isArray(window.dataLayer)) {
     window.dataLayer.push([
       'consent',
       'update',
       {
-        analytics_storage: analyticsGranted ? 'granted' : 'denied',
-        ad_storage: 'denied',
-        ad_user_data: 'denied',
-        ad_personalization: 'denied'
+        analytics_storage: analyticsVal,
+        ad_storage: marketingVal,
+        ad_user_data: marketingVal,
+        ad_personalization: marketingVal
       }
     ]);
   }
@@ -80,7 +83,7 @@ export function saveCookieConsent(choices: { analytics: boolean; marketing?: boo
     localStorage.setItem(COOKIE_CONSENT_STORAGE_KEY, JSON.stringify(consent));
   } catch (_) {}
 
-  applyGtagConsent(consent.analytics);
+  applyGtagConsent(consent.analytics, consent.marketing);
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('zemda-cookie-consent-changed', { detail: consent }));

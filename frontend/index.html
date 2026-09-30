@@ -28,9 +28,12 @@
         var rawConsent = localStorage.getItem('zemda_cookie_consent');
         if (rawConsent) {
           var parsedConsent = JSON.parse(rawConsent);
-          if (parsedConsent && parsedConsent.analytics === true) {
+          if (parsedConsent) {
             gtag('consent', 'update', {
-              'analytics_storage': 'granted'
+              'analytics_storage': parsedConsent.analytics === true ? 'granted' : 'denied',
+              'ad_storage': parsedConsent.marketing === true ? 'granted' : 'denied',
+              'ad_user_data': parsedConsent.marketing === true ? 'granted' : 'denied',
+              'ad_personalization': parsedConsent.marketing === true ? 'granted' : 'denied'
             });
           }
         }

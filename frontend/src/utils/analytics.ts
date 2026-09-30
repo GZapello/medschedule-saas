@@ -80,3 +80,6 @@ export function trackSafeEvent(action: string, category: string = 'general'): vo
     });
   }
 }
+
+// Google Ads / Google Tag Conversion tracking
+export { trackGoogleEvent, trackGoogleConversionSignup, GOOGLE_TAG_ID } from './googleAds';
