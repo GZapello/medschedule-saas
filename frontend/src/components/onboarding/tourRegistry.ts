@@ -25,14 +25,14 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
   // PROFISSIONAL SOLO (Consultório Próprio / Autônomo)
   solo_professional: {
     id: 'solo_professional',
-    name: 'Tour do Profissional Autônomo',
-    description: 'Conheça o fluxo do seu dia a dia clínico e financeiro.',
+    name: 'Tour Geral do Zemda',
+    description: 'Conheça o fluxo do seu dia a dia clínico e gerencial.',
     steps: [
       {
         id: 'solo_dashboard',
         target: '[data-tour="nav-dashboard"]',
         route: 'dashboard',
-        title: 'Painel Geral',
+        title: '1. Painel Geral (Dashboard)',
         description: 'Acompanhe seus atendimentos do dia, faltas, resumo de agenda e alertas importantes em tempo real.',
         position: 'right'
       },
@@ -40,7 +40,7 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
         id: 'solo_calendar',
         target: '[data-tour="nav-calendar"]',
         route: 'calendar',
-        title: 'Agenda Inteligente',
+        title: '2. Agenda Interativa',
         description: 'Organize seus horários, remarque consultas, envie lembretes e inicie atendimentos diretamente da grade.',
         position: 'right'
       },
@@ -48,38 +48,65 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
         id: 'solo_patients',
         target: '[data-tour="nav-patients"]',
         route: 'patients',
-        title: 'Gestão de Pacientes',
-        description: 'Cadastre pacientes, visualize dados de contato, histórico de consultas e anexos.',
+        title: '3. Gestão de Pacientes',
+        description: 'Cadastre pacientes, visualize dados de contato, histórico integrado de consultas e anexos.',
         position: 'right'
+      },
+      {
+        id: 'solo_clinical',
+        target: '[data-tour="nav-clinical"]',
+        route: 'clinical',
+        requiredRoles: ['professional', 'clinic_admin'],
+        title: '4. Prontuário & Evolução',
+        description: 'Linha do tempo contínua com histórico clínico, prontuários anteriores e autosave garantido.',
+        position: 'right',
+        hideIfNoTarget: true
       },
       {
         id: 'solo_module',
         target: '[data-tour="nav-clinical-module"]',
-        title: 'Seu Módulo Clínico',
-        description: 'Seu ambiente especializado com ferramentas personalizadas para sua profissão e conduta clínica.',
-        position: 'right'
+        requiredRoles: ['professional', 'clinic_admin'],
+        title: '5. Módulo Profissional Especializado',
+        description: 'Seu ambiente exclusivo com fichas, escalas e condutas personalizadas para sua especialidade.',
+        position: 'right',
+        hideIfNoTarget: true
+      },
+      {
+        id: 'solo_zemda360',
+        target: '[data-tour="nav-zemda-body"]',
+        route: 'zemda-body',
+        requiredRoles: ['professional', 'clinic_admin'],
+        title: '6. Mapeamento Zemda360',
+        description: 'Visualização anatômica tridimensional com marcação de pontos e planejamento terapêutico visual.',
+        position: 'right',
+        hideIfNoTarget: true
+      },
+      {
+        id: 'solo_exams',
+        target: '[data-tour="nav-pending-exams"]',
+        route: 'pending-exams',
+        title: '7. Documentos & Exames',
+        description: 'Acompanhe laudos e exames pendentes a receber dos seus pacientes.',
+        position: 'right',
+        hideIfNoTarget: true
       },
       {
         id: 'solo_financial',
         target: '[data-tour="nav-financial"]',
         route: 'financial',
-        title: 'Controle Financeiro',
-        description: 'Acompanhe recebimentos, emita recibos oficiais e visualize o fluxo de caixa do seu consultório.',
-        position: 'right'
-      },
-      {
-        id: 'solo_ai',
-        target: '[data-tour="nav-ai-assistant"]',
-        title: 'Assistente Inteligente Zemda',
-        description: 'Utilize a IA para estruturar evoluções clínicas, transcrever áudios e otimizar seu tempo.',
-        position: 'bottom'
+        requiredPermission: 'view_financial',
+        requiredRoles: ['clinic_admin', 'superadmin'],
+        title: '8. Gestão Financeira',
+        description: 'Controle de recebimentos, fluxo de caixa e emissão de recibos autorizados.',
+        position: 'right',
+        hideIfNoTarget: true
       },
       {
         id: 'solo_settings',
         target: '[data-tour="nav-settings"]',
         route: 'settings',
-        title: 'Configurações e Perfil',
-        description: 'Personalize horários de funcionamento, logotipo, modelos de documentos e preferências de segurança.',
+        title: 'Configurações da Conta',
+        description: 'Personalize horários de funcionamento, logotipo, modelos de documentos e dados da conta.',
         position: 'right'
       }
     ]
@@ -116,20 +143,13 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
         position: 'right'
       },
       {
-        id: 'admin_team',
-        target: '[data-tour="nav-professionals"]',
-        route: 'professionals',
-        title: 'Corpo Clínico & Escalas',
-        description: 'Gerencie profissionais cadastrados, horários de atendimento, comissões e especialidades.',
-        position: 'right'
-      },
-      {
         id: 'admin_staff',
         target: '[data-tour="nav-staff"]',
         route: 'staff',
         title: 'Equipe & Permissões',
         description: 'Defina com precisão os papéis de cada colaborador (recepção, financeiro) com controle RBAC seguro.',
-        position: 'right'
+        position: 'right',
+        hideIfNoTarget: true
       },
       {
         id: 'admin_services',
@@ -137,7 +157,8 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
         route: 'services',
         title: 'Serviços & Salas',
         description: 'Catalogue procedimentos, tempos médios de consulta e disponibilidade das salas físicas.',
-        position: 'right'
+        position: 'right',
+        hideIfNoTarget: true
       },
       {
         id: 'admin_financial',
@@ -145,15 +166,8 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
         route: 'financial',
         title: 'Gestão Financeira & Caixa',
         description: 'Contas a receber, controle de caixa diário, conciliação e integração com Asaas.',
-        position: 'right'
-      },
-      {
-        id: 'admin_payroll',
-        target: '[data-tour="nav-payroll"]',
-        route: 'payroll',
-        title: 'Comissões & Repasses',
-        description: 'Cálculo automático de repasses para profissionais por percentual ou valor fixo.',
-        position: 'right'
+        position: 'right',
+        hideIfNoTarget: true
       },
       {
         id: 'admin_inventory',
@@ -161,7 +175,8 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
         route: 'inventory',
         title: 'Estoque de Insumos',
         description: 'Controle de materiais, alertas de reposição mínima e movimentações de estoque.',
-        position: 'right'
+        position: 'right',
+        hideIfNoTarget: true
       },
       {
         id: 'admin_reports',
@@ -169,7 +184,8 @@ export const TOURS_BY_PROFILE: Record<string, TourDefinition> = {
         route: 'reports',
         title: 'Relatórios & Exportação',
         description: 'Relatórios analíticos de produtividade e faturamento em planilhas ou PDF.',
-        position: 'right'
+        position: 'right',
+        hideIfNoTarget: true
       },
       {
         id: 'admin_settings',
@@ -645,8 +661,8 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
         id: 'fisio_pain',
         target: '[data-tour="tab-pain_zemdabody"]',
         route: 'zemda-fisio',
-        title: 'Mapa da Dor & ZemdaBody',
-        description: 'Localização anatômica precisa da dor (EVA) integrada ao mapa corporal.',
+        title: 'Mapa da Dor & Zemda360',
+        description: 'Localização anatômica precisa da dor (EVA) integrada ao mapeamento corporal interativo.',
         position: 'bottom'
       },
       {
@@ -843,18 +859,209 @@ export const MODULE_TOURS: Record<string, TourDefinition> = {
     ]
   },
 
-  // ZemdaBody
+  // ZemdaMed
+  zemda_med: {
+    id: 'zemda_med',
+    name: 'ZemdaMed • Medicina',
+    description: 'Guia prático para atendimento médico, anamnese clínica, exame físico, SOAP e conduta.',
+    steps: [
+      {
+        id: 'med_patient',
+        target: '[data-tour="medical-patient-select"]',
+        route: 'zemda-med',
+        title: 'Seleção do Paciente',
+        description: 'Selecione o paciente para carregar histórico, alergias, dados vitais e atendimentos anteriores.',
+        position: 'bottom',
+        hideIfNoTarget: true
+      },
+      {
+        id: 'med_specialty',
+        target: '[data-tour="tab-specialty"]',
+        route: 'zemda-med',
+        title: 'Módulo da Especialidade',
+        description: 'Acesse campos customizados para sua especialidade médica cadastrada.',
+        position: 'bottom',
+        hideIfNoTarget: true
+      },
+      {
+        id: 'med_anamnese',
+        target: '[data-tour="tab-anamnesis"]',
+        route: 'zemda-med',
+        title: 'Anamnese Completa',
+        description: 'Queixa principal, HMA, antecedentes pessoais, familiares, hábitos de vida e medicações em uso.',
+        position: 'bottom'
+      },
+      {
+        id: 'med_assessments',
+        target: '[data-tour="tab-assessments"]',
+        route: 'zemda-med',
+        title: 'Avaliações Clínicas',
+        description: 'Questionários e escores clínicos validados integrados ao prontuário médico.',
+        position: 'bottom'
+      },
+      {
+        id: 'med_physical_exam',
+        target: '[data-tour="tab-physical_exam"]',
+        route: 'zemda-med',
+        title: 'Exame Físico Estruturado',
+        description: 'Sinais vitais (PA, FC, FR, SpO2, Temperatura, Glicemia) e exame segmentar detalhado.',
+        position: 'bottom'
+      },
+      {
+        id: 'med_soap',
+        target: '[data-tour="tab-soap"]',
+        route: 'zemda-med',
+        title: 'Evolução SOAP',
+        description: 'Registro no padrão Subjetivo, Objetivo, Avaliação e Plano com autosave contínuo.',
+        position: 'bottom'
+      },
+      {
+        id: 'med_diagnosis',
+        target: '[data-tour="tab-diagnosis"]',
+        route: 'zemda-med',
+        title: 'Hipótese Diagnóstica (CID-10)',
+        description: 'Busca rápida de diagnósticos por código ou descrição com suporte a múltiplos CIDs.',
+        position: 'bottom'
+      },
+      {
+        id: 'med_conduct',
+        target: '[data-tour="tab-conduct"]',
+        route: 'zemda-med',
+        title: 'Prescrição & Conduta',
+        description: 'Emissão de prescrições farmacológicas, pedidos de exames complementares e atestados médicos.',
+        position: 'bottom'
+      },
+      {
+        id: 'med_history',
+        target: '[data-tour="tab-history"]',
+        route: 'zemda-med',
+        title: 'Histórico & Linha do Tempo',
+        description: 'Acompanhe a evolução longitudinal de consultas, prescrições e exames anteriores.',
+        position: 'bottom'
+      },
+      {
+        id: 'med_finish',
+        target: '[data-tour="clinical-finish"]',
+        route: 'zemda-med',
+        title: 'Finalização Segura',
+        description: 'Encerre o atendimento médico com assinatura digital e sincronização segura.',
+        position: 'bottom',
+        hideIfNoTarget: true
+      }
+    ]
+  },
+
+  // ZemdaEstetic
+  zemda_estetic: {
+    id: 'zemda_estetic',
+    name: 'ZemdaEstetic • Estética Integrada',
+    description: 'Guia para avaliação facial, corporal, capilar, procedimentos e registro fotográfico.',
+    steps: [
+      {
+        id: 'estetic_patient',
+        target: '[data-tour="estetic-patient-select"]',
+        route: 'zemda-estetic',
+        title: 'Identificação do Cliente',
+        description: 'Selecione o cliente para visualizar ficha estética, queixas principais e histórico de sessões.',
+        position: 'bottom',
+        hideIfNoTarget: true
+      },
+      {
+        id: 'estetic_area',
+        target: '[data-tour="estetic-area-selector"]',
+        route: 'zemda-estetic',
+        title: 'Área de Atuação (Facial / Corporal / Capilar)',
+        description: 'Alterne rapidamente entre os modos Facial, Corporal e Capilar com protocolos personalizados.',
+        position: 'bottom',
+        hideIfNoTarget: true
+      },
+      {
+        id: 'estetic_assessment',
+        target: '[data-tour="tab-assessment"]',
+        route: 'zemda-estetic',
+        title: 'Avaliação & Anamnese Estética',
+        description: 'Fototipo de Fitzpatrick, biótipo cutâneo, queixas principais, contraindicações e hábitos.',
+        position: 'bottom'
+      },
+      {
+        id: 'estetic_photos',
+        target: '[data-tour="tab-photos"]',
+        route: 'zemda-estetic',
+        title: 'Mapeamento Fotográfico',
+        description: 'Upload e organização de fotos clínicas padronizadas por ângulos e sessões.',
+        position: 'bottom'
+      },
+      {
+        id: 'estetic_planning',
+        target: '[data-tour="tab-planning"]',
+        route: 'zemda-estetic',
+        title: 'Planejamento Terapêutico',
+        description: 'Definição de protocolos, número de sessões estimadas, produtos e cronograma.',
+        position: 'bottom'
+      },
+      {
+        id: 'estetic_procedures',
+        target: '[data-tour="tab-procedures"]',
+        route: 'zemda-estetic',
+        title: 'Procedimentos & Aplicações',
+        description: 'Registro detalhado de toxina botulínica, preenchedores, bioestimuladores, peelings e lasers.',
+        position: 'bottom'
+      },
+      {
+        id: 'estetic_zemda360',
+        target: '[data-tour="tab-zemda360"]',
+        route: 'zemda-estetic',
+        title: 'Zemda360 Integrado',
+        description: 'Marcação anatômica visual dos pontos de aplicação facial e corporal com mapa visual de dosagens.',
+        position: 'bottom'
+      },
+      {
+        id: 'estetic_evolutions',
+        target: '[data-tour="tab-evolutions"]',
+        route: 'zemda-estetic',
+        title: 'Evolução & Intercorrências',
+        description: 'Acompanhe a cicatrização, respostas teciduais e intercorrências de forma estruturada.',
+        position: 'bottom'
+      },
+      {
+        id: 'estetic_returns',
+        target: '[data-tour="tab-returns"]',
+        route: 'zemda-estetic',
+        title: 'Retornos & Retoques',
+        description: 'Agendamento de retornos preventivos e anotação de retoques necessários.',
+        position: 'bottom'
+      },
+      {
+        id: 'estetic_before_after',
+        target: '[data-tour="tab-before_after"]',
+        route: 'zemda-estetic',
+        title: 'Comparativo Antes e Depois',
+        description: 'Ferramenta interativa de comparação lado a lado para demonstrar os resultados ao cliente.',
+        position: 'bottom'
+      },
+      {
+        id: 'estetic_history',
+        target: '[data-tour="tab-history"]',
+        route: 'zemda-estetic',
+        title: 'Histórico & Documentos',
+        description: 'Linha do tempo consolidada e termos de consentimento livre e esclarecido (TCLE) assinados.',
+        position: 'bottom'
+      }
+    ]
+  },
+
+  // Zemda360
   zemda_body: {
     id: 'zemda_body',
-    name: 'Zemda360 • Mapeamento Visual & Anatômico',
-    description: 'Guia para marcação anatômica, caneta digital, borracha e planos.',
+    name: 'Zemda360 • Mapeamento Visual e Anatômico Integrado',
+    description: 'Guia para marcação anatômica, caneta digital, borracha e planos terapêuticos.',
     steps: [
       {
         id: 'body_canvas',
         target: '[data-tour="body-canvas-container"]',
         route: 'zemda-body',
         title: 'Modelo Anatômico 360°',
-        description: 'Alterne entre visão anterior, posterior, lateral e modelos anatômicos masculino e feminino.',
+        description: 'Alterne entre visão anterior, posterior, lateral e modelos anatômicos com alta precisão.',
         position: 'bottom'
       },
       {
@@ -939,6 +1146,8 @@ export interface ClinicalModuleInfo {
 }
 
 export const ALL_CLINICAL_MODULES: ClinicalModuleInfo[] = [
+  { id: 'zemda_med', name: 'ZemdaMed (Medicina)', route: 'zemda-med', professionLabel: 'Medicina' },
+  { id: 'zemda_estetic', name: 'ZemdaEstetic (Estética)', route: 'zemda-estetic', professionLabel: 'Estética' },
   { id: 'zemda_fono', name: 'ZemdaFono (Fonoaudiologia)', route: 'zemda-fono', professionLabel: 'Fonoaudiologia' },
   { id: 'zemda_psico', name: 'ZemdaPsico (Psicologia)', route: 'zemda-psico', professionLabel: 'Psicologia' },
   { id: 'zemda_odonto', name: 'ZemdaOdonto (Odontologia)', route: 'zemda-odonto', professionLabel: 'Odontologia' },
@@ -950,6 +1159,10 @@ export const ALL_CLINICAL_MODULES: ClinicalModuleInfo[] = [
 ];
 
 export interface AuthFlagsInput {
+  isDoctor?: boolean;
+  isZemdaMed?: boolean;
+  isEsthetician?: boolean;
+  isZemdaEstetic?: boolean;
   isSpeechTherapist?: boolean;
   isPsychologist?: boolean;
   isDentist?: boolean;
@@ -972,6 +1185,8 @@ export function getUserAuthorizedClinicalModules(
 
   // 1. Verificação via flags de autenticação ativas (com mútua exclusividade do AuthContext)
   if (authFlags) {
+    if (authFlags.isDoctor || authFlags.isZemdaMed) authorized.add('zemda_med');
+    if (authFlags.isEsthetician || authFlags.isZemdaEstetic) authorized.add('zemda_estetic');
     if (authFlags.isSpeechTherapist || authFlags.isZemdaFono) authorized.add('zemda_fono');
     if (authFlags.isPsychologist || authFlags.isZemdaPsico) authorized.add('zemda_psico');
     if (authFlags.isDentist || authFlags.isZemdaOdonto) authorized.add('zemda_odonto');
@@ -984,6 +1199,8 @@ export function getUserAuthorizedClinicalModules(
 
   // 2. Flags explícitas de módulos habilitados no perfil do usuário / clínica
   if (user) {
+    if (user.zemdaMedEnabled || user.zemda_med_enabled) authorized.add('zemda_med');
+    if (user.zemdaEsteticEnabled || user.zemda_estetic_enabled) authorized.add('zemda_estetic');
     if (user.zemdaFonoEnabled || user.zemda_fono_enabled) authorized.add('zemda_fono');
     if (user.zemdaPsicoEnabled || user.zemda_psico_enabled) authorized.add('zemda_psico');
     if (user.zemdaOdontoEnabled || user.zemda_odonto_enabled) authorized.add('zemda_odonto');
@@ -996,6 +1213,8 @@ export function getUserAuthorizedClinicalModules(
 
   // 3. Permissões granulares de acesso a módulos
   if (permissions && permissions.length > 0) {
+    if (permissions.includes('access_zemda_med') || permissions.includes('module_med') || permissions.includes('module_medical')) authorized.add('zemda_med');
+    if (permissions.includes('access_zemda_estetic') || permissions.includes('module_estetic') || permissions.includes('module_aesthetics')) authorized.add('zemda_estetic');
     if (permissions.includes('access_zemda_fono') || permissions.includes('module_fono')) authorized.add('zemda_fono');
     if (permissions.includes('access_zemda_psico') || permissions.includes('module_psico')) authorized.add('zemda_psico');
     if (permissions.includes('access_zemda_odonto') || permissions.includes('module_odonto')) authorized.add('zemda_odonto');
@@ -1020,8 +1239,31 @@ export function getUserAuthorizedClinicalModules(
 
     const combined = `${profId} ${profSlug} ${profName} ${practiceAreas}`.toLowerCase();
 
-    // Psicopedagogia
+    // Medicina
     if (
+      profId.includes('medic') ||
+      profSlug.includes('medic') ||
+      combined.includes('médic') ||
+      combined.includes('medico') ||
+      combined.includes('medicina') ||
+      regType === 'CRM'
+    ) {
+      authorized.add('zemda_med');
+    }
+    // Estética
+    else if (
+      profId.includes('estetic') ||
+      profSlug.includes('estetic') ||
+      combined.includes('estética') ||
+      combined.includes('estetica') ||
+      combined.includes('esteticista') ||
+      combined.includes('biomedicina estetica') ||
+      combined.includes('biomedicina estética')
+    ) {
+      authorized.add('zemda_estetic');
+    }
+    // Psicopedagogia
+    else if (
       profId.includes('psicopedag') ||
       profSlug.includes('psicopedag') ||
       combined.includes('psicopedag') ||

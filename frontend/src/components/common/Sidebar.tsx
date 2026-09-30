@@ -352,6 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         (item.id === 'zemda-to' && isZemdaTO) ||
                         (item.id === 'zemda-personal' && isZemdaPersonal) ||
                         (item.id === 'zemda-pp' && isZemdaPP) ||
+                        (item.id === 'zemda-estetic' && isZemdaEstetic) ||
                         (item.id === 'clinical' && (isProfessional || isClinicAdmin))
                       );
 
@@ -385,7 +386,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Footer info */}
         <div className="p-3 border-t border-slate-100 text-[11px] text-slate-400 bg-slate-50/40 flex items-center justify-between">
-          <span>v1.1.2 • LGPD</span>
+          <span>Ambiente Seguro • LGPD</span>
           <span className="inline-flex items-center gap-1.5 text-emerald-600 font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Online

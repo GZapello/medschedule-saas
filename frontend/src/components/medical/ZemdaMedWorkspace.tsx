@@ -1013,29 +1013,31 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
           </div>
         )}
 
-        <PatientSearchSelect
-          compact
-          value={selectedPatientId}
-          selectedPatient={selectedPatient}
-          clientTermLabel={clientTermLabel}
-          disabled={!!initialAppointmentId}
-          onChange={async (id, pat) => {
-            if (selectedPatientId && autosave.isDirty) {
-              const saved = await autosave.forceSaveDraft();
-              if (!saved) {
-                showToast('Salve o rascunho antes de trocar de paciente.', 'error');
-                return;
+        <div data-tour="medical-patient-select" className="w-full">
+          <PatientSearchSelect
+            compact
+            value={selectedPatientId}
+            selectedPatient={selectedPatient}
+            clientTermLabel={clientTermLabel}
+            disabled={!!initialAppointmentId}
+            onChange={async (id, pat) => {
+              if (selectedPatientId && autosave.isDirty) {
+                const saved = await autosave.forceSaveDraft();
+                if (!saved) {
+                  showToast('Salve o rascunho antes de trocar de paciente.', 'error');
+                  return;
+                }
               }
-            }
-            setSelectedPatientId(id);
-            if (pat) {
-              setSelectedPatient(pat);
-            } else if (!id) {
-              setSelectedPatient(null);
-              sessionStorage.removeItem('zemda_med_active_patient_id');
-            }
-          }}
-        />
+              setSelectedPatientId(id);
+              if (pat) {
+                setSelectedPatient(pat);
+              } else if (!id) {
+                setSelectedPatient(null);
+                sessionStorage.removeItem('zemda_med_active_patient_id');
+              }
+            }}
+          />
+        </div>
 
         {selectedPatientId && (
           <ClinicalQuickHeaderActions

@@ -77,10 +77,7 @@ export const UpdateNotificationModal: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
-                  Nova Versão {versionInfo.latestVersion}
-                </span>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  (Atual: v{APP_VERSION})
+                  Novas Melhorias Disponíveis
                 </span>
               </div>
               <h3 className="font-bold text-slate-900 text-lg leading-tight mt-1">

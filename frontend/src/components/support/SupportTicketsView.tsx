@@ -383,7 +383,7 @@ export const SupportTicketsView: React.FC = () => {
                       <span>Abertura: <strong className="text-slate-700">{new Date(ticketDetails.ticket.created_at).toLocaleString('pt-BR')}</strong></span>
                       <span>Última Atualização: <strong className="text-slate-700">{new Date(ticketDetails.ticket.updated_at || ticketDetails.ticket.created_at).toLocaleString('pt-BR')}</strong></span>
                       <span>Plataforma: <strong className="text-slate-700">{ticketDetails.ticket.platform || 'Web'}</strong></span>
-                      <span>Versão: <strong className="text-slate-700">{ticketDetails.ticket.app_version || '1.1.2'}</strong></span>
+                      <span>Sistema: <strong className="text-slate-700">Atualizado</strong></span>
                     </div>
                   </div>
                 </div>

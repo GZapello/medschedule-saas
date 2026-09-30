@@ -72,7 +72,6 @@ const OnboardingSpotlight = lazyWithRetry(() => import('./components/onboarding/
 const OnboardingWelcomeModal = lazyWithRetry(() => import('./components/onboarding/OnboardingWelcomeModal').then(module => ({ default: module.OnboardingWelcomeModal })), 'OnboardingWelcomeModal');
 const OnboardingHelpModal = lazyWithRetry(() => import('./components/onboarding/OnboardingHelpModal').then(module => ({ default: module.OnboardingHelpModal })), 'OnboardingHelpModal');
 const WhatsNewModal = lazyWithRetry(() => import('./components/onboarding/WhatsNewModal').then(module => ({ default: module.WhatsNewModal })), 'WhatsNewModal');
-const KeyboardShortcutsModal = lazyWithRetry(() => import('./components/onboarding/KeyboardShortcutsModal').then(module => ({ default: module.KeyboardShortcutsModal })), 'KeyboardShortcutsModal');
 import { trackPageView } from './utils/analytics';
 import { Sparkles, AlertCircle } from 'lucide-react';
 
@@ -1699,7 +1698,7 @@ const AppContent: React.FC = () => {
 const PrivateOverlays: React.FC = () => {
   const { currentUser } = useAuth();
   if (!currentUser) return null;
-  return <Suspense fallback={null}><LegalReacceptanceModal /><OnboardingSpotlight /><OnboardingWelcomeModal /><OnboardingHelpModal /><WhatsNewModal /><KeyboardShortcutsModal /></Suspense>;
+  return <Suspense fallback={null}><LegalReacceptanceModal /><OnboardingSpotlight /><OnboardingWelcomeModal /><OnboardingHelpModal /><WhatsNewModal /></Suspense>;
 };
 
 export const App: React.FC = () => {

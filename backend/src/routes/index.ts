@@ -143,7 +143,7 @@ api.get('/v1/public/app-version', (req, res) => {
     minRequiredVersion: '1.0.0',
     releaseDate: '2026-09-12',
     appName: 'Zemda',
-    releaseNotes: 'Versão 1.1.2: Reconhecimento de fala aprimorado, IA para evolução clínica e melhorias de estabilidade.',
+    releaseNotes: 'Recursos recentes: Reconhecimento de fala aprimorado, IA para evolução clínica e melhorias de estabilidade.',
     downloadWindowsUrl: '/v1/public/download-windows',
     downloadAndroidUrl: '/v1/public/download-android',
     features: [

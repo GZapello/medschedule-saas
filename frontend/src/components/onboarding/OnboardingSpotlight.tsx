@@ -54,6 +54,14 @@ export const OnboardingSpotlight: React.FC = () => {
     if (!el) {
       setTargetFound(false);
       setRect(null);
+
+      // Posicionamento centralizado quando o elemento não for encontrado
+      const cardWidth = Math.min(360, window.innerWidth - 32);
+      const cardHeight = cardRef.current?.offsetHeight || 220;
+      setCardPos({
+        top: Math.max(16, (window.innerHeight - cardHeight) / 2),
+        left: Math.max(16, (window.innerWidth - cardWidth) / 2)
+      });
       return;
     }
 
@@ -79,7 +87,7 @@ export const OnboardingSpotlight: React.FC = () => {
 
     // Calcula posição inteligente do card
     const cardWidth = Math.min(360, window.innerWidth - 32);
-    const cardHeight = 220;
+    const cardHeight = cardRef.current?.offsetHeight || 220;
     const margin = 12;
 
     let top = 100;
@@ -119,21 +127,55 @@ export const OnboardingSpotlight: React.FC = () => {
 
   useEffect(() => {
     updatePosition();
+
+    let retryCount = 0;
+    let retryTimer: any = null;
+
+    // Se a etapa for condicional (hideIfNoTarget) e o elemento não for encontrado de imediato,
+    // tenta localizar após breve atraso para transição de rota/renderização.
+    // Se continuar ausente, avança automaticamente sem travar o usuário.
+    if (isTourActive && currentStep?.hideIfNoTarget) {
+      const checkAndSkip = () => {
+        let el = document.querySelector(currentStep.target);
+        if (!el && currentStep.target.includes('nav-')) {
+          const navId = currentStep.target.replace(/\[data-tour="nav-([^"]+)"\]/, '$1');
+          el = document.querySelector(`button[data-nav-id="${navId}"]`);
+        }
+
+        if (!el) {
+          if (retryCount < 2) {
+            retryCount++;
+            retryTimer = setTimeout(checkAndSkip, 150);
+          } else {
+            // Elemento definitivamente ausente: avança com segurança
+            if (currentTour && currentStepIndex === currentTour.steps.length - 1) {
+              finishTour();
+            } else {
+              nextStep();
+            }
+          }
+        } else {
+          updatePosition();
+        }
+      };
+
+      retryTimer = setTimeout(checkAndSkip, 120);
+    } else {
+      retryTimer = setTimeout(updatePosition, 180);
+    }
+
     const handleResize = () => updatePosition();
     const handleScroll = () => updatePosition();
 
     window.addEventListener('resize', handleResize);
     window.addEventListener('scroll', handleScroll, true);
 
-    // Timeout de reavaliação após animação de transição de tela
-    const timer = setTimeout(updatePosition, 180);
-
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('scroll', handleScroll, true);
-      clearTimeout(timer);
+      if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [updatePosition, currentStepIndex]);
+  }, [updatePosition, currentStepIndex, currentStep, isTourActive, currentTour, nextStep, finishTour]);
 
   // Navegação por teclado acessível
   useEffect(() => {

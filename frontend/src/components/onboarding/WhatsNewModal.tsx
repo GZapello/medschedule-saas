@@ -5,8 +5,10 @@ import {
   MessageSquare,
   Save,
   CreditCard,
-  Calendar,
-  Video,
+  Stethoscope,
+  Sparkle,
+  Activity,
+  Dumbbell,
   X,
   ArrowRight,
   CheckCircle2
@@ -26,52 +28,73 @@ interface FeatureItem {
 
 const WHAT_S_NEW_FEATURES: FeatureItem[] = [
   {
+    id: 'zemda_med',
+    badge: 'Medicina',
+    title: 'ZemdaMed: Vertical Médica Completa',
+    description: 'Prontuário com SOAP, anamnese completa, exame físico segmentar, prescrições com CID-10 e suporte a especialidades.',
+    icon: Stethoscope,
+    iconColor: 'text-indigo-600',
+    bgColor: 'bg-indigo-50 border-indigo-100',
+    actionRoute: 'zemda-med'
+  },
+  {
+    id: 'zemda_estetic',
+    badge: 'Estética',
+    title: 'ZemdaEstetic: Estética Integrada',
+    description: 'Mapeamento fotográfico antes e depois, protocolos faciais, corporais e capilares, registro de injetáveis e TCLE.',
+    icon: Sparkle,
+    iconColor: 'text-pink-600',
+    bgColor: 'bg-pink-50 border-pink-100',
+    actionRoute: 'zemda-estetic'
+  },
+  {
+    id: 'zemda360',
+    badge: 'Anatomia Visual',
+    title: 'Zemda360: Mapeamento Visual e Anatômico',
+    description: 'Demarcação interativa 360°, caneta digital, borracha anatômica e associação direta de queixas e condutas aos pontos corporais.',
+    icon: Activity,
+    iconColor: 'text-teal-600',
+    bgColor: 'bg-teal-50 border-teal-100',
+    actionRoute: 'zemda-body'
+  },
+  {
+    id: 'zemda_personal',
+    badge: 'Educação Física',
+    title: 'ZemdaPersonal: Prescrição e Cargas',
+    description: 'Periodização de treinos, banco de exercícios biomecânicos e acompanhamento da evolução de carga por aluno.',
+    icon: Dumbbell,
+    iconColor: 'text-amber-600',
+    bgColor: 'bg-amber-50 border-amber-100',
+    actionRoute: 'zemda-personal'
+  },
+  {
+    id: 'autosave',
+    badge: 'Segurança Clínica',
+    title: 'Autosave Universal Contínuo',
+    description: 'Salvamento automático contínuo em segundo plano a cada digitação em prontuários, evoluções e anamneses.',
+    icon: Save,
+    iconColor: 'text-sky-600',
+    bgColor: 'bg-sky-50 border-sky-100'
+  },
+  {
     id: 'whatsapp',
     badge: 'Comunicação',
     title: 'WhatsApp Business Cloud Oficial',
-    description: 'Envio automático de confirmações, lembretes de consulta com antecedência e remarcação sem depender de celular conectado.',
+    description: 'Envio automático de confirmações, lembretes de consulta com antecedência e remarcação ágil.',
     icon: MessageSquare,
     iconColor: 'text-emerald-600',
     bgColor: 'bg-emerald-50 border-emerald-100',
     actionRoute: 'calendar'
   },
   {
-    id: 'autosave',
-    badge: 'Produtividade',
-    title: 'Autosave Universal Clínico',
-    description: 'Salvamento automático contínuo em segundo plano a cada alteração em prontuários, evoluções e anamneses.',
-    icon: Save,
-    iconColor: 'text-sky-600',
-    bgColor: 'bg-sky-50 border-sky-100'
-  },
-  {
     id: 'asaas',
     badge: 'Financeiro',
-    title: 'Integração de Pagamentos Asaas',
-    description: 'Cobranças automáticas via Pix dinâmico com QR Code, boletos bancários registrados e conciliação direta no caixa.',
+    title: 'Integração Financeira Asaas',
+    description: 'Cobranças com Pix dinâmico com QR Code, boletos bancários registrados e conciliação direta no caixa.',
     icon: CreditCard,
     iconColor: 'text-teal-600',
     bgColor: 'bg-teal-50 border-teal-100',
     actionRoute: 'financial'
-  },
-  {
-    id: 'google_calendar',
-    badge: 'Sincronização',
-    title: 'Sincronização com Google Agenda',
-    description: 'Espelhamento bidirecional dos compromissos da sua clínica diretamente no seu smartphone ou calendário pessoal.',
-    icon: Calendar,
-    iconColor: 'text-blue-600',
-    bgColor: 'bg-blue-50 border-blue-100',
-    actionRoute: 'calendar'
-  },
-  {
-    id: 'telehealth',
-    badge: 'Telessaúde',
-    title: 'Teleatendimento Integrado',
-    description: 'Salas seguras de videoconferência criptografada de ponta a ponta com consentimento formal do paciente segundo a LGPD.',
-    icon: Video,
-    iconColor: 'text-purple-600',
-    bgColor: 'bg-purple-50 border-purple-100'
   }
 ];
 
@@ -107,8 +130,8 @@ export const WhatsNewModal: React.FC = () => {
                 <h2 id="whats-new-modal-title" className="text-sm font-bold text-slate-900 leading-tight">
                   Novidades no Zemda
                 </h2>
-                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                  v1.1.2
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
+                  Novidades Recentes
                 </span>
               </div>
               <p className="text-[11px] text-slate-500">

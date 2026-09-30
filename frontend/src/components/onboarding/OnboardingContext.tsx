@@ -40,7 +40,6 @@ interface OnboardingContextType {
   isWelcomeModalOpen: boolean;
   isHelpOpen: boolean;
   isWhatsNewOpen: boolean;
-  isShortcutsOpen: boolean;
   isModuleSelectorOpen: boolean;
 
   // Ações do Tour
@@ -60,8 +59,6 @@ interface OnboardingContextType {
   closeHelp: () => void;
   openWhatsNew: () => void;
   closeWhatsNew: () => void;
-  openShortcuts: () => void;
-  closeShortcuts: () => void;
   openModuleSelector: () => void;
   closeModuleSelector: () => void;
 
@@ -84,6 +81,10 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
     isClinicAdmin,
     isProfessional,
     isReceptionist,
+    isDoctor,
+    isZemdaMed,
+    isEsthetician,
+    isZemdaEstetic,
     isPhysiotherapist,
     isDentist,
     isNutritionist,
@@ -126,12 +127,15 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(false);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [isWhatsNewOpen, setIsWhatsNewOpen] = useState<boolean>(false);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isModuleSelectorOpen, setIsModuleSelectorOpen] = useState<boolean>(false);
 
   // Lista canônica de módulos clínicos aos quais o usuário tem permissão
   const availableModules = React.useMemo(() => {
     return getUserAuthorizedClinicalModules(currentUser, userPermissions, {
+      isDoctor,
+      isZemdaMed,
+      isEsthetician,
+      isZemdaEstetic,
       isSpeechTherapist,
       isPsychologist,
       isDentist,
@@ -144,6 +148,10 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   }, [
     currentUser,
     userPermissions,
+    isDoctor,
+    isZemdaMed,
+    isEsthetician,
+    isZemdaEstetic,
     isSpeechTherapist,
     isPsychologist,
     isDentist,
@@ -156,6 +164,10 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const clinicalModule = React.useMemo(() => {
     return getClinicalModuleForUser(currentUser, userPermissions, {
+      isDoctor,
+      isZemdaMed,
+      isEsthetician,
+      isZemdaEstetic,
       isSpeechTherapist,
       isPsychologist,
       isDentist,
@@ -168,6 +180,10 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
   }, [
     currentUser,
     userPermissions,
+    isDoctor,
+    isZemdaMed,
+    isEsthetician,
+    isZemdaEstetic,
     isSpeechTherapist,
     isPsychologist,
     isDentist,
@@ -414,7 +430,7 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
     }
   }, [startTour]);
 
-  // Atalho de Teclado Global (ESC fecha tour, Alt+H abre Ajuda)
+  // Fechamento via tecla Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // ESC fecha o tour ou modais de onboarding
@@ -431,10 +447,6 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
           setIsWhatsNewOpen(false);
           return;
         }
-        if (isShortcutsOpen) {
-          setIsShortcutsOpen(false);
-          return;
-        }
         if (isModuleSelectorOpen) {
           setIsModuleSelectorOpen(false);
           return;
@@ -445,17 +457,11 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
           return;
         }
       }
-
-      // Atalho de teclado: Alt + H para abrir a Central de Ajuda
-      if (e.altKey && (e.key === 'h' || e.key === 'H')) {
-        e.preventDefault();
-        setIsHelpOpen(prev => !prev);
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isTourActive, isHelpOpen, isWhatsNewOpen, isShortcutsOpen, isModuleSelectorOpen, isWelcomeModalOpen]);
+  }, [isTourActive, isHelpOpen, isWhatsNewOpen, isModuleSelectorOpen, isWelcomeModalOpen]);
 
   const currentStep = currentTour?.steps[currentStepIndex] || null;
 
@@ -471,7 +477,6 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
         isWelcomeModalOpen,
         isHelpOpen,
         isWhatsNewOpen,
-        isShortcutsOpen,
         isModuleSelectorOpen,
         startTour,
         nextStep,
@@ -487,8 +492,6 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
         closeHelp: () => setIsHelpOpen(false),
         openWhatsNew: () => setIsWhatsNewOpen(true),
         closeWhatsNew: () => setIsWhatsNewOpen(false),
-        openShortcuts: () => setIsShortcutsOpen(true),
-        closeShortcuts: () => setIsShortcutsOpen(false),
         openModuleSelector: () => setIsModuleSelectorOpen(true),
         closeModuleSelector: () => setIsModuleSelectorOpen(false),
         availableModules,

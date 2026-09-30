@@ -619,6 +619,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
           {onFinishConsultation && (
             <button
               type="button"
+              data-tour="clinical-finish"
               onClick={onFinishConsultation}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
@@ -630,6 +631,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
           <div className="relative">
             <button
               type="button"
+              data-tour="estetic-area-selector"
               onClick={() => setIsAreaDropdownOpen(!isAreaDropdownOpen)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
@@ -731,7 +733,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       {/* 2. BARRA DE SELEÇÃO DO PACIENTE */}
       <div className="bg-white border-b border-slate-200 px-6 py-3 shrink-0">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          <div className="w-full md:w-96">
+          <div className="w-full md:w-96" data-tour="estetic-patient-select">
             <PatientSearchSelect
               value={selectedPatientId}
               onChange={handleSelectPatient}
@@ -787,6 +789,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <button
                   key={tab.id}
                   type="button"
+                  data-tour={`tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                     isActive
