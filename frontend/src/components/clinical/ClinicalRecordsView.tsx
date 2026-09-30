@@ -27,6 +27,12 @@ import {
   Hand,
   Mic,
   Activity,
+  Stethoscope,
+  Brain,
+  Dumbbell,
+  Sparkles,
+  Compass,
+  GraduationCap,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
@@ -312,8 +318,38 @@ export const ClinicalRecordsView: React.FC = () => {
                             <Activity className="w-3 h-3 text-teal-700" /> ZemdaFisio
                           </span>
                         )}
+                        {r.module_type === 'ZemdaMed' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                            <Stethoscope className="w-3 h-3 text-blue-700" /> ZemdaMed
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaPsico' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200">
+                            <Brain className="w-3 h-3 text-violet-700" /> ZemdaPsico
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaPersonal' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200">
+                            <Dumbbell className="w-3 h-3 text-orange-700" /> ZemdaPersonal
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaEstetic' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                            <Sparkles className="w-3 h-3 text-rose-700" /> ZemdaEstetic
+                          </span>
+                        )}
+                        {r.module_type === 'Zemda360' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                            <Compass className="w-3 h-3 text-indigo-700" /> Zemda360
+                          </span>
+                        )}
+                        {r.module_type === 'ZemdaPP' && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <GraduationCap className="w-3 h-3 text-emerald-700" /> ZemdaPP
+                          </span>
+                        )}
                         {(!r.module_type || r.module_type === 'general') && (
-                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
                             Geral / Clínico
                           </span>
                         )}

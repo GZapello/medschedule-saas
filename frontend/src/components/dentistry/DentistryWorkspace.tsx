@@ -413,7 +413,22 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
   // Salvar Trabalho de Prótese
   const handleSaveProsthetic = async () => {
-    if (!selectedPatientId) return;
+    if (!selectedPatientId) {
+      setErrorMsg('Selecione um paciente antes de registrar a prótese.');
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
+    if (!prostheticForm.labName.trim()) {
+      setErrorMsg('Informe o nome do laboratório.');
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
+    if (!prostheticForm.workType.trim()) {
+      setErrorMsg('Informe o tipo de trabalho protético.');
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
+
     setSaving(true);
     try {
       await ApiClient.post('/v1/dentistry/prosthetics', {
@@ -429,7 +444,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         toothNumber: '',
         shadeColor: '',
         material: '',
-        sentDate: '',
+        sentDate: new Date().toISOString().split('T')[0],
         expectedDate: '',
         costValue: 0,
         notes: ''
@@ -437,7 +452,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       window.dispatchEvent(new CustomEvent('zemda-prosthetics-updated'));
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro ao salvar prótese');
+      const realMsg = err?.response?.data?.error || err?.message || 'Erro ao salvar prótese';
+      setErrorMsg(realMsg);
+      setTimeout(() => setErrorMsg(null), 4000);
     } finally {
       setSaving(false);
     }
@@ -538,9 +555,12 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         notes: ''
       });
       setNewPlanItem({ tooth: '', face: '', procedure: '', value: '' });
+      window.dispatchEvent(new CustomEvent('zemda-budget-updated'));
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro ao salvar orçamento');
+      const realMsg = err?.response?.data?.error || err?.message || 'Erro ao salvar orçamento';
+      setErrorMsg(realMsg);
+      setTimeout(() => setErrorMsg(null), 4000);
     } finally {
       setSaving(false);
     }
@@ -1108,12 +1128,21 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                 <div className="flex justify-end pt-2">
                   <button
                     type="button"
-                    disabled={saving}
+                    disabled={saving || !selectedPatientId}
                     onClick={handleSavePlan}
-                    className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white rounded-2xl text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                    className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white rounded-2xl text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Save className="w-4 h-4" />
-                    Gerar Orçamento / Salvar
+                    {saving ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Salvando Orçamento...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Gerar Orçamento / Salvar
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -1586,15 +1615,57 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Data de Envio</label>
+                    <input
+                      type="date"
+                      value={prostheticForm.sentDate}
+                      onChange={e => setProstheticForm({ ...prostheticForm, sentDate: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Previsão de Entrega</label>
+                    <input
+                      type="date"
+                      value={prostheticForm.expectedDate}
+                      onChange={e => setProstheticForm({ ...prostheticForm, expectedDate: e.target.value })}
+                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Observações e Instruções para o Laboratório</label>
+                  <textarea
+                    rows={2}
+                    value={prostheticForm.notes}
+                    onChange={e => setProstheticForm({ ...prostheticForm, notes: e.target.value })}
+                    placeholder="Instruções para o protético, moldagem, término cervical, etc."
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium"
+                  />
+                </div>
+
                 <div className="flex justify-end pt-2">
                   <button
                     type="button"
-                    disabled={saving}
+                    disabled={saving || !selectedPatientId}
                     onClick={handleSaveProsthetic}
-                    className="px-4 py-2 bg-cyan-600 text-white rounded-2xl text-xs font-bold hover:bg-cyan-700 shadow-sm flex items-center gap-2"
+                    className="px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white rounded-2xl text-xs font-bold shadow-md flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Save className="w-4 h-4" />
-                    Registrar Envio ao Laboratório
+                    {saving ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Registrando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Registrar Envio ao Laboratório
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

@@ -688,7 +688,7 @@ export class DentistryController {
 
         ClinicalRecordService.recordClinicalEvent({
           tenantId,
-          patientId,
+          patientId: String(patientId),
           professionalId: profId,
           moduleType: 'ZemdaOdonto',
           sourceId: id,
@@ -859,6 +859,10 @@ export class DentistryController {
   static saveProsthetic(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
       if (!isDentistOrClinicManager(req)) {
         res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
         return;
@@ -920,7 +924,7 @@ export class DentistryController {
         );
         ClinicalRecordService.recordClinicalEvent({
           tenantId,
-          patientId,
+          patientId: String(patientId),
           professionalId: profId,
           moduleType: 'ZemdaOdonto',
           sourceId: id,
@@ -960,8 +964,12 @@ export class DentistryController {
 
   static updateProsthetic(req: Request, res: Response): void {
     try {
-      const { id } = req.params;
+      const id = String(req.params.id);
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
 
       if (!isDentistOrClinicManager(req)) {
         res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
