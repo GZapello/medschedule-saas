@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
+import { ClinicalRecordService } from '../services/clinical-record.service';
 
 /**
  * Validação estrita de profissão:
@@ -1355,6 +1356,54 @@ export class PersonalController {
 
       if (postureJson !== undefined) db.prepare('UPDATE personal_assessments SET posture_json = ? WHERE id = ? AND tenant_id = ?').run(postureJson, assessmentId, tenantId);
 
+      // Sincroniza com o prontuário universal (records) de forma idempotente
+      try {
+        const evoLines = [
+          'Avaliação Física e Composição Corporal (ZemdaPersonal):',
+          weight ? `Peso: ${weight} kg` : '',
+          height ? `Estatura: ${height} cm` : '',
+          bmi ? `IMC: ${bmi}` : '',
+          bodyFatPct ? `% Gordura: ${bodyFatPct}%` : '',
+          leanMassKg ? `Massa Magra: ${leanMassKg} kg` : '',
+          fatMassKg ? `Massa Gorda: ${fatMassKg} kg` : '',
+          muscleMassKg ? `Massa Muscular: ${muscleMassKg} kg` : '',
+          tavVal ? `TAV: ${tavVal} (${tavClassification || 'Normal'})` : '',
+          b.notes ? `Observações: ${b.notes}` : ''
+        ].filter(Boolean);
+
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId: b.patient_id,
+          professionalId: b.professional_id || null,
+          moduleType: 'ZemdaPersonal',
+          sourceId: assessmentId,
+          sourceType: 'personal_assessment',
+          title: 'Avaliação Física e Cineantropometria',
+          procedureName: 'Avaliação Cineantropométrica',
+          sessionDate: assessmentDate,
+          clinicalEvolution: evoLines.join('\n'),
+          technicalNotes: b.notes || null,
+          moduleData: {
+            assessmentId,
+            weight,
+            height,
+            bmi,
+            bodyFatPct,
+            leanMassKg,
+            fatMassKg,
+            muscleMassKg,
+            whr,
+            whtr,
+            tavVal,
+            tavClassification,
+            notes: b.notes
+          },
+          createdBy: req.user?.name || 'Personal Trainer'
+        });
+      } catch (recErr) {
+        console.warn('Aviso ao registrar avaliação física no prontuário:', recErr);
+      }
+
       logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
       res.status(201).json({
         id: assessmentId,
@@ -1430,7 +1479,36 @@ export class PersonalController {
       logAudit(req, 'UPDATE_ASSESSMENT', 'personal_assessments', id, { photosCount: Array.isArray(b.photos) ? b.photos.length : undefined });
       
       const updatedPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ? ORDER BY photo_type ASC').all(id, tenantId);
-      const updatedAssessment = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      const updatedAssessment = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+
+      if (updatedAssessment) {
+        try {
+          const evoLines = [
+            'Avaliação Física e Composição Corporal (ZemdaPersonal):',
+            updatedAssessment.weight ? `Peso: ${updatedAssessment.weight} kg` : '',
+            updatedAssessment.height ? `Estatura: ${updatedAssessment.height} cm` : '',
+            updatedAssessment.bmi ? `IMC: ${updatedAssessment.bmi}` : '',
+            updatedAssessment.body_fat_percentage ? `% Gordura: ${updatedAssessment.body_fat_percentage}%` : '',
+            updatedAssessment.notes ? `Observações: ${updatedAssessment.notes}` : ''
+          ].filter(Boolean);
+
+          ClinicalRecordService.recordClinicalEvent({
+            tenantId,
+            patientId: updatedAssessment.patient_id,
+            professionalId: updatedAssessment.professional_id || null,
+            moduleType: 'ZemdaPersonal',
+            sourceId: String(id),
+            sourceType: 'personal_assessment',
+            title: 'Avaliação Física e Cineantropometria',
+            procedureName: 'Avaliação Cineantropométrica',
+            sessionDate: updatedAssessment.assessment_date,
+            clinicalEvolution: evoLines.join('\n'),
+            technicalNotes: updatedAssessment.notes || null,
+            moduleData: updatedAssessment,
+            createdBy: req.user?.name || 'Personal Trainer'
+          });
+        } catch (_) {}
+      }
 
       res.json({
         message: 'Avaliação física atualizada com sucesso',
@@ -2032,6 +2110,36 @@ export class PersonalController {
       });
 
       transaction();
+
+      try {
+        const exCount = Array.isArray(exercises) ? exercises.length : 0;
+        const exList = Array.isArray(exercises)
+          ? exercises.map((e: any, idx: number) => `${idx + 1}. ${e.custom_name || e.exercise_id} (${e.sets || 3}x${e.reps || '10-12'}${e.load_kg ? `, ${e.load_kg}kg` : ''})`).join('\n')
+          : '';
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId: patient_id,
+          professionalId: professionalId || null,
+          moduleType: 'ZemdaPersonal',
+          sourceId: workoutId,
+          sourceType: 'personal_workout',
+          title: `Prescrição de Treinamento: ${title.trim()}`,
+          procedureName: 'Prescrição de Treinamento Físico',
+          clinicalEvolution: `Ficha de Treino - Divisão ${(division || 'A').toUpperCase()} (${structure_type || 'ABC'})\n${exCount} exercícios prescritos:\n${exList}`,
+          technicalNotes: notes || null,
+          moduleData: {
+            workoutId,
+            title: title.trim(),
+            division,
+            structure_type,
+            exercises,
+            notes
+          },
+          createdBy: req.user?.name || 'Personal Trainer'
+        });
+      } catch (recErr) {
+        console.warn('Aviso ao registrar treino no prontuário:', recErr);
+      }
 
       logAudit(req, 'CREATE_WORKOUT', 'personal_workouts', workoutId, { patient_id, title, division });
       res.status(201).json({ id: workoutId, workout: { id: workoutId }, message: 'Treino criado com sucesso' });

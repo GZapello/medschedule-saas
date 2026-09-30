@@ -3,6 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { parseAnatomicalDocument, validateAnatomicalDocument, stampAnatomicalDocument } from '../services/anatomical-document';
 import { logAudit } from '../middlewares/audit.middleware';
+import { ClinicalRecordService } from '../services/clinical-record.service';
 
 /**
  * Validação de acesso ao ZemdaBody:
@@ -347,6 +348,32 @@ export class BodyAssessmentController {
         db.exec('ROLLBACK TO SAVEPOINT zemda360_save');
         db.exec('RELEASE SAVEPOINT zemda360_save');
         throw error;
+      }
+
+      try {
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId,
+          professionalId: resolvedProfId || null,
+          appointmentId: appointmentId || null,
+          moduleType: 'Zemda360',
+          sourceId: assessmentId,
+          sourceType: 'body_assessment',
+          title: 'Mapeamento Corporal 360 / Avaliação Anatômica',
+          procedureName: 'Mapeamento Anatômico',
+          sessionDate: dateStr,
+          clinicalEvolution: `Avaliação Corporal Anatômica 360 - Modelo: ${bodyModel === 'female' ? 'Feminino' : 'Masculino'}\nMódulo: ${module || 'Zemda360'}`,
+          technicalNotes: storedNotes || null,
+          moduleData: {
+            assessmentId,
+            bodyModel,
+            module,
+            notes: storedNotes
+          },
+          createdBy: req.user?.name || 'Profissional Clínico'
+        });
+      } catch (recErr) {
+        console.warn('Aviso ao registrar Zemda360 no prontuário:', recErr);
       }
 
       logAudit(req, 'SAVE_BODY_ASSESSMENT', 'body_assessments', assessmentId);

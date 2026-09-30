@@ -1000,6 +1000,13 @@ export function initializeDatabase(): void {
     addColIfMissing('records', 'clinical_data_json', 'TEXT');
     addColIfMissing('records', 'module_type', 'TEXT');
     addColIfMissing('records', 'module_data_json', 'TEXT');
+    addColIfMissing('records', 'source_id', 'TEXT');
+    addColIfMissing('records', 'source_type', 'TEXT');
+    addColIfMissing('dental_treatment_plans', 'budget_id', 'TEXT');
+    try {
+      rawDb.exec("CREATE INDEX IF NOT EXISTS idx_records_source ON records (tenant_id, patient_id, source_id);");
+      rawDb.exec("CREATE INDEX IF NOT EXISTS idx_treatment_plans_budget ON dental_treatment_plans (tenant_id, budget_id);");
+    } catch (_) {}
 
     addColIfMissing('notifications', 'retry_count', 'INTEGER DEFAULT 0');
     addColIfMissing('notifications', 'last_error', 'TEXT');
@@ -1714,6 +1721,7 @@ export function initializeDatabase(): void {
         tenant_id TEXT NOT NULL,
         patient_id TEXT NOT NULL,
         professional_id TEXT,
+        budget_id TEXT,
         title TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'planned',
         total_value REAL DEFAULT 0,
@@ -1728,6 +1736,7 @@ export function initializeDatabase(): void {
         FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_treatment_plans_patient ON dental_treatment_plans (tenant_id, patient_id);
+      CREATE INDEX IF NOT EXISTS idx_treatment_plans_budget ON dental_treatment_plans (tenant_id, budget_id);
 
       -- Laboratório de Prótese
       CREATE TABLE IF NOT EXISTS dental_prosthetics_lab (

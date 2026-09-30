@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { CapabilityService } from '../services/capability.service';
+import { ClinicalRecordService } from '../services/clinical-record.service';
 
 /**
  * Validador Central de Acesso e Áreas do ZemdaEstetic
@@ -416,6 +417,43 @@ export class EsteticController {
         specJson, observations || null
       );
 
+      try {
+        const evoLines = [
+          `Avaliação Estética (${normArea}):`,
+          chiefComplaint ? `Queixa Principal: ${chiefComplaint}` : '',
+          objectives ? `Objetivos: ${objectives}` : '',
+          clinicalHistory ? `Histórico Clínico: ${clinicalHistory}` : '',
+          observations ? `Observações: ${observations}` : ''
+        ].filter(Boolean);
+
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId,
+          professionalId: professionalId || null,
+          appointmentId: appointmentId || null,
+          moduleType: 'ZemdaEstetic',
+          sourceId: id,
+          sourceType: 'estetic_assessment',
+          title: `Avaliação Estética: ${normArea}`,
+          procedureName: 'Avaliação Estética Especializada',
+          sessionDate: dateStr,
+          clinicalEvolution: evoLines.join('\n'),
+          technicalNotes: observations || null,
+          moduleData: {
+            assessmentId: id,
+            area: normArea,
+            chiefComplaint,
+            objectives,
+            clinicalHistory,
+            observations,
+            specificData
+          },
+          createdBy: req.user?.name || 'Profissional de Estética'
+        });
+      } catch (recErr) {
+        console.warn('Aviso ao registrar avaliação estética no prontuário:', recErr);
+      }
+
       res.status(201).json({ success: true, id, message: 'Avaliação estética salva com sucesso!' });
     } catch (err: any) {
       console.error('[EsteticController.createAssessment]', err);
@@ -731,6 +769,51 @@ export class EsteticController {
               .run(JSON.stringify(updatedItems), planId, tenantId);
           }
         } catch {}
+      }
+
+      // Sincroniza com o prontuário universal (records)
+      try {
+        const evoLines = [
+          `Procedimento Estético Realizado: ${procedureName}`,
+          region ? `Região: ${region}` : '',
+          productName ? `Produto: ${productName}${batchLot ? ` (Lote: ${batchLot})` : ''}` : '',
+          quantity ? `Dose / Quantidade: ${quantity} ${unit || ''}` : '',
+          observation ? `Observações: ${observation}` : '',
+          techniqueNotes ? `Técnica / Conduta: ${techniqueNotes}` : '',
+          adverseEvents ? `Intercorrências / Eventos Adversos: ${adverseEvents}` : '',
+          returnDate ? `Retorno Previsto: ${returnDate}` : ''
+        ].filter(Boolean);
+
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId,
+          professionalId: professionalId || null,
+          appointmentId: req.body.appointmentId || null,
+          moduleType: 'ZemdaEstetic',
+          sourceId: procRecordId,
+          sourceType: 'estetic_procedure',
+          title: `Procedimento Estético: ${procedureName}`,
+          procedureName,
+          clinicalEvolution: evoLines.join('\n'),
+          technicalNotes: observation || null,
+          conducts: techniqueNotes || null,
+          moduleData: {
+            procedureRecordId: procRecordId,
+            procedureName,
+            region,
+            productName,
+            batchLot,
+            quantity,
+            unit,
+            observation,
+            techniqueNotes,
+            adverseEvents,
+            returnDate
+          },
+          createdBy: req.user?.name || 'Profissional de Estética'
+        });
+      } catch (recErr) {
+        console.warn('Aviso ao registrar procedimento estético no prontuário:', recErr);
       }
 
       res.status(201).json({

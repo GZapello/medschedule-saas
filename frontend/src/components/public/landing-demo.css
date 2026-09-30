@@ -45,13 +45,9 @@
 #profissoes.zl-section{height:auto;min-height:0;padding-bottom:32px}
 #profissoes .zl-care-editorial{grid-column:1/-1;position:relative;isolation:isolate;overflow:hidden;display:block;padding:38px 0;margin:8px 0;min-height:0}
 .zl-care-copy{position:relative;z-index:1;max-width:52%}.zl-care-copy h3{font-size:clamp(28px,3vw,40px);line-height:1.15;letter-spacing:-.035em;margin:16px 0}.zl-care-copy p{font-size:16px;line-height:1.8;color:var(--zl-muted);max-width:350px}
-/* Supplied photographs only. Decorative backgrounds do not reserve any height. */
-.zl-care-editorial::before{content:'';position:absolute;z-index:-1;pointer-events:none;top:0;bottom:0;right:-6%;width:55%;background:url('/landing/backgrounds/clinical-care.jpg') center 42%/cover no-repeat;opacity:.75;mask-image:linear-gradient(to right,transparent,black 40%),linear-gradient(to bottom,transparent,black 28%,black 68%,transparent);mask-composite:intersect}
+/* Section containers retain their layout without decorative photography. */
 #como-funciona,#faq{position:relative;isolation:isolate;overflow:hidden}
-#como-funciona::before{content:'';position:absolute;z-index:-1;pointer-events:none;right:-35px;top:20px;width:clamp(280px,32vw,520px);height:260px;background:url('/landing/backgrounds/physio-care.jpg') 60% center/cover no-repeat;opacity:.48;mask-image:linear-gradient(to right,transparent,black 45%),linear-gradient(to bottom,transparent,black 20%,black 65%,transparent);mask-composite:intersect}
-#faq::before{content:'';position:absolute;z-index:-1;pointer-events:none;left:-50px;bottom:0;width:clamp(270px,29vw,430px);height:230px;background:url('/landing/backgrounds/speech-care.png') 65% center/cover no-repeat;opacity:.85;mask-image:linear-gradient(to left,transparent,black 22%),linear-gradient(to bottom,transparent,black 18%,black 85%,transparent);mask-composite:intersect}
-@media(max-width:1100px){#como-funciona::before,#faq::before{display:none}}
-@media(max-width:700px){#profissoes .zl-modules{grid-template-columns:1fr}#profissoes .zl-care-editorial{padding:24px 0}.zl-care-copy{max-width:75%}.zl-care-copy h3{font-size:30px}.zl-care-copy p{font-size:14px}.zl-care-editorial::before{right:-35%;width:65%;opacity:.3}}
+@media(max-width:700px){#profissoes .zl-modules{grid-template-columns:1fr}#profissoes .zl-care-editorial{padding:24px 0}.zl-care-copy{max-width:75%}.zl-care-copy h3{font-size:30px}.zl-care-copy p{font-size:14px}}
 /* New supplied mockup: preserve the complete 1536 × 1024 image. */
 .zemda-landing .zl-hero{padding-bottom:22px}
 .zemda-landing .zl-hero-grid{position:relative}
@@ -67,12 +63,10 @@
 #como-funciona .zl-steps article{display:grid;grid-row:span 3;grid-template-rows:subgrid}
 #como-funciona .zl-steps h3{align-self:start}
 #profissoes .zl-care-editorial{margin:20px 0 0;padding:22px 0;overflow:visible}
-.zl-care-editorial::before{display:none}
 #profissoes{position:relative;isolation:isolate;overflow:hidden}
-#profissoes::after{content:'';position:absolute;z-index:-1;pointer-events:none;right:-40px;bottom:0;width:40%;height:190px;background:url('/landing/backgrounds/clinical-care.jpg') center 40%/cover no-repeat;opacity:.8;mask-image:linear-gradient(to right,transparent,black 35%),linear-gradient(to bottom,transparent,black 25%,black 80%,transparent);mask-composite:intersect}
 @media(max-width:1200px) and (min-width:1051px){.zemda-landing .zl-hero-text{width:365px}.zd-demo{width:650px;right:-26px}}
 @media(max-width:1050px){.zemda-landing .zl-hero-text{width:auto}.zd-demo{position:relative;inset:auto;width:min(760px,100%);transform:none}.zemda-landing .zl-hero-grid{padding-bottom:20px}}
-@media(max-width:700px){#como-funciona .zl-steps{column-gap:20px}#profissoes::after{display:none}}
+@media(max-width:700px){#como-funciona .zl-steps{column-gap:20px}}
 @media(max-width:540px){#como-funciona .zl-steps{grid-template-columns:1fr;row-gap:24px}.zemda-landing .zl-hero .zl-actions{flex-direction:column;align-items:stretch}.zd-demo .zd-demo-note{font-size:8px!important}}
 /* Fine positioning only: shared section axis and a content-sized hero. */
 .zemda-landing .zl-hero>.zl-container{width:min(1180px,calc(100% - 64px))}
@@ -82,7 +76,6 @@
 .zemda-landing .zl-hero-grid{display:grid;grid-template-columns:480px minmax(0,1fr);gap:20px;align-items:center}
 .zd-demo{right:calc((min(1180px,100vw - 64px) - 100vw)/2 - 38px)}
 #como-funciona.zl-section{padding-top:42px}
-#como-funciona::before{top:60px;right:-70px;height:210px;width:clamp(280px,28vw,440px);opacity:.42}
 @media(min-width:1051px){.zemda-landing .zl-hero-grid{min-height:calc(clamp(650px,57vw,960px)*.666667)}}
 @media(min-width:1051px) and (max-width:1200px){.zemda-landing .zl-hero-text{width:410px}.zemda-landing .zl-hero-grid{grid-template-columns:410px minmax(0,1fr);min-height:434px}}
 @media(max-width:1050px){.zemda-landing .zl-hero-grid{grid-template-columns:1fr;gap:12px;padding-bottom:16px}.zemda-landing .zl-hero-text{width:auto}.zd-demo{right:auto}.zemda-landing .zl-hero-text .zl-small,.zemda-landing .zl-hero-trial-copy{max-width:none}}

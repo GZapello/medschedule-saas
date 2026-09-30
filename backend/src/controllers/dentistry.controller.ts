@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
 import { DocumentsController } from './documents.controller';
+import { ClinicalRecordService } from '../services/clinical-record.service';
 
 /**
  * Validação de acesso exclusivo para Odontologia (ZemdaOdonto)
@@ -573,6 +574,10 @@ export class DentistryController {
   static saveTreatmentPlan(req: Request, res: Response): void {
     try {
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
       if (!isDentistOrClinicManager(req)) {
         res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
         return;
@@ -583,8 +588,23 @@ export class DentistryController {
         finalValue, paymentTerms, notes, status = 'planned'
       } = req.body;
 
-      if (!patientId || !title || !Array.isArray(items)) {
-        res.status(400).json({ error: 'patientId, title e items são obrigatórios' });
+      if (!patientId) {
+        res.status(400).json({ error: 'Paciente é obrigatório' });
+        return;
+      }
+      if (!title || !title.trim()) {
+        res.status(400).json({ error: 'Título do plano de tratamento é obrigatório' });
+        return;
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ error: 'O plano deve conter pelo menos um procedimento' });
+        return;
+      }
+
+      // Validação de existência do paciente no tenant
+      const patient = db.prepare('SELECT id, full_name FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId) as any;
+      if (!patient) {
+        res.status(404).json({ error: 'Paciente não encontrado' });
         return;
       }
 
@@ -597,40 +617,111 @@ export class DentistryController {
       }
 
       const id = 'dtp-' + uuidv4().slice(0, 8);
+      const budId = 'bdg-' + uuidv4().slice(0, 8);
+      const year = new Date().getFullYear();
+      const countRow = db.prepare("SELECT count(*) as count FROM budgets WHERE tenant_id = ?").get(tenantId) as { count: number };
+      const budgetNumber = `ORC-${year}-${String((countRow?.count || 0) + 1).padStart(4, '0')}`;
+
+      const numTotal = Math.max(0, Number(totalValue || 0));
+      const numDiscount = Math.max(0, Number(discountValue || 0));
+      const numFinal = Math.max(0, Number(finalValue !== undefined && finalValue !== null ? finalValue : (numTotal - numDiscount)));
       const itemsJson = JSON.stringify(items);
+      const budgetStatus = (status === 'approved') ? 'approved' : 'draft';
 
-      db.prepare(`
-        INSERT INTO dental_treatment_plans (
-          id, tenant_id, patient_id, professional_id, title,
-          status, total_value, discount_value, final_value,
-          items_json, payment_terms, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id, tenantId, patientId, profId, title,
-        status, Number(totalValue || 0), Number(discountValue || 0), Number(finalValue || 0),
-        itemsJson, paymentTerms || null, notes || null
-      );
+      // Execução em transação atômica síncrona
+      const saveTx = db.transaction(() => {
+        // 1. Salva o plano odontológico
+        db.prepare(`
+          INSERT INTO dental_treatment_plans (
+            id, tenant_id, patient_id, professional_id, budget_id, title,
+            status, total_value, discount_value, final_value,
+            items_json, payment_terms, notes
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, tenantId, patientId, profId, budId, title.trim(),
+          status, numTotal, numDiscount, numFinal,
+          itemsJson, paymentTerms || null, notes || null
+        );
 
-      // Também sincroniza com o módulo geral de orçamentos se status for 'budget'
-      try {
-        const budId = 'bud-' + id;
+        // 2. Cria orçamento correspondente em budgets (compatível com Gestão -> Orçamentos)
         db.prepare(`
           INSERT INTO budgets (
-            id, tenant_id, patient_id, title, total_value, discount_value, final_value,
-            status, items_json, notes, created_by
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, tenant_id, budget_type, budget_number, patient_id,
+            supplier_name, supplier_contact, discount, total_amount,
+            validity_date, delivery_deadline, status, notes,
+            converted_to_inventory, created_by, created_at, updated_at
+          ) VALUES (?, ?, 'patient', ?, ?, NULL, NULL, ?, ?, NULL, NULL, ?, ?, 0, ?, datetime('now'), datetime('now'))
         `).run(
-          budId, tenantId, patientId, `[Odonto] ${title}`,
-          Number(totalValue || 0), Number(discountValue || 0), Number(finalValue || 0),
-          status === 'approved' ? 'approved' : 'pending',
-          itemsJson, notes || null, req.user?.name || 'Cirurgião-Dentista'
+          budId, tenantId, budgetNumber, patientId,
+          numDiscount, numFinal, budgetStatus, notes || null,
+          req.user?.name || 'Cirurgião-Dentista'
         );
-      } catch (budErr) {
-        console.warn('Aviso ao sincronizar com orçamentos gerais:', budErr);
-      }
 
-      logAudit(req, 'CREATE_TREATMENT_PLAN', 'dental_treatment_plans', id, { patientId, title });
-      res.status(201).json({ id, message: 'Plano de tratamento salvo com sucesso' });
+        // 3. Mapeia cada procedimento para budget_items com detalhes clínicos
+        const insertItemStmt = db.prepare(`
+          INSERT INTO budget_items (
+            id, tenant_id, budget_id, item_type, reference_id, description, quantity, unit_price, total_price
+          ) VALUES (?, ?, ?, 'service', ?, ?, 1, ?, ?)
+        `);
+
+        for (const item of items) {
+          const toothPart = item.tooth ? ` - Dente ${item.tooth}` : '';
+          const facePart = item.face ? ` (${item.face})` : '';
+          const description = `${item.procedure || 'Procedimento'}${toothPart}${facePart}`;
+          const itemVal = Math.max(0, Number(item.value || item.unitPrice || 0));
+          insertItemStmt.run(
+            'bdi-' + uuidv4().slice(0, 8),
+            tenantId,
+            budId,
+            id,
+            description,
+            itemVal,
+            itemVal
+          );
+        }
+
+        // 4. Gera prontuário universal em records de forma estruturada e idempotente
+        const evolutionText = ClinicalRecordService.formatDentalTreatmentPlanEvolution(
+          title.trim(), items, numTotal, numDiscount, numFinal, paymentTerms
+        );
+        const procedureNames = items.map((i: any) => i.procedure).filter(Boolean).join(', ');
+
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId,
+          professionalId: profId,
+          moduleType: 'ZemdaOdonto',
+          sourceId: id,
+          sourceType: 'dental_treatment_plan',
+          title: `Plano de Tratamento / Orçamento: ${title.trim()}`,
+          procedureName: procedureNames || 'Tratamento Odontológico',
+          clinicalEvolution: evolutionText,
+          technicalNotes: notes || null,
+          moduleData: {
+            title: title.trim(),
+            items,
+            totalValue: numTotal,
+            discountValue: numDiscount,
+            finalValue: numFinal,
+            paymentTerms,
+            notes,
+            status,
+            budgetId: budId,
+            budgetNumber
+          },
+          createdBy: req.user?.name || 'Cirurgião-Dentista'
+        });
+      });
+
+      saveTx();
+
+      logAudit(req, 'CREATE_TREATMENT_PLAN', 'dental_treatment_plans', id, { patientId, title, budgetId: budId, budgetNumber });
+      res.status(201).json({
+        id,
+        budgetId: budId,
+        budgetNumber,
+        message: 'Plano de tratamento e orçamento salvos com sucesso'
+      });
     } catch (err: any) {
       console.error('[DentistryController.saveTreatmentPlan] Erro:', err);
       res.status(500).json({ error: 'Erro ao salvar plano de tratamento' });
@@ -642,9 +733,19 @@ export class DentistryController {
       const { id } = req.params;
       const { status } = req.body;
       const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
 
       if (!isDentistOrClinicManager(req)) {
         res.status(403).json({ error: 'Acesso restrito', code: 'DENTISTRY_RESTRICTED' });
+        return;
+      }
+
+      const plan = db.prepare('SELECT * FROM dental_treatment_plans WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!plan) {
+        res.status(404).json({ error: 'Plano de tratamento não encontrado' });
         return;
       }
 
@@ -654,27 +755,68 @@ export class DentistryController {
         WHERE id = ? AND tenant_id = ?
       `).run(status, id, tenantId);
 
+      // Sincroniza status no orçamento geral correspondente
+      if (plan.budget_id) {
+        const budgetStatus = status === 'approved' ? 'approved' : (status === 'canceled' ? 'rejected' : 'draft');
+        db.prepare(`
+          UPDATE budgets 
+          SET status = ?, updated_at = datetime('now')
+          WHERE id = ? AND tenant_id = ?
+        `).run(budgetStatus, plan.budget_id, tenantId);
+      }
+
+      // Atualiza prontuário universal
+      try {
+        const items = JSON.parse(plan.items_json || '[]');
+        const statusLabel = status === 'approved' ? 'Aprovado' : status === 'in_progress' ? 'Em Andamento' : status === 'completed' ? 'Concluído' : status === 'canceled' ? 'Cancelado' : 'Planejado';
+        const evolutionText = ClinicalRecordService.formatDentalTreatmentPlanEvolution(
+          plan.title, items, plan.total_value, plan.discount_value, plan.final_value, plan.payment_terms
+        ) + `\n\nStatus Atual: ${statusLabel}`;
+
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId: plan.patient_id,
+          professionalId: plan.professional_id,
+          moduleType: 'ZemdaOdonto',
+          sourceId: String(id),
+          sourceType: 'dental_treatment_plan',
+          title: `Plano de Tratamento / Orçamento: ${plan.title}`,
+          clinicalEvolution: evolutionText,
+          technicalNotes: plan.notes || null,
+          moduleData: {
+            title: plan.title,
+            items,
+            totalValue: plan.total_value,
+            discountValue: plan.discount_value,
+            finalValue: plan.final_value,
+            paymentTerms: plan.payment_terms,
+            notes: plan.notes,
+            status,
+            budgetId: plan.budget_id
+          },
+          createdBy: req.user?.name || 'Cirurgião-Dentista'
+        });
+      } catch (_) {}
+
       // Se aprovado, pode registrar contas a receber
       if (status === 'approved' && req.body.generateFinancialRecord) {
         try {
-          const plan = db.prepare('SELECT * FROM dental_treatment_plans WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
-          if (plan) {
-            const payId = 'pay-' + uuidv4().slice(0, 8);
-            db.prepare(`
-              INSERT INTO payments (
-                id, tenant_id, patient_id, amount, method, status, due_date, notes
-              ) VALUES (?, ?, ?, ?, 'credit_card', 'pending', date('now'), ?)
-            `).run(payId, tenantId, plan.patient_id, plan.final_value, `Orçamento Odonto: ${plan.title}`);
-          }
+          const payId = 'pay-' + uuidv4().slice(0, 8);
+          db.prepare(`
+            INSERT INTO payments (
+              id, tenant_id, patient_id, amount, method, status, due_date, notes
+            ) VALUES (?, ?, ?, ?, 'credit_card', 'pending', date('now'), ?)
+          `).run(payId, tenantId, plan.patient_id, plan.final_value, `Orçamento Odonto: ${plan.title}`);
         } catch (payErr) {
           console.warn('Aviso ao gerar registro financeiro:', payErr);
         }
       }
 
+      logAudit(req, 'UPDATE_TREATMENT_PLAN_STATUS', 'dental_treatment_plans', id, { status });
       res.json({ message: 'Status do plano atualizado com sucesso' });
     } catch (err: any) {
       console.error('[DentistryController.updateTreatmentPlanStatus] Erro:', err);
-      res.status(500).json({ error: 'Erro ao atualizar plano' });
+      res.status(500).json({ error: 'Erro ao atualizar status do plano de tratamento' });
     }
   }
 
@@ -693,14 +835,21 @@ export class DentistryController {
       }
 
       const rows = db.prepare(`
-        SELECT dpl.*, p.name as professional_name
+        SELECT dpl.*, p.name as professional_name, pat.full_name as patient_name
         FROM dental_prosthetics_lab dpl
+        JOIN patients pat ON pat.id = dpl.patient_id
         LEFT JOIN professionals p ON p.id = dpl.professional_id
         WHERE dpl.patient_id = ? AND dpl.tenant_id = ?
         ORDER BY dpl.created_at DESC
-      `).all(patientId, tenantId);
+      `).all(patientId, tenantId) as any[];
 
-      res.json(rows);
+      const today = new Date().toISOString().split('T')[0];
+      const result = rows.map(r => ({
+        ...r,
+        isOverdue: (r.status !== 'installed' && r.status !== 'canceled' && r.expected_date) ? r.expected_date < today : false
+      }));
+
+      res.json(result);
     } catch (err: any) {
       console.error('[DentistryController.listProsthetics] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar próteses' });
@@ -733,6 +882,12 @@ export class DentistryController {
         return;
       }
 
+      const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+      if (!patient) {
+        res.status(404).json({ error: 'Paciente não encontrado' });
+        return;
+      }
+
       const validStatuses = ['sent_to_lab', 'in_production', 'delivered_to_clinic', 'tested_adjusted', 'installed', 'canceled'];
       const status = (!rawStatus || rawStatus === 'requested' || !validStatuses.includes(rawStatus))
         ? 'sent_to_lab'
@@ -753,12 +908,49 @@ export class DentistryController {
           expected_date, received_date, cost_value, status, notes
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        id, tenantId, patientId, profId, labName,
-        workType, toothNumber || null, shadeColor || null, material || null, sentDate || null,
+        id, tenantId, patientId, profId, String(labName).trim(),
+        String(workType).trim(), toothNumber || null, shadeColor || null, material || null, sentDate || null,
         expectedDate || null, receivedDate || null, Number(costValue || 0), status, notes || null
       );
 
+      // Sincroniza com prontuário universal
+      try {
+        const evolutionText = ClinicalRecordService.formatDentalProstheticEvolution(
+          String(workType).trim(), String(labName).trim(), toothNumber, shadeColor, material, expectedDate, Number(costValue || 0), status
+        );
+        ClinicalRecordService.recordClinicalEvent({
+          tenantId,
+          patientId,
+          professionalId: profId,
+          moduleType: 'ZemdaOdonto',
+          sourceId: id,
+          sourceType: 'dental_prosthetics_lab',
+          title: `Laboratório de Prótese: ${String(workType).trim()}`,
+          procedureName: String(workType).trim(),
+          clinicalEvolution: evolutionText,
+          technicalNotes: notes || null,
+          moduleData: {
+            id,
+            labName: String(labName).trim(),
+            workType: String(workType).trim(),
+            toothNumber,
+            shadeColor,
+            material,
+            sentDate,
+            expectedDate,
+            receivedDate,
+            costValue: Number(costValue || 0),
+            status,
+            notes
+          },
+          createdBy: req.user?.name || 'Cirurgião-Dentista'
+        });
+      } catch (err) {
+        console.warn('Aviso ao registrar prótese no prontuário universal:', err);
+      }
+
       const created = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      logAudit(req, 'CREATE_PROSTHETIC', 'dental_prosthetics_lab', id, { patientId, workType, labName, status });
       res.status(201).json({ id, message: 'Trabalho de prótese registrado com sucesso', prosthetic: created });
     } catch (err: any) {
       console.error('[DentistryController.saveProsthetic] Erro:', err);
@@ -776,7 +968,16 @@ export class DentistryController {
         return;
       }
 
-      const { status, receivedDate, notes } = req.body;
+      const existing = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      if (!existing) {
+        res.status(404).json({ error: 'Trabalho de prótese não encontrado' });
+        return;
+      }
+
+      const {
+        status, receivedDate, expectedDate, costValue, notes,
+        sentDate, material, shadeColor, toothNumber, workType, labName
+      } = req.body;
       const validStatuses = ['sent_to_lab', 'in_production', 'delivered_to_clinic', 'tested_adjusted', 'installed', 'canceled'];
 
       if (status !== undefined && status !== null && !validStatuses.includes(status)) {
@@ -788,12 +989,58 @@ export class DentistryController {
         UPDATE dental_prosthetics_lab SET
           status = COALESCE(?, status),
           received_date = COALESCE(?, received_date),
+          expected_date = COALESCE(?, expected_date),
+          sent_date = COALESCE(?, sent_date),
+          cost_value = COALESCE(?, cost_value),
+          tooth_number = COALESCE(?, tooth_number),
+          shade_color = COALESCE(?, shade_color),
+          material = COALESCE(?, material),
+          lab_name = COALESCE(?, lab_name),
+          work_type = COALESCE(?, work_type),
           notes = COALESCE(?, notes),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
-      `).run(status || null, receivedDate || null, notes || null, id, tenantId);
+      `).run(
+        status || null,
+        receivedDate || null,
+        expectedDate || null,
+        sentDate || null,
+        costValue !== undefined && costValue !== null ? Number(costValue) : null,
+        toothNumber || null,
+        shadeColor || null,
+        material || null,
+        labName || null,
+        workType || null,
+        notes || null,
+        id,
+        tenantId
+      );
 
-      const updated = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+      const updated = db.prepare('SELECT * FROM dental_prosthetics_lab WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+
+      if (updated) {
+        try {
+          const evolutionText = ClinicalRecordService.formatDentalProstheticEvolution(
+            updated.work_type, updated.lab_name, updated.tooth_number, updated.shade_color, updated.material, updated.expected_date, updated.cost_value, updated.status
+          );
+          ClinicalRecordService.recordClinicalEvent({
+            tenantId,
+            patientId: updated.patient_id,
+            professionalId: updated.professional_id,
+            moduleType: 'ZemdaOdonto',
+            sourceId: id,
+            sourceType: 'dental_prosthetics_lab',
+            title: `Laboratório de Prótese: ${updated.work_type}`,
+            procedureName: updated.work_type,
+            clinicalEvolution: evolutionText,
+            technicalNotes: updated.notes || null,
+            moduleData: updated,
+            createdBy: req.user?.name || 'Cirurgião-Dentista'
+          });
+        } catch (_) {}
+      }
+
+      logAudit(req, 'UPDATE_PROSTHETIC', 'dental_prosthetics_lab', id, { status, updatedFields: Object.keys(req.body) });
       res.json({ message: 'Trabalho de prótese atualizado com sucesso', prosthetic: updated });
     } catch (err: any) {
       console.error('[DentistryController.updateProsthetic] Erro:', err);
