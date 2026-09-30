@@ -10,6 +10,7 @@ import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 import { hasPsychologyAccess } from './psychology.controller';
 import { hasPsychopedagogyAccess } from './psychopedagogy.controller';
 import { isUserPersonalTrainer } from './personal.controller';
+import { isMedicalProfessionalOrClinicManager } from './medical.controller';
 
 function normalizeModule(mod: string): string {
   const m = String(mod || '').toLowerCase().replace(/^zemda[-_]?/, '');
@@ -21,12 +22,31 @@ function normalizeModule(mod: string): string {
   if (m === 'fisio' || m === 'physiotherapy' || m === 'physio') return 'fisio';
   if (m === 'personal' || m === 'fitness') return 'personal';
   if (m === 'pp' || m === 'psychopedagogy') return 'pp';
+  if (m === 'med' || m === 'medical' || m === 'medicina') return 'medical';
   return m;
 }
 
 export function validateModuleAccess(req: Request, moduleType: string, patientId: string): boolean {
   if (!req.user || !req.tenantId) return false;
-  if (req.user.role === 'superadmin') return false;
+
+  const isSandboxTenant = req.tenantId.startsWith('sbx-tenant-');
+  const isSandboxSession = Boolean((req as any).isSandboxSession || req.headers['x-sandbox-session']);
+  let isAuthorizedSandbox = isSandboxTenant || isSandboxSession;
+
+  if (!isAuthorizedSandbox && req.user.role === 'superadmin') {
+    const sbx = db.prepare('SELECT id FROM sandbox_test_sessions WHERE (sandbox_tenant_id = ? OR id = ?) AND admin_user_id = ?').get(req.tenantId, req.tenantId, req.user.userId);
+    if (sbx) isAuthorizedSandbox = true;
+  }
+
+  // SuperAdmin no ambiente Sandbox tem acesso para testes e simulação
+  if (req.user.role === 'superadmin') {
+    if (!isAuthorizedSandbox) {
+      // Em clínicas reais de produção, SuperAdmin é estritamente bloqueado de rascunhos clínicos (sigilo LGPD)
+      return false;
+    }
+    const patient = db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, req.tenantId);
+    return !!patient;
+  }
 
   const role = req.user.role as string;
   if (role === 'receptionist' || role === 'financial' || role === 'secretary' || role === 'assistant') {
@@ -40,6 +60,8 @@ export function validateModuleAccess(req: Request, moduleType: string, patientId
   const norm = normalizeModule(moduleType);
 
   switch (norm) {
+    case 'medical':
+      return isMedicalProfessionalOrClinicManager(req) && hasClinicalAccess(req, patientId);
     case 'fono':
       return isSpeechTherapistOrClinicManager(req);
     case 'odonto':

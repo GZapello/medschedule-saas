@@ -168,6 +168,88 @@ export const DEFAULT_MEDICAL_SPECIALTIES: MedicalSpecialtyPreset[] = [
   }
 ];
 
+function normalizeSpecialtyString(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/^(med-spec-|pa-med-|med-pa-|prof-medico-|prof-)/, '')
+    .trim();
+}
+
+const SPECIALTY_ALIAS_MAP: Record<string, string> = {
+  oftalmo: 'oftalmologia',
+  oftalmologista: 'oftalmologia',
+  neuro: 'neurologia',
+  neurologista: 'neurologia',
+  neurologica: 'neurologia',
+  cardio: 'cardiologia',
+  cardiologista: 'cardiologia',
+  dermato: 'dermatologia',
+  dermatologista: 'dermatologia',
+  ortopedia: 'ortopedia',
+  ortopedista: 'ortopedia',
+  traumatologia: 'ortopedia',
+  traumatologista: 'ortopedia',
+  reuma: 'reumatologia',
+  reumatologista: 'reumatologia',
+  reumatologia: 'reumatologia',
+  gineco: 'ginecologia',
+  ginecologista: 'ginecologia',
+  obstetra: 'ginecologia',
+  obstetricia: 'ginecologia',
+  endocrino: 'endocrinologia',
+  endocrinologista: 'endocrinologia',
+  gastro: 'gastroenterologia',
+  gastroenterologista: 'gastroenterologia',
+  gastroenterologia: 'gastroenterologia',
+  otorrino: 'otorrinolaringologia',
+  otorrinolaringologista: 'otorrinolaringologia',
+  otorrinolaringologia: 'otorrinolaringologia',
+  uro: 'urologia',
+  urologista: 'urologia',
+  psiquiatra: 'psiquiatria',
+  psiquiatria: 'psiquiatria',
+  pediatra: 'pediatria',
+  pediatria: 'pediatria',
+  geriatra: 'geriatria',
+  geriatria: 'geriatria',
+  clinica: 'clinica-medica',
+  clinico: 'clinica-medica'
+};
+
+function matchSpecialtyPreset(candidate: string | undefined | null, presets: MedicalSpecialtyPreset[]): MedicalSpecialtyPreset | null {
+  if (!candidate || !presets || presets.length === 0) return null;
+  const raw = normalizeSpecialtyString(candidate);
+  if (!raw) return null;
+
+  // 1. Correspondência exata em id ou slug
+  const exact = presets.find(p => normalizeSpecialtyString(p.id) === raw || normalizeSpecialtyString(p.slug || '') === raw);
+  if (exact) return exact;
+
+  // 2. Correspondência exata em name
+  const nameMatch = presets.find(p => normalizeSpecialtyString(p.name) === raw);
+  if (nameMatch) return nameMatch;
+
+  // 3. Correspondência por aliases conhecidos
+  for (const [alias, targetPresetId] of Object.entries(SPECIALTY_ALIAS_MAP)) {
+    if (raw.includes(alias) || alias.includes(raw)) {
+      const match = presets.find(p => p.id === targetPresetId || p.slug === targetPresetId);
+      if (match) return match;
+    }
+  }
+
+  // 4. Substring no id ou name
+  const subMatch = presets.find(p => {
+    const pId = normalizeSpecialtyString(p.id);
+    const pName = normalizeSpecialtyString(p.name);
+    return raw.includes(pId) || pId.includes(raw) || raw.includes(pName) || pName.includes(raw);
+  });
+  if (subMatch) return subMatch;
+
+  return null;
+}
+
 export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   initialPatientId,
   initialAppointmentId,
@@ -179,9 +261,36 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   // Árvore Médica Centralizada e Especialidades do Usuário
   const [medicalTree, setMedicalTree] = useState<MedicalSpecialtyItem[]>([]);
   const restoredSpecialtyRef = useRef<string | null>(null);
+  const userHasExplicitlySelectedPresetRef = useRef<boolean>(false);
   const [resourceCapabilities, setResourceCapabilities] = useState<string[] | null>(null);
   const [medicalAreaIds, setMedicalAreaIds] = useState<string[]>([]);
   const [userSpecialtyIds, setUserSpecialtyIds] = useState<string[]>([]);
+  const [appointmentSpecialty, setAppointmentSpecialty] = useState<string | null>(null);
+
+  // Busca detalhes do agendamento quando fornecido para extrair a especialidade do serviço
+  useEffect(() => {
+    if (!initialAppointmentId) {
+      setAppointmentSpecialty(null);
+      return;
+    }
+    let isSubscribed = true;
+    ApiClient.get<any>(`/v1/appointments/${initialAppointmentId}`)
+      .then(res => {
+        if (!isSubscribed) return;
+        const apt = res?.appointment || res;
+        const specCandidate = apt?.service_name || apt?.specialty || apt?.service_id || null;
+        if (specCandidate) {
+          setAppointmentSpecialty(String(specCandidate));
+        }
+        if (!selectedPatientId && apt?.patient_id) {
+          setSelectedPatientId(apt.patient_id);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isSubscribed = false;
+    };
+  }, [initialAppointmentId]);
 
   // Carrega a árvore médica e especialidades do médico
   useEffect(() => {
@@ -263,35 +372,113 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     return [catalogSource[0]];
   }, [medicalTree, userSpecialtyIds, practiceAreaIds, currentUser]);
 
-  // Pacientes e Seleção
+  // Pacientes e Seleção — Sem auto-seleção de paciente fantasma
   const [selectedPatientId, setSelectedPatientId] = useState<string>(() => {
-    return initialPatientId || sessionStorage.getItem('zemda_med_active_patient_id') || '';
+    return initialPatientId || '';
   });
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
 
   useEffect(() => {
     if (initialPatientId) {
       setSelectedPatientId(initialPatientId);
-      sessionStorage.setItem('zemda_med_active_patient_id', initialPatientId);
     }
   }, [initialPatientId]);
 
-  // Preset de Especialidade Ativo
+  // Preset de Especialidade Ativo — Cálculo síncrono inicial para evitar flash de clínica médica
   const [activePreset, setActivePreset] = useState<string>(() => {
-    return allowedPresets[0]?.id || 'clinica-medica';
+    const syncCandidates: (string | undefined | null)[] = [
+      currentUser?.specialtyName,
+      ...(practiceAreaIds || []),
+      currentUser?.practiceAreas,
+      currentUser?.professionName,
+      currentUser?.canonicalProfessionName
+    ];
+    for (const cand of syncCandidates) {
+      if (!cand) continue;
+      const match = matchSpecialtyPreset(cand, DEFAULT_MEDICAL_SPECIALTIES);
+      if (match && match.id !== 'clinica-medica') {
+        return match.id;
+      }
+    }
+    return 'clinica-medica';
   });
 
-  // Atualiza preset ativo quando allowedPresets for carregado
+  // Atualiza preset ativo seguindo ordem estrita de prioridade
   useEffect(() => {
-    if (restoredSpecialtyRef.current && allowedPresets.some(p => p.id === restoredSpecialtyRef.current)) {
-      setActivePreset(restoredSpecialtyRef.current);
-      restoredSpecialtyRef.current = null;
+    if (allowedPresets.length === 0) return;
+
+    // Se o usuário selecionou manualmente uma especialidade no select, respeita a escolha
+    if (userHasExplicitlySelectedPresetRef.current) {
+      if (allowedPresets.some(p => p.id === activePreset)) {
+        return;
+      }
+    }
+
+    // Se um rascunho salvo foi restaurado com especialidade específica, mantém rigorosamente
+    if (restoredSpecialtyRef.current) {
+      const matchRestored = allowedPresets.find(p => p.id === restoredSpecialtyRef.current || p.slug === restoredSpecialtyRef.current);
+      if (matchRestored) {
+        setActivePreset(matchRestored.id);
+        restoredSpecialtyRef.current = null;
+        return;
+      }
+    }
+
+    // Prioridade 1: Especialidade do Agendamento (se veio de agendamento de consulta)
+    if (appointmentSpecialty) {
+      const matchApp = matchSpecialtyPreset(appointmentSpecialty, allowedPresets);
+      if (matchApp) {
+        setActivePreset(matchApp.id);
+        return;
+      }
+    }
+
+    // Prioridade 2: Especialidades médicas vinculadas ao profissional (userSpecialtyIds)
+    if (userSpecialtyIds.length > 0) {
+      for (const specId of userSpecialtyIds) {
+        const matchSpec = matchSpecialtyPreset(specId, allowedPresets);
+        if (matchSpec && matchSpec.id !== 'clinica-medica') {
+          setActivePreset(matchSpec.id);
+          return;
+        }
+      }
+      const matchSpecAny = matchSpecialtyPreset(userSpecialtyIds[0], allowedPresets);
+      if (matchSpecAny) {
+        setActivePreset(matchSpecAny.id);
+        return;
+      }
+    }
+
+    // Prioridade 3: Perfil do médico / Simulação Sandbox (specialtyName, practiceAreaIds, professionName)
+    const profileCandidates: (string | undefined | null)[] = [
+      currentUser?.specialtyName,
+      ...(practiceAreaIds || []),
+      currentUser?.practiceAreas,
+      currentUser?.professionName,
+      currentUser?.canonicalProfessionName,
+      currentUser?.professionId
+    ];
+    for (const cand of profileCandidates) {
+      if (!cand) continue;
+      const matchProf = matchSpecialtyPreset(cand, allowedPresets);
+      if (matchProf && matchProf.id !== 'clinica-medica') {
+        setActivePreset(matchProf.id);
+        return;
+      }
+    }
+
+    // Prioridade 4: Primeiro preset específico permitido diferente de clínica médica
+    const specificPreset = allowedPresets.find(p => p.id !== 'clinica-medica' && p.slug !== 'clinica-medica');
+    if (specificPreset && currentUser?.role !== 'superadmin') {
+      setActivePreset(specificPreset.id);
       return;
     }
-    if (allowedPresets.length > 0 && !allowedPresets.some(p => p.id === activePreset)) {
+
+    // Prioridade 5: Clínica médica como fallback final
+    if (!allowedPresets.some(p => p.id === activePreset)) {
       setActivePreset(allowedPresets[0].id);
     }
-  }, [allowedPresets, activePreset]);
+  }, [allowedPresets, appointmentSpecialty, userSpecialtyIds, practiceAreaIds, currentUser]);
 
   // Estado da Consulta Atual — Anamnese
   const [chiefComplaint, setChiefComplaint] = useState('');
@@ -598,8 +785,9 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       if (!restored || typeof restored !== 'object') return;
       if (typeof restored.specialtyPreset === 'string') {
         restoredSpecialtyRef.current = restored.specialtyPreset;
-        if (allowedPresets.some(p => p.id === restored.specialtyPreset)) {
-          setActivePreset(restored.specialtyPreset);
+        const matched = allowedPresets.find(p => p.id === restored.specialtyPreset || p.slug === restored.specialtyPreset);
+        if (matched) {
+          setActivePreset(matched.id);
           restoredSpecialtyRef.current = null;
         }
       }
@@ -735,6 +923,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
       showToast('Consulta médica finalizada com sucesso e registrada no prontuário do paciente!', 'success');
       await autosave.clearDraft();
+      sessionStorage.removeItem('zemda_med_active_patient_id');
       setActiveTab('history');
       loadPatientConsultations(selectedPatientId);
 
@@ -809,7 +998,10 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             <span className="text-[10px] font-extrabold uppercase text-slate-400">Especialidade:</span>
             <select
               value={activePreset}
-              onChange={e => setActivePreset(e.target.value)}
+              onChange={e => {
+                userHasExplicitlySelectedPresetRef.current = true;
+                setActivePreset(e.target.value);
+              }}
               className="text-xs font-bold text-teal-900 bg-transparent focus:outline-none cursor-pointer"
             >
               {allowedPresets.map(preset => (
@@ -828,14 +1020,16 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
           clientTermLabel={clientTermLabel}
           disabled={!!initialAppointmentId}
           onChange={async (id, pat) => {
-            if (selectedPatientId && !await autosave.forceSaveDraft()) {
-              showToast('Salve o rascunho antes de trocar de paciente.', 'error');
-              return;
+            if (selectedPatientId && autosave.isDirty) {
+              const saved = await autosave.forceSaveDraft();
+              if (!saved) {
+                showToast('Salve o rascunho antes de trocar de paciente.', 'error');
+                return;
+              }
             }
             setSelectedPatientId(id);
             if (pat) {
               setSelectedPatient(pat);
-              sessionStorage.setItem('zemda_med_active_patient_id', id);
             } else if (!id) {
               setSelectedPatient(null);
               sessionStorage.removeItem('zemda_med_active_patient_id');

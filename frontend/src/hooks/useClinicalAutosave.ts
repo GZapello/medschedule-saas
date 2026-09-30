@@ -53,23 +53,34 @@ export function useClinicalAutosave({
   const currentPatientRef = useRef<string | null | undefined>(patientId);
   currentPatientRef.current = patientId;
 
+  const patientVersionRef = useRef<number>(0);
+  const lastBaselinePayloadRef = useRef<string>('');
+
   const resolvedAppId = appointmentId && appointmentId !== 'none' ? appointmentId : null;
   const localDraftKey = patientId ? `zemda_draft_${moduleType}_${patientId}_${resolvedAppId || 'none'}` : null;
 
   // 1. Recuperação Inicial ao alterar Paciente ou Appointment
   useEffect(() => {
+    patientVersionRef.current += 1;
+    const activeVersion = patientVersionRef.current;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    lastBaselinePayloadRef.current = '';
     clearingDraftRef.current = false;
+    initialLoadedRef.current = false;
+    setIsDirty(false);
+    setAutosaveStatus('idle');
+    setLastSavedTime(null);
+
     if (!patientId || !enabled) {
-      initialLoadedRef.current = false;
-      setIsDirty(false);
-      setAutosaveStatus('idle');
       return;
     }
 
     let isSubscribed = true;
-    initialLoadedRef.current = false;
-    setIsDirty(false);
-    setAutosaveStatus('idle');
 
     async function recoverDraft() {
       try {
@@ -84,7 +95,7 @@ export function useClinicalAutosave({
           } catch {}
         }
 
-        if (!isSubscribed) return;
+        if (!isSubscribed || patientVersionRef.current !== activeVersion) return;
 
         const backendDraft = res?.draft;
 
@@ -130,9 +141,12 @@ export function useClinicalAutosave({
       } catch (err) {
         console.warn(`[useClinicalAutosave - ${moduleType}] Erro ao carregar rascunho:`, err);
       } finally {
-        if (isSubscribed) {
+        if (isSubscribed && patientVersionRef.current === activeVersion) {
           setTimeout(() => {
-            initialLoadedRef.current = true;
+            if (isSubscribed && patientVersionRef.current === activeVersion) {
+              lastBaselinePayloadRef.current = JSON.stringify(payloadRef.current);
+              initialLoadedRef.current = true;
+            }
           }, 600);
         }
       }
@@ -142,6 +156,10 @@ export function useClinicalAutosave({
 
     return () => {
       isSubscribed = false;
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
     };
   }, [patientId, resolvedAppId, moduleType, enabled]);
 
@@ -149,9 +167,18 @@ export function useClinicalAutosave({
   const performSaveDraft = useCallback(async (): Promise<boolean> => {
     if (!patientId || !enabled || clearingDraftRef.current) return false;
 
+    const activeVersion = patientVersionRef.current;
+    const activePatientId = patientId;
     const now = new Date();
     const clientUpdatedAt = now.toISOString();
     const currentPayload = payloadRef.current;
+    const currentSerialized = JSON.stringify(currentPayload);
+
+    // Se o formulário for idêntico à linha de base (virgem ou já salvo), não faz requisição desnecessária
+    if (lastBaselinePayloadRef.current && currentSerialized === lastBaselinePayloadRef.current) {
+      setIsDirty(false);
+      return true;
+    }
 
     // Fallback local imediato
     if (localDraftKey) {
@@ -183,12 +210,21 @@ export function useClinicalAutosave({
       pendingSavesRef.current.add(request);
       try { await request; } finally { pendingSavesRef.current.delete(request); }
 
+      // Se o paciente mudou durante o salvamento assíncrono, descarta a atualização de estado
+      if (patientVersionRef.current !== activeVersion || currentPatientRef.current !== activePatientId) {
+        return false;
+      }
+
+      lastBaselinePayloadRef.current = currentSerialized;
       const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
       setLastSavedTime(timeStr);
       setAutosaveStatus('saved');
       setIsDirty(false);
       return true;
     } catch (err: any) {
+      if (patientVersionRef.current !== activeVersion || currentPatientRef.current !== activePatientId) {
+        return false;
+      }
       console.warn(`[useClinicalAutosave - ${moduleType}] Erro no autosave do backend:`, err);
       if (!navigator.onLine || err?.message?.includes('conectar') || err?.message?.includes('Failed to fetch')) {
         setAutosaveStatus('offline');
@@ -204,7 +240,12 @@ export function useClinicalAutosave({
 
   // 3. Debounce Automático ao Modificar Payload
   useEffect(() => {
-    if (!initialLoadedRef.current || !patientId || !enabled) return;
+    if (!initialLoadedRef.current || !patientId || !enabled || clearingDraftRef.current) return;
+
+    const currentSerialized = JSON.stringify(payload);
+    if (lastBaselinePayloadRef.current && currentSerialized === lastBaselinePayloadRef.current) {
+      return;
+    }
 
     setIsDirty(true);
     setAutosaveStatus('saving');
@@ -213,8 +254,12 @@ export function useClinicalAutosave({
       clearTimeout(debounceTimerRef.current);
     }
 
-    debounceTimerRef.current = setTimeout(() => {
-      performSaveDraft();
+    const activeVersion = patientVersionRef.current;
+    debounceTimerRef.current = setTimeout(async () => {
+      if (patientVersionRef.current !== activeVersion || currentPatientRef.current !== patientId) {
+        return;
+      }
+      await performSaveDraft();
     }, debounceMs);
 
     return () => {
@@ -275,6 +320,7 @@ export function useClinicalAutosave({
     clearingDraftRef.current = true;
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     await Promise.allSettled([...pendingSavesRef.current]);
+    lastBaselinePayloadRef.current = '';
     if (localDraftKey) {
       try {
         localStorage.removeItem(localDraftKey);
