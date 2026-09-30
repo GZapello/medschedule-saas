@@ -6,7 +6,6 @@ import { PublicFooter } from './PublicFooter';
 import { RevealSection, RevealItem } from './RevealOnScroll';
 import { LANDING_MODULES, LANDING_PLANS, LANDING_STEPS, LANDING_LAYERS, LANDING_FAQS, moduleHref } from '../../../../backend/src/seo/landingContent';
 import { LandingProductDemo } from './LandingProductDemo';
-import { MobileProductPreview } from './MobileProductPreview';
 import './zemda-landing.css';
 
 interface ZemdaLandingPageProps {
@@ -100,9 +99,7 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
       <RevealSection id="profissoes" className="zl-section zl-tinted"><div className="zl-container">
         <RevealItem distancePx={16} durationMs={550}><Heading label="Ecossistema profissional" title="Ferramentas específicas para sua profissão.">Avalie, registre e acompanhe cada atendimento com os recursos da sua área.</Heading></RevealItem>
         <RevealItem distancePx={18} delayMs={100} durationMs={600}><article id="zemda360" className="zl-body"><span className="zl-body-symbol"><Crosshair size={48} strokeWidth={1.3} /></span><div><span className="zl-eyebrow">Módulo transversal</span><h3>Zemda360</h3><p>Mapeamento anatômico visual integrado ao atendimento. Um recurso compartilhado entre a medicina e as especialidades multiprofissionais para registro corporal e facial, marcações com caneta e borracha e histórico de avaliações.</p></div><div className="zl-body-tags"><span>Mapeamento anatômico visual</span><span>Mapeamento corporal e facial</span><span>Marcações e histórico</span></div></article></RevealItem>
-        <MobileProductPreview view="body" />
         <div className="zl-modules">{LANDING_MODULES.map((module, index) => { const Icon = moduleIcons[module.id] || Stethoscope; return <React.Fragment key={module.id}><RevealItem distancePx={18} delayMs={(index % 4) * 60} durationMs={600} className="zl-full-height"><article id={`modulo-${module.id}`} className={`zl-module zl-module-${module.id}`}><span className="zl-module-icon"><Icon size={23} /></span><p className="zl-profession">{module.profession}</p><h3>{module.name}</h3><Bullets items={module.features} /><a href={moduleHref(module)} onClick={event => navigateModule(event, module)} className="zl-module-link" aria-label={`Conhecer módulo ${module.name}`}>Conhecer módulo <ArrowRight size={16} /></a></article></RevealItem></React.Fragment>; })}</div>
-        <MobileProductPreview view="professions" />
         <aside className="zl-care-editorial">
           <div className="zl-care-copy"><span className="zl-eyebrow">Tecnologia a serviço do cuidado</span><h3>Feito para quem cuida.</h3><p>Da rotina clínica à gestão, o Zemda acompanha cada profissional.</p></div>
         </aside>
@@ -131,7 +128,6 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
       <RevealSection id="gestao" className="zl-section"><div className="zl-container">
         <RevealItem distancePx={16} durationMs={550}><div className="zl-section-inline"><Heading label="Gestão & financeiro" title="Controle sua rotina e suas finanças.">Receitas, despesas, serviços e relatórios para quem atende sozinho ou gerencia uma equipe.</Heading><a href="/gestao-financeira" className="zl-link">Conhecer a gestão <ArrowRight size={16} /></a></div></RevealItem>
         <div className="zl-management">{[{ icon: DollarSign, title: 'Financeiro', items: ['Receitas, despesas e caixa', 'Comissões e relatórios'] }, { icon: Users, title: 'Equipe', items: ['Usuários e permissões', 'Profissões e serviços'] }, { icon: Layers3, title: 'Operação', items: ['Pacientes e agenda', 'Estoque e insumos'] }].map((item, i) => <RevealItem key={item.title} distancePx={18} delayMs={i * 80} durationMs={600} className="zl-full-height"><article><item.icon size={25} /><h3>{item.title}</h3><Bullets items={item.items} /></article></RevealItem>)}</div>
-        <MobileProductPreview view="management" />
       </div></RevealSection>
 
       <RevealSection id="ia" className="zl-section zl-ai-section"><div className="zl-container"><RevealItem distancePx={18} durationMs={600}><div className="zl-ai"><span className="zl-icon"><Sparkles size={27} /></span><div><span className="zl-eyebrow">Inteligência artificial com responsabilidade</span><h2>IA como apoio, não como substituição profissional.</h2><p>Estruturação de texto, apoio à evolução, ditado, organização, sugestões e relatórios assistidos nos fluxos disponíveis.</p><p className="zl-note">Todo conteúdo clínico gerado ou estruturado por IA exige revisão e responsabilidade do profissional.</p></div></div></RevealItem></div></RevealSection>
