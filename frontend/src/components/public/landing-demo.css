@@ -88,3 +88,18 @@
 @media(max-width:1050px){.zemda-landing .zl-hero-grid{grid-template-columns:1fr;gap:12px;padding-bottom:16px}.zemda-landing .zl-hero-text{width:auto}.zd-demo{right:auto}.zemda-landing .zl-hero-text .zl-small,.zemda-landing .zl-hero-trial-copy{max-width:none}}
 @media(max-width:800px){.zemda-landing .zl-hero>.zl-container{width:calc(100% - 40px)}#como-funciona.zl-section{padding-top:34px}}
 @media(max-width:540px){.zemda-landing .zl-hero>.zl-container{width:calc(100% - 36px)}}
+/* Mobile only: enlarge the existing proportional product mockup as one unit. */
+@media (max-width:640px) {
+  .zemda-landing .zl-hero-grid { grid-template-columns:minmax(0,1fr);gap:14px; }
+  .zemda-landing .zl-hero-text,.zemda-landing .zl-hero-copy { display:contents; }
+  .zemda-landing .zl-hero-text h1 { order:1;margin-bottom:0; }
+  .zemda-landing .zl-hero-copy>p:first-child { order:2;margin:0; }
+  .zemda-landing .zl-hero .zl-actions { order:3;margin-top:2px; }
+  .zemda-landing .zl-hero-grid>.zd-demo {
+    order:4;position:relative;inset:auto;justify-self:center;
+    width:112vw;max-width:none;min-width:0;margin:0 0 14px;transform:none;
+  }
+  .zemda-landing .zl-hero-trial-copy { order:5;margin-top:0; }
+  .zemda-landing .zl-hero-copy>.zl-small { order:6;margin-top:0; }
+  .zemda-landing .zd-demo .zd-demo-note { left:10%;right:10%; }
+}
