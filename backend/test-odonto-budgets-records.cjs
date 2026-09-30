@@ -34,26 +34,32 @@ app.use('/api', require('./dist/routes').default);
 
     // 1. Cria Tenant
     db.prepare(`
-      INSERT INTO tenants (id, name, trade_name, cnpj_cpf, status, zemda_odonto_enabled)
-      VALUES (?, 'Clínica Odonto Prime', 'Odonto Prime', '12345678000199', 'active', 1)
+      INSERT INTO tenants (id, slug, name, trade_name, cnpj_cpf, status, email)
+      VALUES (?, 'odonto-prime', 'Clínica Odonto Prime', 'Odonto Prime', '12345678000199', 'active', 'contato@odontoprime.test')
     `).run(tenantId);
 
     // 2. Cria Usuário Dentista
     db.prepare(`
-      INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, profession_name)
-      VALUES (?, ?, 'Dr. Silva Dentista', 'dentista@odonto.test', ?, 'professional', 'active', 'Cirurgião-Dentista')
+      INSERT INTO users (id, tenant_id, name, email, password_hash, role, status, profession_name, zemda_odonto_enabled)
+      VALUES (?, ?, 'Dr. Silva Dentista', 'dentista@odonto.test', ?, 'professional', 'active', 'Cirurgião-Dentista', 1)
     `).run(dentistUserId, tenantId, bcrypt.hashSync('pass123', 4));
+
+    // 2b. Cria Vínculo em clinic_users
+    db.prepare(`
+      INSERT INTO clinic_users (id, tenant_id, user_id, role, status, is_manager, zemda_odonto_enabled)
+      VALUES ('cu-dentist-1', ?, ?, 'professional', 'active', 0, 1)
+    `).run(tenantId, dentistUserId);
 
     // 3. Cria Profissional Dentista
     db.prepare(`
-      INSERT INTO professionals (id, tenant_id, user_id, name, email, profession_id, practice_areas, registration_type, registration_number, active)
-      VALUES (?, ?, ?, 'Dr. Silva Dentista', 'dentista@odonto.test', 'prof-dentista', 'Odontologia, Prótese Dentária', 'CRO', 'SP-12345', 1)
+      INSERT INTO professionals (id, tenant_id, user_id, name, profession_id, registration_type, registration_number, active, zemda_odonto_enabled)
+      VALUES (?, ?, ?, 'Dr. Silva Dentista', 'prof-dentista', 'CRO', 'SP-12345', 1, 1)
     `).run(dentistProfId, tenantId, dentistUserId);
 
     // 4. Cria Paciente
     db.prepare(`
-      INSERT INTO patients (id, tenant_id, full_name, cpf, phone, email, status)
-      VALUES (?, ?, 'Paciente Odonto Silva', '11122233344', '11988887777', 'paciente@odonto.test', 'active')
+      INSERT INTO patients (id, tenant_id, full_name, cpf, phone, email, active)
+      VALUES (?, ?, 'Paciente Odonto Silva', '11122233344', '11988887777', 'paciente@odonto.test', 1)
     `).run(patientId, tenantId);
 
     // Gera token JWT do dentista
@@ -146,13 +152,16 @@ app.use('/api', require('./dist/routes').default);
     assert.equal(budgetRow.status, 'draft');
 
     // Verifica mapeamento em budget_items com dente e face
-    const itemsRows = db.prepare('SELECT * FROM budget_items WHERE budget_id = ? ORDER BY id ASC').all(planCreated.budgetId);
+    const itemsRows = db.prepare('SELECT * FROM budget_items WHERE budget_id = ?').all(planCreated.budgetId);
     assert.equal(itemsRows.length, 2, 'Deve ter criado 2 itens em budget_items');
-    assert.ok(itemsRows[0].description.includes('Dente 16'), 'Descrição deve incluir dente 16');
-    assert.ok(itemsRows[0].description.includes('(MOD)'), 'Descrição deve incluir face MOD');
-    assert.equal(itemsRows[0].unit_price, 250);
-    assert.ok(itemsRows[1].description.includes('Dente 21'));
-    assert.equal(itemsRows[1].unit_price, 600);
+    const item16 = itemsRows.find(i => i.description.includes('Dente 16'));
+    assert.ok(item16, 'Item Dente 16 deve existir em budget_items');
+    assert.ok(item16.description.includes('(MOD)'), 'Descrição deve incluir face MOD');
+    assert.equal(item16.unit_price, 250);
+
+    const item21 = itemsRows.find(i => i.description.includes('Dente 21'));
+    assert.ok(item21, 'Item Dente 21 deve existir em budget_items');
+    assert.equal(item21.unit_price, 600);
     console.log('✓ Procedimentos mapeados corretamente em budget_items:', itemsRows.map(i => i.description));
 
     // Verifica listagem de orçamentos pelo endpoint geral de orçamentos (Gestão -> Orçamentos)
@@ -284,6 +293,8 @@ app.use('/api', require('./dist/routes').default);
   } finally {
     server.closeAllConnections();
     server.close();
-    fs.rmSync(root, { recursive: true, force: true });
+    try {
+      fs.rmSync(root, { recursive: true, force: true });
+    } catch (_) {}
   }
 })();

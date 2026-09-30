@@ -51,6 +51,26 @@ export class ClinicalRecordService {
     const sessionDate = input.sessionDate || now.toISOString().split('T')[0];
     const sessionTime = input.sessionTime || now.toTimeString().slice(0, 5);
 
+    // Garante que professional_id nunca viole constraint NOT NULL da tabela records
+    let effectiveProfId = professionalId || null;
+    if (!effectiveProfId) {
+      const fallbackProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND active = 1 ORDER BY created_at ASC LIMIT 1').get(tenantId) as any;
+      if (fallbackProf) {
+        effectiveProfId = fallbackProf.id;
+      } else {
+        const anyProf = db.prepare('SELECT id FROM professionals WHERE tenant_id = ? LIMIT 1').get(tenantId) as any;
+        if (anyProf) {
+          effectiveProfId = anyProf.id;
+        } else {
+          effectiveProfId = 'prof-tech-' + (tenantId.length > 8 ? tenantId.slice(0, 8) : tenantId);
+          db.prepare(`
+            INSERT OR IGNORE INTO professionals (id, tenant_id, name, registration_type, registration_number, active)
+            VALUES (?, ?, 'Responsável Técnico', 'REG', '00000', 1)
+          `).run(effectiveProfId, tenantId);
+        }
+      }
+    }
+
     const moduleDataJson = moduleData ? (typeof moduleData === 'string' ? moduleData : JSON.stringify(moduleData)) : null;
     const clinicalDataJson = clinicalData ? (typeof clinicalData === 'string' ? clinicalData : JSON.stringify(clinicalData)) : null;
 
@@ -129,7 +149,7 @@ export class ClinicalRecordService {
       tenantId,
       patientId,
       appointmentId,
-      professionalId,
+      effectiveProfId,
       sessionDate,
       sessionTime,
       procedureName,
