@@ -1,3 +1,4 @@
+import './CreateClinicModal.css';
 import React, { useState, useRef, useEffect } from 'react';
 import { RegistrationPlans, RegistrationPlan } from './RegistrationPlans';
 import { RegistrationProfessionSelect } from './RegistrationProfessionSelect';
@@ -45,6 +46,7 @@ interface CreateClinicModalProps {
   onClose: () => void;
   initialPlan?: string;
   isTrial?: boolean;
+  presentation?: 'modal' | 'page';
 }
 
 type RegistrationStep = 'initial_data' | 'profession' | 'security' | 'verify_email' | 'plans';
@@ -53,7 +55,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   isOpen,
   onClose,
   initialPlan,
-  isTrial
+  isTrial,
+  presentation = 'modal'
 }) => {
   const { showToast } = useToast();
   const { loginWithToken } = useAuth();
@@ -824,14 +827,28 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto">
+    <div ref={presentation === 'page' ? contentRef : undefined} className={presentation === 'page' ? 'signup-page' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto'}>
+      {presentation === 'page' && (
+        <aside className="signup-intro">
+          <img src="/brand/zemda-logo.png" alt="Zemda" className="signup-logo" />
+          <div className="signup-pitch">
+            <h1>Organize sua clínica em um só lugar</h1>
+            <p>Agenda, prontuários, gestão e recursos para sua profissão.</p>
+            <ul>
+              <li><CheckCircle2 aria-hidden="true" />7 dias grátis <span>no plano Solo</span></li>
+              <li><ShieldCheck aria-hidden="true" />Sem cartão de crédito</li>
+              <li><Sparkles aria-hidden="true" />Configuração rápida</li>
+            </ul>
+          </div>
+        </aside>
+      )}
       <div
-        className={`bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[92dvh] sm:rounded-3xl flex flex-col ${
+        className={`${presentation === 'page' ? 'signup-card' : ''} bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[92dvh] sm:rounded-3xl flex flex-col ${
           step === 'plans' ? 'sm:max-w-4xl' : step === 'profession' ? 'sm:max-w-2xl sm:min-h-[680px]' : 'sm:max-w-xl'
         } overflow-hidden shadow-2xl border border-slate-100 transition-all duration-300`}
       >
         {/* Top Header com Marca e Fechar */}
-        <div className="bg-gradient-to-r from-teal-950 via-slate-900 to-teal-900 px-5 py-4 sm:px-6 sm:py-5 text-white flex items-center justify-between shrink-0">
+        <div className="signup-card-header bg-gradient-to-r from-teal-950 via-slate-900 to-teal-900 px-5 py-4 sm:px-6 sm:py-5 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <img
               src="/brand/zemda-icon.png"
@@ -884,6 +901,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
               </div>
             </div>
 
+            <p className="mb-3 text-[11px] sm:text-xs text-slate-600 leading-relaxed">
+              Dados → Profissão → Segurança → Finalizar
+            </p>
             {/* Barra Visual de Progresso */}
             <div className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
               <div
@@ -904,7 +924,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         )}
 
         {/* Corpo Scrollável do Cadastro */}
-        <div ref={contentRef} className="p-5 sm:p-7 min-h-0 flex-1 overflow-y-auto">
+        <div ref={presentation === 'page' ? undefined : contentRef} className="signup-content p-5 sm:p-7 min-h-0 flex-1 overflow-y-auto">
           {successData ? (
             /* Sucesso ao Criar Conta */
             <div className="text-center py-6 space-y-4">
@@ -947,25 +967,26 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                   Teste o Zemda grátis por 7 dias
                 </span>
                 <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight pt-1">
-                  Vamos começar seus atendimentos
+                  Crie sua conta grátis
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                  Leva menos de 1 minuto para criar sua conta.
+                  Leva menos de 1 minuto.
                 </p>
               </div>
 
               <div className="space-y-4 pt-1">
-                {/* Nome Completo */}
+                {/* Nome completo */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Nome Completo *
+                  <label htmlFor="signup-name" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Nome completo *
                   </label>
                   <div className="relative">
                     <User className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
+                      id="signup-name"
                       type="text"
                       required
-                      placeholder="Ex: Dra. Mariana Albuquerque"
+                      placeholder="Nome completo"
                       value={formData.responsibleName}
                       onChange={e => {
                         notifySignupStarted();
@@ -978,15 +999,16 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
                 {/* WhatsApp / Celular */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Celular / WhatsApp *
+                  <label htmlFor="signup-phone" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    WhatsApp *
                   </label>
                   <div className="relative">
                     <Phone className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
+                      id="signup-phone"
                       type="tel"
                       required
-                      placeholder="(11) 98765-4321"
+                      placeholder="(54) 99999-9999"
                       value={formData.phone}
                       onChange={e => {
                         notifySignupStarted();
@@ -995,22 +1017,20 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                       className="w-full pl-11 pr-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Usado para notificações e suporte da sua conta.
-                  </p>
                 </div>
 
-                {/* E-mail de Acesso */}
+                {/* E-mail */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    E-mail de Acesso *
+                  <label htmlFor="signup-email" className="block text-xs font-bold text-slate-700 mb-1.5">
+                    E-mail *
                   </label>
                   <div className="relative">
                     <Mail className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
+                      id="signup-email"
                       type="email"
                       required
-                      placeholder="mariana@clinica.com.br"
+                      placeholder="seuemail@exemplo.com"
                       value={formData.email}
                       onChange={e => {
                         notifySignupStarted();
@@ -1019,9 +1039,6 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                       className="w-full pl-11 pr-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
                     />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Seu endereço principal para login e segurança.
-                  </p>
                 </div>
               </div>
 
@@ -1031,7 +1048,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                   type="submit"
                   className="w-full min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <span>Continuar</span>
+                  <span>Continuar cadastro</span>
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>

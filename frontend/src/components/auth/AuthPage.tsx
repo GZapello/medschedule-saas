@@ -90,7 +90,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
+    <div className={`${isCreateClinicOpen ? 'signup-auth-host' : ''} min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans`}>
       {/* Glow sutil de fundo característico do Zemda */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
 
@@ -281,6 +281,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       />
 
       <CreateClinicModal
+        presentation="page"
         isOpen={isCreateClinicOpen}
         onClose={() => setIsCreateClinicOpen(false)}
         initialPlan={initialPlan}

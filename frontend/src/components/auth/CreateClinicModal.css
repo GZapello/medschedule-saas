@@ -1,0 +1,36 @@
+.signup-auth-host { display:block; padding:0 }
+.signup-auth-host > :not(.signup-page) { display:none }
+.signup-page { height:100dvh; overflow-y:auto; background:linear-gradient(135deg,#f0fdfa,#fafcfc 45%,#fff); display:grid; grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr); align-items:start; gap:clamp(32px,5vw,80px); padding:48px max(32px,calc((100vw - 1200px)/2)); color:#0f172a }
+.signup-intro { position:sticky; top:0; padding:24px 0; min-width:0 }
+.signup-logo { width:160px; height:auto; object-fit:contain }
+.signup-pitch { margin-top:64px }
+.signup-pitch h1 { font-size:clamp(32px,3.2vw,46px); line-height:1.15; font-weight:800; letter-spacing:-.035em; color:#134e4a }
+.signup-pitch > p { margin-top:20px; max-width:360px; font-size:18px; line-height:1.65; color:#475569 }
+.signup-pitch ul { display:grid; gap:18px; margin-top:36px }
+.signup-pitch li { display:flex; align-items:center; flex-wrap:wrap; gap:10px; font-size:14px; font-weight:600; color:#334155 }
+.signup-pitch li svg { width:19px; height:19px; color:#0f766e }
+.signup-pitch li span { font-size:12px; font-weight:400 }
+.signup-page .signup-card { min-width:0; max-width:none; min-height:0; height:auto; max-height:none; border-radius:24px; box-shadow:0 8px 32px rgb(15 118 110 / 5%); border-color:#e2e8f0 }
+.signup-page .signup-card-header { background:white; padding:16px 24px }
+.signup-page .signup-card-header h2 { color:#134e4a; font-size:14px }
+.signup-page .signup-card-header p { display:none }
+.signup-page .signup-card-header button { color:#64748b; background:#f8fafc }
+.signup-page .signup-card-header button:hover { background:#f0fdfa; color:#0f766e }
+.signup-page .signup-card-header h2 > span + span { color:#0f766e; background:#f0fdfa }
+.signup-page .signup-content { overflow:visible; padding:24px }
+.signup-page form > .pt-3 { padding-top:4px }
+.signup-page button[type='submit'] { box-shadow:0 2px 6px rgb(15 118 110 / 12%) }
+.signup-page button:focus-visible { outline:2px solid #0f766e; outline-offset:3px }
+@media(max-width:1023px) {
+ .signup-page { display:flex; flex-direction:column; align-items:center; gap:16px; padding:20px 16px 32px }
+ .signup-intro { position:static; padding:0 }
+ .signup-logo { width:128px }
+ .signup-pitch { display:none }
+ .signup-page .signup-card { max-width:640px; flex-shrink:0 }
+ .signup-page .signup-card-header { padding:12px 20px }
+ .signup-page .signup-content { padding:20px }
+}
+@media(max-width:380px) {
+ .signup-page { padding:16px 8px 24px }
+ .signup-page .signup-content { padding:16px }
+}
