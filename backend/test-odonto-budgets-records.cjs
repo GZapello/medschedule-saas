@@ -286,6 +286,44 @@ app.use('/api', require('./dist/routes').default);
     assert.equal(finalRecordsCount, initialRecordsCount, 'Idempotência garantida: contagem de prontuários não deve aumentar');
     console.log('✓ Idempotência e Prontuário Universal verificados com sucesso (sem duplicidade)');
 
+    console.log('\n--- Teste 5: Exclusão Segura de Orçamentos (DELETE /v1/budgets/:id) ---');
+
+    // a. Tentar excluir ID inexistente -> 404
+    const resDelNonExistent = await fetch(`${base}/v1/budgets/bdg-non-existent`, {
+      method: 'DELETE',
+      headers
+    });
+    assert.equal(resDelNonExistent.status, 404, 'Deve retornar 404 para orçamento inexistente');
+
+    // b. Excluir o orçamento vinculado ao plano odontológico (planCreated.budgetId)
+    const resDelOdontoBudget = await fetch(`${base}/v1/budgets/${planCreated.budgetId}`, {
+      method: 'DELETE',
+      headers
+    });
+    assert.equal(resDelOdontoBudget.status, 200, 'Deve excluir o orçamento com sucesso (200)');
+    const delJson = await resDelOdontoBudget.json();
+    assert.equal(delJson.id, planCreated.budgetId);
+
+    // c. Verifica se o orçamento foi removido da tabela budgets
+    const budgetDeletedRow = db.prepare('SELECT * FROM budgets WHERE id = ?').get(planCreated.budgetId);
+    assert.equal(budgetDeletedRow, undefined, 'Orçamento não deve mais existir na tabela budgets');
+
+    // d. Verifica se os itens de budget_items foram excluídos
+    const budgetItemsDeletedRows = db.prepare('SELECT * FROM budget_items WHERE budget_id = ?').all(planCreated.budgetId);
+    assert.equal(budgetItemsDeletedRows.length, 0, 'Itens do orçamento devem ter sido excluídos');
+
+    // e. Verifica se o plano odontológico continuou existindo mas com budget_id = null
+    const planAfterBudgetDelete = db.prepare('SELECT * FROM dental_treatment_plans WHERE id = ?').get(planCreated.id);
+    assert.ok(planAfterBudgetDelete, 'Plano odontológico deve continuar existindo');
+    assert.equal(planAfterBudgetDelete.budget_id, null, 'budget_id do plano deve ter sido desvinculado para NULL');
+    assert.equal(planAfterBudgetDelete.final_value, 800, 'Dados clínicos do plano devem permanecer intactos');
+
+    // f. Verifica se o prontuário universal não foi apagado
+    const recordAfterBudgetDelete = db.prepare('SELECT * FROM records WHERE source_id = ?').get(planCreated.id);
+    assert.ok(recordAfterBudgetDelete, 'Prontuário universal do paciente não deve ser apagado');
+
+    console.log('✓ Exclusão de orçamento executada com sucesso, desvinculando plano odontológico e preservando prontuário');
+
     console.log('\n✅ TODOS OS TESTES DE INTEGRAÇÃO PASSARAM COM SUCESSO!\n');
   } catch (err) {
     console.error('❌ Erro no teste de integração:', err);

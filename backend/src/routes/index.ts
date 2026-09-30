@@ -829,6 +829,12 @@ api.post('/v1/budgets', requireTenant, requireRole('clinic_admin', 'receptionist
 api.put('/v1/budgets/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.updateStatus);
 api.patch('/v1/budgets/:id/status', requireTenant, requireRole('clinic_admin', 'receptionist', 'professional'), BudgetController.updateStatus);
 api.post('/v1/budgets/:id/convert-to-inventory', requireTenant, requireRole('clinic_admin'), BudgetController.convertToInventory);
+api.delete(
+  '/v1/budgets/:id',
+  requireTenant,
+  requireRole('clinic_admin', 'receptionist', 'professional'),
+  BudgetController.delete
+);
 
 // Pagamentos, Comissões e Salário dos Profissionais (Exclusivo Gerenciador da Clínica e visualização do próprio profissional)
 api.get('/v1/payroll', requireTenant, requireRole('clinic_admin', 'professional'), PayrollController.list);

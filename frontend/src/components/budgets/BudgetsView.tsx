@@ -191,10 +191,11 @@ export const BudgetsView: React.FC = () => {
     if (!confirm('Deseja realmente excluir este orçamento?')) return;
     try {
       await ApiClient.delete(`/v1/budgets/${id}`);
-      showToast('Orçamento excluído!', 'success');
+      showToast('Orçamento excluído com sucesso!', 'success');
+      setBudgets(prev => prev.filter(b => b.id !== id));
       fetchBudgets();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao excluir orçamento', 'error');
+      showToast(err?.response?.data?.error || err.message || 'Erro ao excluir orçamento', 'error');
     }
   };
 

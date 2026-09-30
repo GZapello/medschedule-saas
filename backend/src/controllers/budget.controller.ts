@@ -336,4 +336,73 @@ export class BudgetController {
       res.status(500).json({ error: 'Erro ao converter orçamento em estoque' });
     }
   }
+
+  // Excluir orçamento com validação multi-tenant, transação e desvinculação segura
+  static delete(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ error: 'ID do orçamento não informado' });
+        return;
+      }
+
+      // Busca o orçamento por id + tenant_id para garantir isolamento multi-tenant
+      const budget = db.prepare(`
+        SELECT id, budget_number, budget_type, patient_id, total_amount
+        FROM budgets
+        WHERE id = ? AND tenant_id = ?
+      `).get(id, tenantId) as any;
+
+      if (!budget) {
+        res.status(404).json({ error: 'Orçamento não encontrado' });
+        return;
+      }
+
+      // Transação para evitar exclusão parcial
+      const deleteTx = db.transaction(() => {
+        // 1. Ao excluir o orçamento comercial, desvincula do plano odontológico sem apagar o plano clínico
+        db.prepare(`
+          UPDATE dental_treatment_plans
+          SET budget_id = NULL, updated_at = datetime('now')
+          WHERE budget_id = ? AND tenant_id = ?
+        `).run(id, tenantId);
+
+        // 2. Exclui os itens vinculados ao orçamento (garante integridade mesmo sem cascade)
+        db.prepare(`
+          DELETE FROM budget_items
+          WHERE budget_id = ? AND tenant_id = ?
+        `).run(id, tenantId);
+
+        // 3. Exclui o orçamento da tabela budgets
+        db.prepare(`
+          DELETE FROM budgets
+          WHERE id = ? AND tenant_id = ?
+        `).run(id, tenantId);
+      });
+
+      deleteTx();
+
+      logAudit(req, 'DELETE_BUDGET', 'budgets', id, {
+        budgetNumber: budget.budget_number,
+        budgetType: budget.budget_type,
+        patientId: budget.patient_id,
+        totalAmount: budget.total_amount
+      });
+
+      res.json({
+        message: 'Orçamento excluído com sucesso',
+        id
+      });
+    } catch (err: any) {
+      console.error('[BudgetController.delete] Erro:', err);
+      res.status(500).json({ error: 'Erro ao excluir orçamento' });
+    }
+  }
 }
+
