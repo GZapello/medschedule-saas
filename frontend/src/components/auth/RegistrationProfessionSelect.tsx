@@ -8,13 +8,15 @@ export interface RegistrationProfessionSelectProps {
   onChange: (value: string) => void;
   options?: RegistrationProfessionOption[];
   loading?: boolean;
+  compact?: boolean;
 }
 
 export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelectProps> = ({
   value,
   onChange,
   options,
-  loading
+  loading,
+  compact = false
 }) => {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -168,15 +170,16 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
             handleOpen();
           }
         }}
-        className="w-full min-w-0 pl-11 pr-10 py-3 sm:py-2.5 text-left text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-800 transition-all cursor-pointer flex items-center justify-between shadow-xs"
+        className={`w-full min-w-0 ${
+          compact
+            ? 'pl-9 pr-8 py-1.5 h-9 text-xs rounded-xl'
+            : 'pl-11 pr-10 py-3 sm:py-2.5 text-base sm:text-sm rounded-2xl'
+        } border border-slate-200 bg-slate-50 hover:bg-white focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-800 transition-all cursor-pointer flex items-center justify-between shadow-xs`}
       >
         <span className="truncate">
           {selectedOption ? (
             <span className="text-slate-900 font-bold">
-              {selectedOption.label || selectedOption.name}{' '}
-              <span className="font-normal text-teal-700">
-                — {(selectedOption.modules || (selectedOption.module ? [selectedOption.module, 'Zemda360'] : ['Recursos gerais do Zemda', 'Zemda360'])).join(' + ')}
-              </span>
+              {selectedOption.label || selectedOption.name}
             </span>
           ) : loading ? (
             <span className="text-slate-400 flex items-center gap-2 text-xs">
@@ -189,7 +192,7 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
         </span>
         <ChevronDown
           aria-hidden="true"
-          className={`w-5 h-5 text-slate-400 transition-transform duration-200 shrink-0 ${open ? 'rotate-180 text-teal-600' : ''}`}
+          className={`${compact ? 'w-4 h-4' : 'w-5 h-5'} text-slate-400 transition-transform duration-200 shrink-0 ${open ? 'rotate-180 text-teal-600' : ''}`}
         />
       </button>
 
