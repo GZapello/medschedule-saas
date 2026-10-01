@@ -597,7 +597,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       if (!c.applicable_areas_json) return true;
       try {
         const areas = JSON.parse(c.applicable_areas_json);
-        return areas.includes(activeArea);
+        return Array.isArray(areas) ? areas.includes(activeArea) : true;
       } catch {
         return true;
       }

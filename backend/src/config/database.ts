@@ -350,6 +350,22 @@ export function initializeDatabase(): void {
     // Coluna opcional de CID em exames a receber
     addColIfMissing('pending_exams', 'cid_code', 'TEXT');
 
+    // Colunas de suporte a Anamnese estruturada e unificada
+    addColIfMissing('patient_anamnesis', 'questionnaire_answers_json', 'TEXT');
+    addColIfMissing('patient_anamnesis', 'notes', 'TEXT');
+    if (tableColumns('patient_anamnesis').length > 0) {
+      try {
+        rawDb.exec(`
+          UPDATE patient_anamnesis
+          SET questionnaire_answers_json = content_json
+          WHERE (questionnaire_answers_json IS NULL OR questionnaire_answers_json = '')
+            AND content_json IS NOT NULL;
+        `);
+      } catch (e) {
+        console.warn('[Migration] Erro ao sincronizar patient_anamnesis:', e);
+      }
+    }
+
     // Desativação e exclusão agendada em 30 dias (Item 3)
     addColIfMissing('users', 'deactivated_at', 'DATETIME');
     addColIfMissing('users', 'scheduled_deletion_at', 'DATETIME');
@@ -724,6 +740,8 @@ export function initializeDatabase(): void {
         title TEXT NOT NULL,
         template_type TEXT DEFAULT 'geral',
         content_json TEXT NOT NULL,
+        questionnaire_answers_json TEXT,
+        notes TEXT,
         version INTEGER NOT NULL DEFAULT 1,
         previous_version_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),

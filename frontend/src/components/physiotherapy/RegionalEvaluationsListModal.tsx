@@ -128,7 +128,14 @@ export const RegionalEvaluationsListModal: React.FC<RegionalEvaluationsListModal
             </div>
           ) : (
             list.map((item, idx) => {
-              const pain = typeof item.pain_json === 'string' ? JSON.parse(item.pain_json) : item.pain_json;
+              let pain: any = null;
+              if (item.pain_json) {
+                try {
+                  pain = typeof item.pain_json === 'string' ? JSON.parse(item.pain_json) : item.pain_json;
+                } catch {
+                  pain = null;
+                }
+              }
               const painScore = pain?.score ?? 0;
 
               return (

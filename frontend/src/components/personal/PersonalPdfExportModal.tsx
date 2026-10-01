@@ -120,14 +120,16 @@ export const PersonalPdfExportModal: React.FC<PersonalPdfExportModalProps> = ({
   let strengthList: StrengthTestItem[] = [];
   if (latestAssessment?.strength_tests_json) {
     try {
-      strengthList = JSON.parse(latestAssessment.strength_tests_json);
+      const parsed = JSON.parse(latestAssessment.strength_tests_json);
+      strengthList = Array.isArray(parsed) ? parsed : [];
     } catch (e) {}
   }
 
   let enduranceList: EnduranceTestItem[] = [];
   if (latestAssessment?.muscular_endurance_tests_json) {
     try {
-      enduranceList = JSON.parse(latestAssessment.muscular_endurance_tests_json);
+      const parsed = JSON.parse(latestAssessment.muscular_endurance_tests_json);
+      enduranceList = Array.isArray(parsed) ? parsed : [];
     } catch (e) {}
   }
 

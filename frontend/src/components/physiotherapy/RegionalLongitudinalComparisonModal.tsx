@@ -83,22 +83,42 @@ export const RegionalLongitudinalComparisonModal: React.FC<RegionalLongitudinalC
 
   const parsePain = (e?: PhysioRegionalEvaluation | null): PhysioPainAssessment | null => {
     if (!e?.pain_json) return null;
-    return typeof e.pain_json === 'string' ? JSON.parse(e.pain_json) : e.pain_json;
+    try {
+      const res = typeof e.pain_json === 'string' ? JSON.parse(e.pain_json) : e.pain_json;
+      return typeof res === 'object' && res !== null ? res : null;
+    } catch {
+      return null;
+    }
   };
 
   const parseAdm = (e?: PhysioRegionalEvaluation | null): PhysioAdmItem[] => {
     if (!e?.adm_json) return [];
-    return typeof e.adm_json === 'string' ? JSON.parse(e.adm_json) : e.adm_json;
+    try {
+      const res = typeof e.adm_json === 'string' ? JSON.parse(e.adm_json) : e.adm_json;
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
   };
 
   const parseStrength = (e?: PhysioRegionalEvaluation | null): PhysioStrengthItem[] => {
     if (!e?.strength_json) return [];
-    return typeof e.strength_json === 'string' ? JSON.parse(e.strength_json) : e.strength_json;
+    try {
+      const res = typeof e.strength_json === 'string' ? JSON.parse(e.strength_json) : e.strength_json;
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
   };
 
   const parseTests = (e?: PhysioRegionalEvaluation | null): PhysioSpecialTestItem[] => {
     if (!e?.tests_json) return [];
-    return typeof e.tests_json === 'string' ? JSON.parse(e.tests_json) : e.tests_json;
+    try {
+      const res = typeof e.tests_json === 'string' ? JSON.parse(e.tests_json) : e.tests_json;
+      return Array.isArray(res) ? res : [];
+    } catch {
+      return [];
+    }
   };
 
   const baselinePain = parsePain(baseline);

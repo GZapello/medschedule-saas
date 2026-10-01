@@ -75,6 +75,7 @@ const OnboardingHelpModal = lazyWithRetry(() => import('./components/onboarding/
 const WhatsNewModal = lazyWithRetry(() => import('./components/onboarding/WhatsNewModal').then(module => ({ default: module.WhatsNewModal })), 'WhatsNewModal');
 import { trackPageView } from './utils/analytics';
 import { Sparkles, AlertCircle } from 'lucide-react';
+import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 
 function updateDocumentSeo(options: {
   title: string;
@@ -542,9 +543,11 @@ const AppContent: React.FC = () => {
     if (currentUser?.role === 'superadmin') {
       setCurrentView(prev => (prev === 'dashboard' ? 'superadmin' : prev));
     } else {
-      setCurrentView(prev => (prev === 'superadmin' ? 'dashboard' : prev));
+      if (!isSandboxSession && sessionStorage.getItem('activeView') !== 'superadmin') {
+        setCurrentView(prev => (prev === 'superadmin' ? 'dashboard' : prev));
+      }
     }
-  }, [currentUser?.role]);
+  }, [currentUser?.role, isSandboxSession]);
 
   // Sincronização dinâmica de Metadados de SEO, Canonical e Google Analytics 4 na SPA
   useEffect(() => {
@@ -1167,7 +1170,7 @@ const AppContent: React.FC = () => {
   }
 
   // Se o usuário estiver autenticado porém em estado de onboarding pendente, renderiza o fluxo de onboarding obrigatório
-  if (currentUser.role !== 'superadmin' && currentUser.onboardingStatus && currentUser.onboardingStatus !== 'active') {
+  if (currentUser.role !== 'superadmin' && !isSandboxSession && currentUser.onboardingStatus && currentUser.onboardingStatus !== 'active') {
     return (
       <CreateClinicModal
         isOpen={true}
@@ -1184,7 +1187,7 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (currentUser.role !== 'superadmin' && billingSummary && !billingSummary.canOperate) return <BillingView />;
+  if (currentUser.role !== 'superadmin' && !isSandboxSession && billingSummary && !billingSummary.canOperate) return <BillingView />;
   if (currentView === 'subscription' || window.location.pathname === '/assinatura') return <BillingView />;
 
   return (
@@ -1252,6 +1255,7 @@ const AppContent: React.FC = () => {
 
         {/* Main View Container */}
         <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
+          <SectionErrorBoundary key={currentView} sectionName={`Tela: ${currentView}`}>
           {currentView === 'dashboard' && (
             <DashboardView
               onNavigate={handleNavigateView}
@@ -1666,6 +1670,7 @@ const AppContent: React.FC = () => {
           )}
 
           {currentView === 'superadmin' && isSuperAdmin && <SuperAdminView />}
+          </SectionErrorBoundary>
         </main>
       </div>
 

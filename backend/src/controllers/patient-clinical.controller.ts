@@ -501,7 +501,11 @@ export class PatientClinicalController {
       }
 
       const items = db.prepare(`
-        SELECT pa.*, p.name as professional_name
+        SELECT
+          pa.*,
+          COALESCE(pa.questionnaire_answers_json, pa.content_json) as questionnaire_answers_json,
+          COALESCE(pa.content_json, pa.questionnaire_answers_json) as content_json,
+          p.name as professional_name
         FROM patient_anamnesis pa
         LEFT JOIN professionals p ON p.id = pa.professional_id
         WHERE pa.patient_id = ? AND pa.tenant_id = ?
@@ -527,7 +531,11 @@ export class PatientClinicalController {
       }
 
       const item = db.prepare(`
-        SELECT pa.*, p.name as professional_name
+        SELECT
+          pa.*,
+          COALESCE(pa.questionnaire_answers_json, pa.content_json) as questionnaire_answers_json,
+          COALESCE(pa.content_json, pa.questionnaire_answers_json) as content_json,
+          p.name as professional_name
         FROM patient_anamnesis pa
         LEFT JOIN professionals p ON p.id = pa.professional_id
         WHERE pa.id = ? AND pa.patient_id = ? AND pa.tenant_id = ?
@@ -576,11 +584,15 @@ export class PatientClinicalController {
         if (prof) resolvedProfId = prof.id;
       }
 
+      const answersStr = typeof questionnaireAnswersJson === 'string'
+        ? questionnaireAnswersJson
+        : JSON.stringify(questionnaireAnswersJson);
+
       db.prepare(`
         INSERT INTO patient_anamnesis (
-          id, tenant_id, patient_id, professional_id, version, title, questionnaire_answers_json, notes
+          id, tenant_id, patient_id, professional_id, version, title, content_json, questionnaire_answers_json, notes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         tenantId,
@@ -588,7 +600,8 @@ export class PatientClinicalController {
         resolvedProfId || null,
         nextVersion,
         title,
-        typeof questionnaireAnswersJson === 'string' ? questionnaireAnswersJson : JSON.stringify(questionnaireAnswersJson),
+        answersStr,
+        answersStr,
         notes || null
       );
 

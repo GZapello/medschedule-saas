@@ -132,6 +132,7 @@ function Value({ value }: { value: any }): React.ReactElement | null {
 }
 
 export function ClinicalSnapshot({ record }: { record: any }) {
+  if (!record) return null;
   const medicalPayload = record.module_type === 'ZemdaMed' && record.technical_notes && !record.module_data_json && !record.clinical_data_json;
   return (
     <section className="space-y-3 text-xs text-slate-800 dark:text-slate-200">

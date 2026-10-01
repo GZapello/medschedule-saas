@@ -21,8 +21,15 @@ function preparePurge(id: string, admin: string, reason: string, options?: {
   guard?: (owned: Map<string, Set<any>>) => void;
   reauthenticated?: boolean;
 }): void {
-  const existingJob = db.prepare('SELECT * FROM clinic_deletion_jobs WHERE clinic_id = ?').get(id);
-  if (existingJob) return;
+  const tenantExists = db.prepare('SELECT id FROM tenants WHERE id = ?').get(id);
+  // Se o tenant já foi apagado do banco de dados (ex: retry de job anterior com falha de storage remoto)
+  if (!tenantExists) {
+    return;
+  }
+
+  // Remove qualquer job abortado prévio dessa clínica para permitir nova tentativa limpa e atômica
+  db.prepare('DELETE FROM clinic_deletion_jobs WHERE clinic_id = ?').run(id);
+
   db.transaction(() => {
     const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(id);
     if (!tenant) throw new Error('Clínica não encontrada.');
@@ -173,9 +180,26 @@ export async function purgeTenantCompletely(id: string, admin: string, reason: s
   preparePurge(id, admin, reason, options);
   finishLocalFiles(id);
   const job = db.prepare('SELECT files_json FROM clinic_deletion_jobs WHERE clinic_id=?').get(id);
-  if (!job) return;
-  const manifest = JSON.parse(job.files_json);
-  for (const key of manifest.remoteKeys || []) await r2StorageService.deleteFile(key);
-  for (const prefix of manifest.prefixes || []) await r2StorageService.deletePrefix(prefix);
+  if (job) {
+    try {
+      const manifest = JSON.parse(job.files_json);
+      for (const key of manifest.remoteKeys || []) {
+        try {
+          await r2StorageService.deleteFile(key);
+        } catch (fileErr: any) {
+          console.warn(`[clinic-control] Aviso durante exclusão de arquivo remoto ${key}:`, fileErr?.message || fileErr);
+        }
+      }
+      for (const prefix of manifest.prefixes || []) {
+        try {
+          await r2StorageService.deletePrefix(prefix);
+        } catch (prefixErr: any) {
+          console.warn(`[clinic-control] Aviso durante exclusão de prefixo remoto ${prefix}:`, prefixErr?.message || prefixErr);
+        }
+      }
+    } catch (manifestErr: any) {
+      console.warn(`[clinic-control] Aviso ao processar manifesto de exclusão:`, manifestErr?.message || manifestErr);
+    }
+  }
   completePurge(id);
 }

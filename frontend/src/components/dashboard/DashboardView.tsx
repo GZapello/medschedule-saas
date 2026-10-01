@@ -199,102 +199,130 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return parts[0];
   })();
 
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    let period = 'Olá';
+    if (hour >= 5 && hour < 12) {
+      period = 'Bom dia';
+    } else if (hour >= 12 && hour < 18) {
+      period = 'Boa tarde';
+    } else {
+      period = 'Boa noite';
+    }
+    return firstName ? `${period}, ${firstName}` : 'Olá';
+  })();
+
+  const fullDateFormatted = (() => {
+    try {
+      const now = new Date();
+      const str = now.toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    } catch {
+      return '';
+    }
+  })();
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-4">
       {/* Header & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-            HOJE
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            {greeting} 👋
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+          <p className="text-xs text-slate-500 mt-0.5">
+            {fullDateFormatted}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <button
             onClick={onOpenNewPatient}
-            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all min-h-[40px] cursor-pointer"
+            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all min-h-[36px] cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             Novo {clientTermLabel}
           </button>
           <button
             onClick={onOpenNewAppointment}
-            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
+            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-all cursor-pointer min-h-[36px]"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             Novo Agendamento
           </button>
         </div>
       </div>
 
-      {/* KPI Cards Grid (5 Cards - Ocupação removida) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+      {/* KPI Cards Grid (Compact & Informative) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
         {/* Atendimentos Hoje */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Hoje</span>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-              <CalendarIcon className="w-4 h-4" />
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Hoje</span>
+            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+              <CalendarIcon className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900">{metrics?.today?.total || 0}</div>
-          <p className="text-xs text-slate-400 mt-1">atendimentos agendados</p>
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">{metrics?.today?.total || 0}</div>
+          <p className="text-[11px] text-slate-400 mt-0.5">atendimentos hoje</p>
         </div>
 
-        {/* Concluídos Mês */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Realizados</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-              <CheckCircle2 className="w-4 h-4" />
+        {/* Concluídos Hoje */}
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Realizados</span>
+            <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
+              <CheckCircle2 className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900">{allTodayAppts.filter((a: any) => a.status === 'completed').length}</div>
-          <p className="text-xs text-slate-400 mt-1">finalizados hoje</p>
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">{allTodayAppts.filter((a: any) => a.status === 'completed').length}</div>
+          <p className="text-[11px] text-slate-400 mt-0.5">finalizados hoje</p>
         </div>
 
         {/* Faltas / No-Show */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Faltas</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-              <UserX className="w-4 h-4" />
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Faltas</span>
+            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
+              <UserX className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900">{allTodayAppts.filter((a: any) => a.status === 'no_show').length}</div>
-          <p className="text-xs text-slate-400 mt-1">faltas hoje</p>
+          <div className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">{allTodayAppts.filter((a: any) => a.status === 'no_show').length}</div>
+          <p className="text-[11px] text-slate-400 mt-0.5">faltas hoje</p>
         </div>
 
         {metrics?.permissions?.finance && <>
         {/* Faturamento Recebido */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Receita</span>
-            <div className="p-2 bg-teal-50 text-teal-600 rounded-xl">
-              <DollarSign className="w-4 h-4" />
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Receita</span>
+            <div className="p-1.5 bg-teal-50 text-teal-600 rounded-lg">
+              <DollarSign className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-xl font-bold text-slate-900 truncate">
+          <div className="text-lg sm:text-xl font-bold text-slate-900 truncate leading-tight">
             {formatCurrency(metrics?.monthly?.revenue)}
           </div>
-          <p className="text-xs text-slate-400 mt-1">recebido no mês</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">recebido no mês</p>
         </div>
 
         {/* Valores Pendentes */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Pendente</span>
-            <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
-              <Clock className="w-4 h-4" />
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Pendente</span>
+            <div className="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
+              <Clock className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-xl font-bold text-slate-900 truncate">
+          <div className="text-lg sm:text-xl font-bold text-slate-900 truncate leading-tight">
             {formatCurrency(metrics?.monthly?.pending)}
           </div>
-          <p className="text-xs text-slate-400 mt-1">a receber</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">a receber</p>
         </div>
       </>}
       </div>
@@ -302,12 +330,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <TodayWorklist data={metrics?.worklist} onNavigate={onNavigate} onPatient={setViewPatientId} />
 
       {/* Main Content Area: Today's Appointments & Monthly Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
         {/* Atendimentos de Hoje (2/3 width) */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs">
-          <div className="flex items-center justify-between mb-3">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-xs">
+          <div className="flex items-center justify-between mb-2.5">
             <div>
-              <h3 className="font-bold text-slate-900 text-lg">Agenda de Hoje</h3>
+              <h3 className="font-bold text-slate-900 text-base">Agenda de Hoje</h3>
               <p className="text-xs text-slate-500">Acompanhe os clientes e altere o status com agilidade.</p>
             </div>
             <button
@@ -344,32 +372,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {todayList.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
-              <CalendarIcon className="w-10 h-10 mx-auto mb-2 opacity-40 text-slate-400" />
-              <p className="font-medium text-sm">Nenhum atendimento encontrado com o filtro selecionado.</p>
+            <div className="py-8 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
+              <CalendarIcon className="w-8 h-8 mx-auto mb-1.5 opacity-40 text-slate-400" />
+              <p className="font-medium text-xs sm:text-sm">Nenhum atendimento encontrado com o filtro selecionado.</p>
               <button
                 onClick={onOpenNewAppointment}
-                className="mt-3 text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
+                className="mt-2 text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
               >
                 + Criar agendamento agora
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-slate-100 max-h-[360px] overflow-y-auto overflow-x-hidden pr-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
               {todayList.map((appt: any) => {
                 const startTime = appt.start_time?.split('T')[1]?.slice(0, 5) || '00:00';
                 const endTime = appt.end_time?.split('T')[1]?.slice(0, 5) || '00:00';
 
                 return (
-                  <div key={appt.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 p-2.5 rounded-xl transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 flex flex-col items-center justify-center flex-shrink-0 font-bold">
+                  <div key={appt.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/70 p-2 rounded-lg transition-colors">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-11 h-11 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 flex flex-col items-center justify-center flex-shrink-0 font-bold">
                         <span className="text-xs leading-none">{startTime}</span>
-                        <span className="text-[10px] text-indigo-400 leading-none mt-1">{endTime}</span>
+                        <span className="text-[10px] text-indigo-400 leading-none mt-0.5">{endTime}</span>
                       </div>
 
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <h4
                             onClick={() => setViewPatientId(appt.patient_id)}
                             className="font-bold text-slate-900 text-sm hover:text-indigo-600 cursor-pointer transition-colors"
@@ -396,7 +424,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {appt.clinical_module && appt.clinical_module !== 'general' && <span> · {appt.clinical_module === 'ZemdaBody' ? 'Zemda360' : appt.clinical_module}</span>}
                         </p>
 
-                        <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
+                        <div className="flex items-center gap-2.5 text-[11px] text-slate-400 flex-wrap">
                           {appt.modality === 'online' ? (
                             <span className="flex items-center gap-1 text-teal-600"><Video className="w-3 h-3" /> Online</span>
                           ) : (
@@ -458,7 +486,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {appt.status !== 'completed' && appt.status !== 'cancelled' && (
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'in_progress')}
-                          className="flex items-center gap-1 px-3 py-1 text-xs font-bold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-all shadow-xs cursor-pointer"
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-all shadow-xs cursor-pointer"
                           title="Iniciar Atendimento Rápido"
                         >
                           <Stethoscope className="w-3.5 h-3.5" />
@@ -468,7 +496,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {appt.status === 'scheduled' && (
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
-                          className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer"
+                          className="px-2 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer"
                         >
                           Confirmar
                         </button>
@@ -476,7 +504,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {appt.status === 'confirmed' && (
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'in_progress')}
-                          className="px-2.5 py-1 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer"
+                          className="px-2 py-1 text-xs font-semibold bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer"
                         >
                           Iniciar
                         </button>
@@ -484,7 +512,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {(appt.status === 'in_progress' || appt.status === 'confirmed') && (
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'completed')}
-                          className="px-2.5 py-1 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-colors shadow-xs cursor-pointer"
+                          className="px-2 py-1 text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 rounded-lg transition-colors shadow-xs cursor-pointer"
                         >
                           Concluir
                         </button>
@@ -518,7 +546,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             }}
                             disabled={!hasPhone}
                             title={hasPhone ? 'Enviar lembrete pelo WhatsApp' : 'Paciente sem telefone cadastrado'}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                            className={`flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-lg transition-all ${
                               hasPhone
                                 ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 cursor-pointer shadow-2xs'
                                 : 'bg-slate-100 text-slate-400 border border-slate-200/60 opacity-60 cursor-not-allowed'
@@ -538,13 +566,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Monthly Trend & Quick Stats (1/3 width) */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col justify-between">
+        <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-slate-900 text-lg mb-1">Evolução Mensal</h3>
-            <p className="text-xs text-slate-500 mb-4">Volume de atendimentos nos últimos meses.</p>
+            <h3 className="font-bold text-slate-900 text-base mb-0.5">Evolução Mensal</h3>
+            <p className="text-xs text-slate-500 mb-3">Volume de atendimentos nos últimos meses.</p>
 
             {/* Visual Bar Chart */}
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {(metrics?.chart || []).map((item: any, idx: number) => {
                 const max = Math.max(...(metrics?.chart || []).map((c: any) => c.appointments), 10);
                 const percent = Math.min(100, Math.round((item.appointments / max) * 100));
@@ -555,7 +583,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <span className="capitalize">{item.month}</span>
                       <span>{item.appointments} atendimentos</span>
                     </div>
-                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                       <div
                         className="bg-indigo-600 h-full rounded-full transition-all duration-500"
                         style={{ width: `${percent}%` }}
@@ -567,9 +595,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50 p-4 rounded-xl">
-            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Resumo Operacional</h4>
-            <div className="space-y-1.5 text-xs text-slate-600">
+          <div className="mt-4 pt-3 border-t border-slate-100 bg-slate-50 p-3 rounded-lg">
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">Resumo Operacional</h4>
+            <div className="space-y-1 text-xs text-slate-600">
               <div className="flex justify-between">
                 <span>Profissionais Ativos:</span>
                 <span className="font-bold text-slate-900">{metrics?.totals?.active_professionals || 0}</span>

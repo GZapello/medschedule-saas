@@ -6,6 +6,7 @@ import {
   X,
   Clock,
   AlertTriangle,
+  AlertCircle,
   Pill,
   FileText,
   Activity,
@@ -37,6 +38,7 @@ import {
 import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
 import { ClinicalSnapshot } from '../clinical/ClinicalSnapshot';
+import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 
 interface PatientProfileModalProps {
   patientId: string;
@@ -96,6 +98,8 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   // Anamnesis state
   const [anamnesisList, setAnamnesisList] = useState<any[]>([]);
+  const [loadingAnamnesis, setLoadingAnamnesis] = useState<boolean>(false);
+  const [anamnesisError, setAnamnesisError] = useState<string | null>(null);
   const [showNewAnamnesis, setShowNewAnamnesis] = useState<boolean>(false);
   const [anamnesisForm, setAnamnesisForm] = useState({
     title: 'Anamnese Geral',
@@ -296,12 +300,66 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     }
   };
 
+  const parseAnamnesis = (item: any) => {
+    if (!item) return { chiefComplaint: '', historyOfPresentIllness: '', pastMedicalHistory: '', lifestyle: '', extraFields: [] };
+    const raw = item.questionnaire_answers_json ?? item.content_json;
+    let data: any = {};
+    if (typeof raw === 'object' && raw !== null) {
+      data = raw;
+    } else if (typeof raw === 'string') {
+      try {
+        data = JSON.parse(raw);
+        if (typeof data !== 'object' || data === null) {
+          data = { rawText: String(raw) };
+        }
+      } catch {
+        data = { rawText: raw };
+      }
+    }
+
+    const chiefComplaint = data.chiefComplaint || data.chief_complaint || data.queixaPrincipal || data.queixa_principal || '';
+    const historyOfPresentIllness = data.historyOfPresentIllness || data.history_of_present_illness || data.hma || data.history || data.historia_molestia_atual || '';
+    const pastMedicalHistory = data.pastMedicalHistory || data.past_medical_history || data.hpp || data.historico_patologico_pregresso || '';
+    const lifestyle = data.lifestyle || data.familyHistory || data.family_history || data.habits || data.habitos || data.lifestyle_and_family || '';
+
+    const knownKeys = new Set([
+      'chiefComplaint', 'chief_complaint', 'queixaPrincipal', 'queixa_principal',
+      'historyOfPresentIllness', 'history_of_present_illness', 'hma', 'history', 'historia_molestia_atual',
+      'pastMedicalHistory', 'past_medical_history', 'hpp', 'historico_patologico_pregresso',
+      'lifestyle', 'familyHistory', 'family_history', 'habits', 'habitos', 'lifestyle_and_family',
+      'title', 'imported_from', 'rawText'
+    ]);
+    const extraFields: Array<{ label: string; value: string }> = [];
+    if (data.imported_from) {
+      extraFields.push({ label: 'Origem da Importação', value: String(data.imported_from) });
+    }
+    if (data.rawText) {
+      extraFields.push({ label: 'Conteúdo do Registro', value: String(data.rawText) });
+    }
+    for (const [k, v] of Object.entries(data)) {
+      if (!knownKeys.has(k) && v && typeof v === 'string') {
+        extraFields.push({ label: k, value: v });
+      }
+    }
+
+    return { chiefComplaint, historyOfPresentIllness, pastMedicalHistory, lifestyle, extraFields };
+  };
+
   const loadAnamnesis = async () => {
     try {
+      setLoadingAnamnesis(true);
+      setAnamnesisError(null);
       const data = await ApiClient.get<any[]>(`/v1/patients/${patientId}/anamnesis`);
-      setAnamnesisList(data || []);
+      setAnamnesisList(Array.isArray(data) ? data : []);
     } catch (err: any) {
-      console.error(err);
+      console.error('[PatientProfileModal.loadAnamnesis]', err);
+      if (err?.status === 403 || err?.response?.status === 403 || err?.message?.includes('403') || err?.code === 'CLINICAL_PRIVACY_RESTRICTION') {
+        setAnamnesisError('Acesso clínico restrito (Sigilo LGPD): este profissional não possui consulta agendada ou histórico de atendimento ativo vinculado a este paciente.');
+      } else {
+        setAnamnesisError(err?.message || 'Falha ao carregar lista de anamneses.');
+      }
+    } finally {
+      setLoadingAnamnesis(false);
     }
   };
 
@@ -459,19 +517,17 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   const handleDuplicateAnamnesis = (item: any) => {
     try {
-      const parsed = typeof item.questionnaire_answers_json === 'string'
-        ? JSON.parse(item.questionnaire_answers_json)
-        : item.questionnaire_answers_json;
+      const parsed = parseAnamnesis(item);
       setAnamnesisForm({
-        title: `Cópia da v${item.version} - ${item.title}`,
+        title: `Cópia da v${item.version || 1} - ${item.title || 'Anamnese'}`,
         chiefComplaint: parsed.chiefComplaint || '',
         historyOfPresentIllness: parsed.historyOfPresentIllness || '',
         pastMedicalHistory: parsed.pastMedicalHistory || '',
-        familyHistory: parsed.familyHistory || '',
+        familyHistory: '',
         lifestyle: parsed.lifestyle || ''
       });
       setShowNewAnamnesis(true);
-      showToast(`Dados da versão ${item.version} clonados para novo rascunho`, 'info');
+      showToast(`Dados da versão ${item.version || 1} clonados para novo rascunho`, 'info');
     } catch (e) {
       showToast('Erro ao clonar anamnese', 'error');
     }
@@ -706,6 +762,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
         {/* Tab Content Container */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
+          <SectionErrorBoundary key={activeTab} sectionName={`Perfil do Paciente • Aba: ${activeTab}`}>
           {/* TAB 1: VISÃO GERAL */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
@@ -1482,60 +1539,122 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                 </form>
               )}
 
-              {anamnesisList.length === 0 ? (
+              {loadingAnamnesis ? (
                 <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-400 text-xs">
-                  Nenhuma anamnese arquivada para este paciente.
+                  Carregando histórico de anamneses...
+                </div>
+              ) : anamnesisError ? (
+                <div className="bg-white p-8 rounded-2xl border border-rose-200 shadow-xs space-y-3 text-center sm:text-left">
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <h4 className="text-sm font-bold text-slate-900">Aviso de Acesso à Anamnese</h4>
+                      <p className="text-xs text-slate-500">{anamnesisError}</p>
+                    </div>
+                  </div>
+                  <div className="pt-2 flex justify-center sm:justify-start">
+                    <button
+                      type="button"
+                      onClick={loadAnamnesis}
+                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                    >
+                      Tentar Novamente
+                    </button>
+                  </div>
+                </div>
+              ) : anamnesisList.length === 0 ? (
+                <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 space-y-3">
+                  <Activity className="w-10 h-10 text-slate-300 mx-auto" />
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-slate-700">Nenhuma anamnese arquivada para este paciente</h4>
+                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                      Preencha a primeira versão da anamnese clínica para registrar queixa principal, histórico pregresso e hábitos do paciente.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAnamnesis(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Preencher Primeira Anamnese
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {anamnesisList.map(item => {
-                    const parsed = typeof item.questionnaire_answers_json === 'string'
-                      ? JSON.parse(item.questionnaire_answers_json)
-                      : item.questionnaire_answers_json;
+                    const parsed = parseAnamnesis(item);
+                    const hasAnyData = parsed.chiefComplaint || parsed.historyOfPresentIllness || parsed.pastMedicalHistory || parsed.lifestyle || (parsed.extraFields && parsed.extraFields.length > 0);
 
                     return (
                       <div key={item.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3 text-xs">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2 flex-wrap gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-md text-[11px]">
-                              Versão {item.version}
+                              Versão {item.version || 1}
                             </span>
-                            <strong className="text-slate-900 text-sm">{item.title}</strong>
-                            <span className="text-slate-400">({item.created_at?.split('T')[0]})</span>
+                            <strong className="text-slate-900 text-sm">{item.title || 'Anamnese'}</strong>
+                            <span className="text-slate-400">
+                              ({item.created_at ? item.created_at.split('T')[0] : 'Data não informada'})
+                            </span>
+                            {item.professional_name && (
+                              <span className="text-slate-500 font-medium">
+                                • Profissional: <strong>{item.professional_name}</strong>
+                              </span>
+                            )}
                           </div>
                           <button
+                            type="button"
                             onClick={() => handleDuplicateAnamnesis(item)}
-                            className="flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-semibold text-xs"
+                            className="flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-semibold text-xs cursor-pointer"
                           >
                             <Copy className="w-3.5 h-3.5" /> Usar como base para nova versão
                           </button>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-700">
-                          {parsed.chiefComplaint && (
-                            <div>
-                              <span className="text-slate-400 font-bold">Queixa Principal:</span>
-                              <p className="mt-0.5 font-medium">{parsed.chiefComplaint}</p>
-                            </div>
-                          )}
-                          {parsed.historyOfPresentIllness && (
-                            <div>
-                              <span className="text-slate-400 font-bold">HMA:</span>
-                              <p className="mt-0.5 font-medium">{parsed.historyOfPresentIllness}</p>
-                            </div>
-                          )}
-                          {parsed.pastMedicalHistory && (
-                            <div>
-                              <span className="text-slate-400 font-bold">Histórico Pregresso:</span>
-                              <p className="mt-0.5 font-medium">{parsed.pastMedicalHistory}</p>
-                            </div>
-                          )}
-                          {parsed.lifestyle && (
-                            <div>
-                              <span className="text-slate-400 font-bold">Hábitos e Família:</span>
-                              <p className="mt-0.5 font-medium">{parsed.lifestyle}</p>
-                            </div>
-                          )}
-                        </div>
+
+                        {hasAnyData ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-700">
+                            {parsed.chiefComplaint && (
+                              <div>
+                                <span className="text-slate-400 font-bold">Queixa Principal:</span>
+                                <p className="mt-0.5 font-medium whitespace-pre-wrap">{parsed.chiefComplaint}</p>
+                              </div>
+                            )}
+                            {parsed.historyOfPresentIllness && (
+                              <div>
+                                <span className="text-slate-400 font-bold">História da Moléstia Atual (HMA):</span>
+                                <p className="mt-0.5 font-medium whitespace-pre-wrap">{parsed.historyOfPresentIllness}</p>
+                              </div>
+                            )}
+                            {parsed.pastMedicalHistory && (
+                              <div>
+                                <span className="text-slate-400 font-bold">Histórico Pregresso:</span>
+                                <p className="mt-0.5 font-medium whitespace-pre-wrap">{parsed.pastMedicalHistory}</p>
+                              </div>
+                            )}
+                            {parsed.lifestyle && (
+                              <div>
+                                <span className="text-slate-400 font-bold">Hábitos e Família:</span>
+                                <p className="mt-0.5 font-medium whitespace-pre-wrap">{parsed.lifestyle}</p>
+                              </div>
+                            )}
+                            {parsed.extraFields && parsed.extraFields.map((f, i) => (
+                              <div key={i} className="col-span-full bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                                <span className="text-slate-500 font-bold capitalize">{f.label}:</span>
+                                <p className="mt-0.5 font-medium text-slate-700 whitespace-pre-wrap">{f.value}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 italic">Anamnese arquivada sem campos textuais preenchidos.</p>
+                        )}
+
+                        {item.notes && (
+                          <div className="pt-2 border-t border-slate-100 text-slate-600 text-2xs">
+                            <strong>Observações adicionais:</strong> {item.notes}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -2441,6 +2560,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
               )}
             </div>
           )}
+          </SectionErrorBoundary>
         </div>
       </div>
 

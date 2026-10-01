@@ -816,6 +816,12 @@ export class TenantController {
         res.status(403).json({ error: 'Reautenticação inválida. Entre novamente.' }); return;
       }
 
+      // Não permite excluir a clínica vinculada ao próprio SuperAdmin
+      if (adminUser.tenant_id && adminUser.tenant_id === id) {
+        res.status(400).json({ error: 'Operação não permitida: não é possível excluir a clínica associada ao Administrador do Sistema.' });
+        return;
+      }
+
       // Validação da confirmação por texto explícito e motivo
       if (typeof reason !== 'string' || !reason.trim()) {
         res.status(400).json({ error: 'O motivo da exclusão definitiva é obrigatório.' });
@@ -842,8 +848,11 @@ export class TenantController {
       res.json({ message: 'Clínica excluída definitivamente', deleted_clinic_id: id });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;
-      console.error('[TenantController.adminDeletePermanently] Erro:', err);
-      res.status(500).json({ error: err?.message || 'Exclusão não concluída. Ocorreu uma falha durante o processo de limpeza.' });
+      console.error('[TenantController.adminDeletePermanently] Erro sanitizado:', err?.message || err);
+      const safeMessage = err?.message && !err.message.includes('SQLITE') && !err.message.includes('SELECT') && !err.message.includes('PRAGMA') && !err.message.includes('sqlite_') && !err.message.includes('database is locked')
+        ? err.message
+        : 'Exclusão não concluída. Ocorreu uma falha durante o processo de limpeza.';
+      res.status(500).json({ error: safeMessage });
     }
   }
 

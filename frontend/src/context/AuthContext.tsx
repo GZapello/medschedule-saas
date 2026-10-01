@@ -151,50 +151,88 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const startSandboxSession = (sessionData: { token: string; user: User; tenant: Tenant; capabilities: any }) => {
-    const originalToken = localStorage.getItem('auth_token');
-    const originalTenant = localStorage.getItem('active_tenant_id');
+    const originalToken = localStorage.getItem('auth_token') || token;
+    const originalTenant = localStorage.getItem('active_tenant_id') || currentTenant?.id || '';
     if (originalToken && !localStorage.getItem('sandbox_backup_token')) {
       localStorage.setItem('sandbox_backup_token', originalToken);
-      if (originalTenant) localStorage.setItem('sandbox_backup_tenant', originalTenant);
+      sessionStorage.setItem('sandbox_backup_token', originalToken);
+      if (originalTenant) {
+        localStorage.setItem('sandbox_backup_tenant', originalTenant);
+        sessionStorage.setItem('sandbox_backup_tenant', originalTenant);
+      }
+    }
+    if (currentUser && !localStorage.getItem('sandbox_backup_user')) {
+      const userJson = JSON.stringify(currentUser);
+      localStorage.setItem('sandbox_backup_user', userJson);
+      sessionStorage.setItem('sandbox_backup_user', userJson);
     }
 
     loginWithToken(sessionData.token, sessionData.user, sessionData.tenant);
   };
 
   const exitSandboxSession = async () => {
-    const backupToken = localStorage.getItem('sandbox_backup_token');
-    const backupTenant = localStorage.getItem('sandbox_backup_tenant');
+    const backupToken = localStorage.getItem('sandbox_backup_token') || sessionStorage.getItem('sandbox_backup_token');
+    const backupTenant = localStorage.getItem('sandbox_backup_tenant') || sessionStorage.getItem('sandbox_backup_tenant');
+    const backupUserStr = localStorage.getItem('sandbox_backup_user') || sessionStorage.getItem('sandbox_backup_user');
 
     localStorage.removeItem('sandbox_backup_token');
+    sessionStorage.removeItem('sandbox_backup_token');
     localStorage.removeItem('sandbox_backup_tenant');
+    sessionStorage.removeItem('sandbox_backup_tenant');
+    localStorage.removeItem('sandbox_backup_user');
+    sessionStorage.removeItem('sandbox_backup_user');
     localStorage.removeItem('active_tenant_id');
     setCurrentTenant(null);
+
+    // 1. Restaura o usuário SuperAdmin no estado síncrono imediatamente
+    let restoredUser: User | null = null;
+    if (backupUserStr) {
+      try {
+        restoredUser = JSON.parse(backupUserStr);
+      } catch (_) {}
+    }
+
+    if (restoredUser) {
+      setCurrentUser(restoredUser);
+    } else {
+      // Se não havia backupUser salvo, restaura papel superadmin para evitar telas indevidas
+      setCurrentUser((prev: any) => prev ? { ...prev, role: 'superadmin', tenantId: null } : {
+        id: 'superadmin',
+        name: 'Administrador',
+        email: 'admin@zemda.com.br',
+        role: 'superadmin',
+        status: 'active'
+      } as any);
+    }
 
     try {
       sessionStorage.setItem('activeView', 'superadmin');
     } catch (_) {}
 
+    // 2. Restaura o token do SuperAdmin no localStorage e no state
     if (backupToken) {
       localStorage.setItem('auth_token', backupToken);
       if (backupTenant && !backupTenant.startsWith('sbx-tenant-')) {
         localStorage.setItem('active_tenant_id', backupTenant);
       }
       setToken(backupToken);
+    }
 
+    // 3. Atualiza rota e emite eventos de retorno ao painel SuperAdmin
+    try {
+      window.history.pushState({ view: 'superadmin' }, '', '/superadmin');
+    } catch (_) {}
+
+    window.dispatchEvent(new CustomEvent('zemda-exit-sandbox'));
+    window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'superadmin', force: true } }));
+
+    // 4. Sincroniza sessão em segundo plano se o token estiver presente
+    if (backupToken || localStorage.getItem('auth_token')) {
       try {
         await reloadSession();
       } catch (e) {
-        console.error('Erro ao restaurar sessão de SuperAdmin:', e);
+        console.warn('Sincronização em segundo plano após sair do Sandbox:', e);
       }
-
-      try {
-        window.history.pushState({ view: 'superadmin' }, '', '/superadmin');
-      } catch (_) {}
-
-      window.dispatchEvent(new CustomEvent('zemda-exit-sandbox'));
-      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'superadmin', force: true } }));
-    } else {
-      logout();
     }
   };
 

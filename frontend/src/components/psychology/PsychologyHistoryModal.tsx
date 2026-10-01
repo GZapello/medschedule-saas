@@ -19,6 +19,17 @@ import {
 } from 'lucide-react';
 import { printPsychologyDocument } from './psychology-print.util';
 
+function safeJson<T = any>(val: any, fallback: T): T {
+  if (!val) return fallback;
+  if (typeof val === 'object') return val;
+  try {
+    const res = JSON.parse(val);
+    return res !== null && res !== undefined ? res : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 interface PsychologyHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -203,9 +214,9 @@ export const PsychologyHistoryModal: React.FC<PsychologyHistoryModalProps> = ({
                     </div>
                   ) : (
                     historyData.sessions.map((sess: any) => {
-                      const amendments = sess.amendments_json ? JSON.parse(sess.amendments_json) : [];
+                      const amendments = safeJson<any[]>(sess.amendments_json, []);
                       const isOnline = sess.modality === 'online';
-                      const tdic = sess.tdic_info_json ? JSON.parse(sess.tdic_info_json) : null;
+                      const tdic = safeJson<any>(sess.tdic_info_json, null);
 
                       return (
                         <div key={sess.id} className="border border-slate-200 rounded-2xl p-5 bg-white space-y-4 shadow-xs">
@@ -321,8 +332,8 @@ export const PsychologyHistoryModal: React.FC<PsychologyHistoryModalProps> = ({
                     </div>
                   ) : (
                     historyData.assessments.map((evalItem: any) => {
-                      const fundSources = evalItem.fundamental_sources_json ? JSON.parse(evalItem.fundamental_sources_json) : [];
-                      const compSources = evalItem.complementary_sources_json ? JSON.parse(evalItem.complementary_sources_json) : [];
+                      const fundSources = safeJson<string[]>(evalItem.fundamental_sources_json, []);
+                      const compSources = safeJson<string[]>(evalItem.complementary_sources_json, []);
 
                       return (
                         <div key={evalItem.id} className="border border-slate-200 rounded-2xl p-5 bg-white space-y-4 shadow-xs">
@@ -396,7 +407,7 @@ export const PsychologyHistoryModal: React.FC<PsychologyHistoryModalProps> = ({
                     </div>
                   ) : (
                     historyData.documents.map((doc: any) => {
-                      const delivery = doc.delivery_receipt_json ? JSON.parse(doc.delivery_receipt_json) : null;
+                      const delivery = safeJson<any>(doc.delivery_receipt_json, null);
                       const typeLabels: Record<string, string> = {
                         declaracao: 'Declaração',
                         atestado: 'Atestado Psicológico',
