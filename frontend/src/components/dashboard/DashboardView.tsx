@@ -228,11 +228,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   })();
 
   return (
-    <div className="space-y-3.5 sm:space-y-4">
+    <div className="space-y-2 min-w-0">
       {/* Header & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white px-3 py-2.5 rounded-xl border border-slate-200 shadow-xs">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          <h2 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
             {greeting} 👋
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -259,49 +259,49 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI Cards Grid (Compact & Informative) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
         {/* Atendimentos Hoje */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+        <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-0.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Hoje</span>
-            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+            <div className="p-1 bg-blue-50 text-blue-600 rounded-lg">
               <CalendarIcon className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">{metrics?.today?.total || 0}</div>
+          <div className="text-xl font-bold text-slate-900 leading-tight">{metrics?.today?.total || 0}</div>
           <p className="text-[11px] text-slate-400 mt-0.5">atendimentos hoje</p>
         </div>
 
         {/* Concluídos Hoje */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+        <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-0.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Realizados</span>
-            <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
+            <div className="p-1 bg-emerald-50 text-emerald-600 rounded-lg">
               <CheckCircle2 className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">{allTodayAppts.filter((a: any) => a.status === 'completed').length}</div>
+          <div className="text-xl font-bold text-slate-900 leading-tight">{allTodayAppts.filter((a: any) => a.status === 'completed').length}</div>
           <p className="text-[11px] text-slate-400 mt-0.5">finalizados hoje</p>
         </div>
 
         {/* Faltas / No-Show */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+        <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-0.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Faltas</span>
-            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
+            <div className="p-1 bg-amber-50 text-amber-600 rounded-lg">
               <UserX className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">{allTodayAppts.filter((a: any) => a.status === 'no_show').length}</div>
+          <div className="text-xl font-bold text-slate-900 leading-tight">{allTodayAppts.filter((a: any) => a.status === 'no_show').length}</div>
           <p className="text-[11px] text-slate-400 mt-0.5">faltas hoje</p>
         </div>
 
         {metrics?.permissions?.finance && <>
         {/* Faturamento Recebido */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+        <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-0.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Receita</span>
-            <div className="p-1.5 bg-teal-50 text-teal-600 rounded-lg">
+            <div className="p-1 bg-teal-50 text-teal-600 rounded-lg">
               <DollarSign className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -312,10 +312,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Valores Pendentes */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-1.5">
+        <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 mb-0.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Pendente</span>
-            <div className="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
+            <div className="p-1 bg-rose-50 text-rose-600 rounded-lg">
               <Clock className="w-3.5 h-3.5" />
             </div>
           </div>
@@ -330,9 +330,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <TodayWorklist data={metrics?.worklist} onNavigate={onNavigate} onPatient={setViewPatientId} />
 
       {/* Main Content Area: Today's Appointments & Monthly Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 items-start">
         {/* Atendimentos de Hoje (2/3 width) */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-xs">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-3 shadow-xs">
           <div className="flex items-center justify-between mb-2.5">
             <div>
               <h3 className="font-bold text-slate-900 text-base">Agenda de Hoje</h3>
@@ -347,7 +347,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Filtros Rápidos (Item 3) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-2.5 mb-3 text-xs border-b border-slate-100 no-scrollbar">
+          <div className="flex items-center gap-1 flex-wrap pb-2 mb-2 text-xs border-b border-slate-100 no-scrollbar">
             {[
               { id: 'all', label: `Todos (${allTodayAppts.length})` },
               { id: 'scheduled', label: `Agendados (${countScheduled})` },
@@ -360,7 +360,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setFilterTab(tab.id as any)}
-                className={`px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                className={`px-2 py-1 rounded-lg font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                   filterTab === tab.id
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -372,7 +372,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {todayList.length === 0 ? (
-            <div className="py-8 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
+            <div className="py-4 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
               <CalendarIcon className="w-8 h-8 mx-auto mb-1.5 opacity-40 text-slate-400" />
               <p className="font-medium text-xs sm:text-sm">Nenhum atendimento encontrado com o filtro selecionado.</p>
               <button
@@ -383,13 +383,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100 max-h-[360px] overflow-y-auto overflow-x-hidden pr-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+            <div className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto overflow-x-hidden pr-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
               {todayList.map((appt: any) => {
                 const startTime = appt.start_time?.split('T')[1]?.slice(0, 5) || '00:00';
                 const endTime = appt.end_time?.split('T')[1]?.slice(0, 5) || '00:00';
 
                 return (
-                  <div key={appt.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/70 p-2 rounded-lg transition-colors">
+                  <div key={appt.id} className="py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/70 p-2 rounded-lg transition-colors">
                     <div className="flex items-start gap-2.5">
                       <div className="w-11 h-11 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 flex flex-col items-center justify-center flex-shrink-0 font-bold">
                         <span className="text-xs leading-none">{startTime}</span>
@@ -482,7 +482,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
 
                     {/* Quick Status Action Buttons */}
-                    <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                    <div className="flex items-center gap-1.5 flex-wrap sm:flex-wrap">
                       {appt.status !== 'completed' && appt.status !== 'cancelled' && (
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'in_progress')}
@@ -566,13 +566,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Monthly Trend & Quick Stats (1/3 width) */}
-        <div className="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
+        <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-xs flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-slate-900 text-base mb-0.5">Evolução Mensal</h3>
+            <h3 className="font-bold text-slate-900 text-sm mb-0.5">Evolução Mensal</h3>
             <p className="text-xs text-slate-500 mb-3">Volume de atendimentos nos últimos meses.</p>
 
             {/* Visual Bar Chart */}
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {(metrics?.chart || []).map((item: any, idx: number) => {
                 const max = Math.max(...(metrics?.chart || []).map((c: any) => c.appointments), 10);
                 const percent = Math.min(100, Math.round((item.appointments / max) * 100));
@@ -583,7 +583,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <span className="capitalize">{item.month}</span>
                       <span>{item.appointments} atendimentos</span>
                     </div>
-                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                       <div
                         className="bg-indigo-600 h-full rounded-full transition-all duration-500"
                         style={{ width: `${percent}%` }}
@@ -595,7 +595,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100 bg-slate-50 p-3 rounded-lg">
+          <div className="mt-2 pt-2 border-t border-slate-100 bg-slate-50 p-3 rounded-lg">
             <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">Resumo Operacional</h4>
             <div className="space-y-1 text-xs text-slate-600">
               <div className="flex justify-between">
