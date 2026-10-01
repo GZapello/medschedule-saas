@@ -1,0 +1,9 @@
+{
+  "name": "zemda-integration",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:critical": "playwright test --grep @critical"
+  },
+  "devDependencies": { "@playwright/test": "^1.56.0" }
+}

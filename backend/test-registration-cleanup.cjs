@@ -41,13 +41,20 @@ let server;
   const base=`http://127.0.0.1:${server.address().port}/api`;
   const register=async(name,email=name+'@test.invalid')=>{
     const r=await fetch(base+'/v1/public/tenants/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      responsibleName:name,email,password:'password123',clinicName:name,termsAccepted:true,privacyAccepted:true,managerProfession:'Fisioterapeuta'
+      emailVerificationToken:require('./test-fixtures/verified-email.cjs')(email),responsibleName:name,email,password:'password123',clinicName:name,termsAccepted:true,privacyAccepted:true,managerProfession:'Fisioterapeuta'
     })});const body=await r.json();return {...body,status:r.status};
   };
   const create=async(name,age='-6 days')=>{
     const result=await register(name);assert.equal(result.status,201,JSON.stringify(result));
-    db.prepare("UPDATE tenants SET created_at=datetime('now',?) WHERE id=?").run(age,result.clinicId);return result.clinicId;
+    // Model the legacy unfinished registration flow. Current signup completes onboarding
+    // and provisions its service; those accounts must remain protected from expiry.
+    db.prepare("UPDATE tenants SET created_at=datetime('now',?), onboarding_completed=0, manager_confirmed=0 WHERE id=?").run(age,result.clinicId);
+    db.prepare('DELETE FROM professional_services WHERE service_id IN (SELECT id FROM services WHERE tenant_id=?)').run(result.clinicId);
+    db.prepare('DELETE FROM services WHERE tenant_id=?').run(result.clinicId);
+    return result.clinicId;
   };
+  const completedSignup=await register('completed-signup');
+  db.prepare("UPDATE tenants SET created_at=datetime('now','-6 days') WHERE id=?").run(completedSignup.clinicId);
   const abandoned=await create('abandoned');
   assert.equal((await register('retry','abandoned@test.invalid')).status,409);
   const recent=await create('recent','-4 days');
@@ -83,7 +90,7 @@ let server;
   db.prepare("INSERT INTO cleanup_test_clinical_child SELECT 'future-child',id FROM users WHERE tenant_id=?").run(futureTable);
   await run();
   for(const id of [abandoned,boundary,expired])assert.equal(exists(id),false,'Should expire '+id);
-  for(const id of [recent,active,paid,activeSub,historical,used,onboarding,approved,legacy,shared,remotePaid,remoteActive,unavailable,paginated,wrongEnv,racing,changing,busy,futureTable])assert.equal(exists(id),true,'Must preserve '+id);
+  for(const id of [completedSignup.clinicId,recent,active,paid,activeSub,historical,used,onboarding,approved,legacy,shared,remotePaid,remoteActive,unavailable,paginated,wrongEnv,racing,changing,busy,futureTable])assert.equal(exists(id),true,'Must preserve '+id);
   assert.equal(db.prepare("SELECT 1 FROM users WHERE email='abandoned@test.invalid'").get(),undefined);
   assert.equal(db.prepare("SELECT 1 FROM asaas_webhook_events WHERE id='expired-event'").get(),undefined);
   for(const table of ['clinic_users','professionals'])assert.equal(db.prepare(`SELECT 1 FROM ${table} WHERE tenant_id=?`).get(abandoned),undefined);

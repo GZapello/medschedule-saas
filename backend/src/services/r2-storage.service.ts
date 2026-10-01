@@ -205,13 +205,14 @@ export class R2StorageService {
                 Quiet: true
               }
             });
-            await this.client.send(deleteCmd);
+              const deletion = await this.client.send(deleteCmd);
+              if (deletion.Errors?.length) throw new Error('R2_DELETE_INCOMPLETE');
             deletedCount += listRes.Contents.length;
           }
           continuationToken = listRes ? listRes.NextContinuationToken : undefined;
         } while (continuationToken);
       } catch (err: any) {
-        console.warn(`[R2StorageService.deletePrefix] Aviso ao excluir prefixo ${prefix}:`, err?.message || err);
+          throw new Error('R2_PREFIX_CLEANUP_FAILED');
       }
     }
 

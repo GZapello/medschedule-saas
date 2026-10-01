@@ -204,9 +204,8 @@ assert(hasCalendarSync && hasDashboardSync, 'Item 7: Evento global bidirecional 
 // ----------------------------------------------------
 // TEST 8: ZemdaMed busca paciente por nome completo / email / CPF / telefone
 // ----------------------------------------------------
-const hasPatientFullSearch = medContent.includes('p.full_name || p.name') &&
-  medContent.includes('cpf') &&
-  medContent.includes('phone');
+const picker = fs.readFileSync(path.join(__dirname, '../frontend/src/components/common/PatientSearchSelect.tsx'), 'utf8');
+const hasPatientFullSearch = medContent.includes('PatientSearchSelect') && picker.includes('cpf') && picker.includes('phone');
 assert(hasPatientFullSearch, 'Item 8: ZemdaMed pesquisa paciente por nome completo, email, CPF e telefone com label consistente');
 
 // ----------------------------------------------------

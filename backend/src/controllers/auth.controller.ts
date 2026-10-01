@@ -29,6 +29,7 @@ export class AuthController {
 
       const userStmt = db.prepare(`
         SELECT id, tenant_id, name, email, password_hash, role, phone, avatar_url, status,
+               onboarding_status, email_verified,
                terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at
         FROM users
         WHERE email = ?
@@ -43,6 +44,8 @@ export class AuthController {
         phone: string | null;
         avatar_url: string | null;
         status: string;
+        onboarding_status?: string | null;
+        email_verified?: number | null;
         terms_version_accepted?: string | null;
         privacy_version_accepted?: string | null;
         terms_accepted_at?: string | null;
@@ -62,8 +65,11 @@ export class AuthController {
         return;
       }
 
-      // Validação de status do usuário
-      if (user.status === 'pending' && !pendingBillingManager(user)) {
+      const userOnboardingStatus = user.onboarding_status || 'active';
+      const isOnboardingPending = userOnboardingStatus !== 'active';
+
+      // Validação de status do usuário (permite login se a conta estiver em onboarding)
+      if (user.status === 'pending' && !pendingBillingManager(user) && !isOnboardingPending) {
         logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'account_pending' });
         res.status(403).json({
           error: 'Sua solicitação de acesso está aguardando aprovação pelo gestor da clínica.',
@@ -96,7 +102,7 @@ export class AuthController {
         const tenantStmt = db.prepare(`
           SELECT 
             id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-            primary_color, client_term_label, status, banned_reason, registrations_blocked,
+            primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
             onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
           FROM tenants
           WHERE id = ?
@@ -114,7 +120,10 @@ export class AuthController {
             return;
           }
 
-          if (tenantData.status === 'pending' && !pendingBillingManager(user)) {
+          const tenantOnboardingStatus = tenantData.onboarding_status || 'active';
+          const isTenantOnboardingPending = tenantOnboardingStatus !== 'active';
+
+          if (tenantData.status === 'pending' && !pendingBillingManager(user) && !isOnboardingPending && !isTenantOnboardingPending) {
             logAudit(req, 'LOGIN_FAILED', 'users', user.id, { email: attemptedEmail, reason: 'clinic_pending' });
             res.status(403).json({
               error: 'O cadastro da sua clínica está em análise e pendente de aprovação pelo Administrador do SaaS. Você será notificado assim que o acesso for liberado.',
@@ -216,7 +225,7 @@ export class AuthController {
         }
       }
 
-      const needsOnboarding = false;
+      const needsOnboarding = user.role !== 'superadmin' && (isOnboardingPending || tenantData?.onboarding_status !== 'active');
 
       let userPermissions: string[] = [];
       let cuRow: any = null;
@@ -280,12 +289,16 @@ export class AuthController {
 
       res.json({
         token,
+        needsOnboarding,
+        onboardingStatus: userOnboardingStatus,
         user: {
           id: user.id,
           name: user.name,
           email: user.email,
           role: user.role,
           status: user.status,
+          onboardingStatus: userOnboardingStatus,
+          emailVerified: Boolean(user.email_verified === 1),
           phone: user.phone,
           avatarUrl: user.avatar_url,
           tenantId: user.tenant_id,
@@ -344,6 +357,7 @@ export class AuthController {
 
       const userStmt = db.prepare(`
         SELECT id, tenant_id, name, email, role, phone, avatar_url, status,
+               onboarding_status, email_verified,
                terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at
         FROM users
         WHERE id = ?
@@ -362,7 +376,7 @@ export class AuthController {
         const tenantStmt = db.prepare(`
           SELECT 
             id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-            primary_color, client_term_label, status,
+            primary_color, client_term_label, status, onboarding_status,
             onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
           FROM tenants
           WHERE id = ?
@@ -439,7 +453,11 @@ export class AuthController {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
       }
-      const needsOnboarding = false;
+      const userOnboardingStatus = user.onboarding_status || 'active';
+      const isOnboardingPending = userOnboardingStatus !== 'active';
+      const tenantOnboardingStatus = tenantData?.onboarding_status || 'active';
+      const isTenantOnboardingPending = tenantOnboardingStatus !== 'active';
+      const needsOnboarding = user.role !== 'superadmin' && (isOnboardingPending || isTenantOnboardingPending);
 
       if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = completeProfessionalProfile(user.id, user.tenant_id, profDetails);
@@ -499,6 +517,8 @@ export class AuthController {
           email: user.email,
           role: user.role,
           status: user.status,
+          onboardingStatus: userOnboardingStatus,
+          emailVerified: Boolean(user.email_verified === 1),
           phone: user.phone,
           avatarUrl: user.avatar_url,
           tenantId: user.tenant_id,

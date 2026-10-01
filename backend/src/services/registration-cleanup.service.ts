@@ -1,6 +1,6 @@
 import { db } from '../config/database';
 import { AsaasService } from './asaas.service';
-import { purgeClinic } from './clinic-control.service';
+import { purgeTenantCompletely } from './clinic-control.service';
 
 const actor = 'system:registration-expiry';
 const reason = 'Cadastro não ativado e sem pagamento, expirado após 5 dias.';
@@ -107,7 +107,7 @@ export class RegistrationCleanupService {
       const jobs=db.prepare(`SELECT j.clinic_id FROM clinic_deletion_jobs j WHERE EXISTS
         (SELECT 1 FROM global_clinic_audit a WHERE a.clinic_id=j.clinic_id AND a.admin_id=? AND a.action='DELETE_REQUESTED')`).all(actor);
       for (const job of jobs) {
-        try { purgeClinic(job.clinic_id,actor,reason); }
+        try { await purgeTenantCompletely(job.clinic_id,actor,reason); }
         catch { console.warn('[RegistrationCleanup] FILE_CLEANUP_RETRY'); }
       }
       const candidates=db.prepare(`SELECT id FROM tenants WHERE status='pending' AND billing_required=1
@@ -117,7 +117,7 @@ export class RegistrationCleanupService {
           if (!eligible(id)) continue;
           const before=snapshot(id);
           if (!await gatewayIsEmpty(id)) continue;
-          purgeClinic(id,actor,reason,{reauthenticated:false,guard:owned=>{
+          await purgeTenantCompletely(id,actor,reason,{reauthenticated:false,guard:owned=>{
             if (!eligible(id) || before!==snapshot(id)) throw new Error('REGISTRATION_CHANGED');
             for (const [table,rows] of owned) if (rows.size && !temporaryTables.has(table)) throw new Error('CLINIC_ALREADY_USED');
             // Early checkout notifications can still lack clinic_id. Remove only

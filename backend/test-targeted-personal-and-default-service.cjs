@@ -33,6 +33,12 @@ process.env.DATABASE_PATH = path.resolve(__dirname, 'test_targeted_personal.db')
 process.env.JWT_SECRET = 'test-secret-targeted-personal-123';
 process.env.PORT = '3105';
 process.env.R2_MOCK_STORAGE = 'true';
+process.env.ZEMDA_FILES_WORKER_URL = 'https://test-worker.invalid';
+const originalFetch = global.fetch;
+global.fetch = async (url, options) => {
+  if (String(url).startsWith('https://test-worker.invalid/file')) return new Response(null, { status: 200 });
+  return originalFetch(url, options);
+};
 
 if (fs.existsSync(process.env.DATABASE_PATH)) {
   try { fs.unlinkSync(process.env.DATABASE_PATH); } catch (_) {}
@@ -240,10 +246,10 @@ async function runTests() {
       composition_method: 'skinfolds',
       notes: 'Avaliação inicial com 4 vistas corporais integradas ao R2',
       photos: [
-        { photo_type: 'front', photo_url: photoFrontUrl },
-        { photo_type: 'back', photo_url: photoBackUrl },
-        { photo_type: 'right', photo_url: photoRightUrl },
-        { photo_type: 'left', photo_url: photoLeftUrl }
+        { photo_type: 'front', file_id: frontConfirmRes.data.file.id },
+        { photo_type: 'back', file_id: backConfirmRes.data.file.id },
+        { photo_type: 'right', file_id: rightConfirmRes.data.file.id },
+        { photo_type: 'left', file_id: leftConfirmRes.data.file.id }
       ]
     });
     assert(assessmentRes.status === 201, '5. Salvar avaliação física com 4 fotos retorna HTTP 201');
@@ -261,26 +267,29 @@ async function runTests() {
 
     // Teste 8: Substituir foto (substitui a frontal por uma nova frontal)
     console.log('\n--- 3. SUBSTITUIÇÃO E REMOÇÃO DE FOTOS ---');
-    const newFrontUrl = 'https://r2.zemda.com/assessments/new_front_substituted.webp';
+    const nextTicket = await makeRequest('POST', '/api/v1/files/upload-url', authHeaders, { category:'personal_assessment_front', filename:'replacement.webp', mimeType:'image/webp', fileSize:100, patientId:studentId });
+    const nextPhoto = await makeRequest('POST','/api/v1/files/complete',authHeaders,{objectKey:nextTicket.data.objectKey,category:'personal_assessment_front',filename:'replacement.webp',mimeType:'image/webp',fileSize:100,patientId:studentId});
+    assert(nextPhoto.status === 201, 'Foto substituta criada com anexo válido');
+    const newFrontId = nextPhoto.data.file.id;
     const updateRes = await makeRequest('PUT', `/api/v1/personal/assessments/${assessmentId}`, authHeaders, {
       photos: [
-        { photo_type: 'front', photo_url: newFrontUrl }, // substituída
-        { photo_type: 'back', photo_url: photoBackUrl },
-        { photo_type: 'right', photo_url: photoRightUrl },
-        { photo_type: 'left', photo_url: photoLeftUrl }
+        { photo_type: 'front', file_id: newFrontId }, // substituída
+        { photo_type: 'back', file_id: backConfirmRes.data.file.id },
+        { photo_type: 'right', file_id: rightConfirmRes.data.file.id },
+        { photo_type: 'left', file_id: leftConfirmRes.data.file.id }
       ]
     });
     assert(updateRes.status === 200, '8.1. PUT /v1/personal/assessments/:id retorna HTTP 200');
     const checkSubstituted = await makeRequest('GET', `/api/v1/personal/assessments/${assessmentId}`, authHeaders);
     const subFront = checkSubstituted.data.photos.find(p => p.photo_type === 'front');
-    assert(subFront && subFront.photo_url === newFrontUrl, '8.2. Substituir foto: nova foto frontal foi atualizada com sucesso');
+    assert(subFront && subFront.file_id === newFrontId, '8.2. Substituir foto: nova foto frontal foi atualizada com sucesso');
 
     // Teste 9: Remover foto (remove a foto lateral esquerda)
     const removeLeftRes = await makeRequest('PUT', `/api/v1/personal/assessments/${assessmentId}`, authHeaders, {
       photos: [
-        { photo_type: 'front', photo_url: newFrontUrl },
-        { photo_type: 'back', photo_url: photoBackUrl },
-        { photo_type: 'right', photo_url: photoRightUrl }
+        { photo_type: 'front', file_id: newFrontId },
+        { photo_type: 'back', file_id: backConfirmRes.data.file.id },
+        { photo_type: 'right', file_id: rightConfirmRes.data.file.id }
         // 'left' removida
       ]
     });
@@ -295,6 +304,16 @@ async function runTests() {
     // -------------------------------------------------------------
     console.log('\n--- 4. EXERCÍCIOS DO ZEMDAPersonal (COM/SEM IMAGEM, EDIÇÃO E CARDS) ---');
 
+    // Uploads use the same persisted attachment contract as the application.
+    const exercisePhoto = async () => {
+      const body = {category:'exercises',filename:'exercise.webp',mimeType:'image/webp',fileSize:100};
+      const ticket = await makeRequest('POST','/api/v1/files/upload-url',authHeaders,body);
+      assert(ticket.status === 200, 'Ticket de imagem do exercício');
+      const completed = await makeRequest('POST','/api/v1/files/complete',authHeaders,{...body,objectKey:ticket.data.objectKey});
+      assert(completed.status < 300, 'Anexo persistido para exercício');
+      return completed.data.file.id;
+    };
+    const initialExerciseFile = await exercisePhoto();
     // Teste 10: Criar exercício com imagem
     const exWithPhotoRes = await makeRequest('POST', '/api/v1/personal/exercises', authHeaders, {
       name: 'Crucifixo Inclinado com Halteres R2',
@@ -302,7 +321,7 @@ async function runTests() {
       equipment: 'halteres',
       category: 'hipertrofia',
       level: 'intermediario',
-      photo_url: 'https://r2.zemda.com/exercises/crucifixo_inclinado.webp',
+      exercise_file_id: initialExerciseFile,
       technical_notes: 'Banco inclinado a 30 graus, cotovelos levemente flexionados.'
     });
     assert(exWithPhotoRes.status === 201, '10. Criar exercício com imagem no R2 retorna HTTP 201');
@@ -322,10 +341,10 @@ async function runTests() {
     const exWithoutPhotoId = exWithoutPhotoRes.data.id || exWithoutPhotoRes.data.exercise?.id;
 
     // Teste 12: Editar imagem do exercício
-    const newExPhotoUrl = 'https://r2.zemda.com/exercises/crucifixo_nova_foto.webp';
+    const newExPhotoId = await exercisePhoto();
     const editExRes = await makeRequest('PUT', `/api/v1/personal/exercises/${exWithPhotoId}`, authHeaders, {
       name: 'Crucifixo Inclinado com Halteres R2 (Foto Editada)',
-      photo_url: newExPhotoUrl
+      exercise_file_id: newExPhotoId
     });
     assert(editExRes.status === 200, '12.1. Editar exercício retorna HTTP 200');
 
@@ -334,13 +353,13 @@ async function runTests() {
     assert(listCardsRes.status === 200, '13.1. Listagem de exercícios retorna HTTP 200');
     const exercisesList = listCardsRes.data.exercises || listCardsRes.data;
     const foundEdited = exercisesList.find(e => e.id === exWithPhotoId);
-    assert(foundEdited && foundEdited.photo_url === newExPhotoUrl, '13.2. Card do exercício exibe a imagem atualizada');
+    assert(foundEdited && foundEdited.exercise_file_id === newExPhotoId, '13.2. Card do exercício exibe a imagem atualizada');
     const foundNoPhoto = exercisesList.find(e => e.id === exWithoutPhotoId);
     assert(foundNoPhoto && (!foundNoPhoto.photo_url || foundNoPhoto.photo_url === ''), '13.3. Card do exercício sem foto continua sem imagem (Sem foto)');
 
     // Teste 14: Atualizar a página e confirmar persistência
-    const rawDbCheck = db.prepare('SELECT id, name, photo_url FROM personal_exercises WHERE id = ?').get(exWithPhotoId);
-    assert(rawDbCheck && rawDbCheck.photo_url === newExPhotoUrl, '14. Persistência no banco confirmada após consulta direta');
+    const rawDbCheck = db.prepare('SELECT id, name, exercise_file_id FROM personal_exercises WHERE id = ?').get(exWithPhotoId);
+    assert(rawDbCheck && rawDbCheck.exercise_file_id === newExPhotoId, '14. Persistência no banco confirmada após consulta direta');
 
     // -------------------------------------------------------------
     // BLOCO 3: SERVIÇO PADRÃO EM NOVOS CADASTROS (TESTES 15 A 20)
@@ -350,6 +369,7 @@ async function runTests() {
     // Teste 15: Criar nova clínica/conta
     const uniqueClinicSuffix = Math.floor(Math.random() * 90000) + 10000;
     const newClinicRes = await makeRequest('POST', '/api/v1/public/tenants/register', {}, {
+      emailVerificationToken: require('./test-fixtures/verified-email.cjs')(`leonardo_${uniqueClinicSuffix}@novaclinica.com`),
       responsibleName: 'Dr. Leonardo Nova Clinica',
       email: `leonardo_${uniqueClinicSuffix}@novaclinica.com`,
       phone: '(11) 98765-4321',
@@ -373,7 +393,9 @@ async function runTests() {
     assert(Number(checkService.price) === 180.0, '16.2. Valor do serviço padrão é rigorosamente R$ 180,00');
     assert(checkService.active === 1, '16.3. Status do serviço é Ativo (active = 1)');
 
-    // Ativa a nova clínica para liberar o uso da agenda (simulando início do período ou aprovação)
+    const completedProfile = await makeRequest('POST', '/api/v1/onboarding/complete-profile', newClinicHeaders, { practiceAreaIds: [] });
+    assert(completedProfile.status === 200, '16.4. Perfil verificado conclui onboarding antes de acessar a agenda');
+    // Isola o teste da agenda da cobrança após concluir o onboarding real.
     db.prepare("UPDATE tenants SET status = 'active', billing_required = 0 WHERE id = ?").run(newTenantId);
     db.prepare("UPDATE users SET status = 'active' WHERE tenant_id = ?").run(newTenantId);
     db.prepare("UPDATE clinic_users SET status = 'active' WHERE tenant_id = ?").run(newTenantId);
@@ -413,16 +435,17 @@ async function runTests() {
       }
     }
 
+    require('./dist/utils/schedule-defaults').createDefaultSchedules(db, newTenantId, newProfId);
     const apptRes = await makeRequest('POST', '/api/v1/appointments', newClinicHeaders, {
       patientId: newPatientId,
       professionalId: newProfId,
       serviceId: defaultServiceFromApi.id,
       date: '2026-09-18',
-      startTime: '10:00',
-      endTime: '10:50',
+      startTime: '2026-09-18T10:00:00',
+      endTime: '2026-09-18T10:50:00',
       status: 'scheduled'
     });
-    assert(apptRes.status === 201, '18. Criar primeiro agendamento com serviço padrão retorna HTTP 201');
+    assert(apptRes.status === 201, '18. Criar primeiro agendamento com serviço padrão retorna HTTP 201: ' + JSON.stringify(apptRes.data));
 
     // Teste 19: Confirmar que o serviço aparece imediatamente e gerou pagamento com valor R$ 180,00
     const paymentRow = db.prepare('SELECT amount, status FROM payments WHERE appointment_id = ?').get(apptRes.data.id || apptRes.data.appointment?.id);

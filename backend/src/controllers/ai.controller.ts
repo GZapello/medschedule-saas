@@ -1622,7 +1622,7 @@ function saveToConversation(convId: string, tenantId: string, userText: string, 
       const msgs = JSON.parse(conv.messages_json || '[]');
       msgs.push({ sender: 'user', text: userText, timestamp: new Date().toISOString() });
       msgs.push({ sender: 'assistant', text: aiReply, timestamp: new Date().toISOString() });
-      db.prepare('UPDATE ai_conversations SET messages_json = ?, updated_at = datetime("now") WHERE id = ?').run(JSON.stringify(msgs), convId);
+      db.prepare("UPDATE ai_conversations SET messages_json = ?, updated_at = datetime('now') WHERE id = ?").run(JSON.stringify(msgs), convId);
     }
   } catch (e) {
     console.error('[AIController.saveToConversation] Erro:', e);

@@ -185,8 +185,9 @@ async function runTests() {
     // ----------------------------------------------------
     console.log('\n--- 3. CATÁLOGO DE SERVIÇOS: EDIÇÃO ---');
 
+    db.prepare("INSERT INTO professionals (id, tenant_id, name) VALUES ('prof-1', 'clinic-a', 'Dra. Ana')").run();
     // Gestor da Clínica A cria serviço
-    const createServiceRes = await api('POST', '/v1/services', {
+    const createServiceRes = await api('POST', '/v1/services', { professionalId: 'prof-1',
       name: 'Fisioterapia Motora Inicial',
       price: 150.0,
       durationMinutes: 50,
@@ -222,7 +223,7 @@ async function runTests() {
     console.log('\n--- 4. CATÁLOGO DE SERVIÇOS: EXCLUSÃO / INATIVAÇÃO ---');
 
     // Cenário A: Serviço com histórico (agendamento / atendimento vinculado)
-    db.prepare("INSERT INTO professionals (id, tenant_id, name) VALUES ('prof-1', 'clinic-a', 'Dra. Ana')").run();
+
     db.prepare("INSERT INTO patients (id, tenant_id, full_name, phone) VALUES ('patient-1', 'clinic-a', 'Carlos Souza', '11999998888')").run();
 
     // Inserir agendamento vinculado ao serviceId
@@ -250,7 +251,7 @@ async function runTests() {
     assertTest(checkAppt && checkAppt.service_id === serviceId, 'Histórico de agendamento/atendimento preservado intacto');
 
     // Cenário B: Serviço sem nenhum vínculo histórico
-    const createServiceCleanRes = await api('POST', '/v1/services', {
+    const createServiceCleanRes = await api('POST', '/v1/services', { professionalId: 'prof-1',
       name: 'Serviço Temporário Sem Vínculo',
       price: 80.0,
       durationMinutes: 30

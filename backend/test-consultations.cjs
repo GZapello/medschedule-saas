@@ -7,7 +7,7 @@ process.env.CLINIC_UPLOAD_ROOT = path.join(temp, 'uploads');
 const { db, initializeDatabase } = require('./dist/config/database');
 initializeDatabase(); initializeDatabase();
 const bcrypt = require('bcryptjs'); const express = require('express');
-const app = express(); app.use(express.json({limit:'50mb'})); app.use('/api', require('./dist/routes').default);
+const app = express(); app.use(express.json({limit:'50mb'})); app.use(require('./dist/services/error-monitor.service').ErrorMonitor.requestMiddleware); app.use('/api', require('./dist/routes').default);
 const password = 'Local-Test-Only-2026';
 const modules = [
   ['fono','Fonoaudiologia','ZemdaFono','speech-therapy','zemdaFonoEnabled'],
@@ -33,6 +33,7 @@ db.prepare("INSERT INTO users (id,tenant_id,name,email,password_hash,role,status
 db.prepare("INSERT INTO clinic_users (id,tenant_id,user_id,role,status) VALUES ('cu-manager','test-clinic','manager','clinic_admin','active')").run();
 // Body access now requires an explicit manager grant in the current application.
 db.prepare("UPDATE clinic_users SET permissions_json='[\"access_zemda_body\"]' WHERE tenant_id='test-clinic' AND role='professional'").run();
+module.exports = { app, db };
 let server;
 (async()=>{
   if (process.argv.includes('--serve')) {
@@ -87,10 +88,10 @@ let server;
     const finish=await call(`/v1/appointments/apt-${key}/finish`,{payment},token);assert.equal(finish.status,200,JSON.stringify(finish));
     const repeated=await call(`/v1/appointments/apt-${key}/finish`,{payment},token);assert.equal(repeated.data.alreadyCompleted,true);
     assert.equal(db.prepare('SELECT COUNT(*) n FROM payments WHERE appointment_id=?').get('apt-'+key).n,1);
-    assert.equal(db.prepare('SELECT COUNT(*) n FROM records WHERE appointment_id=?').get('apt-'+key).n,1);
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM records WHERE appointment_id=? AND clinical_evolution=?').get('apt-'+key, 'Evolução '+key).n,1);
     assert.equal(db.prepare('SELECT status FROM payments WHERE appointment_id=?').get('apt-'+key).status,payment.status);
     const records=await call('/v1/clinical-records/patient/pat-'+key,null,token);assert.equal(records.status,200,JSON.stringify(records));
-    const record=records.data.find(r=>r.appointment_id==='apt-'+key);assert.ok(record,'Record visible after reopen');
+    const record=records.data.find(r=>r.id===save.data.generatedDocs.recordId);assert.ok(record,'Record visible after reopen');
     assert.equal(record.clinical_evolution,'Evolução '+key);assert.equal(record.technical_notes,'Técnica '+key);
     assert.equal(record.attachments.length,1);assert.equal(record.attachments[0].title,'Anexo teste');
     assert.ok(record.module_data_json.includes('Anamnese '+key));assert.ok(record.module_data_json.includes('Avaliação '+key));

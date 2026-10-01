@@ -1,3 +1,4 @@
+import { SystemIntegrity } from './system-integrity.service';
 import type { Request, Response, NextFunction } from 'express';
 import { EmailService } from './email.service';
 
@@ -173,6 +174,7 @@ export const ErrorMonitor = {
     };
 
     res.on('finish', () => {
+      SystemIntegrity.observe(req, res);
       if (res.statusCode < 500 || res.locals.errorCaptured) return;
       try {
         const route = routeOf(req);

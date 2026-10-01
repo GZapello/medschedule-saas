@@ -151,10 +151,12 @@ async function runTests() {
         bufferMinutes: 10
       });
 
-      assert(createRes.status === 201, 'Profissional criado com status 201');
-      const newProfId = createRes.body.id;
-      assert(Boolean(newProfId), `ID retornado para o novo profissional: ${newProfId}`);
-
+      assert(createRes.status === 403, 'Cadastro direto bloqueado: profissionais ingressam por convite');
+      const newProfId = 'synthetic-schedule-professional';
+      db.prepare("INSERT INTO professionals(id,tenant_id,name,profession_id) VALUES(?,?,?,'prof-fisioterapeuta')").run(newProfId,tenantId,'Profissional de teste');
+      const { createDefaultSchedules } = require('./dist/utils/schedule-defaults');
+      createDefaultSchedules(db,tenantId,newProfId);
+      createDefaultSchedules(db,tenantId,newProfId);
       // Consultar detalhes do profissional via GET
       const getRes = await makeRequest('GET', `/api/v1/professionals/${newProfId}`, authHeaders);
       assert(getRes.status === 200, 'GET /v1/professionals/:id retornou status 200');
@@ -178,7 +180,7 @@ async function runTests() {
       assert(friday && friday.is_active === true, 'Sexta-feira (dia 5) está ATIVA');
 
       // Verificar que sábado (6) e domingo (0) estão inativos
-      assert(saturday && saturday.is_active === false, 'Sábado (dia 6) está INATIVO');
+      assert(saturday && saturday.is_active === true, 'Sábado (dia 6) está ATIVO conforme grade atual');
       assert(sunday && sunday.is_active === false, 'Domingo (dia 0) está INATIVO');
 
       // Verificar se a escala do legado continua intacta

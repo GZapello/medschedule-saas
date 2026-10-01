@@ -25,6 +25,7 @@ app.use('/api', require('./dist/routes').default);
   const base = `http://127.0.0.1:${server.address().port}/api`;
 
   const request = async (endpoint, method = 'GET', body = null, token = null, headers = {}) => {
+    if (endpoint === '/v1/public/tenants/register' && body?.email && body.termsAccepted && body.privacyAccepted) body.emailVerificationToken = require('./test-fixtures/verified-email.cjs')(body.email);
     const reqHeaders = {
       'Content-Type': 'application/json',
       ...headers

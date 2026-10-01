@@ -34,3 +34,7 @@ frontend/android/.gradle/
 .env*
 !.env.example
 ExerciseGymGifsDB/
+
+# Playwright reports contain only synthetic test artifacts and stay local.
+/playwright-report/
+/test-results/

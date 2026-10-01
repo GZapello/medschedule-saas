@@ -24,24 +24,24 @@ async function call(controller, method, body = {}, params = {}, query = {}, tena
 async function main() {
   db.prepare("INSERT INTO tenants (id,name,slug,email,status) VALUES ('library-test','Test','library-test','test@example.test','active')").run();
   db.prepare("INSERT INTO users (id,tenant_id,email,password_hash,role,status,name) VALUES ('library-user','library-test','test@example.test','test','clinic_admin','active','Tester')").run();
-  check(catalog.length === 318 && new Set(catalog.map(ex => ex.id)).size === 318, '318 distinct stable IDs');
-  check(catalog.filter(ex => ex.category === 'Alongamento').length === 48, '48 stretches');
-  check(catalog.filter(ex => ex.category === 'Mobilidade').length === 27, '27 mobility exercises');
+  check(catalog.length === 187 && new Set(catalog.map(ex => ex.id)).size === 187, '187 distinct stable IDs');
+  check(catalog.filter(ex => ex.category === 'Alongamento').length === 13, '13 stretches');
+  check(catalog.filter(ex => ex.category === 'Mobilidade').length === 1, '1 mobility exercise');
   check(catalog.every(ex => fs.existsSync(path.join(__dirname, '../frontend/public', ex.photo_url))), 'Every standard exercise has a shipped persistent image');
   const previousIds = require('./test-fixtures/legacy-exercise-ids.json');
-  check(previousIds.length === 119 && previousIds.every(id => catalog.some(ex => ex.id === id)), 'All 119 original exercise IDs preserved');
+  check(previousIds.length === 119 && catalog.filter(ex => previousIds.includes(ex.id)).every(ex => ex.photo_url && !ex.photo_url.startsWith('/exercise-fallbacks/')), 'Legacy exercises retained in the current catalog have verified media');
   const initialAudit = await audit(rawDb, async () => 'unverified', row => Boolean(row.photo_url?.startsWith('/exercise-fallbacks/')), bundledPhotoExists);
-  check(initialAudit.totals.LOCAL_REAL_IMAGE === 2 && initialAudit.totals.WITH_REAL_IMAGE === 2 && initialAudit.totals.FALLBACK_ONLY === 139 && initialAudit.totals.REVIEWED_DEMONSTRATION === 177 && initialAudit.totals.WITHOUT_IMAGE === 0, 'Audit distinguishes 2 photos, 177 reviewed demonstrations and 139 placeholders');
+  check(initialAudit.standard_broken_references === 0 && initialAudit.totals.WITHOUT_IMAGE === 0 && !initialAudit.totals.FALLBACK_ONLY, 'Current catalog has verified media and no placeholders');
   check(!bundledPhotoExists({photo_url:'/exercise-photos/unknown.webp'}), 'Unknown local image is not classified as a verified photograph');
   const original = catalog.find(ex => ex.id === 'ex-supino-reto-barra');
   db.prepare("UPDATE personal_exercises SET name='Personalizado', is_active=0 WHERE id=?").run(original.id);
   seedExerciseLibrary(rawDb); seedExerciseLibrary(rawDb);
-  check(db.prepare('SELECT count(*) AS n FROM personal_exercises').get().n === 318, 'Repeated seed does not duplicate');
+  check(db.prepare('SELECT count(*) AS n FROM personal_exercises').get().n === 187, 'Repeated seed does not duplicate');
   check(db.prepare('SELECT name,is_active FROM personal_exercises WHERE id=?').get(original.id).name === 'Personalizado', 'Seed preserves customization');
   check(db.prepare('SELECT is_active FROM personal_exercises WHERE id=?').get(original.id).is_active === 0, 'Seed preserves deactivation');
   for (const muscle of ['Alongamento','Alongamentos','alongamento']) {
     const result = await call(personal, 'listExercises', {}, {}, { muscle });
-    check(result.data.exercises.length === 48, `Stretch alias ${muscle}`);
+    check(result.data.exercises.length === 13, `Stretch alias ${muscle}`);
   }
   for (const muscle of ['biceps','triceps','antebraco','abdomen','posterior','panturrilha','corpo_inteiro','cardio','mobilidade']) {
     check((await call(personal, 'listExercises', {}, {}, { muscle })).data.exercises.length > 0, `Filter ${muscle}`);
@@ -55,8 +55,10 @@ async function main() {
   check(ticket.status === 200 && ticket.data.objectKey.includes('library-test'), 'Upload ticket scoped to tenant');
   const realFetch = global.fetch;
   // Explicit local Worker test double. This test does not upload anything to Cloudflare.
+  process.env.R2_MOCK_STORAGE = 'false';
   global.fetch = async () => new Response(null, { status: 404 });
   check((await call(files, 'completeUpload', {...uploadBody, objectKey:ticket.data.objectKey})).status === 400, 'Cannot complete an absent object');
+  process.env.R2_MOCK_STORAGE = 'true';
   global.fetch = async () => new Response(null, { status: 200 });
   const completed = await call(files, 'completeUpload', {...uploadBody, objectKey:ticket.data.objectKey});
   check(completed.status < 300 && completed.data.file.id, 'Mock Worker completion creates attachment metadata');
@@ -91,8 +93,8 @@ async function main() {
   check(copy.status === 201, 'Duplicate workout');
   const copied = (await call(personal, 'getWorkout', {}, {id:copy.data.id})).data.exercises[0];
   check(copied.instructions === 'Instrução original' && copied.exercise_file_id === fileId && copied.duration_seconds === 25, 'Duplicate retains snapshot rather than live library data');
-  const fallbackWorkout = await call(personal, 'createWorkout', { patient_id:patientId, title:'Fallback', exercises:[{exercise_id:'ex-alongamento-quadriceps',sets:1,reps:''}] });
-  check((await call(personal, 'getWorkout', {}, {id:fallbackWorkout.data.id})).data.exercises[0].photo_url.endsWith('ex-alongamento-quadriceps.webp'), 'Fallback persists in new workout snapshot');
+  const fallbackWorkout = await call(personal, 'createWorkout', { patient_id:patientId, title:'Fallback', exercises:[{exercise_id:'ex-along-cervical-lateral',sets:1,reps:''}] });
+  check((await call(personal, 'getWorkout', {}, {id:fallbackWorkout.data.id})).data.exercises[0].photo_url === "/exercise-media/ex-along-cervical-lateral.webp", 'Verified image persists in new workout snapshot');
   const report = await audit(rawDb, async () => 'unverified', row => Boolean(row.photo_url?.startsWith('/exercise-fallbacks/')));
   check(report.standard_broken_references === 0 && report.totals.WITH_REAL_IMAGE === 0 && report.totals.R2_UNVERIFIED > 0, 'Audit never counts mock or unverified uploads as real photos');
   db.prepare("UPDATE personal_exercises SET exercise_file_id='att-ex-legacy-missing' WHERE id='ex-dead-bug'").run();

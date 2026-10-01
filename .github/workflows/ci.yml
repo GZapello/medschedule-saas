@@ -24,6 +24,8 @@ jobs:
 
       - run: npm ci
 
+      - run: npx tsc --noEmit
+
       - run: npm run build
 
       - run: node run-tests.cjs
@@ -56,3 +58,43 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Frontend regression tests
+        working-directory: frontend
+        run: |
+          node test-clinical-neutral-defaults.cjs
+          node test-medical-specialties.cjs
+          node test-clinical-core.cjs
+
+  e2e:
+    name: E2E critical workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix backend
+      - run: npm ci --prefix frontend
+      - run: npm run build --prefix backend
+      - run: npm run build --prefix frontend
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-failure-traces
+          path: |
+            playwright-report/
+            test-results/

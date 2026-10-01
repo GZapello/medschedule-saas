@@ -202,6 +202,7 @@ export function initializeDatabase(): void {
     addColIfMissing('tenants', 'website', 'TEXT');
     addColIfMissing('tenants', 'description', 'TEXT');
     addColIfMissing('tenants', 'trial_used', 'INTEGER NOT NULL DEFAULT 0');
+    addColIfMissing('tenants', 'onboarding_status', "TEXT DEFAULT 'active'");
 
     // Tabela e índices de Aceite Legal (Termos de Uso e Política de Privacidade / LGPD)
     try {
@@ -325,6 +326,9 @@ export function initializeDatabase(): void {
     // Versão de sessão por usuário: incrementada quando o próprio usuário troca a senha,
     // invalidando tokens JWT emitidos antes da troca sem afetar outros usuários da clínica.
     addColIfMissing('users', 'session_version', 'INTEGER NOT NULL DEFAULT 0');
+    addColIfMissing('users', 'onboarding_status', "TEXT DEFAULT 'active'");
+    addColIfMissing('users', 'email_verified', 'INTEGER DEFAULT 0');
+    addColIfMissing('users', 'email_verified_at', 'TEXT');
 
     // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
     addColIfMissing('appointments', 'insurance_id', 'TEXT');
@@ -1050,10 +1054,14 @@ export function initializeDatabase(): void {
           last_error TEXT,
           delivery_status TEXT DEFAULT 'pending',
           idempotency_key TEXT,
+          sent_by_user_id TEXT,
+          sent_by_name TEXT,
+          mode TEXT DEFAULT 'auto',
+          external_message_id TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        INSERT INTO notifications_migrated (id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for, sent_at, created_at)
-        SELECT id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for, sent_at, created_at FROM notifications;
+        INSERT INTO notifications_migrated (id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for, sent_at, created_at, retry_count, last_error, delivery_status, idempotency_key, sent_by_user_id, sent_by_name, mode, external_message_id)
+        SELECT id, tenant_id, patient_id, professional_id, appointment_id, type, channel, recipient, content, status, scheduled_for, sent_at, created_at, retry_count, last_error, delivery_status, idempotency_key, sent_by_user_id, sent_by_name, mode, external_message_id FROM notifications;
         DROP TABLE notifications;
         ALTER TABLE notifications_migrated RENAME TO notifications;
         CREATE INDEX IF NOT EXISTS idx_notifications_queue ON notifications (status, scheduled_for);

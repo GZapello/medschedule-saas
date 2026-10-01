@@ -1,3 +1,4 @@
+import { dashboardWorklist } from '../services/dashboard-worklist.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 
@@ -30,10 +31,11 @@ export class DashboardController {
         countParams.push((req as any).user.userId, tenantId);
       }
 
+      const canViewFinance = req.user?.role === 'clinic_admin';
       // 1. Atendimentos de hoje (inclui completed, in_progress, scheduled, etc. - nunca exclui atendimentos finalizados)
       const todayApptsStmt = db.prepare(`
         SELECT 
-          a.id, a.patient_id, a.professional_id, a.service_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality,
+          a.id, a.patient_id, a.professional_id, a.service_id, a.appointment_number, a.start_time, a.end_time, a.status, a.modality, a.clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone,
           p.name as professional_name,
           s.name as service_name,
@@ -71,15 +73,20 @@ export class DashboardController {
         FROM payments
         WHERE tenant_id = ? AND created_at >= ?
       `);
-      const finance = financeStmt.get(tenantId, monthStart) as any;
+      const finance = canViewFinance ? financeStmt.get(tenantId, monthStart) as any : {};
 
       // 4. Novos pacientes do mês
       const patientCountStmt = db.prepare(`
         SELECT COUNT(*) as new_patients
-        FROM patients
+        FROM patients pat
         WHERE tenant_id = ? AND created_at >= ?
+        ${req.user?.role === 'professional' ? `AND EXISTS (
+          SELECT 1 FROM appointments a JOIN professionals p ON p.id=a.professional_id
+          WHERE a.patient_id=pat.id AND a.tenant_id=pat.tenant_id
+          AND p.tenant_id=pat.tenant_id AND p.user_id=? AND p.active=1)` : ''}
       `);
-      const newPatients = (patientCountStmt.get(tenantId, monthStart) as any)?.new_patients || 0;
+      const newPatients = (patientCountStmt.get(tenantId, monthStart,
+        ...(req.user?.role === 'professional' ? [req.user.userId] : [])) as any)?.new_patients || 0;
 
       // 5. Total de profissionais e salas ativas
       const totalsStmt = db.prepare(`
@@ -89,6 +96,9 @@ export class DashboardController {
           (SELECT COUNT(*) FROM rooms WHERE tenant_id = ? AND active = 1) as active_rooms
       `);
       const totals = totalsStmt.get(tenantId, tenantId, tenantId) as any;
+      if (req.user?.role === 'professional') {
+        totals.active_professionals = (db.prepare('SELECT COUNT(*) AS count FROM professionals WHERE tenant_id=? AND user_id=? AND active=1').get(tenantId, req.user.userId) as any).count;
+      }
 
       // 6. Taxa de ocupação estimada (baseada em agendamentos vs capacidade de 8 slots/dia por profissional)
       const totalMonth = counts.total_month || 0;
@@ -97,7 +107,7 @@ export class DashboardController {
       const occupancyRate = Math.min(100, Math.round((totalMonth / (estimatedCapacity || 1)) * 100));
 
       // 7. Dados dos últimos 6 meses para gráficos
-      const monthsData: { month: string; appointments: number; revenue: number }[] = [];
+      const monthsData: { month: string; appointments: number; revenue: number | undefined }[] = [];
       for (let i = 5; i >= 0; i--) {
         const d = new Date();
         d.setMonth(d.getMonth() - i);
@@ -106,13 +116,13 @@ export class DashboardController {
 
         const apptCount = (db.prepare(`
           SELECT COUNT(*) as c FROM appointments 
-          WHERE tenant_id = ? AND start_time LIKE ? AND status != 'cancelled'
-        `).get(tenantId, `${yMonth}%`) as any)?.c || 0;
+          WHERE tenant_id = ? AND start_time LIKE ? AND status != 'cancelled' ${profFilterMonth}
+        `).get(tenantId, `${yMonth}%`, ...countParams.slice(2)) as any)?.c || 0;
 
-        const revSum = (db.prepare(`
+        const revSum = canViewFinance ? (db.prepare(`
           SELECT SUM(amount) as s FROM payments 
           WHERE tenant_id = ? AND created_at LIKE ? AND status = 'paid'
-        `).get(tenantId, `${yMonth}%`) as any)?.s || 0;
+        `).get(tenantId, `${yMonth}%`) as any)?.s || 0 : undefined;
 
         monthsData.push({
           month: monthLabel,
@@ -122,6 +132,8 @@ export class DashboardController {
       }
 
       res.json({
+        permissions: { finance: canViewFinance },
+        worklist: dashboardWorklist(req, today),
         today: {
           date: today,
           total: todayAppointments.length,
@@ -132,8 +144,8 @@ export class DashboardController {
           completed: counts.completed_month || 0,
           noShow: counts.no_show_month || 0,
           cancelled: counts.cancelled_month || 0,
-          revenue: finance.revenue_month || 0,
-          pending: finance.pending_month || 0,
+          ...(canViewFinance ? { revenue: finance.revenue_month || 0, pending: finance.pending_month || 0 } : {}),
+
           newPatients,
           occupancyRate
         },

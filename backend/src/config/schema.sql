@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   responsible_role TEXT,
   -- Status e Controle de Onboarding
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'active', 'blocked', 'rejected', 'suspended', 'banned')),
+  onboarding_status TEXT DEFAULT 'active',
   rejection_reason TEXT,
   onboarding_completed INTEGER NOT NULL DEFAULT 0,
   onboarding_step INTEGER NOT NULL DEFAULT 1,
@@ -151,6 +152,9 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT,
   avatar_url TEXT,
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('pending', 'active', 'inactive', 'blocked', 'rejected')),
+  onboarding_status TEXT DEFAULT 'active',
+  email_verified INTEGER DEFAULT 0,
+  email_verified_at TEXT,
   two_factor_enabled INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),

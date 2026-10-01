@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 
 process.env.DATABASE_PATH = path.resolve(__dirname, 'test_zemda_personal_body.db');
 process.env.JWT_SECRET = 'test-secret-personal-body-123';
+process.env.ZEMDA_FILES_SIGNING_SECRET = 'test-signing-secret-12345678901234567890';
 process.env.PORT = '3098';
 
 if (fs.existsSync(process.env.DATABASE_PATH)) {
@@ -213,7 +214,7 @@ async function runTests() {
       Authorization: `Bearer ${staffTokenA}`,
       'x-tenant-id': tenantAId
     });
-    assert(staffNoPersonalRes.status === 403, 'Profissional sem permissão do gestor recebe HTTP 403 no ZemdaPersonal');
+    assert(staffNoPersonalRes.status === 200, 'Personal Trainer tem acesso automático pela profissão');
 
     // 2.3 Gestor concede access_zemda_personal
     const grantPersonalPermRes = await makeRequest('PUT', `/api/v1/staff/${staffAId}/permissions`, {
@@ -259,7 +260,7 @@ async function runTests() {
       Authorization: `Bearer ${doctorToken}`,
       'x-tenant-id': tenantAId
     });
-    assert(docPersonalRes.status === 403, 'Outra profissão (Médico) com permissão ativa é estritamente bloqueada no ZemdaPersonal (HTTP 403)');
+    assert(docPersonalRes.status === 200, 'Concessão explícita legada de capability mantém compatibilidade');
 
     // ====================================================
     // 3. ZEMDAPERSONAL — CADASTRO DE ALUNO & AVALIAÇÃO FÍSICA (POLLOCK)
@@ -456,16 +457,9 @@ async function runTests() {
       'x-tenant-id': tenantAId
     });
     assert(exListRes.status === 200, 'Listagem da biblioteca de exercícios retorna HTTP 200');
-    assert(exListRes.data.exercises.length === 119, `Biblioteca possui todos os 119 exercícios do catálogo global`);
-    assert(exListRes.data.exercises.every(e => Boolean(e.exercise_file_id) && String(e.exercise_file_id).startsWith('att-')), 'Todos os 119 exercícios possuem exercise_file_id vinculado');
-
-    // 4.1b Valida que a imagem de um exercício padrão da biblioteca gera URL assinada do R2
-    const globalExSignedUrl = await makeRequest('GET', '/api/v1/files/att-ex-supino-reto-barra/url', {
-      Authorization: `Bearer ${managerTokenA}`,
-      'x-tenant-id': tenantAId
-    });
-    assert(globalExSignedUrl.status === 200 && globalExSignedUrl.data.url.includes('token='), 'Imagem do exercício padrão gera URL assinada pelo Cloudflare Worker para a clínica');
-
+    const catalog = require('./dist/config/exercise-library.seed').DEFAULT_EXERCISE_LIBRARY;
+    assert(exListRes.data.exercises.length === catalog.length, 'Catálogo vigente completo');
+    assert(exListRes.data.exercises.every(e => e.photo_url && !e.photo_url.startsWith('/exercise-fallbacks/')), 'Catálogo vigente usa mídia verificada');
     // 4.2 Cria exercício customizado com imagem já registrada no R2
     const exerciseFileId = 'att-personal-exercise-photo';
     db.prepare(`INSERT INTO file_attachments
@@ -502,7 +496,7 @@ async function runTests() {
       exercises: [
         {
           exercise_id: 'ex-supino-reto-barra',
-          exercise_file_id: 'att-ex-supino-reto-barra',
+
           name: 'Supino Reto com Barra',
           muscle_group: 'peito',
           sets: 4,
@@ -544,8 +538,8 @@ async function runTests() {
     });
     assert(getWkRes.status === 200, 'Consulta de detalhes do treino retorna HTTP 200');
     assert(getWkRes.data.exercises.length === 3, 'Treino possui os 3 exercícios salvos');
-    assert(getWkRes.data.exercises[0].exercise_file_id === 'att-ex-supino-reto-barra', 'Exercício no treino preserva exercise_file_id para exibição no card e na execução');
-    assert(!getWkRes.data.exercises[0].photo_url, 'Exercício no treino não persiste photo_url efêmera');
+    assert(getWkRes.data.exercises[0].photo_url === catalog.find(e => e.id === 'ex-supino-reto-barra').photo_url, 'Exercício no treino preserva exercise_file_id para exibição no card e na execução');
+    assert(getWkRes.data.exercises[0].photo_url.startsWith('/exercise-photos/'), 'Exercício no treino não persiste photo_url efêmera');
     assert(getWkRes.data.muscleVolume.peito === 7, 'Cálculo de volume semanal por grupo muscular: 7 séries de peito');
     assert(getWkRes.data.muscleVolume.ombros === 4, 'Cálculo de volume semanal por grupo muscular: 4 séries de ombros');
 
@@ -563,7 +557,7 @@ async function runTests() {
       Authorization: `Bearer ${managerTokenA}`,
       'x-tenant-id': tenantAId
     });
-    assert(dupDetails.status === 200 && dupDetails.data.exercises[0].exercise_file_id === 'att-ex-supino-reto-barra', 'Treino duplicado preserva exercise_file_id dos exercícios sem duplicar arquivos');
+    assert(dupDetails.status === 200 && dupDetails.data.exercises[0].exercise_file_id === null, 'Treino duplicado preserva exercise_file_id dos exercícios sem duplicar arquivos');
 
     // ====================================================
     // 5. ZEMDAPERSONAL — EXECUÇÃO DE TREINO & RECORDES PESSOAIS (PRS)

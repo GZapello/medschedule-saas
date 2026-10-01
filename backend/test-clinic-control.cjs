@@ -22,7 +22,7 @@ function fixture(table, clinic) {
   const cols = db.prepare(`PRAGMA table_info(${quote(table)})`).all();
   const foreign = db.prepare(`PRAGMA foreign_key_list(${quote(table)})`).all();
   const sql = db.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table).sql;
-  const values = { id };
+  const values = cols.some(c => c.name === 'id') ? { id } : {};
   for (const c of cols) {
     if (c.name === 'id') continue;
     if (c.name === 'tenant_id') { values[c.name] = clinic; continue; }
@@ -94,10 +94,10 @@ let server;
   assert.equal((await call('/v1/public/invites/test-invite',{},adminToken,'GET')).status,200);
   assert.equal(db.prepare("SELECT registrations_blocked FROM tenants WHERE id='A'").get().registrations_blocked,0);
   // A cross-clinic FK must fail without changing either clinic.
-  db.prepare("UPDATE documents SET record_id='A-records' WHERE id='B-documents'").run();
+  db.exec("CREATE TABLE test_cross_clinic_links(id TEXT PRIMARY KEY, tenant_id TEXT, record_id TEXT REFERENCES records(id)); INSERT INTO test_cross_clinic_links VALUES('B-link','B','A-records')");
   assert.equal((await deletion()).status,500);
   assert.ok(db.prepare("SELECT id FROM patients WHERE tenant_id='A'").get());
-  db.prepare("UPDATE documents SET record_id=NULL WHERE id='B-documents'").run();
+  db.exec('DROP TABLE test_cross_clinic_links');
   const otherSnapshot = () => JSON.stringify(tableNames.filter(t=>!['global_clinic_audit','clinic_deletion_jobs'].includes(t)).map(t=>[t,db.prepare(`SELECT * FROM ${quote(t)} ORDER BY rowid`).all().filter(r=>r.id !== 'shared' && (r.tenant_id==='B'||r.id==='B'||String(r.id).startsWith('B-')))]));
   const before = otherSnapshot();
   fs.mkdirSync(path.join(process.env.CLINIC_UPLOAD_ROOT,'A'),{recursive:true});

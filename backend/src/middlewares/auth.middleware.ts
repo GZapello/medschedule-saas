@@ -34,22 +34,52 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  const account = db.prepare('SELECT id, role, status, tenant_id, session_version FROM users WHERE id = ?').get(payload.userId);
-  if (!account || (account.status !== 'active' && !pendingBillingManager(account)) || account.role !== payload.role ||
+  const account = db.prepare('SELECT id, role, status, tenant_id, session_version, onboarding_status FROM users WHERE id = ?').get(payload.userId) as any;
+  const isOnboarding = Boolean(account && account.onboarding_status && account.onboarding_status !== 'active');
+  if (!account || (account.status !== 'active' && !pendingBillingManager(account) && !isOnboarding) || account.role !== payload.role ||
     (payload.userSessionVersion || 0) !== (account.session_version || 0)) {
     res.status(401).json({ error: 'Sessão inválida. Entre novamente.' }); return;
   }
   if (payload.role !== 'superadmin') {
-    const tenant = db.prepare('SELECT status, session_version FROM tenants WHERE id = ?').get(payload.tenantId);
-    const membership = db.prepare('SELECT status FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(payload.userId, payload.tenantId);
-    if (!tenant || (tenant.status !== 'active' && !(tenant.status === 'pending' && pendingBillingManager(account))) || (payload.sessionVersion || 0) !== tenant.session_version ||
-      (membership ? (membership.status !== 'active' && !pendingBillingManager(account)) : account.tenant_id !== payload.tenantId)) {
+    const tenant = db.prepare('SELECT status, session_version, onboarding_status FROM tenants WHERE id = ?').get(payload.tenantId) as any;
+    const membership = db.prepare('SELECT status FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(payload.userId, payload.tenantId) as any;
+    const isTenantOnboarding = Boolean((tenant && tenant.onboarding_status && tenant.onboarding_status !== 'active') || isOnboarding);
+    if (!tenant || (tenant.status !== 'active' && !(tenant.status === 'pending' && (pendingBillingManager(account) || isTenantOnboarding))) || (payload.sessionVersion || 0) !== tenant.session_version ||
+      (membership ? (membership.status !== 'active' && !pendingBillingManager(account) && !isTenantOnboarding) : account.tenant_id !== payload.tenantId)) {
       res.status(403).json({ error: 'Acesso à clínica bloqueado ou sessão invalidada.' }); return;
     }
   }
   req.user = payload;
   if (payload.tenantId) {
     req.tenantId = payload.tenantId;
+  }
+
+  next();
+}
+
+export function onboardingGate(req: Request, res: Response, next: NextFunction): void {
+  if (req.user?.role === 'superadmin') {
+    next();
+    return;
+  }
+
+  const isAllowed = /^\/(?:v1\/)?(?:auth\/(?:me|accept-legal|logout|profile)|onboarding|user-onboarding|public|tenants\/current|clinics\/current|taxonomy|capabilities|plans|subscriptions|support)(?:\/|$)/.test(req.path);
+  if (isAllowed) {
+    next();
+    return;
+  }
+
+  const userId = req.user?.userId;
+  if (userId) {
+    const userRow = db.prepare('SELECT onboarding_status, status FROM users WHERE id = ?').get(userId) as any;
+    if (userRow && userRow.onboarding_status && userRow.onboarding_status !== 'active') {
+      res.status(403).json({
+        code: 'ONBOARDING_INCOMPLETE',
+        error: 'Conclua as etapas obrigatórias de cadastro para acessar esta funcionalidade.',
+        onboardingStatus: userRow.onboarding_status
+      });
+      return;
+    }
   }
 
   next();

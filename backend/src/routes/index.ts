@@ -57,7 +57,7 @@ import { MedicalController } from '../controllers/medical.controller';
 import { SandboxController } from '../controllers/sandbox.controller';
 import { EsteticController } from '../controllers/estetic.controller';
 
-import { authMiddleware } from '../middlewares/auth.middleware';
+import { authMiddleware, onboardingGate } from '../middlewares/auth.middleware';
 import { tenantMiddleware, requireTenant } from '../middlewares/tenant.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { requireCapability } from '../middlewares/capability.middleware';
@@ -178,6 +178,7 @@ api.post('/v1/auth/accept-legal', AuthController.acceptLegal);
 api.put('/v1/auth/profile/password', AuthController.updateProfilePassword);
 api.put('/v1/auth/profile/email', AuthController.updateProfileEmail);
 
+api.use(onboardingGate);
 api.use(subscriptionGate);
 
 // Tenants & Configurações da Clínica
@@ -234,11 +235,12 @@ api.put('/v1/staff/:id/permissions', requireTenant, requireRole('clinic_admin'),
 api.put('/v1/staff/:id/toggle-status', requireTenant, requireRole('clinic_admin'), StaffController.toggleStatus);
 api.put('/v1/staff/:id/role-profession', requireTenant, requireRole('clinic_admin'), StaffController.updateRoleProfession);
 
-// Onboarding Inicial da Clínica & Gestor Responsável
-api.get('/v1/onboarding/status', requireTenant, OnboardingController.getStatus);
-api.post('/v1/onboarding/confirm-manager', requireTenant, OnboardingController.confirmManager);
-api.post('/v1/onboarding/step', requireTenant, OnboardingController.saveStep);
-api.post('/v1/onboarding/complete', requireTenant, OnboardingController.complete);
+// Onboarding Obrigatório pós-cadastro
+api.get('/v1/onboarding/current-state', OnboardingController.getCurrentState);
+api.post('/v1/onboarding/verify-email', OnboardingController.verifyEmail);
+api.post('/v1/onboarding/resend-otp', OnboardingController.resendOtp);
+api.post('/v1/onboarding/select-plan', OnboardingController.selectPlan);
+api.post('/v1/onboarding/complete-profile', OnboardingController.completeProfile);
 
 // Onboarding Interativo & Guia Prático por Usuário (Todas as Roles & Módulos)
 api.get('/v1/user-onboarding', authMiddleware, OnboardingController.getUserOnboarding);

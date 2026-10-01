@@ -53,7 +53,7 @@ export class ProfessionTaxonomyService {
     }
 
     const targetProfId = (newProfessionId || currentProf.profession_id || '').trim();
-    const targetProfName = (newProfessionName || currentProf.profession_name || '').trim();
+    const targetProfName = (newProfessionName || (newProfessionId ? '' : currentProf.profession_name) || '').trim();
 
     // 2. Resolução canônica
     const resolution = resolveCanonicalProfession({

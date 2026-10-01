@@ -111,22 +111,35 @@ export class TenantController {
 
       const cleanEmail = email.toLowerCase();
 
-      // Validação obrigatória do token de verificação de e-mail por código de 6 dígitos
-      const emailVerificationToken = req.body.emailVerificationToken;
-      if (!emailVerificationToken) {
-        res.status(400).json({ error: 'É obrigatório validar o e-mail com o código de 6 dígitos antes de concluir o cadastro' });
+      // Verificação de conta existente para retomada segura do cadastro ou conflito
+      const existingUser = db.prepare('SELECT id, onboarding_status, status FROM users WHERE email = ?').get(cleanEmail) as any;
+      if (existingUser) {
+        const userOnboarding = existingUser.onboarding_status || existingUser.status;
+        if (userOnboarding !== 'active') {
+          res.status(409).json({
+            code: 'ACCOUNT_EXISTS_ONBOARDING_PENDING',
+            error: 'Você já possui uma conta em processo de cadastro. Faça login para continuar de onde parou.',
+            onboardingStatus: existingUser.onboarding_status || 'pending_verification',
+            email: cleanEmail
+          });
+          return;
+        }
+        res.status(409).json({
+          code: 'EMAIL_ALREADY_EXISTS',
+          error: 'Este e-mail já está cadastrado na plataforma'
+        });
         return;
       }
 
-      const tokenValidation = EmailService.verifyVerificationToken(
-        emailVerificationToken,
-        cleanEmail,
-        'clinic_registration'
-      );
-
-      if (!tokenValidation.valid) {
-        res.status(400).json({ code: 'EMAIL_VERIFICATION_EXPIRED', error: tokenValidation.error || 'Token de verificação de e-mail inválido ou expirado' });
-        return;
+      // Validação opcional do token de verificação se fornecido previamente
+      const emailVerificationToken = req.body.emailVerificationToken;
+      let tokenValidation: any = null;
+      if (emailVerificationToken) {
+        tokenValidation = EmailService.verifyVerificationToken(
+          emailVerificationToken,
+          cleanEmail,
+          'clinic_registration'
+        );
       }
 
       // Gera slug único a partir do nome da clínica
@@ -198,42 +211,37 @@ export class TenantController {
       const userAgent = (req.headers['user-agent'] as string) || null;
       const optInMarketing = (marketingAccepted || marketingOptIn) ? 1 : 0;
       const initialPermissions = JSON.stringify([]);
-      const verificationId = tokenValidation.payload?.verificationId;
+      const verificationId = tokenValidation?.payload?.verificationId;
 
       let createdProfId: string | null = null;
       // Execução transacional atômica única: se qualquer etapa falhar, executa rollback integral
       const executeRegistrationTransaction = db.transaction(() => {
-        // 1. Consumo atômico da verificação de e-mail (exige rigorosamente changes === 1)
-        if (!verificationId) {
-          throw new Error('VERIFICATION_ID_MISSING');
-        }
-
-        const consumeRes = db.prepare(`
-          UPDATE email_verifications
-          SET status = 'consumed', consumed_at = datetime('now')
-          WHERE id = ? AND status = 'verified' AND consumed_at IS NULL
-        `).run(verificationId);
-
-        if (consumeRes.changes !== 1) {
-          throw new Error('VERIFICATION_ALREADY_CONSUMED_OR_INVALID');
+        // 1. Se veio verificação prévia, consome
+        if (verificationId) {
+          db.prepare(`
+            UPDATE email_verifications
+            SET status = 'consumed', consumed_at = datetime('now')
+            WHERE id = ? AND status = 'verified' AND consumed_at IS NULL
+          `).run(verificationId);
         }
 
         // 2. Verificação de unicidade do e-mail dentro da transação para isolamento perfeito
-        const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
-        if (existingUser) {
+        const existingUserInTx = db.prepare('SELECT id FROM users WHERE email = ?').get(cleanEmail);
+        if (existingUserInTx) {
           throw new Error('EMAIL_ALREADY_EXISTS');
         }
 
-        const initialTenantStatus = startTrial ? 'active' : 'pending';
-        const initialUserStatus = startTrial ? 'active' : 'pending';
+        const initialTenantStatus = 'pending';
+        const initialUserStatus = 'pending';
+        const initialOnboardingStatus = verificationId ? 'pending_plan' : 'pending_verification';
 
-        // 3. Insere o tenant com status PENDENTE ou ACTIVE (se trial) e registro dos termos aceitos
+        // 3. Insere o tenant com status PENDENTE e onboarding_status 'pending_verification'
         db.prepare(`
           INSERT INTO tenants (
             id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
             city, state, responsible_name, responsible_email, responsible_phone,
             manager_profession, manager_practice_areas,
-            status, onboarding_completed, onboarding_step, manager_confirmed,
+            status, onboarding_status, onboarding_completed, onboarding_step, manager_confirmed,
             terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
             terms_version, privacy_version, plan_id, trial_used, billing_required,
             created_at, updated_at
@@ -241,7 +249,7 @@ export class TenantController {
             ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?,
-            ?, 1, 5, 1,
+            ?, ?, 0, 1, 1,
             1, datetime('now'), 1, datetime('now'),
             ?, ?, ?, ?, 1,
             datetime('now'), datetime('now')
@@ -263,23 +271,24 @@ export class TenantController {
           resolvedProfName || null,
           managerPracticeAreas || null,
           initialTenantStatus,
+          initialOnboardingStatus,
           CURRENT_TERMS_VERSION,
           CURRENT_PRIVACY_VERSION,
           startTrial ? soloPlan?.id : selectedPlan?.id || null,
           startTrial ? 1 : 0
         );
 
-        // 4. Insere o usuário gestor com role 'clinic_admin' e termos aceitos
+        // 4. Insere o usuário gestor com role 'clinic_admin', status 'pending', onboarding_status
         db.prepare(`
           INSERT INTO users (
-            id, tenant_id, name, email, password_hash, role, phone, status,
+            id, tenant_id, name, email, password_hash, role, phone, status, onboarding_status, email_verified,
             profession_id, profession_name, practice_areas, registration_type, registration_number,
             terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
             zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
             zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled,
             created_at, updated_at
           ) VALUES (
-            ?, ?, ?, ?, ?, 'clinic_admin', ?, ?,
+            ?, ?, ?, ?, ?, 'clinic_admin', ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, datetime('now'), datetime('now'),
             ?, ?, ?, ?,
@@ -287,7 +296,7 @@ export class TenantController {
             datetime('now'), datetime('now')
           )
         `).run(
-          userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null, initialUserStatus,
+          userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null, initialUserStatus, initialOnboardingStatus, verificationId ? 1 : 0,
           resolvedProfId, resolvedProfName, managerPracticeAreas || null, resolvedBoardLabel, managerRegistrationNumber || null,
           CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION,
           modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
@@ -347,7 +356,7 @@ export class TenantController {
               registration_type, registration_number, practice_areas, bio, active,
               zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
               zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             createdProfId,
             tenantId,
@@ -470,8 +479,10 @@ export class TenantController {
         }
       }
 
-      if (startTrial) {
-        void TrialNotificationService.notifyTrialStarted(tenantId, cleanEmail, responsibleName, trialEndsAt);
+      try {
+        await EmailService.requestVerificationCode(cleanEmail, 'clinic_registration', ipAddress || undefined);
+      } catch (otpErr) {
+        console.warn('[TenantController.registerPublic] Aviso ao enviar código OTP inicial:', otpErr);
       }
 
       logAudit(req, 'REGISTER_CLINIC_REQUEST', 'tenants', tenantId, {
@@ -494,7 +505,7 @@ export class TenantController {
       const tenantData = db.prepare(`
         SELECT 
           id, slug, name, corporate_name, trade_name, email, phone, logo_url,
-          primary_color, client_term_label, status, banned_reason, registrations_blocked,
+          primary_color, client_term_label, status, onboarding_status, banned_reason, registrations_blocked,
           onboarding_completed, onboarding_step, manager_confirmed, manager_profession, manager_practice_areas
         FROM tenants
         WHERE id = ?
@@ -505,11 +516,13 @@ export class TenantController {
         name: responsibleName,
         email: cleanEmail,
         role: 'clinic_admin' as const,
-        status: startTrial ? 'active' : 'pending',
+        status: 'pending' as const,
+        onboardingStatus: verificationId ? 'pending_plan' : 'pending_verification',
+        emailVerified: Boolean(verificationId),
         phone: phone || null,
         avatarUrl: null,
         tenantId: tenantId,
-        needsOnboarding: false,
+        needsOnboarding: true,
         needsLegalAcceptance: false,
         professionalId: createdProfId,
         professionId: resolvedProfId,
@@ -547,31 +560,15 @@ export class TenantController {
         tenantId
       }).catch(err => console.error('[TenantController.registerPublic] Erro na notificação de novo usuário:', err));
 
-      if (startTrial) {
-        void AdminNotificationService.notifyTrialStarted({
-          tenantId,
-          clinicName,
-          responsibleName,
-          email: cleanEmail,
-          professionName: resolvedProfName,
-          planName: 'Zemda Solo',
-          startedAt: trialStartedAt,
-          endsAt: trialEndsAt,
-          trialDays: 7,
-          userId
-        }).catch(err => console.error('[TenantController.registerPublic] Erro na notificação de início de trial:', err));
-      }
-
       res.status(201).json({
-        message: startTrial
-          ? 'Teste grátis de 7 dias do Zemda Solo ativado com sucesso!'
-          : 'Clínica cadastrada com sucesso. Redirecionando para escolha do plano.',
+        message: 'Conta criada com sucesso! Verifique seu e-mail para continuar.',
         token,
         user: userPayload,
         tenant: tenantData,
         clinicId: tenantId,
         slug,
-        status: startTrial ? 'active' : 'pending',
+        status: 'pending',
+        onboardingStatus: userPayload.onboardingStatus,
         isTrial: startTrial,
         trialEndsAt: startTrial ? trialEndsAt : null
       });

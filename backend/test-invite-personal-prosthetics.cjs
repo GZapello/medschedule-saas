@@ -215,6 +215,7 @@ async function runAllTests() {
     const targetAreaIds = resPracticeAreas.body.slice(0, 3).map(p => p.id);
 
     const registerPayload = {
+      emailVerificationToken: require('./test-fixtures/verified-email.cjs')('rodrigo.personal@alpha.com', 'invite_registration'), termsAccepted: true, privacyAccepted: true,
       token: inviteTokenAlpha,
       name: 'Rodrigo Personal',
       email: 'rodrigo.personal@alpha.com',
