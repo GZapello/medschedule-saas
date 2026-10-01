@@ -36,7 +36,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   const { currentTenant, clientTermLabel } = auth;
   const { showToast } = useToast();
 
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(() => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'day' : 'week'));
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -713,44 +713,46 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
   return (
     <div className="space-y-4">
       {/* Top Controls Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         {/* Navigation buttons */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleToday}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
-          >
-            Hoje
-          </button>
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between sm:justify-start gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-2">
             <button
-              onClick={handlePrev}
-              className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg"
-              title="Período anterior"
+              onClick={handleToday}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
             >
-              <ChevronLeft className="w-5 h-5" />
+              Hoje
             </button>
-            <button
-              onClick={handleNext}
-              className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg"
-              title="Próximo período"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handlePrev}
+                className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                title="Período anterior"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleNext}
+                className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                title="Próximo período"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          <span className="text-base font-bold text-slate-800 ml-2">
+          <span className="text-sm sm:text-base font-bold text-slate-800 ml-1 sm:ml-2">
             {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
           </span>
         </div>
 
         {/* Filters and Actions */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {/* Seletor de Profissional */}
           <select
             value={selectedProf}
             onChange={e => setSelectedProf(e.target.value)}
-            className="text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+            className="w-full sm:w-auto flex-1 sm:flex-initial text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 min-h-[38px]"
           >
             <option value="all">Todos os Profissionais</option>
             {professionals.map(p => (
@@ -762,7 +764,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           <select
             value={selectedStatus}
             onChange={e => setSelectedStatus(e.target.value)}
-            className="text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+            className="w-full sm:w-auto flex-1 sm:flex-initial text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 min-h-[38px]"
           >
             <option value="all">Todos os Status</option>
             <option value="scheduled">Agendado</option>
@@ -774,10 +776,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           </select>
 
           {/* Modos de visualização */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0">
             <button
               onClick={() => setViewMode('day')}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 viewMode === 'day' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
@@ -785,7 +787,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
             </button>
             <button
               onClick={() => setViewMode('week')}
-              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 viewMode === 'week' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
@@ -796,7 +798,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           <button
             data-tour="btn-new-appointment"
             onClick={() => onOpenNewAppointment(selectedProf !== 'all' ? { professionalId: selectedProf } : undefined)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer min-h-[38px]"
           >
             <Plus className="w-4 h-4" />
             Agendar
@@ -939,9 +941,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
       {/* Calendar Day View */}
       {viewMode === 'day' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-slate-900 text-lg">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <h3 className="font-bold text-slate-900 text-base sm:text-lg">
               Atendimentos para {currentDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </h3>
             <button
@@ -950,7 +952,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                 time: '09:00',
                 professionalId: selectedProf !== 'all' ? selectedProf : undefined
               })}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl"
+              className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-xl cursor-pointer self-start sm:self-auto min-h-[36px]"
             >
               <Plus className="w-4 h-4" /> Novo neste dia
             </button>
@@ -1007,7 +1009,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                               e.stopPropagation();
                               setSelectedAppt(appt);
                             }}
-                            className="p-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex items-center justify-between bg-white"
+                            className="p-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-xs cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white"
                           >
                             <div className="flex items-center gap-4">
                               <div className="text-center font-bold text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg text-xs">
@@ -1061,7 +1063,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
       {/* Appointment Detail & Actions Modal */}
       {selectedAppt && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           {/* Backdrop cobrindo 100vw/100vh */}
           <div
             className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
@@ -1073,18 +1075,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
           />
 
           {/* Modal posicionado acima do backdrop */}
-          <div className="relative z-10 bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
+          <div className="relative z-10 bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div>
                 <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">{selectedAppt.appointment_number}</span>
-                <h3 className="text-xl font-bold text-slate-900">{selectedAppt.patient_name}</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900">{selectedAppt.patient_name}</h3>
               </div>
               <button
                 onClick={() => {
                   setSelectedAppt(null);
                   setIsRescheduling(false);
                 }}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1092,7 +1094,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
 
             {!isRescheduling ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <span className="text-slate-400 font-medium">Serviço:</span>
                     <p className="font-bold text-slate-800 text-sm mt-0.5">{selectedAppt.service_name}</p>
@@ -1115,7 +1117,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
                       </span>
                     </div>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2 flex items-center justify-between">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-1 sm:col-span-2 flex items-center justify-between">
                     <div>
                       <span className="text-slate-400 font-medium text-[11px] block">Telefone do Paciente:</span>
                       <p className="font-bold text-slate-800 text-xs mt-0.5 flex items-center gap-1.5">

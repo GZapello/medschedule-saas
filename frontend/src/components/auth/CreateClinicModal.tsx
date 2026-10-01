@@ -10,7 +10,15 @@ import {
   trackSignupEmailVerified,
   trackSignupPlanSelected,
   trackSignupSubmit,
-  trackSignupError
+  trackSignupError,
+  trackSignupValidationError,
+  trackSignupCompleted,
+  trackEmailVerificationStarted,
+  trackEmailVerified,
+  trackPlanSelected,
+  trackTrialStarted,
+  trackProfessionalProfileCompleted,
+  trackOnboardingCompleted
 } from '../../utils/registrationAnalytics';
 import { trackGoogleConversionSignup } from '../../utils/googleAds';
 import { ApiClient } from '../../api/client';
@@ -49,7 +57,7 @@ interface CreateClinicModalProps {
   presentation?: 'modal' | 'page';
 }
 
-type RegistrationStep = 'initial_data' | 'profession' | 'security' | 'verify_email' | 'plans';
+type RegistrationStep = 'initial_data' | 'profession' | 'security' | 'verify_email' | 'plans' | 'profile';
 
 export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   isOpen,
@@ -59,7 +67,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   presentation = 'modal'
 }) => {
   const { showToast } = useToast();
-  const { loginWithToken } = useAuth();
+  const { currentUser, loginWithToken, reloadSession, logout } = useAuth();
 
   // 1. Estado da Etapa Atual
   const [step, setStep] = useState<RegistrationStep>('initial_data');
@@ -71,6 +79,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   // Senha visibilidade
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Registro profissional
+  const [registrationType, setRegistrationType] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
 
   // Flags e Bloqueios
   const registrationBusy = useRef(false);
@@ -95,6 +107,27 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     privacyAccepted: false
   });
   const [marketingAccepted, setMarketingAccepted] = useState(false);
+
+  // Retomada automática de onboarding se o usuário já estiver logado
+  useEffect(() => {
+    if (currentUser?.onboardingStatus && currentUser.onboardingStatus !== 'active') {
+      if (currentUser.onboardingStatus === 'pending_verification') {
+        setStep('verify_email');
+      } else if (currentUser.onboardingStatus === 'pending_plan') {
+        setStep('plans');
+      } else if (currentUser.onboardingStatus === 'pending_profile') {
+        setStep('profile');
+      }
+      setFormData(prev => ({
+        ...prev,
+        email: currentUser.email || prev.email,
+        responsibleName: currentUser.name || prev.responsibleName,
+        profession: currentUser.professionId || (currentUser as any).canonicalProfessionId || currentUser.professionName || prev.profession
+      }));
+      if (currentUser.registrationType) setRegistrationType(currentUser.registrationType);
+      if (currentUser.registrationNumber) setRegistrationNumber(currentUser.registrationNumber);
+    }
+  }, [currentUser]);
 
   // OTP e Validações
   const [loading, setLoading] = useState(false);
@@ -338,11 +371,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     notifySignupStarted();
 
     if (!formData.responsibleName.trim()) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'initial_data',
-        errorCode: 'NAME_MISSING',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan
+        field: 'name',
+        errorCode: 'NAME_MISSING'
       });
       showToast('Por favor, informe seu nome completo.', 'error');
       return;
@@ -350,11 +382,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     const cleanPhone = formData.phone.replace(/\D/g, '');
     if (cleanPhone.length < 10) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'initial_data',
-        errorCode: 'INVALID_PHONE_FORMAT',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan
+        field: 'phone',
+        errorCode: 'INVALID_PHONE_FORMAT'
       });
       showToast('Informe um número de WhatsApp ou celular válido com DDD.', 'error');
       return;
@@ -362,11 +393,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email.trim())) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'initial_data',
-        errorCode: 'INVALID_EMAIL_FORMAT',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan
+        field: 'email',
+        errorCode: 'INVALID_EMAIL_FORMAT'
       });
       showToast('Informe um endereço de e-mail válido.', 'error');
       return;
@@ -381,137 +411,154 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     e.preventDefault();
 
     if (!formData.profession) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'profession',
-        errorCode: 'PROFESSION_MISSING',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan
+        field: 'profession',
+        errorCode: 'PROFESSION_MISSING'
       });
       showToast('Selecione sua profissão para continuar.', 'error');
       return;
     }
 
     if (formData.profession === 'prof-outro-saude' && !formData.customProfession.trim()) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'profession',
-        errorCode: 'CUSTOM_PROFESSION_MISSING',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan,
-        professionCode: 'prof-outro-saude'
+        field: 'customProfession',
+        errorCode: 'CUSTOM_PROFESSION_MISSING'
       });
       showToast('Por favor, especifique sua profissão da saúde.', 'error');
-      return;
-    }
-
-    if (formData.profession === 'prof-medico' && selectedMedicalSpecialtyIds.length === 0) {
-      trackSignupError({
-        step: 'profession',
-        errorCode: 'MEDICAL_SPECIALTY_MISSING',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan,
-        professionCode: 'prof-medico'
-      });
-      showToast('Por favor, selecione ao menos uma especialidade médica.', 'error');
       return;
     }
 
     setStep('security');
   };
 
-  // Avançar da Etapa 3 (Segurança) para Validação de E-mail / Etapa 4
+  // Etapa 3 (Segurança): Valida campos essenciais e CRIA A CONTA IMEDIATAMENTE no backend
   const handleProceedFromSecurity = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.password || formData.password.length < 6) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'security',
-        errorCode: 'PASSWORD_TOO_SHORT',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan,
-        professionCode: formData.profession || undefined
+        field: 'password',
+        errorCode: 'PASSWORD_TOO_SHORT'
       });
       showToast('A senha deve ter no mínimo 6 caracteres.', 'error');
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'security',
-        errorCode: 'PASSWORD_MISMATCH',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan,
-        professionCode: formData.profession || undefined
+        field: 'confirmPassword',
+        errorCode: 'PASSWORD_MISMATCH'
       });
       showToast('As senhas digitadas não coincidem.', 'error');
       return;
     }
 
     if (!formData.termsAccepted || !formData.privacyAccepted) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'security',
-        errorCode: 'TERMS_NOT_ACCEPTED',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan,
-        professionCode: formData.profession || undefined
+        field: 'terms',
+        errorCode: 'TERMS_NOT_ACCEPTED'
       });
       showToast('Você deve aceitar os Termos de Uso e a Política de Privacidade.', 'error');
       return;
     }
 
-    // Se o e-mail já foi verificado para este endereço exato, segue direto para planos
-    if (verification?.email === formData.email.trim().toLowerCase()) {
-      setStep('plans');
-      return;
-    }
-
-    // Solicita código OTP por e-mail antes do passo 4
+    // Cria a conta imediatamente com dados mínimos
     try {
       setLoading(true);
-      const res = await ApiClient.post<{ success: boolean; message: string; cooldownSeconds?: number }>(
-        '/v1/public/email/request-code',
-        {
-          email: formData.email.trim().toLowerCase(),
-          purpose: 'clinic_registration'
-        }
-      );
-
-      setStep('verify_email');
-      setOtpDigits(['', '', '', '', '', '']);
-      setCooldownSeconds(res.cooldownSeconds || 60);
-      showToast('Código de 6 dígitos enviado para seu e-mail!', 'info');
-      trackSignupEmailValidation({
+      trackSignupSubmit({
         planCode: selectedPlanCode || initialPlan,
         professionCode: formData.profession || undefined
       });
-      setTimeout(() => {
-        otpInputRefs.current[0]?.focus();
-      }, 150);
+
+      const fallbackClinicName = formData.responsibleName.trim()
+        ? `Consultório ${formData.responsibleName.trim()}`
+        : 'Meu Consultório';
+
+      const selectedOption = professionOptions.find(p => p.id === formData.profession);
+      const professionNameToSend =
+        formData.profession === 'prof-outro-saude' && formData.customProfession.trim()
+          ? formData.customProfession.trim()
+          : (selectedOption?.label || (selectedOption as any)?.name || selectedOption?.canonicalName || formData.profession);
+
+      const data = await ApiClient.post<any>('/v1/public/tenants/register', {
+        responsibleName: formData.responsibleName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim(),
+        password: formData.password,
+        profession: professionNameToSend,
+        professionId: selectedOption?.id || undefined,
+        professionName: professionNameToSend,
+        registrationType: selectedOption?.boardLabel || undefined,
+        clinicName: fallbackClinicName,
+        tradeName: fallbackClinicName,
+        termsAccepted: formData.termsAccepted,
+        privacyAccepted: formData.privacyAccepted,
+        marketingAccepted: marketingAccepted
+      });
+
+      if (data.token && data.user) {
+        accountCreated.current = true;
+        loginWithToken(data.token, data.user, data.tenant);
+        trackSignupCompleted({
+          professionCode: formData.profession || undefined,
+          userId: data.user.id
+        });
+        trackGoogleConversionSignup({
+          accountId: data.user.id,
+          planCode: selectedPlanCode || initialPlan || 'SOLO',
+          isTrial: true,
+          value: 0
+        });
+
+        setCooldownSeconds(data.cooldownSeconds || 60);
+        setStep('verify_email');
+        trackEmailVerificationStarted({
+          professionCode: formData.profession || undefined
+        });
+        showToast('Conta criada com sucesso! Digite o código de 6 dígitos enviado para seu e-mail.', 'info');
+        setTimeout(() => {
+          otpInputRefs.current[0]?.focus();
+        }, 150);
+      } else {
+        throw new Error(data.message || 'Não foi possível criar a conta.');
+      }
     } catch (err: any) {
       trackSignupError({
         step: 'security',
-        errorCode: err.code || 'REQUEST_CODE_FAILED',
+        errorCode: err.code || 'REGISTRATION_FAILED',
         errorType: err.code ? 'api_error' : 'network_error',
         planCode: selectedPlanCode || initialPlan,
         professionCode: formData.profession || undefined
       });
-      showToast(err.message || 'Erro ao enviar código de verificação.', 'error');
+      if (err.code === 'ACCOUNT_EXISTS_ONBOARDING_PENDING') {
+        showToast('Já existe um cadastro em andamento com este e-mail. Faça login para continuar o onboarding.', 'info');
+      } else {
+        showToast(err.message || 'Erro ao realizar cadastro.', 'error');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Reenviar código OTP
+  // Reenviar código OTP (via onboarding autenticado ou fallback público)
   const handleResendOtp = async () => {
     if (cooldownSeconds > 0 || isResending) return;
     try {
       setIsResending(true);
-      const res = await ApiClient.post<{ success: boolean; message: string; cooldownSeconds?: number }>(
-        '/v1/public/email/request-code',
-        {
+      let res: any;
+      try {
+        res = await ApiClient.post<any>('/v1/onboarding/resend-otp', {});
+      } catch {
+        res = await ApiClient.post<any>('/v1/public/email/request-code', {
           email: formData.email.trim().toLowerCase(),
           purpose: 'clinic_registration'
-        }
-      );
+        });
+      }
       setOtpDigits(['', '', '', '', '', '']);
       setCooldownSeconds(res.cooldownSeconds || 60);
       showToast('Novo código enviado com sucesso!', 'success');
@@ -525,16 +572,14 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     }
   };
 
-  // Validar código OTP e avançar para Etapa 4 (Planos)
+  // Validar código OTP e avançar para Etapa de Planos (onboarding)
   const handleVerifyOtpAndAdvance = async () => {
     const code = otpDigits.join('').trim();
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-      trackSignupError({
+      trackSignupValidationError({
         step: 'verify_email',
-        errorCode: 'INVALID_OTP_FORMAT',
-        errorType: 'validation',
-        planCode: selectedPlanCode || initialPlan,
-        professionCode: formData.profession || undefined
+        field: 'otp',
+        errorCode: 'INVALID_OTP_FORMAT'
       });
       showToast('Por favor, digite o código completo de 6 dígitos numéricos.', 'error');
       return;
@@ -542,24 +587,12 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     try {
       setIsVerifying(true);
-      const verifyRes = await ApiClient.post<{ success: boolean; emailVerificationToken: string; message: string }>(
-        '/v1/public/email/verify-code',
-        {
-          email: formData.email.trim().toLowerCase(),
-          code,
-          purpose: 'clinic_registration'
-        }
-      );
+      await ApiClient.post<any>('/v1/onboarding/verify-email', { code });
 
-      if (!verifyRes.emailVerificationToken) {
-        throw new Error('Falha ao autenticar verificação de e-mail.');
-      }
-
-      setVerification({ email: formData.email.trim().toLowerCase(), token: verifyRes.emailVerificationToken });
-      trackSignupEmailVerified({
-        planCode: selectedPlanCode || initialPlan,
+      trackEmailVerified({
         professionCode: formData.profession || undefined
       });
+      showToast('E-mail verificado com sucesso!', 'success');
       setStep('plans');
     } catch (err: any) {
       trackSignupError({
@@ -622,7 +655,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     otpInputRefs.current[nextIndex]?.focus();
   };
 
-  // Seleção e Registro na Etapa 4
+  // Seleção e Ativação do Plano no Onboarding
   const handleSelectPlan = (plan: RegistrationPlan) => {
     setSelectedPlanCode(plan.code);
     if (lastSelectedPlanCode.current !== plan.code) {
@@ -633,167 +666,103 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     }
   };
 
-  const handleRegister = async (plan: RegistrationPlan) => {
-    if (registrationBusy.current || accountCreated.current) return;
-    if (!verification || verification.email !== formData.email.trim().toLowerCase()) {
-      setStep('security');
-      return;
-    }
-
+  const handleChoosePlan = async (plan: RegistrationPlan) => {
+    if (registrationBusy.current) return;
     handleSelectPlan(plan);
-    trackSignupSubmit({
-      planCode: plan.code,
-      professionCode: formData.profession || undefined
-    });
 
     registrationBusy.current = true;
     setLoading(true);
-    setSelectedPlanCode(plan.code);
 
     try {
-      const fallbackClinicName = formData.responsibleName.trim()
-        ? `Consultório ${formData.responsibleName.trim()}`
-        : 'Meu Consultório';
+      await ApiClient.post<any>('/v1/onboarding/select-plan', {
+        planCode: plan.code,
+        startTrial: plan.trial_days > 0
+      });
 
-      const selectedOption = professionOptions.find(p => p.id === formData.profession);
-      const professionNameToSend =
-        formData.profession === 'prof-outro-saude' && formData.customProfession.trim()
-          ? formData.customProfession.trim()
-          : (selectedOption?.label || (selectedOption as any)?.name || selectedOption?.canonicalName || formData.profession);
+      trackPlanSelected(plan.code, {
+        isTrial: plan.trial_days > 0,
+        professionCode: formData.profession || undefined
+      });
 
+      if (plan.trial_days > 0) {
+        trackTrialStarted(plan.code, plan.trial_days);
+      }
+
+      showToast(plan.trial_days > 0 ? 'Teste grátis de 7 dias selecionado! Agora personalize sua área de atuação.' : 'Plano selecionado! Agora personalize sua área de atuação.', 'success');
+      setStep('profile');
+    } catch (err: any) {
+      trackSignupError({
+        step: 'plans',
+        errorCode: err.code || 'PLAN_SELECTION_FAILED',
+        errorType: err.code ? 'api_error' : 'network_error',
+        planCode: plan.code,
+        professionCode: formData.profession || undefined
+      });
+      showToast(err.message || 'Erro ao selecionar plano.', 'error');
+    } finally {
+      registrationBusy.current = false;
+      setLoading(false);
+    }
+  };
+
+  // Conclusão do Perfil Profissional (Especialidade, Áreas e Registro) -> Ativação Total
+  const handleCompleteProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (registrationBusy.current) return;
+
+    registrationBusy.current = true;
+    setLoading(true);
+
+    try {
       const isSpecificMedical = practiceAreas.length > 0 && !!practiceAreas[0].medicalSpecialtyId;
       const isGenericDoc = formData.profession === 'prof-medico';
 
       let medSpecialtyIdsToSend: string[] | undefined = undefined;
       let medPracticeAreaIdsToSend: string[] | undefined = undefined;
       let allPracticeAreaIdsToSend = selectedPracticeAreaIds;
-      let selectedAreaNames: string[] = [];
 
       if (isSpecificMedical) {
         const specId = practiceAreas[0].medicalSpecialtyId!;
         medSpecialtyIdsToSend = [specId];
         medPracticeAreaIdsToSend = selectedPracticeAreaIds;
         allPracticeAreaIdsToSend = [];
-        const subNames = practiceAreas
-          .filter(pa => selectedPracticeAreaIds.includes(pa.id))
-          .map(pa => pa.name);
-        selectedAreaNames = [practiceAreas[0].medicalSpecialtyName || 'Especialidade Médica', ...subNames];
       } else if (isGenericDoc) {
         medSpecialtyIdsToSend = selectedMedicalSpecialtyIds;
         medPracticeAreaIdsToSend = selectedMedicalPracticeAreaIds;
         allPracticeAreaIdsToSend = [];
-        const specNames = medicalTree
-          .filter(s => selectedMedicalSpecialtyIds.includes(s.id))
-          .map(s => s.name);
-        const subNames = medicalTree
-          .flatMap(s => s.practiceAreas || [])
-          .filter(pa => selectedMedicalPracticeAreaIds.includes(pa.id))
-          .map(pa => pa.name);
-        selectedAreaNames = [...specNames, ...subNames];
-      } else {
-        selectedAreaNames = practiceAreas
-          .filter(pa => selectedPracticeAreaIds.includes(pa.id))
-          .map(pa => pa.name);
       }
 
-      const data = await ApiClient.post<any>('/v1/public/tenants/register', {
-        responsibleName: formData.responsibleName.trim(),
-        email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.trim(),
-        password: formData.password,
-        profession: professionNameToSend,
-        professionId: selectedOption?.id || undefined,
-        professionName: professionNameToSend,
-        registrationType: selectedOption?.boardLabel || undefined,
+      await ApiClient.post<any>('/v1/onboarding/complete-profile', {
         practiceAreaIds: allPracticeAreaIdsToSend,
         medicalSpecialtyIds: medSpecialtyIdsToSend,
         medicalPracticeAreaIds: medPracticeAreaIdsToSend,
-        practiceAreas: selectedAreaNames.length > 0 ? selectedAreaNames.join(', ') : undefined,
-        clinicName: fallbackClinicName,
-        tradeName: fallbackClinicName,
-        termsAccepted: formData.termsAccepted,
-        privacyAccepted: formData.privacyAccepted,
-        marketingAccepted: marketingAccepted,
-        emailVerificationToken: verification.token,
-        startTrial: plan.trial_days > 0,
-        planCode: plan.code
+        registrationNumber: registrationNumber.trim(),
+        registrationType: registrationType.trim()
       });
 
-      if (data.success === false) {
-        trackSignupError({
-          step: 'plans',
-          errorCode: data.code || 'REGISTRATION_REJECTED',
-          errorType: 'api_error',
-          planCode: plan.code,
-          professionCode: formData.profession || undefined
-        });
-        throw new Error(data.message || 'Não foi possível criar a conta.');
-      }
-
-      if (data.token && data.user) {
-        accountCreated.current = true;
-        if (data.success !== false) {
-          trackCompletedRegistration(data.user.id, data.isTrial === true ? plan.trial_days : undefined, {
-            planCode: plan.code,
-            professionCode: formData.profession || undefined
-          });
-          trackGoogleConversionSignup({
-            accountId: data.user.id,
-            planCode: plan.code,
-            isTrial: data.isTrial === true,
-            trialPeriodDays: data.isTrial === true ? plan.trial_days : undefined,
-            value: data.isTrial === true ? 0 : plan.monthly_price
-          });
-        }
-        loginWithToken(data.token, data.user, data.tenant);
-
-        if (data.isTrial === true) {
-          showToast('E-mail verificado! Seu teste grátis de 7 dias do Zemda Solo está ativo.', 'success');
-          onClose();
-          window.history.pushState(null, '', '/');
-          window.dispatchEvent(new PopStateEvent('popstate'));
-          window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
-          return;
-        }
-
-        showToast('Conta criada! Complete os dados do pagador para continuar ao checkout.', 'success');
-        onClose();
-        window.history.pushState(null, '', '/assinatura?checkout=1');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'subscription' } }));
-        return;
-      }
-
-      if (data.success === true || data.clinicId) {
-        accountCreated.current = true;
-        trackCompletedRegistration(data.clinicId, undefined, {
-          planCode: plan.code,
-          professionCode: formData.profession || undefined
-        });
-        trackGoogleConversionSignup({
-          accountId: data.clinicId,
-          planCode: plan.code,
-          isTrial: false,
-          value: plan.monthly_price
-        });
-        setSuccessData(data);
-      } else {
-        throw new Error('Resposta de cadastro inválida. Verifique seu acesso antes de tentar novamente.');
-      }
-      showToast('Cadastro realizado com sucesso! Faça login para continuar.', 'info');
-    } catch (err: any) {
-      trackSignupError({
-        step: 'plans',
-        errorCode: err.code || 'REGISTRATION_FAILED',
-        errorType: err.code ? 'api_error' : 'server_error',
-        planCode: plan.code,
+      trackProfessionalProfileCompleted({
         professionCode: formData.profession || undefined
       });
-      if (err.code === 'EMAIL_VERIFICATION_EXPIRED') {
-        setVerification(null);
-        setStep('security');
-      }
-      showToast(err.message || 'Erro ao realizar cadastro.', 'error');
+      trackOnboardingCompleted({
+        planCode: selectedPlanCode || undefined,
+        professionCode: formData.profession || undefined
+      });
+
+      await reloadSession();
+      showToast('Onboarding concluído com sucesso! Bem-vindo ao Zemda.', 'success');
+      onClose();
+      window.history.pushState(null, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
+    } catch (err: any) {
+      trackSignupError({
+        step: 'profile',
+        errorCode: err.code || 'PROFILE_SAVE_FAILED',
+        errorType: err.code ? 'api_error' : 'network_error',
+        planCode: selectedPlanCode || undefined,
+        professionCode: formData.profession || undefined
+      });
+      showToast(err.message || 'Erro ao concluir perfil profissional.', 'error');
     } finally {
       registrationBusy.current = false;
       setLoading(false);
@@ -810,8 +779,10 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       case 'security':
         return 3;
       case 'verify_email':
-        return 3; // Etapa de validação associada à segurança/titularidade
+        return 3;
       case 'plans':
+        return 4;
+      case 'profile':
         return 4;
       default:
         return 1;
@@ -890,14 +861,20 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                   {stepNumber} de 4
                 </span>
                 <span className="text-xs sm:text-sm font-bold text-slate-800">
-                  {step === 'verify_email' ? 'Confirmação de E-mail' : stepTitles[stepNumber - 1]}
+                  {step === 'verify_email'
+                    ? 'Confirmação de E-mail'
+                    : step === 'profile'
+                    ? 'Especialidade & Áreas'
+                    : stepTitles[stepNumber - 1]}
                 </span>
               </div>
               <div className="text-[11px] font-semibold text-slate-500">
-                {stepNumber === 1 && '25%'}
-                {stepNumber === 2 && '50%'}
-                {stepNumber === 3 && '75%'}
-                {stepNumber === 4 && '100%'}
+                {step === 'initial_data' && '25%'}
+                {step === 'profession' && '50%'}
+                {step === 'security' && '75%'}
+                {step === 'verify_email' && '80%'}
+                {step === 'plans' && '90%'}
+                {step === 'profile' && '100%'}
               </div>
             </div>
 
@@ -910,12 +887,16 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-300 rounded-full"
                 style={{
                   width:
-                    stepNumber === 1
+                    step === 'initial_data'
                       ? '25%'
-                      : stepNumber === 2
+                      : step === 'profession'
                       ? '50%'
-                      : stepNumber === 3
+                      : step === 'security'
                       ? '75%'
+                      : step === 'verify_email'
+                      ? '80%'
+                      : step === 'plans'
+                      ? '90%'
                       : '100%'
                 }}
               />
@@ -1122,368 +1103,6 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                         onChange={e => setFormData({ ...formData, customProfession: e.target.value })}
                         className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
                       />
-                    </div>
-                  )}
-
-                  {/* Seleção Interativa de Áreas de Atuação e Abordagens */}
-                  {formData.profession && (
-                    <div className="mt-5 pt-5 border-t border-slate-200 animate-in fade-in duration-200">
-                      {/* CASO A: MÉDICO GENÉRICO (prof-medico) - Árvore Clínica Médica Dinâmica */}
-                      {formData.profession === 'prof-medico' ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800 flex items-center gap-2">
-                              <Stethoscope className="w-4 h-4 text-teal-600" />
-                              <span>Especialidades Médicas & Subáreas (ZemdaMed)</span>
-                            </label>
-                            <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
-                              {selectedMedicalSpecialtyIds.length} especialidade(s)
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 mb-3">
-                            Selecione uma ou mais especialidades em que você atua. Expanda para detalhar suas áreas de atuação / subáreas clínicas.
-                          </p>
-
-                          {loadingMedicalTree ? (
-                            <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2.5 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                              <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
-                              <span className="font-medium">Carregando catálogo de especialidades médicas...</span>
-                            </div>
-                          ) : (
-                            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                              {medicalTree.map(spec => {
-                                const isSpecSelected = selectedMedicalSpecialtyIds.includes(spec.id);
-                                const isExpanded = expandedSpecialtyIds.includes(spec.id);
-                                const specSubareas = spec.practiceAreas || [];
-                                const selectedSubareaCount = specSubareas.filter(pa => selectedMedicalPracticeAreaIds.includes(pa.id)).length;
-
-                                return (
-                                  <div
-                                    key={spec.id}
-                                    className={`rounded-2xl border transition-all overflow-hidden ${
-                                      isSpecSelected
-                                        ? 'border-teal-500 bg-teal-50/50 shadow-xs'
-                                        : 'border-slate-200 bg-white hover:border-slate-300'
-                                    }`}
-                                  >
-                                    {/* Specialty Header Row */}
-                                    <div className="p-3 sm:p-3.5 flex items-center justify-between gap-3">
-                                      <div
-                                        onClick={() => {
-                                          if (isSpecSelected) {
-                                            setSelectedMedicalSpecialtyIds(prev => prev.filter(id => id !== spec.id));
-                                            // Deselect child subareas
-                                            const childIds = new Set(specSubareas.map(pa => pa.id));
-                                            setSelectedMedicalPracticeAreaIds(prev => prev.filter(id => !childIds.has(id)));
-                                          } else {
-                                            setSelectedMedicalSpecialtyIds(prev => [...prev, spec.id]);
-                                            if (!isExpanded) {
-                                              setExpandedSpecialtyIds(prev => [...prev, spec.id]);
-                                            }
-                                          }
-                                        }}
-                                        className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none"
-                                      >
-                                        <div
-                                          className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
-                                            isSpecSelected
-                                              ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
-                                              : 'border-slate-300 bg-white'
-                                          }`}
-                                        >
-                                          {isSpecSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                          <div className="flex items-center gap-2">
-                                            <span className={`text-xs sm:text-sm font-black ${isSpecSelected ? 'text-teal-950' : 'text-slate-800'}`}>
-                                              {spec.name}
-                                            </span>
-                                            {selectedSubareaCount > 0 && (
-                                              <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-teal-600 text-white">
-                                                {selectedSubareaCount} subárea(s)
-                                              </span>
-                                            )}
-                                          </div>
-                                          {spec.description && (
-                                            <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                                              {spec.description}
-                                            </p>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {specSubareas.length > 0 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setExpandedSpecialtyIds(prev =>
-                                              isExpanded ? prev.filter(id => id !== spec.id) : [...prev, spec.id]
-                                            );
-                                          }}
-                                          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors shrink-0 cursor-pointer"
-                                          title={isExpanded ? 'Recolher subáreas' : 'Expandir subáreas'}
-                                        >
-                                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    {/* Child Practice Areas (Subareas) */}
-                                    {isExpanded && specSubareas.length > 0 && (
-                                      <div className="px-3 pb-3 pt-1 border-t border-teal-100/70 bg-white/70">
-                                        <p className="text-[11px] font-extrabold text-slate-600 mb-2">
-                                          Subáreas & Focos Clínicos de {spec.name}:
-                                        </p>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                          {specSubareas.map(sub => {
-                                            const isSubSelected = selectedMedicalPracticeAreaIds.includes(sub.id);
-                                            return (
-                                              <div
-                                                key={sub.id}
-                                                onClick={() => {
-                                                  if (isSubSelected) {
-                                                    setSelectedMedicalPracticeAreaIds(prev => prev.filter(id => id !== sub.id));
-                                                  } else {
-                                                    setSelectedMedicalPracticeAreaIds(prev => [...prev, sub.id]);
-                                                    // Ensure parent specialty is selected
-                                                    if (!isSpecSelected) {
-                                                      setSelectedMedicalSpecialtyIds(prev => [...prev, spec.id]);
-                                                    }
-                                                  }
-                                                }}
-                                                className={`p-2 rounded-xl border text-left cursor-pointer transition-all flex items-center gap-2 select-none ${
-                                                  isSubSelected
-                                                    ? 'border-teal-500 bg-teal-50 text-teal-950 font-bold'
-                                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs'
-                                                }`}
-                                              >
-                                                <div
-                                                  className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
-                                                    isSubSelected ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300'
-                                                  }`}
-                                                >
-                                                  {isSubSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                                                </div>
-                                                <span className="text-[11px] truncate">{sub.name}</span>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      ) : practiceAreas.length > 0 && practiceAreas[0].medicalSpecialtyId ? (
-                        /* CASO B: ALIAS MÉDICO ESPECÍFICO (Neurologista, Cardiologista, Psiquiatra, etc.) */
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
-                              Especialidade Médica Vinculada
-                            </label>
-                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                              Definida Automaticamente
-                            </span>
-                          </div>
-
-                          <div className="p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/90 text-teal-950 flex items-start gap-3 shadow-2xs mb-4">
-                            <div className="w-7 h-7 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                              <Check className="w-4 h-4 stroke-[3]" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-black text-teal-950">
-                                  {practiceAreas[0].medicalSpecialtyName || 'Especialidade Médica'}
-                                </span>
-                                <span className="text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200/60">
-                                  ZemdaMed
-                                </span>
-                              </div>
-                              <p className="text-xs text-teal-800 mt-1">
-                                Prescrições, anamnese estruturada e recursos clínicos pré-configurados para <strong>{practiceAreas[0].medicalSpecialtyName}</strong>.
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Subáreas / Áreas de Atuação daquela Especialidade Médica */}
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
-                              Áreas de Atuação / Subáreas de {practiceAreas[0].medicalSpecialtyName} (Opcional)
-                            </label>
-                            <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
-                              {selectedPracticeAreaIds.length === 0
-                                ? 'Nenhuma subárea • Geral'
-                                : `${selectedPracticeAreaIds.length} selecionada(s)`}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 mb-3">
-                            Selecione as subáreas em que você atua para enriquecer escalas e modelos especializados.
-                          </p>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
-                            {practiceAreas.map(area => {
-                              const isSelected = selectedPracticeAreaIds.includes(area.id);
-                              return (
-                                <button
-                                  type="button"
-                                  key={area.id}
-                                  onClick={() => {
-                                    setSelectedPracticeAreaIds(prev =>
-                                      isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
-                                    );
-                                  }}
-                                  className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer select-none ${
-                                    isSelected
-                                      ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
-                                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
-                                  }`}
-                                >
-                                  <div
-                                    className={`w-4.5 h-4.5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
-                                      isSelected
-                                        ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
-                                        : 'border-slate-300 bg-white'
-                                    }`}
-                                  >
-                                    {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <span className={`text-xs font-bold block truncate ${isSelected ? 'text-teal-950 font-black' : 'text-slate-800'}`}>
-                                      {area.name}
-                                    </span>
-                                    {area.description && (
-                                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
-                                        {area.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : practiceAreas.length === 1 && practiceAreas[0].isInferredForAlias ? (
-                        /* CASO C: ALIAS DE OUTRAS PROFISSÕES (Neuropsicólogo, Psicanalista, etc.) */
-                        <div>
-                          {(() => {
-                            const isApproach = String(practiceAreas[0].type || '').toUpperCase().includes('APPROACH');
-                            return (
-                              <>
-                                <div className="flex items-center justify-between mb-2">
-                                  <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
-                                    {isApproach ? 'Abordagem Clínica Vinculada' : 'Especialidade Vinculada'}
-                                  </label>
-                                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                                    Definida Automaticamente
-                                  </span>
-                                </div>
-                                <div className="p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/90 text-teal-950 flex items-start gap-3 shadow-2xs">
-                                  <div className="w-7 h-7 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                                    <Check className="w-4 h-4 stroke-[3]" />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="text-sm font-black text-teal-950">
-                                        {practiceAreas[0].name}
-                                      </span>
-                                      <span className="text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200/60">
-                                        {isApproach ? 'Abordagem' : 'Especialidade'}
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-teal-800 mt-1">
-                                      Recursos e diretrizes clínicas pré-configurados para <strong>{practiceAreas[0].name}</strong>.
-                                    </p>
-                                    <p className="text-[11px] text-slate-500 mt-2 border-t border-teal-200/60 pt-1.5">
-                                      💡 Caso atue em <strong>múltiplas especialidades</strong>, selecione a profissão genérica correspondente (ex: Odontologia ou Fisioterapia) para selecionar mais de uma.
-                                    </p>
-                                  </div>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      ) : (
-                        /* CASO D: PROFISSÕES CANÔNICAS GENÉRICAS (Fisioterapia, Odonto, Nutrição, etc.) */
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
-                              Áreas de Atuação & Abordagens Clínicas
-                            </label>
-                            <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
-                              {selectedPracticeAreaIds.length === 0
-                                ? 'Opcional • Selecione'
-                                : `${selectedPracticeAreaIds.length} selecionada${selectedPracticeAreaIds.length > 1 ? 's' : ''}`}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 mb-3">
-                            Escolha uma ou mais áreas para pré-configurar recursos clínicos, escalas e prescrições ideais.
-                          </p>
-
-                          {loadingPracticeAreas ? (
-                            <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2.5 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                              <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
-                              <span className="font-medium">Carregando áreas de atuação recomendadas...</span>
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 sm:max-h-72 overflow-y-auto pr-1">
-                              {practiceAreas.map(area => {
-                                const isSelected = selectedPracticeAreaIds.includes(area.id);
-                                const isApproach = (area.type || '').toUpperCase().includes('APPROACH');
-                                return (
-                                  <button
-                                    type="button"
-                                    key={area.id}
-                                    onClick={() => {
-                                      setSelectedPracticeAreaIds(prev =>
-                                        isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
-                                      );
-                                    }}
-                                    className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer select-none ${
-                                      isSelected
-                                        ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
-                                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
-                                    }`}
-                                  >
-                                    <div
-                                      className={`w-4.5 h-4.5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
-                                        isSelected
-                                          ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
-                                          : 'border-slate-300 bg-white'
-                                      }`}
-                                    >
-                                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center justify-between gap-1.5">
-                                        <span className={`text-xs font-bold truncate ${isSelected ? 'text-teal-950 font-black' : 'text-slate-800'}`}>
-                                          {area.name}
-                                        </span>
-                                        <span
-                                          className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wide shrink-0 ${
-                                            isApproach
-                                              ? 'bg-purple-100 text-purple-700 border border-purple-200/60'
-                                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200/60'
-                                          }`}
-                                        >
-                                          {isApproach ? 'Abordagem' : 'Especialidade'}
-                                        </span>
-                                      </div>
-                                      {area.description && (
-                                        <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
-                                          {area.description}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -1797,9 +1416,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 </button>
               </div>
             </div>
-          ) : (
+          ) : step === 'plans' ? (
             /* ======================================================== */
-            /* ETAPA 4: ESCOLHA DO PLANO                                 */
+            /* ETAPA 4: ESCOLHA DO PLANO OU TESTE GRÁTIS                 */
             /* ======================================================== */
             <div>
               {planError && (
@@ -1820,11 +1439,436 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 plans={plans}
                 selectedCode={selectedPlanCode}
                 busy={loading}
-                onChoose={handleRegister}
-                onBack={() => setStep('security')}
+                onChoose={handleChoosePlan}
+                onBack={() => setStep('verify_email')}
                 onSelectPlan={handleSelectPlan}
               />
             </div>
+          ) : (
+            /* ======================================================== */
+            /* ETAPA 5 / ONBOARDING: ESPECIALIDADE E ÁREA DE ATUAÇÃO     */
+            /* ======================================================== */
+            <form onSubmit={handleCompleteProfile} className="space-y-5">
+              <div className="space-y-1">
+                <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200/60">
+                  <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                  Etapa Final do Onboarding
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  Especialidade & Áreas de Atuação
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 font-medium">
+                  Personalizamos seus prontuários, prescrições e modelos clínicos para o seu dia a dia.
+                </p>
+              </div>
+
+              {/* Seleção Interativa de Áreas de Atuação e Abordagens */}
+              <div className="space-y-4 pt-1">
+                {/* CASO A: MÉDICO GENÉRICO (prof-medico) - Árvore Clínica Médica Dinâmica */}
+                {formData.profession === 'prof-medico' ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs sm:text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                        <Stethoscope className="w-4 h-4 text-teal-600" />
+                        <span>Especialidades Médicas & Subáreas (ZemdaMed)</span>
+                      </label>
+                      <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
+                        {selectedMedicalSpecialtyIds.length} especialidade(s)
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Selecione uma ou mais especialidades em que você atua. Expanda para detalhar suas áreas de atuação / subáreas clínicas.
+                    </p>
+
+                    {loadingMedicalTree ? (
+                      <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2.5 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
+                        <span className="font-medium">Carregando catálogo de especialidades médicas...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                        {medicalTree.map(spec => {
+                          const isSpecSelected = selectedMedicalSpecialtyIds.includes(spec.id);
+                          const isExpanded = expandedSpecialtyIds.includes(spec.id);
+                          const specSubareas = spec.practiceAreas || [];
+                          const selectedSubareaCount = specSubareas.filter(pa => selectedMedicalPracticeAreaIds.includes(pa.id)).length;
+
+                          return (
+                            <div
+                              key={spec.id}
+                              className={`rounded-2xl border transition-all overflow-hidden ${
+                                isSpecSelected
+                                  ? 'border-teal-500 bg-teal-50/50 shadow-xs'
+                                  : 'border-slate-200 bg-white hover:border-slate-300'
+                              }`}
+                            >
+                              {/* Specialty Header Row */}
+                              <div className="p-3 sm:p-3.5 flex items-center justify-between gap-3">
+                                <div
+                                  onClick={() => {
+                                    if (isSpecSelected) {
+                                      setSelectedMedicalSpecialtyIds(prev => prev.filter(id => id !== spec.id));
+                                      const childIds = new Set(specSubareas.map(pa => pa.id));
+                                      setSelectedMedicalPracticeAreaIds(prev => prev.filter(id => !childIds.has(id)));
+                                    } else {
+                                      setSelectedMedicalSpecialtyIds(prev => [...prev, spec.id]);
+                                      if (!isExpanded) {
+                                        setExpandedSpecialtyIds(prev => [...prev, spec.id]);
+                                      }
+                                    }
+                                  }}
+                                  className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer select-none"
+                                >
+                                  <div
+                                    className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                      isSpecSelected
+                                        ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                                        : 'border-slate-300 bg-white'
+                                    }`}
+                                  >
+                                    {isSpecSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-xs sm:text-sm font-black ${isSpecSelected ? 'text-teal-950' : 'text-slate-800'}`}>
+                                        {spec.name}
+                                      </span>
+                                      {selectedSubareaCount > 0 && (
+                                        <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-teal-600 text-white">
+                                          {selectedSubareaCount} subárea(s)
+                                        </span>
+                                      )}
+                                    </div>
+                                    {spec.description && (
+                                      <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                                        {spec.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {specSubareas.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setExpandedSpecialtyIds(prev =>
+                                        isExpanded ? prev.filter(id => id !== spec.id) : [...prev, spec.id]
+                                      );
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors shrink-0 cursor-pointer"
+                                    title={isExpanded ? 'Recolher subáreas' : 'Expandir subáreas'}
+                                  >
+                                    {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Child Practice Areas (Subareas) */}
+                              {isExpanded && specSubareas.length > 0 && (
+                                <div className="px-3 pb-3 pt-1 border-t border-teal-100/70 bg-white/70">
+                                  <p className="text-[11px] font-extrabold text-slate-600 mb-2">
+                                    Subáreas & Focos Clínicos de {spec.name}:
+                                  </p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                    {specSubareas.map(sub => {
+                                      const isSubSelected = selectedMedicalPracticeAreaIds.includes(sub.id);
+                                      return (
+                                        <div
+                                          key={sub.id}
+                                          onClick={() => {
+                                            if (isSubSelected) {
+                                              setSelectedMedicalPracticeAreaIds(prev => prev.filter(id => id !== sub.id));
+                                            } else {
+                                              setSelectedMedicalPracticeAreaIds(prev => [...prev, sub.id]);
+                                              if (!isSpecSelected) {
+                                                setSelectedMedicalSpecialtyIds(prev => [...prev, spec.id]);
+                                              }
+                                            }
+                                          }}
+                                          className={`p-2 rounded-xl border text-left cursor-pointer transition-all flex items-center gap-2 select-none ${
+                                            isSubSelected
+                                              ? 'border-teal-500 bg-teal-50 text-teal-950 font-bold'
+                                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs'
+                                          }`}
+                                        >
+                                          <div
+                                            className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                              isSubSelected ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300'
+                                            }`}
+                                          >
+                                            {isSubSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                          </div>
+                                          <span className="text-[11px] truncate">{sub.name}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : practiceAreas.length > 0 && practiceAreas[0].medicalSpecialtyId ? (
+                  /* CASO B: ALIAS MÉDICO ESPECÍFICO (Neurologista, Cardiologista, Psiquiatra, etc.) */
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                        Especialidade Médica Vinculada
+                      </label>
+                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                        Definida Automaticamente
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/90 text-teal-950 flex items-start gap-3 shadow-2xs mb-4">
+                      <div className="w-7 h-7 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                        <Check className="w-4 h-4 stroke-[3]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-black text-teal-950">
+                            {practiceAreas[0].medicalSpecialtyName || 'Especialidade Médica'}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200/60">
+                            ZemdaMed
+                          </span>
+                        </div>
+                        <p className="text-xs text-teal-800 mt-1">
+                          Prescrições, anamnese estruturada e recursos clínicos pré-configurados para <strong>{practiceAreas[0].medicalSpecialtyName}</strong>.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Subáreas / Áreas de Atuação daquela Especialidade Médica */}
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                        Áreas de Atuação / Subáreas de {practiceAreas[0].medicalSpecialtyName} (Opcional)
+                      </label>
+                      <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
+                        {selectedPracticeAreaIds.length === 0
+                          ? 'Nenhuma subárea • Geral'
+                          : `${selectedPracticeAreaIds.length} selecionada(s)`}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Selecione as subáreas em que você atua para enriquecer escalas e modelos especializados.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
+                      {practiceAreas.map(area => {
+                        const isSelected = selectedPracticeAreaIds.includes(area.id);
+                        return (
+                          <button
+                            type="button"
+                            key={area.id}
+                            onClick={() => {
+                              setSelectedPracticeAreaIds(prev =>
+                                isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
+                              );
+                            }}
+                            className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer select-none ${
+                              isSelected
+                                ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
+                                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+                            }`}
+                          >
+                            <div
+                              className={`w-4.5 h-4.5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                isSelected
+                                  ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                                  : 'border-slate-300 bg-white'
+                              }`}
+                            >
+                              {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <span className={`text-xs font-bold block truncate ${isSelected ? 'text-teal-950 font-black' : 'text-slate-800'}`}>
+                                {area.name}
+                              </span>
+                              {area.description && (
+                                <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                                  {area.description}
+                                </p>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : practiceAreas.length === 1 && practiceAreas[0].isInferredForAlias ? (
+                  /* CASO C: ALIAS DE OUTRAS PROFISSÕES (Neuropsicólogo, Psicanalista, etc.) */
+                  <div>
+                    {(() => {
+                      const isApproach = String(practiceAreas[0].type || '').toUpperCase().includes('APPROACH');
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                              {isApproach ? 'Abordagem Clínica Vinculada' : 'Especialidade Vinculada'}
+                            </label>
+                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                              Definida Automaticamente
+                            </span>
+                          </div>
+                          <div className="p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/90 text-teal-950 flex items-start gap-3 shadow-2xs">
+                            <div className="w-7 h-7 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                              <Check className="w-4 h-4 stroke-[3]" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-black text-teal-950">
+                                  {practiceAreas[0].name}
+                                </span>
+                                <span className="text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-wide bg-emerald-100 text-emerald-800 border border-emerald-200/60">
+                                  {isApproach ? 'Abordagem' : 'Especialidade'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-teal-800 mt-1">
+                                Recursos e diretrizes clínicas pré-configurados para <strong>{practiceAreas[0].name}</strong>.
+                              </p>
+                              <p className="text-[11px] text-slate-500 mt-2 border-t border-teal-200/60 pt-1.5">
+                                💡 Caso atue em <strong>múltiplas especialidades</strong>, selecione a profissão genérica correspondente (ex: Odontologia ou Fisioterapia) para selecionar mais de uma.
+                              </p>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  /* CASO D: PROFISSÕES CANÔNICAS GENÉRICAS (Fisioterapia, Odonto, Nutrição, etc.) */
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs sm:text-sm font-extrabold text-slate-800">
+                        Áreas de Atuação & Abordagens Clínicas
+                      </label>
+                      <span className="text-[11px] font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60">
+                        {selectedPracticeAreaIds.length === 0
+                          ? 'Opcional • Selecione'
+                          : `${selectedPracticeAreaIds.length} selecionada${selectedPracticeAreaIds.length > 1 ? 's' : ''}`}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Escolha uma ou mais áreas para pré-configurar recursos clínicos, escalas e prescrições ideais.
+                    </p>
+
+                    {loadingPracticeAreas ? (
+                      <div className="flex items-center justify-center p-6 text-xs text-slate-500 gap-2.5 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <RefreshCw className="w-4 h-4 animate-spin text-teal-600" />
+                        <span className="font-medium">Carregando áreas de atuação recomendadas...</span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 sm:max-h-72 overflow-y-auto pr-1">
+                        {practiceAreas.map(area => {
+                          const isSelected = selectedPracticeAreaIds.includes(area.id);
+                          const isApproach = (area.type || '').toUpperCase().includes('APPROACH');
+                          return (
+                            <button
+                              type="button"
+                              key={area.id}
+                              onClick={() => {
+                                setSelectedPracticeAreaIds(prev =>
+                                  isSelected ? prev.filter(id => id !== area.id) : [...prev, area.id]
+                                );
+                              }}
+                              className={`p-3 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer select-none ${
+                                isSelected
+                                  ? 'border-teal-500 bg-teal-50/90 shadow-xs ring-1 ring-teal-500'
+                                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80'
+                              }`}
+                            >
+                              <div
+                                className={`w-4.5 h-4.5 mt-0.5 rounded-md flex items-center justify-center shrink-0 border transition-all ${
+                                  isSelected
+                                    ? 'bg-teal-600 border-teal-600 text-white shadow-xs'
+                                    : 'border-slate-300 bg-white'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <span className={`text-xs font-bold truncate ${isSelected ? 'text-teal-950 font-black' : 'text-slate-800'}`}>
+                                    {area.name}
+                                  </span>
+                                  <span
+                                    className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wide shrink-0 ${
+                                      isApproach
+                                        ? 'bg-purple-100 text-purple-700 border border-purple-200/60'
+                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200/60'
+                                    }`}
+                                  >
+                                    {isApproach ? 'Abordagem' : 'Especialidade'}
+                                  </span>
+                                </div>
+                                {area.description && (
+                                  <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                                    {area.description}
+                                  </p>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Campos de Registro Profissional */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-200">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Conselho Profissional (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: CRM, CREFITO, CRO, CRP..."
+                      value={registrationType}
+                      onChange={e => setRegistrationType(e.target.value)}
+                      className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Número do Registro (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 12345/SP"
+                      value={registrationNumber}
+                      onChange={e => setRegistrationNumber(e.target.value)}
+                      className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Botão de Finalização */}
+              <div className="pt-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Concluindo ativação...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span>Concluir e Acessar o Sistema</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           )}
         </div>
       </div>

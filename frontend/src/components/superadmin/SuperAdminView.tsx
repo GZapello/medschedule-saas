@@ -418,8 +418,8 @@ export const SuperAdminView: React.FC = () => {
   return (
     <div className="space-y-6">
       {control && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <form onSubmit={submitControl} role="dialog" aria-modal="true" aria-labelledby="clinic-control-title" className="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <form onSubmit={submitControl} role="dialog" aria-modal="true" aria-labelledby="clinic-control-title" className="bg-white rounded-2xl p-4 sm:p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 id="clinic-control-title" className="font-bold text-lg">{control.action === 'delete' ? 'Excluir clínica definitivamente' : 'Banir clínica'}</h3>
             <p>Clínica: <strong>{control.clinic.name}</strong></p>
             <p className="text-red-700">{control.action === 'delete' ? 'Esta ação apagará permanentemente a clínica e todos os dados vinculados. Esta operação não poderá ser desfeita.' : 'O acesso será bloqueado imediatamente. Os dados serão preservados.'}</p>
@@ -435,20 +435,20 @@ export const SuperAdminView: React.FC = () => {
               </label>
             </>}
             {controlError && <p role="alert" className="text-red-700">{controlError}</p>}
-            <div className="flex justify-end gap-3">
-              <button type="button" disabled={controlBusy} onClick={closeControl} className="border rounded-lg px-4 py-2">CANCELAR</button>
-              <button type="submit" disabled={controlBusy || !controlReason.trim() || (control.action === 'delete' && (confirmation !== 'EXCLUIR' || !adminPassword))} className="bg-red-700 text-white rounded-lg px-4 py-2 disabled:opacity-50">{controlBusy ? 'Processando…' : control.action === 'delete' ? 'EXCLUIR DEFINITIVAMENTE' : 'BANIR CLÍNICA'}</button>
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
+              <button type="button" disabled={controlBusy} onClick={closeControl} className="w-full sm:w-auto border rounded-lg px-4 py-2 min-h-[40px]">CANCELAR</button>
+              <button type="submit" disabled={controlBusy || !controlReason.trim() || (control.action === 'delete' && (confirmation !== 'EXCLUIR' || !adminPassword))} className="w-full sm:w-auto bg-red-700 text-white rounded-lg px-4 py-2 disabled:opacity-50 min-h-[40px]">{controlBusy ? 'Processando…' : control.action === 'delete' ? 'EXCLUIR DEFINITIVAMENTE' : 'BANIR CLÍNICA'}</button>
             </div>
           </form>
         </div>
       )}
       {/* Top Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border border-white/10">
-        <div className="flex items-center gap-4">
-          <div className="p-3.5 bg-rose-500/20 rounded-2xl border border-rose-500/30 text-rose-400">
-            <Shield className="w-8 h-8" />
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-8 rounded-3xl shadow-xl flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border border-white/10">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="p-3 sm:p-3.5 bg-rose-500/20 rounded-2xl border border-rose-500/30 text-rose-400 shrink-0">
+            <Shield className="w-6 h-6 sm:w-8 sm:h-8" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-300 text-[10px] font-black uppercase tracking-wider mb-1">
               Painel de Governança Global
             </div>
@@ -460,13 +460,13 @@ export const SuperAdminView: React.FC = () => {
         </div>
 
         {/* Menu Superior de Módulos Globais */}
-        <div className="flex items-center gap-1.5 p-1.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-xs font-bold">
-          <button onClick={()=>setMainSection('subscriptions')} className="px-3 py-2 rounded-xl hover:bg-white/10">Assinaturas</button>
-          <button onClick={() => setMainSection('integrity')} className="px-3 py-2 rounded-xl hover:bg-white/10">Integridade</button>
-          <button onClick={()=>setMainSection('integrations')} className="px-3 py-2 rounded-xl hover:bg-white/10">Integrações</button>
+        <div className="flex items-center gap-1.5 p-1.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-xs font-bold overflow-x-auto max-w-full no-scrollbar scroll-smooth">
+          <button onClick={()=>setMainSection('subscriptions')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Assinaturas</button>
+          <button onClick={() => setMainSection('integrity')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Integridade</button>
+          <button onClick={()=>setMainSection('integrations')} className="px-3 py-2 rounded-xl hover:bg-white/10 shrink-0 whitespace-nowrap">Integrações</button>
           <button
             onClick={() => setMainSection('tenants')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               mainSection === 'tenants'
                 ? 'bg-white text-slate-900 shadow-md'
                 : 'text-slate-300 hover:text-white'
@@ -478,7 +478,7 @@ export const SuperAdminView: React.FC = () => {
 
           <button
             onClick={() => setMainSection('professions')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               mainSection === 'professions'
                 ? 'bg-white text-slate-900 shadow-md'
                 : 'text-slate-300 hover:text-white'
@@ -490,7 +490,7 @@ export const SuperAdminView: React.FC = () => {
 
           <button
             onClick={() => setMainSection('categories')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               mainSection === 'categories'
                 ? 'bg-white text-slate-900 shadow-md'
                 : 'text-slate-300 hover:text-white'
@@ -502,7 +502,7 @@ export const SuperAdminView: React.FC = () => {
 
           <button
             onClick={() => setMainSection('free_trials')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               mainSection === 'free_trials'
                 ? 'bg-amber-400 text-slate-950 font-black shadow-md'
                 : 'text-slate-300 hover:text-white'
@@ -514,7 +514,7 @@ export const SuperAdminView: React.FC = () => {
 
           <button
             onClick={() => setMainSection('whatsapp')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               mainSection === 'whatsapp'
                 ? 'bg-emerald-500 text-white font-black shadow-md'
                 : 'text-slate-300 hover:text-white'
@@ -526,7 +526,7 @@ export const SuperAdminView: React.FC = () => {
 
           <button
             onClick={() => setMainSection('laboratory')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               mainSection === 'laboratory'
                 ? 'bg-purple-600 text-white font-black shadow-md'
                 : 'text-purple-300 hover:text-white'
@@ -599,12 +599,12 @@ export const SuperAdminView: React.FC = () => {
           )}
 
           {/* Tabela de Clínicas */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-4">
+          <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl w-fit text-xs font-bold">
+              <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl w-full sm:w-fit text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
                 <button
                   onClick={() => setActiveTab('all')}
-                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                     activeTab === 'all' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -612,7 +612,7 @@ export const SuperAdminView: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setActiveTab('pending')}
-                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1 ${
+                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1 shrink-0 whitespace-nowrap ${
                     activeTab === 'pending' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -627,7 +627,7 @@ export const SuperAdminView: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setActiveTab('active')}
-                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                     activeTab === 'active' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -635,7 +635,7 @@ export const SuperAdminView: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setActiveTab('blocked')}
-                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                     activeTab === 'blocked' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -797,7 +797,7 @@ export const SuperAdminView: React.FC = () => {
       {/* SEÇÃO 2: PROFISSÕES GLOBAIS (Exclusivo SuperAdmin SaaS) */}
       {/* ========================================================================= */}
       {mainSection === 'professions' && (
-        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-4">
+        <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
@@ -809,8 +809,8 @@ export const SuperAdminView: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="relative w-64">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
@@ -824,7 +824,7 @@ export const SuperAdminView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleOpenProfModal()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 min-h-[40px]"
               >
                 <Plus className="w-4 h-4" />
                 Adicionar Profissão
@@ -941,7 +941,7 @@ export const SuperAdminView: React.FC = () => {
       {/* SEÇÃO 3: TIPOS DE SERVIÇO / CATEGORIAS (Exclusivo SuperAdmin SaaS) */}
       {/* ========================================================================= */}
       {mainSection === 'categories' && (
-        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-4">
+        <div className="bg-white rounded-3xl p-4 sm:p-6 border border-slate-100 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
@@ -953,8 +953,8 @@ export const SuperAdminView: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="relative w-64">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
@@ -968,7 +968,7 @@ export const SuperAdminView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleOpenCatModal()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer shrink-0 min-h-[40px]"
               >
                 <Plus className="w-4 h-4" />
                 Adicionar Tipo de Serviço
@@ -1060,8 +1060,8 @@ export const SuperAdminView: React.FC = () => {
       {/* MODAL: Nova / Editar Profissão Global */}
       {/* ========================================================================= */}
       {isProfModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">
                 {editingProf ? `Editar Profissão: ${editingProf.name}` : 'Cadastrar Nova Profissão Global'}
@@ -1121,17 +1121,17 @@ export const SuperAdminView: React.FC = () => {
                 </label>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsProfModalOpen(false)}
-                  className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs cursor-pointer min-h-[40px]"
                 >
                   Salvar Profissão
                 </button>
@@ -1145,8 +1145,8 @@ export const SuperAdminView: React.FC = () => {
       {/* MODAL: Novo / Editar Tipo de Serviço */}
       {/* ========================================================================= */}
       {isCatModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-4 sm:p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-bold text-slate-900">
                 {editingCat ? `Editar Tipo de Serviço: ${editingCat.name}` : 'Cadastrar Novo Tipo de Serviço'}
@@ -1206,17 +1206,17 @@ export const SuperAdminView: React.FC = () => {
                 </label>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsCatModalOpen(false)}
-                  className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs cursor-pointer min-h-[40px]"
                 >
                   Salvar Tipo de Serviço
                 </button>
@@ -1228,8 +1228,8 @@ export const SuperAdminView: React.FC = () => {
 
       {/* Modal: Recusar Cadastro */}
       {rejectingClinic && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl p-4 sm:p-6 w-full max-w-md shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-extrabold text-slate-900">
               Recusar Cadastro de "{rejectingClinic.name}"
             </h3>
@@ -1245,17 +1245,17 @@ export const SuperAdminView: React.FC = () => {
                 placeholder="Motivo da recusa (ex: dados cadastrais inconsistentes)..."
                 className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50"
               />
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setRejectingClinic(null)}
-                  className="px-4 py-2 font-bold text-slate-600"
+                  className="w-full sm:w-auto px-4 py-2 font-bold text-slate-600 min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs cursor-pointer min-h-[40px]"
                 >
                   Confirmar Recusa
                 </button>
@@ -1267,8 +1267,8 @@ export const SuperAdminView: React.FC = () => {
 
       {/* Modal: Detalhes Administrativos da Clínica */}
       {selectedClinic && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl p-6 space-y-4 text-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl p-4 sm:p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-extrabold text-slate-900">
                 Ficha da Clínica — {selectedClinic.name}
@@ -1293,7 +1293,7 @@ export const SuperAdminView: React.FC = () => {
             <div className="pt-3 border-t border-slate-100 flex justify-end">
               <button
                 onClick={() => setSelectedClinic(null)}
-                className="px-4 py-2 bg-slate-900 text-white font-bold rounded-xl"
+                className="w-full sm:w-auto px-4 py-2 bg-slate-900 text-white font-bold rounded-xl min-h-[40px]"
               >
                 Fechar
               </button>
@@ -1304,8 +1304,8 @@ export const SuperAdminView: React.FC = () => {
 
       {/* Modal: Exclusão Definitiva de Profissão Global */}
       {deletingProf && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl p-4 sm:p-6 w-full max-w-lg shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
@@ -1425,19 +1425,19 @@ export const SuperAdminView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={closeDeleteProfModal}
                   disabled={deleteProfBusy}
-                  className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  className="w-full sm:w-auto px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={deleteProfBusy || deleteProfConfirmation !== 'EXCLUIR' || !deleteProfPassword}
-                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  className="w-full sm:w-auto px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 min-h-[40px]"
                 >
                   {deleteProfBusy ? 'Excluindo...' : 'EXCLUIR PROFISSÃO DEFINITIVAMENTE'}
                 </button>

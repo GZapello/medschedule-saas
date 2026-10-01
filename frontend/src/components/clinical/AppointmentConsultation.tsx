@@ -141,24 +141,24 @@ export function AppointmentConsultation({
     return (
       <div className="fixed inset-0 z-50 bg-slate-100 flex flex-col overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento com Zemda360">
         {/* Barra superior de alternância */}
-        <div className="flex flex-wrap items-center justify-between px-5 py-3 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={onClose}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer mr-2"
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer mr-1 sm:mr-2 shrink-0 min-h-[36px]"
             >
               <ChevronLeft className="w-4 h-4" /> Voltar à agenda
             </button>
-            <span className="font-bold text-xs text-slate-900 border-l pl-3 border-slate-200">
+            <span className="font-bold text-xs text-slate-900 border-l pl-2 sm:pl-3 border-slate-200 truncate">
               {appointment.patient_name || 'Paciente'}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
             <button
               type="button"
               onClick={() => setActiveTab('records')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
             >
               <FileText className="w-3.5 h-3.5" /> Prontuário & Evolução
             </button>
@@ -167,7 +167,7 @@ export function AppointmentConsultation({
               <button
                 type="button"
                 onClick={() => setActiveTab('specialized')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
               >
                 <Stethoscope className="w-3.5 h-3.5" /> Módulo Clínico
               </button>
@@ -175,9 +175,9 @@ export function AppointmentConsultation({
 
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-teal-600 text-white shadow-xs cursor-default"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-teal-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
             >
-              <Activity className="w-3.5 h-3.5" /> Zemda360 (Mapeamento Anatômico)
+              <Activity className="w-3.5 h-3.5" /> Zemda360 (Mapeamento)
             </button>
           </div>
         </div>
@@ -201,27 +201,27 @@ export function AppointmentConsultation({
     if (effectiveModuleType === 'ZemdaPersonal') {
       return (
         <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento Personal Trainer">
-          <div className="flex flex-wrap items-center justify-between px-5 py-3 bg-white border-b border-slate-200 sticky top-0 z-10">
-            <div className="flex items-center gap-2">
-              <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer">
+          <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-10 gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer shrink-0 min-h-[36px]">
                 Voltar à agenda
               </button>
-              <span className="font-bold text-xs text-slate-800 border-l pl-3 border-slate-200">
+              <span className="font-bold text-xs text-slate-800 border-l pl-2 sm:pl-3 border-slate-200 truncate">
                 {appointment.patient_name || 'Aluno'}
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
               <button
                 type="button"
                 onClick={() => setActiveTab('records')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
               >
                 <FileText className="w-3.5 h-3.5" /> Prontuário
               </button>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-orange-600 text-white shadow-xs cursor-default"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-orange-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
               >
                 <Dumbbell className="w-3.5 h-3.5" /> ZemdaPersonal
               </button>
@@ -229,7 +229,7 @@ export function AppointmentConsultation({
                 <button
                   type="button"
                   onClick={() => setActiveTab('zemda_body')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
                 >
                   <Activity className="w-3.5 h-3.5" /> Zemda360
                 </button>
@@ -249,27 +249,27 @@ export function AppointmentConsultation({
 
     return (
       <div className="fixed inset-0 z-50 bg-slate-50 overflow-auto" role="dialog" aria-modal="true" aria-label="Atendimento clínico especializado">
-        <div className="flex flex-wrap items-center justify-between px-5 py-3 bg-white border-b border-slate-200 sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer">
+        <div className="flex flex-wrap items-center justify-between px-3 sm:px-5 py-2.5 sm:py-3 bg-white border-b border-slate-200 sticky top-0 z-10 gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer shrink-0 min-h-[36px]">
               Voltar à agenda
             </button>
-            <span className="font-bold text-xs text-slate-800 border-l pl-3 border-slate-200">
+            <span className="font-bold text-xs text-slate-800 border-l pl-2 sm:pl-3 border-slate-200 truncate">
               {appointment.patient_name || 'Paciente'}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto max-w-full">
             <button
               type="button"
               onClick={() => setActiveTab('records')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
             >
               <FileText className="w-3.5 h-3.5" /> Prontuário
             </button>
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-indigo-600 text-white shadow-xs cursor-default"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-extrabold rounded-lg bg-indigo-600 text-white shadow-xs cursor-default shrink-0 whitespace-nowrap min-h-[36px]"
             >
               <Stethoscope className="w-3.5 h-3.5" /> Módulo Clínico
             </button>
@@ -277,7 +277,7 @@ export function AppointmentConsultation({
               <button
                 type="button"
                 onClick={() => setActiveTab('zemda_body')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 cursor-pointer shrink-0 whitespace-nowrap min-h-[36px]"
               >
                 <Activity className="w-3.5 h-3.5" /> Zemda360
               </button>

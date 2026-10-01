@@ -1,3 +1,4 @@
+import { useClinicalReview } from '../clinical/useClinicalReview';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
@@ -724,6 +725,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
   };
 
   // 9. Finalizar Atendimento Oficial (Grava evolução, sela e abre opções pós-consulta)
+  const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
   const handleFinishConsultation = async () => {
     if (!selectedPatientId) {
       showToast('Selecione um aprendente para finalizar.', 'info');
@@ -736,6 +738,26 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
     try {
       setSaving(true);
+      const finalPayload = {
+        patientId: selectedPatientId,
+        professionalId: currentUser?.id,
+        appointmentId: initialAppointmentId || null,
+        sessionDate: new Date().toISOString().split('T')[0],
+        title: finishForm.consultation_title || 'Atendimento Psicopedagógico (ZemdaPP)',
+        clinicalEvolution: finishForm.evolution_text,
+        technicalNotes: finishForm.next_steps || '',
+        isSealed: true,
+        useDigitalSignature: false,
+        sessionData: {
+          session_date: new Date().toISOString().split('T')[0],
+          objectives: currentSession.objectives || '',
+          activities_developed: currentSession.activities_developed,
+          interventions_performed: currentSession.interventions_performed,
+          results_observations: currentSession.results_observations,
+          guidance_notes: finishForm.guidance_summary
+        }
+      };
+      if (!await review.confirm({ ...finalPayload, patientName: patientData?.full_name || patientData?.name, professionalName: currentUser?.name, moduleType: 'ZemdaPP' })) return;
       let effectiveAppointmentId = initialAppointmentId;
 
       // Se não houver appointmentId, inicia transparente via endpoint canônico
@@ -751,25 +773,8 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
         } catch (_) {}
       }
 
-      const res = await ApiClient.post<any>('/v1/psychopedagogy/sessions/finish', {
-        patientId: selectedPatientId,
-        professionalId: currentUser?.id,
-        appointmentId: effectiveAppointmentId || null,
-        sessionDate: new Date().toISOString().split('T')[0],
-        title: finishForm.consultation_title || 'Atendimento Psicopedagógico (ZemdaPP)',
-        clinicalEvolution: finishForm.evolution_text,
-        technicalNotes: finishForm.next_steps || '',
-        isSealed: true,
-        useDigitalSignature: false,
-        sessionData: {
-          session_date: new Date().toISOString().split('T')[0],
-          objectives: currentSession.objectives || 'Atendimento psicopedagógico finalizado.',
-          activities_developed: currentSession.activities_developed,
-          interventions_performed: currentSession.interventions_performed,
-          results_observations: currentSession.results_observations,
-          guidance_notes: finishForm.guidance_summary
-        }
-      });
+      finalPayload.appointmentId = effectiveAppointmentId || null;
+      const res = await ApiClient.post<any>('/v1/psychopedagogy/sessions/finish', finalPayload);
 
       await autosave.clearDraft();
       showToast('Atendimento psicopedagógico finalizado e selado com sucesso!', 'success');
@@ -808,7 +813,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
   const selectedPatient = patientData;
 
-  return (
+  return <>{review.dialog}{(
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       
       {/* 10. NOVO CABEÇALHO DO MÓDULO ZEMDAPP */}
@@ -2762,7 +2767,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
         onKeepCurrent={() => autosave.resolveConflict('local')}
       />
     </div>
-  );
+  )}</>;
 };
 
 export default PsychopedagogyWorkspace;

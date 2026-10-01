@@ -1,4 +1,10 @@
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
+import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
+import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
+import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
+import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
+import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
+import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
@@ -87,6 +93,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     | 'before_after'
     | 'history'
   >('overview');
+
+  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
 
   // Estados de dados do paciente
   const [loadingOverview, setLoadingOverview] = useState(false);
@@ -210,7 +218,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     procedure_id: '',
     status: 'AGENDADO' as 'AGENDADO' | 'COMPARECEU' | 'RETOQUE_REALIZADO' | 'ALTA_CICLO',
     evaluation_notes: '',
-    touchup_required: false,
+    touchup_required: undefined as boolean | undefined,
     touchup_description: ''
   });
 
@@ -222,6 +230,26 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     [returnForm, setReturnForm],
   ]);
 
+  const [finishAppointment, setFinishAppointment] = useState<any>(null);
+  const clinicalPayload = { assessmentForm, planForm, procedureForm, evolutionForm, returnForm };
+  const autosave = useClinicalAutosave({
+    moduleType: 'ZemdaEstetic', patientId: selectedPatientId, appointmentId: initialAppointmentId,
+    payload: clinicalPayload,
+    onRestoreDraft: draft => {
+      if (draft.assessmentForm) setAssessmentForm(previous => ({ ...previous, ...draft.assessmentForm }));
+      if (draft.planForm) setPlanForm(previous => ({ ...previous, ...draft.planForm }));
+      if (draft.procedureForm) setProcedureForm(previous => ({ ...previous, ...draft.procedureForm }));
+      if (draft.evolutionForm) setEvolutionForm(previous => ({ ...previous, ...draft.evolutionForm }));
+      if (draft.returnForm) setReturnForm(previous => ({ ...previous, ...draft.returnForm }));
+    }
+  });
+  useEffect(() => { setFinishAppointment(null); }, [selectedPatientId, initialAppointmentId]);
+  const requestFinish = async () => {
+    try {
+      const { appointment } = await ApiClient.get<any>(`/v1/appointments/${initialAppointmentId}`);
+      if (isCurrentClinicalContext() && appointment.patient_id === selectedPatientId) setFinishAppointment(appointment);
+    } catch (error: any) { showToast(error.message || 'Erro ao abrir finalização.', 'error'); }
+  };
 
   // Carrega configurações do ZemdaEstetic
   useEffect(() => {
@@ -533,7 +561,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         actual_date: returnForm.actual_date || undefined,
         status: returnForm.status,
         evaluation_notes: returnForm.evaluation_notes,
-        touchup_required: returnForm.touchup_required ? 1 : 0,
+        touchup_required: returnForm.touchup_required === undefined ? undefined : returnForm.touchup_required ? 1 : 0,
         touchup_description: returnForm.touchup_description
       });
       showToast('Retorno estético agendado/registrado!', 'success');
@@ -545,7 +573,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         procedure_id: '',
         status: 'AGENDADO',
         evaluation_notes: '',
-        touchup_required: false,
+        touchup_required: undefined,
         touchup_description: ''
       });
       loadPatientData(selectedPatientId, activeArea);
@@ -609,6 +637,13 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50" data-testid="zemda-estetic-workspace">
+      <ClinicalDraftRecoveryModal isOpen={autosave.conflictModalOpen} moduleName="ZemdaEstetic"
+        onClose={() => autosave.resolveConflict('local')} onSelectVersion={autosave.resolveConflict} />
+      {finishAppointment && <FinishConsultationModal appointment={finishAppointment}
+        clinicalData={{ moduleType: 'ZemdaEstetic', moduleData: clinicalPayload,
+          clinicalEvolution: evolutionForm.biological_response, technicalNotes: assessmentForm.observations }}
+        onClose={() => setFinishAppointment(null)}
+        onFinished={() => { void autosave.clearDraft(); setFinishAppointment(null); onFinishConsultation?.(); }} />}
       {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E AÇÕES RÁPIDAS */}
       <ProfessionalModuleHeader
         icon={Sparkles}
@@ -627,11 +662,12 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         description="Avaliação estruturada por área, rastreabilidade de produtos, fotos clínicas e motor anatômico Zemda360."
       >
         <div className="flex items-center gap-2 flex-wrap">
-          {onFinishConsultation && (
+          {selectedPatientId && <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />}
+          {onFinishConsultation && initialAppointmentId && (
             <button
               type="button"
               data-tour="clinical-finish"
-              onClick={onFinishConsultation}
+              onClick={requestFinish}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -742,7 +778,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       </ProfessionalModuleHeader>
 
       {/* 2. BARRA DE SELEÇÃO DO PACIENTE */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 shrink-0">
+      <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 shrink-0">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           <div className="w-full md:w-96" data-tour="estetic-patient-select">
             <PatientSearchSelect
@@ -754,8 +790,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
           </div>
 
           {selectedPatientId && overviewData?.patient && (
-            <div className="flex items-center gap-4 text-xs text-slate-600">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:gap-4 text-xs text-slate-600 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-slate-800">{overviewData.patient.full_name}</span>
                 {overviewData.patient.gender && (
                   <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium">
@@ -780,8 +816,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
       {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS */}
       {selectedPatientId ? (
-        <div className="bg-white border-b border-slate-200 px-6 overflow-x-auto shrink-0 scrollbar-none">
-          <div className="max-w-7xl mx-auto flex items-center gap-1 py-2">
+        <div className="bg-white border-b border-slate-200 px-3 sm:px-6 shrink-0">
+          <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-2`}>
             {[
               { id: 'overview', label: 'Visão Geral', icon: Layers },
               { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
@@ -800,6 +836,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <button
                   key={tab.id}
                   type="button"
+                  data-active={isActive ? 'true' : 'false'}
                   data-tour={`tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
@@ -2891,12 +2928,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={returnForm.touchup_required}
-                    onChange={e => setReturnForm({ ...returnForm, touchup_required: e.target.checked })}
-                    className="rounded text-rose-600"
-                  />
+                  <ClinicalBooleanSelect value={returnForm.touchup_required}
+                    onChange={value => setReturnForm({ ...returnForm, touchup_required: value })} />
                   <span>Retoque necessário ou realizado?</span>
                 </label>
 

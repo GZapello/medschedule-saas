@@ -1,3 +1,4 @@
+import { ClinicalPainScale } from '../clinical/ClinicalPainScale';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { PostureGait } from '../clinical/PostureGait';
 import React, { useState, useEffect, lazy, Suspense } from 'react';
@@ -137,9 +138,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   onFinishConsultation
 }) => {
   const { showToast } = useToast();
-  const completion = useConsultationCompletion(onFinishConsultation);
+  const { currentUser } = useAuth();
+
 
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  const completion = useConsultationCompletion(onFinishConsultation, selectedPatientId + ':' + (initialAppointmentId || ''));
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState<boolean>(false);
@@ -425,27 +428,27 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     });
   }, [selectedPatientId]);
 
-  const loadPatientData = async (patId: string) => {
+  const loadPatientData = async (patId: string, restoreClinical = false) => {
     try {
       setLoading(true);
-      const [assessRes, evolRes] = await Promise.allSettled([
-        ApiClient.get<any[]>(`/v1/physiotherapy/assessments/patient/${patId}`),
-        ApiClient.get<any[]>(`/v1/physiotherapy/evolutions/patient/${patId}`)
-      ]);
-      if (!isCurrentClinicalContext()) return;
-
-      if (assessRes.status === 'fulfilled' && Array.isArray(assessRes.value) && assessRes.value.length > 0) {
-        const latest = assessRes.value[0];
-        if (latest.chief_complaint) setChiefComplaint(latest.chief_complaint);
-        if (latest.hpi) setHpi(latest.hpi);
-        if (latest.past_medical_history) setPastMedicalHistory(latest.past_medical_history);
-        if (latest.medical_diagnosis) setMedicalDiagnosis(latest.medical_diagnosis);
-        if (latest.physio_diagnosis) setPhysioDiagnosis(latest.physio_diagnosis);
-        if (latest.pain_score !== undefined) setPainScore(latest.pain_score);
-        if (latest.pain_location) setPainLocation(latest.pain_location);
-        if (latest.pain_characteristics) setPainCharacteristics(latest.pain_characteristics);
-        if (latest.body_map_json) setBodyMapJson(latest.body_map_json);
-        if (latest.body_map_image) setBodyMapImage(latest.body_map_image);
+      // History stays available in its own views. A new encounter is populated
+      // only from its draft or an explicitly selected assessment.
+      if (restoreClinical) {
+        const previous = await ApiClient.get<any[]>(`/v1/physiotherapy/assessments/patient/${patId}`);
+        if (!isCurrentClinicalContext()) return;
+        const latest = previous[0];
+        if (latest) {
+          setChiefComplaint(latest.chief_complaint ?? '');
+          setHpi(latest.hpi ?? '');
+          setPastMedicalHistory(latest.past_medical_history ?? '');
+          setMedicalDiagnosis(latest.medical_diagnosis ?? '');
+          setPhysioDiagnosis(latest.physio_diagnosis ?? '');
+          setPainScore(latest.pain_score ?? '');
+          setPainLocation(latest.pain_location ?? '');
+          setPainCharacteristics(latest.pain_characteristics ?? '');
+          setBodyMapJson(latest.body_map_json ?? '');
+          setBodyMapImage(latest.body_map_image ?? '');
+        }
       }
       await Promise.allSettled([
         loadRegionalSummary(patId),
@@ -511,9 +514,10 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
     try {
       setSaving(true);
-      await completion.save('/v1/physiotherapy/consultations/finish', {
+      if (!await completion.save('/v1/physiotherapy/consultations/finish', {
         patientId: selectedPatientId,
         patientName: selectedPatient?.full_name,
+        professionalName: currentUser?.name,
         appointmentId: initialAppointmentId || null,
         moduleType: 'ZemdaFisio',
         title: consultationTitle,
@@ -549,7 +553,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
           reassessmentDate
         },
         homeExercisesData: homeExercises
-      });
+      })) return;
       await autosave.clearDraft();
       showToast('Atendimento de fisioterapia finalizado com sucesso no prontuário!', 'success');
     } catch (err: any) {
@@ -594,6 +598,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
         {selectedPatientId && (
           <ClinicalQuickHeaderActions
+            onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
@@ -851,24 +856,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
                 {/* Escala EVA */}
                 <div className="p-4 bg-rose-50/50 border border-rose-100 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800">Escala Visual Analógica (EVA):</span>
-                    <span className="text-base font-extrabold text-rose-700">{painScore === '' ? 'Não avaliado' : `${painScore} / 10`}</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={painScore}
-                    onChange={e => setPainScore(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full accent-rose-600 cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-slate-400 font-bold">
-                    <span>0: Sem dor</span>
-                    <span>3: Leve</span>
-                    <span>7: Forte</span>
-                    <span>10: Insuportável</span>
-                  </div>
+                  <ClinicalPainScale value={painScore} onChange={value => setPainScore(value ?? '')} />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1728,7 +1716,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3.5 bg-teal-50/50 border border-teal-200 rounded-xl text-xs">
                     <span className="font-bold text-teal-900 block mb-1">Dor & EVA</span>
-                    <p className="text-teal-700">EVA {painScore}/10 ({painLocation || 'Sem localização'})</p>
+                    <p className="text-teal-700">{painScore === '' ? 'EVA não avaliada' : `EVA ${painScore}/10`} ({painLocation || 'Sem localização'})</p>
                   </div>
                   <div className="p-3.5 bg-teal-50/50 border border-teal-200 rounded-xl text-xs">
                     <span className="font-bold text-teal-900 block mb-1">Plano RBPF</span>

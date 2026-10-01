@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+const source=fs.readFileSync(__dirname+'/src/components/clinical/useClinicalReview.tsx','utf8');
+const ast=ts.createSourceFile('review.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const fn=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text==='populatedClinicalData');
+const context={};vm.runInNewContext(ts.transpile(fn.getText(ast).replace('export ',''))+';globalThis.clean=populatedClinicalData;',context);
+const clean=v=>JSON.parse(JSON.stringify(context.clean(v))||'null');
+assert.deepEqual(clean({zero:0,negative:false,empty:'',missing:null}),{zero:0,negative:false});
+assert.equal(clean({name:'Reference test',result:'not_tested',notes:''}),null);
+assert.equal(clean({joint:'Shoulder',normalRange:'180',right:'',left:''}),null);
+assert.equal(clean({group:'Strength',rightGrade:'',leftGrade:''}),null);
+assert.deepEqual(clean({group:'Strength',rightGrade:0,leftGrade:''}),{group:'Strength',rightGrade:0});
+assert.deepEqual(clean({result:'not_tested',notes:'Not performed because of recorded limitation'}),{notes:'Not performed because of recorded limitation'});
+assert.deepEqual(clean({tests:[{name:'Unassessed',score:null},{name:'Assessed',score:0}]}),{tests:[{name:'Assessed',score:0}]});
+console.log('PASS clinical review: no unassessed catalog rows, explicit zero/false and documented limitations preserved.');

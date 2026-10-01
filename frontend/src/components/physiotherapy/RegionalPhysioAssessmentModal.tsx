@@ -1,3 +1,4 @@
+import { ClinicalPainScale } from '../clinical/ClinicalPainScale';
 import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { ClinicalScales } from '../clinical/ClinicalScales';
 import React, { useState, useEffect } from 'react';
@@ -357,76 +358,15 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
           {/* TAB 1: DOR (EVA) */}
           {activeTab === 'pain' && (
             <div className="space-y-6 animate-in fade-in">
-              <div className="p-4 bg-rose-50/60 border border-rose-100 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <AlertCircle className="w-4 h-4 text-rose-600" /> Escala Visual Analógica (EVA Geral):
-                  </span>
-                  <span className="text-lg font-black text-rose-700">{pain.score === undefined ? 'Não avaliado' : pain.score + ' / 10'}</span>
-                </div>
-                <input
-                  type="number"
-                  min="0"
-                  max="10"
-                  value={pain.score ?? ''}
-                  onChange={e => setPain({ ...pain, score: e.target.value === '' ? undefined : Number(e.target.value) })}
-                  className="w-full p-2 border border-slate-200 rounded-lg"
-                />
-                <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
-                  <span>0: Sem dor</span>
-                  <span>3: Leve</span>
-                  <span>5: Moderada</span>
-                  <span>8: Intensa</span>
-                  <span>10: Insuportável</span>
-                </div>
+              <div className="p-4 bg-rose-50/60 border border-rose-100 rounded-xl">
+                <ClinicalPainScale label="EVA Geral" value={pain.score} onChange={score => setPain(previous => ({ ...previous, score }))} />
               </div>
-
-              {/* Sub-escores: Repouso, Movimento e Palpação */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
-                    <span>Em Repouso:</span>
-                    <span className="text-rose-600 font-black">{pain.restScore === undefined ? 'Não avaliado' : pain.restScore + ' / 10'}</span>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                {(['restScore', 'movementScore', 'palpationScore'] as const).map((key, index) => (
+                  <div key={key} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <ClinicalPainScale label={['Em repouso', 'Ao movimento', 'À palpação'][index]} value={pain[key]} onChange={value => setPain(previous => ({ ...previous, [key]: value }))} />
                   </div>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={pain.restScore ?? ''}
-                    onChange={e => setPain({ ...pain, restScore: e.target.value === '' ? undefined : Number(e.target.value) })}
-                    className="w-full accent-rose-500 cursor-pointer"
-                  />
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
-                    <span>Ao Movimento:</span>
-                    <span className="text-rose-600 font-black">{pain.movementScore === undefined ? 'Não avaliado' : pain.movementScore + ' / 10'}</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={pain.movementScore ?? ''}
-                    onChange={e => setPain({ ...pain, movementScore: e.target.value === '' ? undefined : Number(e.target.value) })}
-                    className="w-full accent-rose-500 cursor-pointer"
-                  />
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
-                    <span>À Palpação:</span>
-                    <span className="text-rose-600 font-black">{pain.palpationScore === undefined ? 'Não avaliado' : pain.palpationScore + ' / 10'}</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={pain.palpationScore ?? ''}
-                    onChange={e => setPain({ ...pain, palpationScore: e.target.value === '' ? undefined : Number(e.target.value) })}
-                    className="w-full accent-rose-500 cursor-pointer"
-                  />
-                </div>
+                ))}
               </div>
 
               {/* Características e Duração */}

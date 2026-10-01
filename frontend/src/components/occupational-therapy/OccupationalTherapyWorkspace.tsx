@@ -70,8 +70,9 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   const { showToast } = useToast();
 
   // Pacientes e Seleção
-  const completion = useConsultationCompletion(onFinishConsultation);
+
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  const completion = useConsultationCompletion(onFinishConsultation, selectedPatientId + ':' + (initialAppointmentId || ''));
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
@@ -285,7 +286,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   }, [selectedPatientId]);
 
   // Carrega dados de TO do paciente
-  const loadPatientData = async (patId: string) => {
+  const loadPatientData = async (patId: string, restoreClinical = false) => {
     try {
       setLoading(true);
       const [profRes, adlRes, sensRes, motRes, planRes, astRes] = await Promise.allSettled([
@@ -298,20 +299,20 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
       ]);
       if (!isCurrentClinicalContext()) return;
 
-      if (profRes.status === 'fulfilled' && profRes.value && profRes.value.profile) {
+      if (restoreClinical && profRes.status === 'fulfilled' && profRes.value && profRes.value.profile) {
         setProfileData(profRes.value.profile);
       }
       if (adlRes.status === 'fulfilled' && Array.isArray(adlRes.value)) {
         setAdlList(adlRes.value);
-        if (adlRes.value.length > 0 && adlRes.value[0].items) {
+        if (restoreClinical && adlRes.value.length > 0 && adlRes.value[0].items) {
           setAdlItems(adlRes.value[0].items);
         }
       }
-      if (sensRes.status === 'fulfilled' && sensRes.value) {
+      if (restoreClinical && sensRes.status === 'fulfilled' && sensRes.value) {
         if (sensRes.value.systems) setSensorySystems(sensRes.value.systems);
         if (sensRes.value.notes) setSensoryNotes(sensRes.value.notes);
       }
-      if (motRes.status === 'fulfilled' && motRes.value && motRes.value.data) {
+      if (restoreClinical && motRes.status === 'fulfilled' && motRes.value && motRes.value.data) {
         setMotorCognitiveData(motRes.value.data);
       }
       if (planRes.status === 'fulfilled' && Array.isArray(planRes.value)) {
@@ -479,8 +480,11 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
 
     try {
       setSaving(true);
-      await completion.save('/v1/occupational-therapy/consultations/finish', {
+      if (!await completion.save('/v1/occupational-therapy/consultations/finish', {
         patientId: selectedPatientId,
+        patientName: selectedPatient?.full_name || selectedPatient?.name,
+        professionalName: currentUser?.name,
+        moduleType: 'ZemdaTO',
         appointmentId: initialAppointmentId || null,
         title: consultationTitle,
         clinicalEvolution: consultationEvolution,
@@ -490,7 +494,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
         sensoryData: { systems: sensorySystems, notes: sensoryNotes },
         motorCognitiveData,
         treatmentPlanData: planForm, assistiveTechnologyData: assistiveForm
-      });
+      })) return;
       await autosave.clearDraft();
 
 
@@ -623,6 +627,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
 
         {selectedPatientId && (
           <ClinicalQuickHeaderActions
+            onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}

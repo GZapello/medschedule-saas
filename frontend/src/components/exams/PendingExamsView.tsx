@@ -216,7 +216,7 @@ export const PendingExamsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
@@ -237,7 +237,7 @@ export const PendingExamsView: React.FC = () => {
             setExpectedDate('');
             setShowNewModal(true);
           }}
-          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs self-start md:self-auto"
+          className="flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs self-start md:self-auto min-h-[40px]"
         >
           <Plus className="w-4 h-4" />
           Registrar Solicitação de Exame
@@ -278,7 +278,7 @@ export const PendingExamsView: React.FC = () => {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center gap-3">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
         <form onSubmit={handleSearchSubmit} className="flex-1 min-w-[200px] relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -286,14 +286,14 @@ export const PendingExamsView: React.FC = () => {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={`Buscar por exame, ${clientTermLabel.toLowerCase()} ou observação...`}
-            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 min-h-[38px]"
           />
         </form>
 
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}
-          className="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium text-slate-700"
+          className="w-full sm:w-auto border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium text-slate-700 min-h-[38px]"
         >
           <option value="">Todos os Status</option>
           <option value="waiting">Aguardando</option>
@@ -304,7 +304,7 @@ export const PendingExamsView: React.FC = () => {
         <select
           value={filterProfId}
           onChange={e => setFilterProfId(e.target.value)}
-          className="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium text-slate-700"
+          className="w-full sm:w-auto border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium text-slate-700 min-h-[38px]"
         >
           <option value="">Todos os Profissionais</option>
           {professionals.map(p => (
@@ -312,20 +312,20 @@ export const PendingExamsView: React.FC = () => {
           ))}
         </select>
 
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 w-full sm:w-auto">
           <span>De:</span>
           <input
             type="date"
             value={startDate}
             onChange={e => setStartDate(e.target.value)}
-            className="border border-slate-200 rounded-xl px-2 py-1.5 bg-slate-50 text-xs"
+            className="flex-1 sm:flex-initial border border-slate-200 rounded-xl px-2 py-1.5 bg-slate-50 text-xs min-h-[38px]"
           />
           <span>Até:</span>
           <input
             type="date"
             value={endDate}
             onChange={e => setEndDate(e.target.value)}
-            className="border border-slate-200 rounded-xl px-2 py-1.5 bg-slate-50 text-xs"
+            className="flex-1 sm:flex-initial border border-slate-200 rounded-xl px-2 py-1.5 bg-slate-50 text-xs min-h-[38px]"
           />
         </div>
       </div>
@@ -484,10 +484,10 @@ export const PendingExamsView: React.FC = () => {
 
       {/* Modal Novo Exame */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Registrar Solicitação de Exame</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">Registrar Solicitação de Exame</h3>
               <button onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">✕</button>
             </div>
 
@@ -527,7 +527,7 @@ export const PendingExamsView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Data da Solicitação *</label>
                   <input
@@ -570,11 +570,11 @@ export const PendingExamsView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
@@ -582,7 +582,7 @@ export const PendingExamsView: React.FC = () => {
                   type="button"
                   onClick={handleCreateExam}
                   disabled={saving}
-                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50"
+                  className="w-full sm:w-auto px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 min-h-[40px]"
                 >
                   {saving ? 'Salvando...' : 'Salvar Exame'}
                 </button>
@@ -594,10 +594,10 @@ export const PendingExamsView: React.FC = () => {
 
       {/* Modal Dar Baixa / Recebido */}
       {receivingExam && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Dar Baixa no Exame</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">Dar Baixa no Exame</h3>
               <button onClick={() => setReceivingExam(null)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">✕</button>
             </div>
 
@@ -628,11 +628,11 @@ export const PendingExamsView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setReceivingExam(null)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
@@ -640,7 +640,7 @@ export const PendingExamsView: React.FC = () => {
                   type="button"
                   onClick={handleMarkReceived}
                   disabled={saving}
-                  className="px-6 py-2 font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs disabled:opacity-50"
+                  className="w-full sm:w-auto px-6 py-2 font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs disabled:opacity-50 min-h-[40px]"
                 >
                   {saving ? 'Gravando...' : 'Confirmar Recebimento'}
                 </button>
@@ -652,10 +652,10 @@ export const PendingExamsView: React.FC = () => {
 
       {/* Modal Editar Exame */}
       {editingExam && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Editar Exame</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">Editar Exame</h3>
               <button onClick={() => setEditingExam(null)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">✕</button>
             </div>
 
@@ -684,7 +684,7 @@ export const PendingExamsView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Data da Solicitação *</label>
                   <input
@@ -726,11 +726,11 @@ export const PendingExamsView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setEditingExam(null)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
@@ -738,7 +738,7 @@ export const PendingExamsView: React.FC = () => {
                   type="button"
                   onClick={handleSaveEdit}
                   disabled={saving}
-                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50"
+                  className="w-full sm:w-auto px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 min-h-[40px]"
                 >
                   {saving ? 'Salvando...' : 'Salvar Alterações'}
                 </button>

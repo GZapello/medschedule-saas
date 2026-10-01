@@ -11,6 +11,7 @@ import { ApiClient } from './api/client';
 const Navbar = lazyWithRetry(() => import('./components/common/Navbar').then(module => ({ default: module.Navbar })), 'Navbar');
 const Sidebar = lazyWithRetry(() => import('./components/common/Sidebar').then(module => ({ default: module.Sidebar })), 'Sidebar');
 const AuthPage = lazyWithRetry(() => import('./components/auth/AuthPage').then(module => ({ default: module.AuthPage })), 'AuthPage');
+const CreateClinicModal = lazyWithRetry(() => import('./components/auth/CreateClinicModal').then(module => ({ default: module.CreateClinicModal })), 'CreateClinicModal');
 const DashboardView = lazyWithRetry(() => import('./components/dashboard/DashboardView').then(module => ({ default: module.DashboardView })), 'DashboardView');
 const CalendarView = lazyWithRetry(() => import('./components/calendar/CalendarView').then(module => ({ default: module.CalendarView })), 'CalendarView');
 const PatientsView = lazyWithRetry(() => import('./components/patients/PatientsView').then(module => ({ default: module.PatientsView })), 'PatientsView');
@@ -249,7 +250,8 @@ const AppContent: React.FC = () => {
     isZemdaEstetic,
     hasCapability,
     isSandboxSession,
-    exitSandboxSession
+    exitSandboxSession,
+    logout
   } = useAuth();
 
   const { summary: billingSummary } = useBillingSummary();
@@ -1164,6 +1166,19 @@ const AppContent: React.FC = () => {
     );
   }
 
+  // Se o usuário estiver autenticado porém em estado de onboarding pendente, renderiza o fluxo de onboarding obrigatório
+  if (currentUser.role !== 'superadmin' && currentUser.onboardingStatus && currentUser.onboardingStatus !== 'active') {
+    return (
+      <CreateClinicModal
+        isOpen={true}
+        onClose={() => {
+          logout();
+        }}
+        presentation="page"
+      />
+    );
+  }
+
   if (currentUser.role !== 'superadmin' && billingSummary && !billingSummary.canOperate) return <BillingView />;
   if (currentView === 'subscription' || window.location.pathname === '/assinatura') return <BillingView />;
 
@@ -1231,7 +1246,7 @@ const AppContent: React.FC = () => {
         />
 
         {/* Main View Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0">
           {currentView === 'dashboard' && (
             <DashboardView
               onNavigate={handleNavigateView}

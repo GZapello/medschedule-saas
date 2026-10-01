@@ -86,8 +86,9 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   const { showToast } = useToast();
 
   // Pacientes e Seleção
-  const completion = useConsultationCompletion(onFinishConsultation);
+
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  const completion = useConsultationCompletion(onFinishConsultation, selectedPatientId + ':' + (initialAppointmentId || ''));
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
 
   // Switcher de Área da Fonoaudiologia
@@ -400,7 +401,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   }, [selectedPatientId]);
 
   // Carrega dados fonoaudiológicos
-  const loadPatientData = async (patId: string) => {
+  const loadPatientData = async (patId: string, restoreClinical = false) => {
     try {
       setLoading(true);
       const [anaRes, langRes, phonRes, oroRes, voiRes, fluRes, dysRes, audRes, planRes, compRes] = await Promise.allSettled([
@@ -417,22 +418,22 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
       ]);
       if (!isCurrentClinicalContext()) return;
 
-      if (anaRes.status === 'fulfilled' && anaRes.value && anaRes.value.data) setAnamnesisData(anaRes.value.data);
-      if (langRes.status === 'fulfilled' && langRes.value && langRes.value.data) setLanguageData(langRes.value.data);
-      if (phonRes.status === 'fulfilled' && phonRes.value) {
+      if (restoreClinical && anaRes.status === 'fulfilled' && anaRes.value && anaRes.value.data) setAnamnesisData(anaRes.value.data);
+      if (restoreClinical && langRes.status === 'fulfilled' && langRes.value && langRes.value.data) setLanguageData(langRes.value.data);
+      if (restoreClinical && phonRes.status === 'fulfilled' && phonRes.value) {
         if (Array.isArray(phonRes.value.phonemes)) setPhonemesList(phonRes.value.phonemes);
         if (phonRes.value.referredBy) setSpeechReferredBy(phonRes.value.referredBy);
         if (phonRes.value.coarticulationBreakdown) setCoarticulationBreakdown(phonRes.value.coarticulationBreakdown);
       }
-      if (oroRes.status === 'fulfilled' && oroRes.value && oroRes.value.data) setOrofacialData(oroRes.value.data);
-      if (voiRes.status === 'fulfilled' && voiRes.value && voiRes.value.data) setVoiceData(voiRes.value.data);
-      if (fluRes.status === 'fulfilled' && fluRes.value && fluRes.value.data) setFluencyData(fluRes.value.data);
-      if (dysRes.status === 'fulfilled' && dysRes.value && dysRes.value.data) setDysphagiaData(dysRes.value.data);
+      if (restoreClinical && oroRes.status === 'fulfilled' && oroRes.value && oroRes.value.data) setOrofacialData(oroRes.value.data);
+      if (restoreClinical && voiRes.status === 'fulfilled' && voiRes.value && voiRes.value.data) setVoiceData(voiRes.value.data);
+      if (restoreClinical && fluRes.status === 'fulfilled' && fluRes.value && fluRes.value.data) setFluencyData(fluRes.value.data);
+      if (restoreClinical && dysRes.status === 'fulfilled' && dysRes.value && dysRes.value.data) setDysphagiaData(dysRes.value.data);
       if (audRes.status === 'fulfilled' && Array.isArray(audRes.value)) setAudiologyList(audRes.value);
       if (planRes.status === 'fulfilled' && Array.isArray(planRes.value)) {
         setTreatmentPlans(planRes.value);
         const latestPlan = planRes.value[0];
-        if (latestPlan) {
+        if (restoreClinical && latestPlan) {
           if (latestPlan.referredBy) setPlanReferredBy(latestPlan.referredBy);
           if (Array.isArray(latestPlan.goalsStructured) && latestPlan.goalsStructured.length > 0) {
             setStructuredGoals(latestPlan.goalsStructured);
@@ -653,8 +654,11 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
     try {
       setSaving(true);
-      await completion.save('/v1/speech-therapy/consultations/finish', {
+      if (!await completion.save('/v1/speech-therapy/consultations/finish', {
         patientId: selectedPatientId,
+        patientName: selectedPatient?.full_name || selectedPatient?.name,
+        professionalName: currentUser?.name,
+        moduleType: 'ZemdaFono',
         appointmentId: initialAppointmentId || null,
         title: consultationTitle,
         clinicalEvolution: consultationEvolution,
@@ -679,7 +683,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
         audiologyData,
         audiologyRecordId: currentAudiologyRecordId || undefined,
         audioData: audioBlobUrl
-      });
+      })) return;
       await autosave.clearDraft();
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar atendimento de Fono', 'error');
@@ -777,6 +781,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
           {selectedPatientId && (
             <ClinicalQuickHeaderActions
+            onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
               autosaveStatus={autosave.autosaveStatus}
               lastSavedTime={autosave.lastSavedTime}
               onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}

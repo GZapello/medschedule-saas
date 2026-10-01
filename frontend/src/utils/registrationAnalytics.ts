@@ -179,9 +179,9 @@ export function trackCompletedRegistration(
   }
 }
 
-/** 9. signup_error: Disparar quando ocorrer erro durante o cadastro (sem dados pessoais). */
+/** 9. signup_error: Disparar quando ocorrer erro de requisição ou backend durante o cadastro (sem dados pessoais). */
 export function trackSignupError(params: {
-  step: 'form' | 'initial_data' | 'profession' | 'security' | 'verify_email' | 'plans' | string;
+  step: 'form' | 'initial_data' | 'profession' | 'security' | 'verify_email' | 'plans' | 'profile' | string;
   errorCode?: string;
   errorType?: 'validation' | 'api_error' | 'server_error' | 'network_error' | 'unknown';
   planCode?: string;
@@ -208,6 +208,29 @@ export function trackSignupError(params: {
   } catch {}
 }
 
+/** 9.1 signup_validation_error: Disparar exclusivamente para falhas de validação de formulário (antes da chamada ao backend). */
+export function trackSignupValidationError(params: {
+  step: 'initial_data' | 'profession' | 'security' | 'verify_email' | 'plans' | 'profile' | string;
+  field?: string;
+  errorCode?: string;
+}): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (getStoredCookieConsent()?.analytics !== true) return;
+
+  const payload: Record<string, any> = {
+    send_to: GA_MEASUREMENT_ID,
+    step: params.step,
+    field: params.field ? String(params.field).slice(0, 30) : undefined,
+    error_code: sanitizeErrorCode(params.errorCode || 'VALIDATION_FAILED'),
+    device_context: getDeviceContext(),
+    page_location: 'https://zemda.com.br/cadastro'
+  };
+
+  try {
+    window.gtag('event', 'signup_validation_error', payload);
+  } catch {}
+}
+
 /** 10. login_started: Separar o início do login do cadastro para não misturar com form_start. */
 export function trackLoginStarted(params?: { method?: string }): void {
   if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
@@ -225,3 +248,130 @@ export function trackLoginStarted(params?: { method?: string }): void {
     window.gtag('event', 'login_started', payload);
   } catch {}
 }
+
+/** 11. signup_completed: Disparar imediatamente após a criação bem-sucedida da conta (etapa de segurança concluída). */
+export function trackSignupCompleted(meta?: { professionCode?: string; userId?: string }): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (getStoredCookieConsent()?.analytics !== true) return;
+
+  const payload: Record<string, any> = {
+    send_to: GA_MEASUREMENT_ID,
+    signup_step: 'signup_completed',
+    device_context: getDeviceContext(),
+    page_location: 'https://zemda.com.br/cadastro',
+    page_title: 'Zemda • Conta Criada'
+  };
+  if (meta?.professionCode) payload.profession_code = String(meta.professionCode).slice(0, 50);
+
+  try {
+    window.gtag('event', 'signup_completed', payload);
+  } catch {}
+}
+
+/** 12. email_verification_started: Disparar ao carregar a tela de verificação de e-mail OTP. */
+export function trackEmailVerificationStarted(meta?: { professionCode?: string }): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (getStoredCookieConsent()?.analytics !== true) return;
+
+  const payload: Record<string, any> = {
+    send_to: GA_MEASUREMENT_ID,
+    signup_step: 'verify_email',
+    device_context: getDeviceContext(),
+    page_location: 'https://zemda.com.br/cadastro'
+  };
+  if (meta?.professionCode) payload.profession_code = String(meta.professionCode).slice(0, 50);
+
+  try {
+    window.gtag('event', 'email_verification_started', payload);
+  } catch {}
+}
+
+/** 13. email_verified: Disparar quando o OTP for validado com sucesso pelo backend. */
+export function trackEmailVerified(meta?: { professionCode?: string }): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (getStoredCookieConsent()?.analytics !== true) return;
+
+  const payload: Record<string, any> = {
+    send_to: GA_MEASUREMENT_ID,
+    signup_step: 'verify_email_success',
+    device_context: getDeviceContext(),
+    page_location: 'https://zemda.com.br/cadastro'
+  };
+  if (meta?.professionCode) payload.profession_code = String(meta.professionCode).slice(0, 50);
+
+  try {
+    window.gtag('event', 'email_verified', payload);
+  } catch {}
+}
+
+/** 14. plan_selected: Disparar quando um plano for selecionado no onboarding. */
+export function trackPlanSelected(planCode: string, meta?: { isTrial?: boolean; professionCode?: string }): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (getStoredCookieConsent()?.analytics !== true) return;
+
+  const payload: Record<string, any> = {
+    send_to: GA_MEASUREMENT_ID,
+    plan_code: String(planCode).slice(0, 30),
+    is_trial: !!meta?.isTrial,
+    signup_step: 'plans',
+    device_context: getDeviceContext()
+  };
+  if (meta?.professionCode) payload.profession_code = String(meta.professionCode).slice(0, 50);
+
+  try {
+    window.gtag('event', 'plan_selected', payload);
+  } catch {}
+}
+
+/** 15. trial_started: Disparar quando o período de teste for iniciado. */
+export function trackTrialStarted(planCode: string, trialPeriodDays?: number): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (getStoredCookieConsent()?.analytics !== true) return;
+
+  const payload: Record<string, any> = {
+    send_to: GA_MEASUREMENT_ID,
+    plan_code: String(planCode).slice(0, 30),
+    trial_period_days: trialPeriodDays || 7,
+    device_context: getDeviceContext()
+  };
+
+  try {
+    window.gtag('event', 'trial_started', payload);
+  } catch {}
+}
+
+/** 16. professional_profile_completed: Disparar ao salvar especialidade e áreas de atuação. */
+export function trackProfessionalProfileCompleted(meta?: { professionCode?: string }): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (getStoredCookieConsent()?.analytics !== true) return;
+
+  const payload: Record<string, any> = {
+    send_to: GA_MEASUREMENT_ID,
+    signup_step: 'profile_completed',
+    device_context: getDeviceContext()
+  };
+  if (meta?.professionCode) payload.profession_code = String(meta.professionCode).slice(0, 50);
+
+  try {
+    window.gtag('event', 'professional_profile_completed', payload);
+  } catch {}
+}
+
+/** 17. onboarding_completed: Disparar ao concluir todas as etapas do onboarding. */
+export function trackOnboardingCompleted(meta?: { planCode?: string; professionCode?: string }): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (getStoredCookieConsent()?.analytics !== true) return;
+
+  const payload: Record<string, any> = {
+    send_to: GA_MEASUREMENT_ID,
+    signup_step: 'completed',
+    device_context: getDeviceContext()
+  };
+  if (meta?.planCode) payload.plan_code = String(meta.planCode).slice(0, 30);
+  if (meta?.professionCode) payload.profession_code = String(meta.professionCode).slice(0, 50);
+
+  try {
+    window.gtag('event', 'onboarding_completed', payload);
+  } catch {}
+}
+

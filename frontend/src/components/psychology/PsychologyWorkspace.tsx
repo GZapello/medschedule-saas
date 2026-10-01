@@ -1,3 +1,4 @@
+import { useClinicalReview } from '../clinical/useClinicalReview';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
@@ -739,6 +740,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
     setShowFinishConfirmModal(true);
   };
 
+  const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
   const confirmAndFinishConsultation = async () => {
     if (!selectedPatientId) return;
 
@@ -754,7 +756,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       // Salva rascunho mais recente antes de finalizar
       await performSaveDraft();
 
-      const res: any = await ApiClient.post('/v1/psychology/consultations/finish', {
+      const finalPayload = {
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId,
         sessionNumber: currentSession.sessionNumber,
@@ -770,7 +772,9 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         referrals: currentSession.referrals,
         nextSessionPlan: currentSession.nextSessionPlan,
         sessionRiskNotes: currentSession.sessionRiskNotes
-      });
+      };
+      if (!await review.confirm({ ...finalPayload, patientName: selectedPatient?.full_name || selectedPatient?.name, professionalName: currentUser?.name, moduleType: 'ZemdaPsico' })) return;
+      const res: any = await ApiClient.post('/v1/psychology/consultations/finish', finalPayload);
 
       setShowFinishConfirmModal(false);
       setIsDirty(false);
@@ -826,7 +830,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   const hasAssessmentBasis = assessmentsList.length > 0 || !!mentalState.criticalJudgment;
 
-  return (
+  return <>{review.dialog}{(
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {/* CABEÇALHO DO MÓDULO ZEMDAPSICO */}
       <ProfessionalModuleHeader
@@ -2378,5 +2382,5 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         </div>
       )}
     </div>
-  );
+  )}</>;
 };

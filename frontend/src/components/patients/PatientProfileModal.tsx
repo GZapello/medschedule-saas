@@ -598,14 +598,14 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl w-full max-w-5xl shadow-2xl border border-slate-200 flex flex-col max-h-[95vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Top Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 to-teal-400 flex items-center justify-center text-white font-black text-2xl shadow-md">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 sm:p-6 flex flex-col sm:flex-row items-start justify-between gap-4">
+          <div className="flex items-start gap-3 sm:gap-4 min-w-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 rounded-2xl bg-gradient-to-tr from-indigo-500 to-teal-400 flex items-center justify-center text-white font-black text-xl sm:text-2xl shadow-md">
               {patient.full_name?.charAt(0) || 'P'}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-2xl font-bold tracking-tight text-white">{patient.full_name}</h2>
+                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white break-words">{patient.full_name}</h2>
                 {patient.is_child === 1 && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
                     <Baby className="w-3.5 h-3.5" /> Pediátrico
@@ -623,7 +623,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-4 text-xs text-slate-300 mt-1 flex-wrap">
+              <div className="flex items-center gap-2 sm:gap-4 text-xs text-slate-300 mt-1 flex-wrap">
                 <span>CPF: {patient.cpf || 'Não informado'}</span>
                 <span>Nascimento: {patient.birth_date || '—'}</span>
                 <span>Tel: {patient.phone}</span>
@@ -632,7 +632,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end shrink-0">
             <button
               onClick={() => setIsEditModalOpen(true)}
               title="Editar Cadastro do Paciente"
@@ -659,7 +659,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="bg-slate-50 border-b border-slate-200 px-6 flex items-center gap-2 overflow-x-auto text-xs font-semibold text-slate-600">
+        <div className="bg-slate-50 border-b border-slate-200 px-3 sm:px-6 flex items-center gap-2 overflow-x-auto text-xs font-semibold text-slate-600 no-scrollbar scroll-smooth">
           {[
             { id: 'overview', label: 'Visão Geral', icon: User },
             { id: 'timeline', label: 'Linha do Tempo 360°', icon: Clock },
@@ -691,7 +691,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 py-3.5 px-3 border-b-2 font-bold transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2 py-3.5 px-3 border-b-2 font-bold transition-all whitespace-nowrap shrink-0 ${
                   active
                     ? 'border-indigo-600 text-indigo-600 bg-white shadow-2xs rounded-t-xl'
                     : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -705,7 +705,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
         </div>
 
         {/* Tab Content Container */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
           {/* TAB 1: VISÃO GERAL */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
@@ -2292,7 +2292,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 pt-1 text-slate-700">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-slate-700">
                         {item.weight && <div><strong>Peso:</strong> {item.weight} kg</div>}
                         {item.height && <div><strong>Altura:</strong> {item.height} cm</div>}
                         {item.waist_circ && <div><strong>Cintura:</strong> {item.waist_circ} cm</div>}

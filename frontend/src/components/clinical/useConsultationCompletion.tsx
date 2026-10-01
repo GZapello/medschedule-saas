@@ -1,3 +1,4 @@
+import { useClinicalReview } from './useClinicalReview';
 import React, { useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
@@ -5,7 +6,8 @@ import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
 import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
 import { CheckCircle2, FileText, Printer, X, Eye } from 'lucide-react';
 
-export function useConsultationCompletion(onFinished?: () => void) {
+export function useConsultationCompletion(onFinished?: () => void, contextKey?: string) {
+  const review = useClinicalReview(contextKey);
   const [receipt, setReceipt] = useState<any>(null);
   const [lastPayload, setLastPayload] = useState<any>(null);
 
@@ -15,6 +17,7 @@ export function useConsultationCompletion(onFinished?: () => void) {
   const [showRecordsModal, setShowRecordsModal] = useState<boolean>(false);
 
   const save = async (endpoint: string, payload: any) => {
+    if (!await review.confirm(payload)) return false;
     setLastPayload(payload);
     let appointmentId = payload.appointmentId;
 
@@ -44,6 +47,7 @@ export function useConsultationCompletion(onFinished?: () => void) {
       throw new Error('Este atendimento já foi finalizado. Abra o prontuário para consultar o histórico.');
     }
     setReceipt({ ...result, appointmentId });
+    return true;
   };
 
   const handleFinishAll = () => {
@@ -56,6 +60,7 @@ export function useConsultationCompletion(onFinished?: () => void) {
 
   const dialog = (
     <>
+      {review.dialog}
       {receipt && (
         <ConsultationPaymentModal
           appointmentId={receipt.appointmentId}

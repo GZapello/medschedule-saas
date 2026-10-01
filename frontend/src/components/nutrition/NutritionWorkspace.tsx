@@ -99,10 +99,11 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 }) => {
   const { currentUser, currentTenant } = useAuth();
   const { showToast } = useToast();
-  const completion = useConsultationCompletion(onFinishConsultation);
+
 
   // Pacientes e Seleção
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  const completion = useConsultationCompletion(onFinishConsultation, selectedPatientId + ':' + (initialAppointmentId || ''));
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState<boolean>(false);
@@ -343,7 +344,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     });
   }, [selectedPatientId]);
 
-  const loadPatientData = async (patId: string) => {
+  const loadPatientData = async (patId: string, restoreClinical = false) => {
     try {
       setLoading(true);
       const [assRes, bioRes, recRes, planRes, anaRes] = await Promise.allSettled([
@@ -357,7 +358,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
       if (assRes.status === 'fulfilled' && Array.isArray(assRes.value)) {
         setAssessments(assRes.value);
-        if (assRes.value.length > 0) {
+        if (restoreClinical && assRes.value.length > 0) {
           const latest = assRes.value[0];
           setAnthroForm({
             weight: latest.weight ? String(latest.weight) : '',
@@ -382,7 +383,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         setRecalls(recRes.value);
       }
 
-      if (planRes.status === 'fulfilled' && Array.isArray(planRes.value) && planRes.value.length > 0) {
+      if (restoreClinical && planRes.status === 'fulfilled' && Array.isArray(planRes.value) && planRes.value.length > 0) {
         const latestPlan = planRes.value[0];
         try {
           const parsedMeals = typeof latestPlan.meals_json === 'string' ? JSON.parse(latestPlan.meals_json) : latestPlan.meals_json;
@@ -401,12 +402,12 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         }
       }
 
-      if (anaRes.status === 'fulfilled' && anaRes.value) {
+      if (restoreClinical && anaRes.status === 'fulfilled' && anaRes.value) {
         const a = anaRes.value;
         setAnamnesisData({
-          digestiveHealth: a.digestive_health || 'regular',
+          digestiveHealth: a.digestive_health || '',
           bowelHabits: a.bowel_habits || '',
-          waterIntakeLiters: a.water_intake_liters ? String(a.water_intake_liters) : '2.0',
+          waterIntakeLiters: a.water_intake_liters != null ? String(a.water_intake_liters) : '',
           sleepQuality: a.sleep_quality || '',
           physicalActivity: a.physical_activity || '',
           foodAllergies: a.food_allergies || '',
@@ -865,9 +866,10 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
     try {
       setSaving(true);
-      await completion.save('/v1/nutrition/consultations/finish', {
+      if (!await completion.save('/v1/nutrition/consultations/finish', {
         patientId: selectedPatientId,
         patientName: selectedPatient?.full_name,
+        professionalName: currentUser?.name,
         appointmentId: initialAppointmentId || null,
         moduleType: 'ZemdaNutri',
         title: consultationTitle,
@@ -891,7 +893,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         anamnesisData,
         bioimpedanceData: bioForm,
         recallData: recallForm
-      });
+      })) return;
       await autosave.clearDraft();
       showToast('Consulta nutricional finalizada e gravada com sucesso!', 'success');
     } catch (err: any) {
@@ -943,6 +945,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
         {selectedPatientId && (
           <ClinicalQuickHeaderActions
+            onLoadSavedClinicalData={() => void loadPatientData(selectedPatientId, true)}
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}

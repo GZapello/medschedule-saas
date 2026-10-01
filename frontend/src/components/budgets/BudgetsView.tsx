@@ -215,10 +215,10 @@ export const BudgetsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl shrink-0">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Orçamentos & Propostas</h2>
@@ -238,7 +238,7 @@ export const BudgetsView: React.FC = () => {
             setNotes('');
             setShowNewModal(true);
           }}
-          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs self-start md:self-auto"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer text-xs w-full sm:w-auto min-h-[40px]"
         >
           <Plus className="w-4 h-4" />
           {activeTab === 'patient' ? `Novo Orçamento de ${clientTermLabel}` : 'Novo Orçamento de Insumos'}
@@ -246,10 +246,10 @@ export const BudgetsView: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar scroll-smooth">
         <button
           onClick={() => setActiveTab('patient')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'patient'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
@@ -260,7 +260,7 @@ export const BudgetsView: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveTab('supplier')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'supplier'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
@@ -272,8 +272,8 @@ export const BudgetsView: React.FC = () => {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center gap-3">
-        <div className="flex-1 min-w-[200px] relative">
+      <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div className="flex-1 min-w-0 relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -288,7 +288,7 @@ export const BudgetsView: React.FC = () => {
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}
-          className="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium text-slate-700"
+          className="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium text-slate-700 w-full sm:w-auto min-h-[38px]"
         >
           <option value="">Todos os Status</option>
           <option value="draft">Rascunho</option>
@@ -408,8 +408,8 @@ export const BudgetsView: React.FC = () => {
 
       {/* Modal Novo Orçamento */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">
                 {activeTab === 'patient' ? `Novo Orçamento de ${clientTermLabel}` : 'Novo Orçamento de Insumos / Fornecedor'}
@@ -429,7 +429,7 @@ export const BudgetsView: React.FC = () => {
                   />
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Fornecedor / Distribuidor *</label>
                     <input
@@ -466,8 +466,8 @@ export const BudgetsView: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-left text-xs">
+                <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[500px]">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold text-[10px]">
                       <tr>
                         <th className="p-2.5">Descrição do Item / Procedimento</th>
@@ -583,11 +583,11 @@ export const BudgetsView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
@@ -595,7 +595,7 @@ export const BudgetsView: React.FC = () => {
                   type="button"
                   onClick={handleCreateBudget}
                   disabled={saving}
-                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50"
+                  className="w-full sm:w-auto px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 min-h-[40px]"
                 >
                   {saving ? 'Gerando...' : 'Gerar Orçamento'}
                 </button>
@@ -607,8 +607,8 @@ export const BudgetsView: React.FC = () => {
 
       {/* Modal Visualização e Impressão Formato A4 */}
       {printBudgetData && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-8 shadow-2xl border border-slate-200 my-auto print:border-0 print:shadow-none print:m-0 print:max-w-none print:w-full">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto print:p-0 print:bg-white">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-4 sm:p-8 shadow-2xl border border-slate-200 my-auto max-h-[90vh] overflow-y-auto print:max-h-none print:overflow-visible print:border-0 print:shadow-none print:m-0 print:max-w-none print:w-full">
             {/* Barra de controle na tela (oculta na impressão) */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6 print:hidden">
               <div className="flex items-center gap-2">
@@ -646,7 +646,7 @@ export const BudgetsView: React.FC = () => {
               />
 
               {/* Dados do Paciente */}
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-slate-500">Paciente:</span>
                   <p className="font-bold text-slate-900 text-sm">{printBudgetData.budget.patient_name || 'Paciente'}</p>
@@ -724,7 +724,7 @@ export const BudgetsView: React.FC = () => {
               )}
 
               {/* Assinatura */}
-              <div className="pt-12 grid grid-cols-2 gap-8 text-center">
+              <div className="pt-8 sm:pt-12 grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 text-center">
                 <div className="border-t border-slate-400 pt-2">
                   <p className="font-bold text-slate-800">{printBudgetData.tenant?.trade_name || printBudgetData.tenant?.name || currentTenant?.trade_name || currentTenant?.name || 'Responsável da Clínica'}</p>
                   <p className="text-[10px] text-slate-400">Assinatura / Carimbo</p>

@@ -199,7 +199,7 @@ export const ProfessionalsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Equipe de Profissionais</h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -207,10 +207,10 @@ export const ProfessionalsView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <button
             onClick={() => setShowBlockModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all border border-amber-200 cursor-pointer"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-all border border-amber-200 cursor-pointer min-h-[40px]"
           >
             <Ban className="w-4 h-4" /> Bloquear Horário / Férias
           </button>
@@ -319,8 +319,8 @@ export const ProfessionalsView: React.FC = () => {
 
       {/* Modal Editar Profissional */}
       {editingProf && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Editar Profissional: {editingProf.name}</h3>
               <button onClick={handleCloseEditModal} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
@@ -353,7 +353,7 @@ export const ProfessionalsView: React.FC = () => {
               </div>
 
               {/* Estrutura: Profissão -> Especialidade -> Atendimentos/áreas de atuação livres */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block font-semibold text-slate-700">Profissão *</label>
@@ -443,7 +443,7 @@ export const ProfessionalsView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Tipo de Registro</label>
                   <input
@@ -596,18 +596,18 @@ export const ProfessionalsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={handleCloseEditModal}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveEditProfessional}
-                  className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
+                  className="w-full sm:w-auto px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs min-h-[40px]"
                 >
                   Salvar Alterações
                 </button>
@@ -619,8 +619,8 @@ export const ProfessionalsView: React.FC = () => {
 
       {/* Modal de Confirmação: Alteração Única de Profissão (Item 2) */}
       {showConfirmChangeModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-amber-200 animate-in zoom-in-95 duration-200 space-y-4">
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-amber-200 animate-in zoom-in-95 duration-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3 text-amber-600">
               <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center flex-shrink-0">
                 <AlertTriangle className="w-5 h-5 text-amber-600" />
@@ -640,18 +640,18 @@ export const ProfessionalsView: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setShowConfirmChangeModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer min-h-[40px]"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmUnlockProfession}
-                className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[40px]"
               >
                 Sim, quero alterar
               </button>
@@ -662,8 +662,8 @@ export const ProfessionalsView: React.FC = () => {
 
       {/* Modal Bloqueio de Horário */}
       {showBlockModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Bloquear Agenda / Ausência</h3>
               <button onClick={() => setShowBlockModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
@@ -677,7 +677,7 @@ export const ProfessionalsView: React.FC = () => {
                 <select
                   value={blockProfId}
                   onChange={e => setBlockProfId(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 min-h-[38px]"
                 >
                   <option value="">Toda a Clínica (Recesso Geral)</option>
                   {professionals.map(p => (
@@ -697,14 +697,14 @@ export const ProfessionalsView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Início (Data e Hora) *</label>
                   <input
                     type="datetime-local"
                     value={blockStart}
                     onChange={e => setBlockStart(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs min-h-[38px]"
                   />
                 </div>
                 <div>
@@ -713,21 +713,21 @@ export const ProfessionalsView: React.FC = () => {
                     type="datetime-local"
                     value={blockEnd}
                     onChange={e => setBlockEnd(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs min-h-[38px]"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
                 <button
                   onClick={() => setShowBlockModal(false)}
-                  className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleCreateBlock}
-                  className="px-6 py-2 font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs"
+                  className="w-full sm:w-auto px-6 py-2 font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl shadow-xs min-h-[40px]"
                 >
                   Salvar Bloqueio
                 </button>

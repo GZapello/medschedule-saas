@@ -11,6 +11,8 @@ export interface User {
   avatarUrl?: string;
   tenantId?: string | null;
   status?: string;
+  onboardingStatus?: string;
+  emailVerified?: boolean;
   needsOnboarding?: boolean;
   needsLegalAcceptance?: boolean;
   termsVersionAccepted?: string | null;
@@ -70,6 +72,7 @@ export interface Tenant {
   primary_color?: string;
   client_term_label?: string;
   status: 'active' | 'suspended' | 'trial' | 'pending' | 'blocked' | 'rejected';
+  onboarding_status?: string;
   plan_name?: string;
   plan_slug?: string;
   onboarding_completed?: number;

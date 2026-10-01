@@ -1,3 +1,4 @@
+import { useClinicalReview } from '../clinical/useClinicalReview';
 import { MedicalComparison } from './shared/MedicalComparison';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { ClinicalSnapshot } from '../clinical/ClinicalSnapshot';
@@ -862,6 +863,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   };
 
   // Finalizar Consulta Médica (Registrando no Prontuário Geral Selado)
+  const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
   const handleFinishConsultation = async () => {
     if (!selectedPatientId) {
       showToast('Selecione um paciente para registrar o atendimento.', 'info');
@@ -881,7 +883,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
       const specName = activePresetObj?.name || 'Consulta Médica';
 
       let evolutionText = `[ZemdaMed — Consulta de ${specName}]\n\n` +
-        `• Queixa Principal: ${chiefComplaint || 'Consulta de rotina'}\n` +
+        `• Queixa Principal: ${chiefComplaint || 'Não informado'}\n` +
         (hpi ? `• HDA: ${hpi}\n` : '') +
         (pastMedicalHistory ? `• Antecedentes (HPP): ${pastMedicalHistory}\n` : '') +
         (familyHistory ? `• Histórico Familiar: ${familyHistory}\n` : '') +
@@ -898,7 +900,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         if (findings.length) evolutionText += '\n[' + section.title + ']\n' + findings.join('\n') + '\n';
       }
 
-      await ApiClient.post('/v1/medical/finish-consultation', {
+      const finalPayload = {
         ...currentDraftPayload,
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId || null,
@@ -919,7 +921,9 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         conducts: clinicalConduct,
         clinicalEvolution: evolutionText,
         returnInDays
-      });
+      };
+      if (!await review.confirm({ ...finalPayload, patientName: selectedPatient?.full_name || selectedPatient?.name, professionalName: currentUser?.name, moduleType: "ZemdaMed" })) return;
+      await ApiClient.post('/v1/medical/finish-consultation', finalPayload);
 
       showToast('Consulta médica finalizada com sucesso e registrada no prontuário do paciente!', 'success');
       await autosave.clearDraft();
@@ -962,7 +966,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     { id: 'history', label: `Histórico (${consultationsHistory.length})`, icon: History }
   ];
 
-  return (
+  return <>{review.dialog}{(
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       <ClinicalDraftRecoveryModal
         isOpen={autosave.conflictModalOpen}
@@ -1993,5 +1997,5 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         )}
       </div>
     </div>
-  );
+  )}</>;
 };

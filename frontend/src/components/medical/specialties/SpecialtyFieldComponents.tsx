@@ -1,3 +1,4 @@
+import { ClinicalSelect, ClinicalTextarea } from '../../clinical/ClinicalFields';
 import React from 'react';
 
 export interface BaseFieldProps {
@@ -66,19 +67,19 @@ export const CompactSelect: React.FC<BaseFieldProps & {
 }> = ({ label, fieldKey, value, onChange, readOnly, options, className = '' }) => (
   <div className={className}>
     <label className="block text-[11px] font-bold text-slate-700 mb-1 leading-tight">{label}</label>
-    <select
+    <ClinicalSelect
       value={typeof value === 'string' ? value : ''}
       disabled={readOnly}
       onChange={e => onChange?.(fieldKey, e.target.value)}
       className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none transition-all cursor-pointer font-normal"
     >
-      <option value="">Não avaliado / Selecionar...</option>
+
       {options.map(opt => (
         <option key={opt.value} value={opt.value}>
           {opt.label}
         </option>
       ))}
-    </select>
+    </ClinicalSelect>
   </div>
 );
 
@@ -87,7 +88,7 @@ export const CompactTextArea: React.FC<BaseFieldProps & {
 }> = ({ label, fieldKey, value, onChange, placeholder, readOnly, rows = 2, className = '' }) => (
   <div className={className}>
     <label className="block text-[11px] font-bold text-slate-700 mb-1 leading-tight">{label}</label>
-    <textarea
+    <ClinicalTextarea
       rows={rows}
       placeholder={placeholder || 'Observações e achados...'}
       value={typeof value === 'string' || typeof value === 'number' ? value : ''}

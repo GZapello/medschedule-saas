@@ -1,3 +1,4 @@
+import { PeriodontalExamForm } from './forms/PeriodontalExamForm';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
@@ -66,8 +67,9 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   const { currentUser, currentTenant } = useAuth();
 
   // Pacientes e Seleção
-  const completion = useConsultationCompletion(onFinishConsultation);
+
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
+  const completion = useConsultationCompletion(onFinishConsultation, selectedPatientId + ':' + (initialAppointmentId || ''));
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
   const [showPreviousRecordsModal, setShowPreviousRecordsModal] = useState<boolean>(false);
 
@@ -603,8 +605,11 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
     setSaving(true);
     try {
-      await completion.save('/v1/dentistry/consultations/finish', {
+      if (!await completion.save('/v1/dentistry/consultations/finish', {
         patientId: selectedPatientId,
+        patientName: selectedPatient?.full_name || selectedPatient?.name,
+        professionalName: currentUser?.name,
+        moduleType: 'ZemdaOdonto',
         appointmentId: initialAppointmentId,
         clinicalEvolution: consultationEvolution,
         proceduresPerformed: consultationProcedures,
@@ -613,7 +618,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         odontogramData: odontogramData,
         toothChanges: pendingToothChanges,
         isSealed: true
-      });
+      })) return;
       await autosave.clearDraft();
 
       // Detecção de procedimentos para sugestão de atualização no odontograma
@@ -1274,78 +1279,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
               />
 
               {/* Registro Rápido de Sítio Periodontal */}
-              <div className="p-6 bg-white border border-slate-200 rounded-3xl space-y-4 shadow-sm">
-                <span className="text-xs font-black uppercase text-slate-700">
-                  Lançamento de Exame Periodontal
-                </span>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Dente</label>
-                    <input
-                      type="text"
-                      value={perioForm.toothNumber}
-                      onChange={e => setPerioForm({ ...perioForm, toothNumber: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Profundidade (mm)</label>
-                    <input
-                      type="number"
-                      value={perioForm.probingDepth}
-                      onChange={e => setPerioForm({ ...perioForm, probingDepth: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Mobilidade Dental</label>
-                    <select
-                      value={perioForm.mobility}
-                      onChange={e => setPerioForm({ ...perioForm, mobility: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold"
-                    ><option value="">Não avaliado</option>
-                      <option value="0">Grau 0 (Fisiológica)</option>
-                      <option value="1">Grau I (Horizontal &lt; 1mm)</option>
-                      <option value="2">Grau II (Horizontal &gt; 1mm)</option>
-                      <option value="3">Grau III (Vertical e Horizontal)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Lesão de Furca</label>
-                    <select
-                      value={perioForm.furcation}
-                      onChange={e => setPerioForm({ ...perioForm, furcation: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold"
-                    ><option value="">Não avaliado</option>
-                      <option value="0">Ausente</option>
-                      <option value="1">Grau I</option>
-                      <option value="2">Grau II</option>
-                      <option value="3">Grau III (Passagem Total)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6 pt-2">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                    <ClinicalBooleanSelect value={perioForm.bleeding} onChange={(value: boolean | undefined) => setPerioForm({ ...perioForm, bleeding: value })} />
-                    Sangramento à Sondagem (SS)
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                    <ClinicalBooleanSelect value={perioForm.suppuration} onChange={(value: boolean | undefined) => setPerioForm({ ...perioForm, suppuration: value })} />
-                    Supuração Presente
-                  </label>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={async () => {
+              <PeriodontalExamForm perioForm={perioForm} setPerioForm={setPerioForm} saving={saving} onSave={async () => {
                       try {
                         setSaving(true);
                         await ApiClient.post('/v1/dentistry/perio', {
@@ -1362,14 +1296,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                       } finally {
                         setSaving(false);
                       }
-                    }}
-                    className="px-4 py-2 bg-cyan-600 text-white rounded-2xl text-xs font-bold hover:bg-cyan-700 shadow-sm flex items-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    Salvar Sondagem
-                  </button>
-                </div>
-              </div>
+                    }} />
 
               {/* Histórico Periodontal */}
               <div className="space-y-3">

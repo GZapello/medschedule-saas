@@ -185,17 +185,17 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-sm shrink-0">
               <WhatsAppIcon className="w-5 h-5 fill-white" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900 leading-tight">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
                 Enviar Lembrete por WhatsApp
               </h3>
               <p className="text-xs text-slate-500">
@@ -206,7 +206,7 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
           <button
             onClick={onClose}
             disabled={isSending}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -335,7 +335,7 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isSending}
-            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer min-h-[40px]"
           >
             Cancelar
           </button>
@@ -347,7 +347,7 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
                 type="button"
                 onClick={handleOpenManual}
                 disabled={isSending || !phoneValid}
-                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300/80 rounded-xl transition-all cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300/80 rounded-xl transition-all cursor-pointer min-h-[40px]"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 <span>Abrir no WhatsApp Web/App (Contingência)</span>
@@ -359,7 +359,7 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
                 type="button"
                 onClick={handleSendOfficial}
                 disabled={isSending || !phoneValid || Boolean(successMessage) || loadingStatus}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-xs transition-all cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
               >
                 {isSending ? (
                   <>
@@ -378,7 +378,7 @@ export const WhatsAppReminderModal: React.FC<WhatsAppReminderModalProps> = ({
                 type="button"
                 onClick={handleOpenManual}
                 disabled={isSending || !phoneValid || Boolean(successMessage) || loadingStatus}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-xs transition-all cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
               >
                 {isSending ? (
                   <>

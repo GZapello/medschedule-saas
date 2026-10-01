@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../api/client';
 
 export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'offline' | 'error';
@@ -37,11 +37,14 @@ export function useClinicalAutosave({
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [recoveryEpoch, setRecoveryEpoch] = useState(0);
 
   // Controle de Conflito de Versões
   const [conflictModalOpen, setConflictModalOpen] = useState<boolean>(false);
   const [serverDraftData, setServerDraftData] = useState<any>(null);
   const [localDraftData, setLocalDraftData] = useState<any>(null);
+  const conflictPendingRef = useRef(false);
+  const [resolvedConflict, setResolvedConflict] = useState<{ choice: 'server' | 'local'; version: number } | null>(null);
 
   const initialLoadedRef = useRef<boolean>(false);
   const clearingDraftRef = useRef(false);
@@ -72,6 +75,11 @@ export function useClinicalAutosave({
     lastBaselinePayloadRef.current = '';
     clearingDraftRef.current = false;
     initialLoadedRef.current = false;
+    conflictPendingRef.current = false;
+    setConflictModalOpen(false);
+    setServerDraftData(null);
+    setLocalDraftData(null);
+    setResolvedConflict(null);
     setIsDirty(false);
     setAutosaveStatus('idle');
     setLastSavedTime(null);
@@ -100,12 +108,13 @@ export function useClinicalAutosave({
         const backendDraft = res?.draft;
 
         if (backendDraft && localDraft) {
-          const backendTime = new Date(backendDraft.client_updated_at || backendDraft.updated_at).getTime();
+          const backendTime = new Date(backendDraft.clientUpdatedAt || backendDraft.client_updated_at || backendDraft.updatedAt || backendDraft.updated_at).getTime();
           const localTime = new Date(localDraft.clientUpdatedAt).getTime();
           const diffMs = Math.abs(localTime - backendTime);
 
           // Se ambos existem e diferem significativamente (> 15 segundos de divergência)
           if (diffMs > 15000) {
+            conflictPendingRef.current = true;
             setServerDraftData(backendDraft.draftData || backendDraft.draft_data);
             setLocalDraftData(localDraft.draftData);
             setConflictModalOpen(true);
@@ -117,7 +126,7 @@ export function useClinicalAutosave({
           if (effective && onRestoreDraft) {
             onRestoreDraft(effective);
             setAutosaveStatus('saved');
-            const savedDate = backendDraft.updated_at ? new Date(backendDraft.updated_at) : new Date();
+            const savedDate = (backendDraft.updatedAt || backendDraft.updated_at) ? new Date(backendDraft.updatedAt || backendDraft.updated_at) : new Date();
             setLastSavedTime(savedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
           }
         } else if (backendDraft) {
@@ -125,7 +134,7 @@ export function useClinicalAutosave({
           if (effective && onRestoreDraft) {
             onRestoreDraft(effective);
             setAutosaveStatus('saved');
-            const savedDate = backendDraft.updated_at ? new Date(backendDraft.updated_at) : new Date();
+            const savedDate = (backendDraft.updatedAt || backendDraft.updated_at) ? new Date(backendDraft.updatedAt || backendDraft.updated_at) : new Date();
             setLastSavedTime(savedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
           }
         } else if (localDraft) {
@@ -141,13 +150,8 @@ export function useClinicalAutosave({
       } catch (err) {
         console.warn(`[useClinicalAutosave - ${moduleType}] Erro ao carregar rascunho:`, err);
       } finally {
-        if (isSubscribed && patientVersionRef.current === activeVersion) {
-          setTimeout(() => {
-            if (isSubscribed && patientVersionRef.current === activeVersion) {
-              lastBaselinePayloadRef.current = JSON.stringify(payloadRef.current);
-              initialLoadedRef.current = true;
-            }
-          }, 600);
+        if (isSubscribed && patientVersionRef.current === activeVersion && !conflictPendingRef.current) {
+          setRecoveryEpoch(activeVersion);
         }
       }
     }
@@ -165,7 +169,7 @@ export function useClinicalAutosave({
 
   // 2. Função de Persistência (Backend + Contingência Local)
   const performSaveDraft = useCallback(async (): Promise<boolean> => {
-    if (!patientId || !enabled || clearingDraftRef.current) return false;
+    if (!patientId || !enabled || clearingDraftRef.current || conflictPendingRef.current) return false;
 
     const activeVersion = patientVersionRef.current;
     const activePatientId = patientId;
@@ -238,11 +242,22 @@ export function useClinicalAutosave({
     }
   }, [patientId, resolvedAppId, moduleType, enabled, localDraftKey]);
 
+  // Restore callbacks and this state update commit together. Do not wait an
+  // arbitrary delay: edits made during that delay would become an unsaved baseline.
+  useLayoutEffect(() => {
+    if (recoveryEpoch && recoveryEpoch === patientVersionRef.current) {
+      lastBaselinePayloadRef.current = JSON.stringify(payloadRef.current);
+      initialLoadedRef.current = true;
+    }
+  }, [recoveryEpoch]);
+
+  // Parent renders (e.g. the consultation clock) must not postpone a save.
+  const serializedPayload = JSON.stringify(payload);
   // 3. Debounce Automático ao Modificar Payload
   useEffect(() => {
     if (!initialLoadedRef.current || !patientId || !enabled || clearingDraftRef.current) return;
 
-    const currentSerialized = JSON.stringify(payload);
+    const currentSerialized = serializedPayload;
     if (lastBaselinePayloadRef.current && currentSerialized === lastBaselinePayloadRef.current) {
       return;
     }
@@ -267,7 +282,7 @@ export function useClinicalAutosave({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [payload, debounceMs, patientId, enabled, performSaveDraft]);
+  }, [serializedPayload, debounceMs, patientId, enabled, performSaveDraft]);
 
   // 4. Reconexão e Prevenção de Perda
   useEffect(() => {
@@ -307,13 +322,27 @@ export function useClinicalAutosave({
       setAutosaveStatus('saved');
     } else if (choice === 'local' && localDraftData && onRestoreDraft) {
       onRestoreDraft(localDraftData);
-      performSaveDraft();
     }
     setConflictModalOpen(false);
-    setTimeout(() => {
-      initialLoadedRef.current = true;
-    }, 400);
+    setResolvedConflict({ choice, version: patientVersionRef.current });
   };
+
+  // Wait for the workspace's restored state to commit before saving the chosen copy.
+  useEffect(() => {
+    if (!resolvedConflict || resolvedConflict.version !== patientVersionRef.current) return;
+    conflictPendingRef.current = false;
+    initialLoadedRef.current = true;
+    if (resolvedConflict.choice === 'local') {
+      lastBaselinePayloadRef.current = '';
+      void performSaveDraft();
+    } else {
+      lastBaselinePayloadRef.current = JSON.stringify(payloadRef.current);
+      if (localDraftKey) {
+        try { localStorage.removeItem(localDraftKey); } catch { /* Storage can be unavailable. */ }
+      }
+      setIsDirty(false);
+    }
+  }, [resolvedConflict, performSaveDraft, localDraftKey]);
 
   // 6. Limpeza de Rascunho (chamado ao concluir atendimento)
   const clearDraft = async () => {

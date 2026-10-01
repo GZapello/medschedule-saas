@@ -1,3 +1,4 @@
+import { useClinicalReview } from './useClinicalReview';
 import React, { useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -171,6 +172,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     }
   }, [evolution, certificate, prescription, examRequest, returnAppt, referral, includeEvolution, includeCertificate, includePrescription, includeExamRequest, includeReturn, includeReferral, DRAFT_KEY]);
 
+  const review = useClinicalReview(appointment.patient_id + ':' + appointment.id);
   const handleFinish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return; // Prevenção rigorosa de duplo clique
@@ -253,6 +255,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         payload.referral = referral;
       }
 
+      if (!await review.confirm({ ...payload, patientName: appointment.patient_name, professionalName: appointment.professional_name, serviceName: appointment.service_name })) return;
       const res = await ApiClient.post<any>(`/v1/appointments/${appointment.id}/finish`, payload);
       
       setReceipt(res);
@@ -285,14 +288,14 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   if (completionSummary) {
     return (
       <>
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 p-6 text-center space-y-5">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 p-4 sm:p-6 text-center space-y-4 sm:space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
               <CheckCircle2 className="w-8 h-8" />
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-slate-900">Atendimento Finalizado com Sucesso!</h2>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900">Atendimento Finalizado com Sucesso!</h2>
               <p className="text-xs text-slate-500 mt-1">
                 Consulta de <strong>{appointment.patient_name || 'Paciente'}</strong> concluída e arquivada no histórico.
               </p>
@@ -442,33 +445,33 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     );
   }
 
-  return (
+  return <>{review.dialog}{(
     <>
       <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
         <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           {/* Header */}
-          <div className="bg-gradient-to-r from-teal-700 via-indigo-900 to-slate-900 text-white p-6 flex items-start justify-between">
-            <div>
+          <div className="bg-gradient-to-r from-teal-700 via-indigo-900 to-slate-900 text-white p-4 sm:p-6 flex items-start justify-between gap-3 shrink-0">
+            <div className="min-w-0 pr-2">
               <span className="text-xs font-bold text-teal-300 uppercase tracking-widest">
                 Encerramento de Consulta
               </span>
-              <h2 className="text-xl font-bold tracking-tight text-white mt-0.5">
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white mt-0.5 truncate">
                 Finalizar Atendimento: {appointment.patient_name || 'Paciente'}
               </h2>
-              <p className="text-xs text-slate-300 mt-1">
+              <p className="text-xs text-slate-300 mt-1 truncate">
                 Serviço: <strong>{appointment.service_name}</strong> • Profissional: <strong>{appointment.professional_name}</strong>
               </p>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-xl bg-white/10 transition-all"
+              className="p-2 text-slate-400 hover:text-white rounded-xl bg-white/10 transition-all shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleFinish} className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+          <form onSubmit={handleFinish} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50/50">
             {/* Checklist de Itens para Finalizar */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
@@ -751,18 +754,18 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             )}
 
             {/* Bottom Actions */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-200">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all"
+                className="w-full sm:w-auto px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all min-h-[40px]"
               >
                 Voltar
               </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex items-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-sm transition-all disabled:opacity-50"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-sm transition-all disabled:opacity-50 min-h-[40px]"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 {submitting ? 'Finalizando...' : 'Concluir Atendimento'}
@@ -784,5 +787,5 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         />
       )}
     </>
-  );
+  )}</>;
 };

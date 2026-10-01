@@ -26,14 +26,14 @@ export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProp
 
   const handleChooseServer = () => {
     if (onRecoverServer) onRecoverServer();
-    if (onSelectVersion) onSelectVersion('server');
-    onClose();
+    else if (onSelectVersion) onSelectVersion('server');
+    else onClose();
   };
 
   const handleChooseLocal = () => {
     if (onKeepCurrent) onKeepCurrent();
-    if (onSelectVersion) onSelectVersion('local');
-    onClose();
+    else if (onSelectVersion) onSelectVersion('local');
+    else onClose();
   };
 
   const formatTime = (ts?: string | null) => {
@@ -47,7 +47,7 @@ export const ClinicalDraftRecoveryModal: React.FC<ClinicalDraftRecoveryModalProp
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 p-6 space-y-5">
+      <div role="dialog" aria-modal="true" aria-label="Recuperar rascunho" className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 p-6 space-y-5">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5 text-amber-600">
             <div className="p-2 rounded-xl bg-amber-50 border border-amber-200">

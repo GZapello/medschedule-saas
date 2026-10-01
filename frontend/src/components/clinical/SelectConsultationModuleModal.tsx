@@ -361,17 +361,17 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="select-module-title"
     >
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
         
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-          <div>
-            <h3 id="select-module-title" className="text-lg font-bold text-slate-900 tracking-tight">
+        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
+          <div className="min-w-0 pr-2">
+            <h3 id="select-module-title" className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
               Iniciar Atendimento • Escolha o Módulo
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -380,7 +380,7 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer shrink-0 min-h-[40px] min-w-[40px] flex items-center justify-center"
             aria-label="Fechar modal"
           >
             <X className="w-5 h-5" />
@@ -389,7 +389,7 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
 
         {/* Informações do Agendamento */}
         {(patientName || serviceName) && (
-          <div className="px-6 py-3 bg-indigo-50/50 border-b border-indigo-100/60 flex items-center justify-between text-xs text-indigo-950">
+          <div className="px-4 sm:px-6 py-2.5 sm:py-3 bg-indigo-50/50 border-b border-indigo-100/60 flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-950 shrink-0">
             {patientName && (
               <div>
                 <span className="text-indigo-600 font-semibold">Paciente:</span>{' '}
@@ -406,7 +406,7 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
         )}
 
         {/* Lista de Módulos Compatíveis */}
-        <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
+        <div className="p-4 sm:p-6 space-y-3 overflow-y-auto flex-1">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
             Módulos compatíveis com sua atuação:
           </p>
@@ -419,18 +419,18 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
                 <button
                   key={mod.id}
                   onClick={() => onSelectModule(mod.id)}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all flex items-center justify-between group cursor-pointer shadow-xs hover:shadow-md ${theme.border} ${theme.bg}`}
+                  className={`w-full text-left p-3.5 sm:p-4 rounded-xl border-2 transition-all flex items-center justify-between group cursor-pointer shadow-xs hover:shadow-md ${theme.border} ${theme.bg}`}
                 >
-                  <div className="flex items-center gap-3.5">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-inner ${theme.iconBg}`}>
-                      <Icon className="w-6 h-6" />
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 shadow-inner ${theme.iconBg}`}>
+                      <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-sm text-slate-900 group-hover:text-indigo-900 transition-colors">
                           {mod.name}
                         </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.badgeBg} ${theme.badgeText}`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${theme.badgeBg} ${theme.badgeText}`}>
                           {mod.badge}
                         </span>
                       </div>
@@ -440,7 +440,7 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
                     </div>
                   </div>
 
-                  <div className="flex items-center text-slate-400 group-hover:text-indigo-600 transition-transform group-hover:translate-x-1 pl-2">
+                  <div className="flex items-center text-slate-400 group-hover:text-indigo-600 transition-transform group-hover:translate-x-1 pl-2 shrink-0">
                     <ChevronRight className="w-5 h-5" />
                   </div>
                 </button>
@@ -454,10 +454,10 @@ export const SelectConsultationModuleModal: React.FC<SelectConsultationModuleMod
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <div className="px-4 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer min-h-[40px]"
           >
             Cancelar
           </button>

@@ -183,11 +183,11 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto my-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
           <h3 className="text-lg font-bold text-slate-900">Novo Agendamento</h3>
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -201,7 +201,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             onChange={(id) => setPatientId(id)}
           />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Profissional *</label>
               <select
@@ -234,7 +234,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Convênio</label>
               <select
@@ -267,7 +267,7 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Data *</label>
               <input
@@ -311,13 +311,13 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
                 Nenhum horário livre disponível para esta data e profissional.
               </p>
             ) : (
-              <div className="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1">
                 {availableSlots.map(slot => (
                   <button
                     key={slot.time}
                     type="button"
                     onClick={() => setSelectedSlot(slot)}
-                    className={`py-2 px-1 rounded-xl text-center font-bold text-xs transition-all ${
+                    className={`py-2 px-1 rounded-xl text-center font-bold text-xs transition-all cursor-pointer ${
                       selectedSlot?.time === slot.time
                         ? 'bg-indigo-600 text-white shadow-xs'
                         : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-indigo-400'
@@ -341,17 +341,17 @@ export const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
             <button
               onClick={onClose}
-              className="px-4 py-2 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+              className="w-full sm:w-auto px-4 py-2.5 font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer min-h-[44px]"
             >
               Cancelar
             </button>
             <button
               onClick={handleBook}
               disabled={!selectedSlot || loading}
-              className="px-6 py-2 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50"
+              className="w-full sm:w-auto px-6 py-2.5 font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 cursor-pointer min-h-[44px]"
             >
               Confirmar Agendamento
             </button>

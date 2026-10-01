@@ -1,3 +1,4 @@
+import { ClinicalPainScale } from './ClinicalPainScale';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
@@ -835,8 +836,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
       <div className="bg-white rounded-3xl w-full max-w-5xl shadow-2xl border border-slate-200 flex flex-col max-h-[96vh] overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* TOP BAR: Identidade Zemda & Fechar */}
-        <div className="bg-slate-900 text-white px-6 py-3.5 flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-3">
+        <div className="bg-slate-900 text-white px-3 sm:px-6 py-2.5 sm:py-3.5 flex flex-wrap items-center justify-between border-b border-slate-800 gap-2 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
             <div className="flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full animate-pulse ${
                 isAppointmentPhysio ? 'bg-emerald-400' :
@@ -889,7 +890,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {/* Indicador de Autosave */}
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-[11px]">
               {autosaveStatus === 'saving' && (
@@ -1515,29 +1516,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                     {/* Escala EVA & Local da Dor */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="md:col-span-1 bg-white p-3 rounded-xl border border-teal-100 shadow-2xs">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-slate-700">Intensidade da Dor (EVA)</label>
-                          <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
-                            painScore === 0 ? 'bg-slate-100 text-slate-600' :
-                            Number(painScore) <= 3 ? 'bg-emerald-100 text-emerald-800' :
-                            Number(painScore) <= 7 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
-                          }`}>
-                            {painScore === '' ? 'Não avaliado' : `${painScore} / 10`}
-                          </span>
-                        </div>
-                        <input
-                          type="number"
-                          min="0"
-                          max="10"
-                          value={painScore}
-                          onChange={e => setPainScore(e.target.value === '' ? '' : Number(e.target.value))}
-                          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
-                        />
-                        <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-medium">
-                          <span>0 Sem dor</span>
-                          <span>5 Moderada</span>
-                          <span>10 Insuportável</span>
-                        </div>
+                        <ClinicalPainScale value={painScore} onChange={value => setPainScore(value ?? '')} />
                       </div>
 
                       <div className="md:col-span-2 bg-white p-3 rounded-xl border border-teal-100 shadow-2xs">
@@ -1684,12 +1663,12 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         </div>
 
         {/* BARRA DE AÇÕES INFERIOR */}
-        <div className="bg-white border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="bg-white border-t border-slate-200 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={handleManualSaveDraft}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 flex-1 sm:flex-initial px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors min-h-[40px]"
             >
               <Save className="w-3.5 h-3.5" />
               <span>Salvar Rascunho</span>
@@ -1699,28 +1678,28 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               type="button"
               disabled={savingRecord}
               onClick={handleSaveEvolution}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-slate-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold text-slate-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 transition-colors disabled:opacity-50 min-h-[40px]"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
               <span>{savingRecord ? 'Gravando...' : 'Salvar Evolução'}</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors min-h-[40px]"
             >
               Fechar
             </button>
 
             {(isAppointmentPhysio || isAppointmentDentist || isAppointmentNutri || isAppointmentTO || isAppointmentFono) ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowFinishModal(true)}
-                  className="px-3.5 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 border border-teal-200 rounded-xl transition-colors cursor-pointer"
+                  className="w-full sm:w-auto px-3.5 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 border border-teal-200 rounded-xl transition-colors cursor-pointer min-h-[40px]"
                   title="Emitir atestados, prescrições ou encaminhamentos"
                 >
                   Documentos / Atestado
@@ -1729,7 +1708,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   type="button"
                   disabled={savingRecord}
                   onClick={handleFinalizeAttendance}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer disabled:opacity-50 min-h-[40px]"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{savingRecord ? 'Finalizando...' : 'Finalizar Atendimento'}</span>
@@ -1739,7 +1718,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowFinishModal(true)}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer min-h-[40px]"
               >
                 <span>Finalizar Atendimento</span>
                 <ChevronRight className="w-4 h-4" />

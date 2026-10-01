@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
 import {
   Dumbbell,
   Users,
@@ -43,6 +44,8 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
 
   // Abas principais
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'students' | 'exercises' | 'templates' | 'calendar'>('dashboard');
+
+  const { tabScrollProps } = useHorizontalTabScroll(currentTab);
 
   // Aluno atualmente selecionado para ver perfil detalhado
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || null);
@@ -371,8 +374,8 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
       </ProfessionalModuleHeader>
 
       {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
-      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
-        <div className="flex items-center gap-1 py-1 overflow-x-auto no-scrollbar">
+      <div className="bg-white border-b border-slate-200 px-3 sm:px-6 shrink-0">
+        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
           {[
             { id: 'dashboard', label: 'Painel de Treinamento', icon: LayoutDashboard },
             { id: 'students', label: `Alunos & Prescrições (${students.length})`, icon: Users },
@@ -384,7 +387,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
               <button
                 key={tab.id}
                 data-tour={`personal-${tab.id}-tab`}
-                data-active={isActive}
+                data-active={isActive ? 'true' : 'false'}
                 type="button"
                 onClick={() => {
                   if (selectedStudentId) {
@@ -407,7 +410,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}
-      <div className="flex-1 p-6 overflow-y-auto">
+      <div className="flex-1 p-3 sm:p-6 overflow-y-auto">
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Se o perfil do aluno estiver ativo, renderiza o perfil detalhado */}
           {selectedStudentId ? (

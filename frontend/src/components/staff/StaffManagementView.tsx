@@ -392,7 +392,7 @@ export const StaffManagementView: React.FC = () => {
               setRecentlyCreatedLink(null);
               setIsInviteModalOpen(true);
             }}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer w-full sm:w-auto min-h-[40px] shrink-0"
           >
             <LinkIcon className="w-4 h-4" />
             <span>Gerar Link de Convite</span>
@@ -402,10 +402,10 @@ export const StaffManagementView: React.FC = () => {
 
       {/* Abas e Busca */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-fit text-xs font-bold flex-wrap">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-200/70 rounded-2xl w-full sm:w-fit text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
           <button
             onClick={() => setActiveTab('active')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer shrink-0 whitespace-nowrap ${
               activeTab === 'active'
                 ? 'bg-white text-indigo-600 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -416,7 +416,7 @@ export const StaffManagementView: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('pending')}
-            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
               activeTab === 'pending'
                 ? 'bg-white text-indigo-600 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -832,9 +832,9 @@ export const StaffManagementView: React.FC = () => {
       {/* MODAL 1: Gerar Link de Convite Único da Clínica */}
       {/* ========================================================== */}
       {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-8 border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto border border-slate-100 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-extrabold flex items-center gap-2">
                   <LinkIcon className="w-5 h-5 text-indigo-400" />
@@ -853,7 +853,7 @@ export const StaffManagementView: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-5 text-xs text-left">
+            <div className="p-4 sm:p-6 space-y-5 text-xs text-left">
               {recentlyCreatedLink ? (
                 <div className="space-y-4">
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3">
@@ -978,9 +978,9 @@ export const StaffManagementView: React.FC = () => {
       {/* MODAL 2: Editar Cargo, Profissão e Áreas de Atuação */}
       {/* ========================================================== */}
       {editingRoleUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-8">
-            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-extrabold">Editar Função & Áreas de Atuação</h3>
                 <p className="text-xs text-slate-400">{editingRoleUser.name}</p>
@@ -990,7 +990,7 @@ export const StaffManagementView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveRoleProfession} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSaveRoleProfession} className="p-4 sm:p-6 space-y-4 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Função no Sistema (RBAC) *</label>
                 <select
@@ -1054,17 +1054,17 @@ export const StaffManagementView: React.FC = () => {
                 </p>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setEditingRoleUser(null)}
-                  className="px-4 py-2 font-bold text-slate-600 hover:text-slate-800"
+                  className="w-full sm:w-auto px-4 py-2 font-bold text-slate-600 hover:text-slate-800 min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md cursor-pointer min-h-[40px]"
                 >
                   Salvar Alterações
                 </button>
@@ -1078,9 +1078,9 @@ export const StaffManagementView: React.FC = () => {
       {/* MODAL 3: Editar Permissões do Funcionário */}
       {/* ========================================================== */}
       {editingPermissionsUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-8">
-            <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl my-auto max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 bg-slate-900 text-white flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-extrabold">Permissões de {editingPermissionsUser.name}</h3>
                 <p className="text-xs text-slate-400">
@@ -1092,7 +1092,7 @@ export const StaffManagementView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSavePermissions} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSavePermissions} className="p-4 sm:p-6 space-y-4 text-xs">
               {/* Perfis Pré-Programados (Item 18) */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
                 <span className="text-[11px] font-bold text-slate-500 block uppercase">
@@ -1148,17 +1148,17 @@ export const StaffManagementView: React.FC = () => {
                 })}
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setEditingPermissionsUser(null)}
-                  className="px-4 py-2 font-bold text-slate-600 hover:text-slate-800"
+                  className="w-full sm:w-auto px-4 py-2 font-bold text-slate-600 hover:text-slate-800 min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md cursor-pointer min-h-[40px]"
                 >
                   Salvar Permissões
                 </button>

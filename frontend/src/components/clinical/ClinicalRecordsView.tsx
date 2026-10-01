@@ -210,7 +210,7 @@ export const ClinicalRecordsView: React.FC = () => {
       </div>
 
       {/* Patient Selector & Action */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
           <label className="text-xs font-bold text-slate-700 whitespace-nowrap">
             Selecione o {clientTermLabel}:
@@ -237,7 +237,7 @@ export const ClinicalRecordsView: React.FC = () => {
             setShowNewModal(true);
           }}
           disabled={!selectedPatientId}
-          className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-1.5 w-full sm:w-auto px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
         >
           <Plus className="w-4 h-4" />
           Nova Evolução Clínica
@@ -252,19 +252,19 @@ export const ClinicalRecordsView: React.FC = () => {
             Carregando histórico do prontuário...
           </div>
         ) : !selectedPatientId ? (
-          <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
+          <div className="bg-white p-8 sm:p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
             <User className="w-10 h-10 mx-auto mb-2 opacity-40 text-slate-400" />
             <p className="font-medium text-sm text-slate-600">Nenhum {clientTermLabel.toLowerCase()} selecionado.</p>
             <p className="text-xs text-slate-400 mt-1">Busque e selecione um {clientTermLabel.toLowerCase()} acima para carregar o prontuário.</p>
           </div>
         ) : records.length === 0 ? (
-          <div className="bg-white p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
+          <div className="bg-white p-8 sm:p-12 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400">
             <FileText className="w-10 h-10 mx-auto mb-2 opacity-40 text-slate-400" />
             <p className="font-medium text-sm text-slate-600">Nenhum registro clínico cadastrado para este paciente.</p>
             <p className="text-xs text-slate-400 mt-1">Clique em "Nova Evolução Clínica" para iniciar o prontuário.</p>
           </div>
         ) : (
-          <div className="relative border-l-2 border-indigo-200 ml-4 pl-6 space-y-6">
+          <div className="relative border-l-2 border-indigo-200 ml-2 sm:ml-4 pl-4 sm:pl-6 space-y-6">
             {records.map(r => {
               const editHistory = parseEditHistory(r.edit_history_json);
               const isExpanded = expandedRecordId === r.id;
@@ -273,11 +273,11 @@ export const ClinicalRecordsView: React.FC = () => {
                 <div
                   key={r.id}
                   className={`relative bg-white rounded-2xl border transition-all duration-200 shadow-xs ${
-                    isExpanded ? 'border-indigo-300 ring-2 ring-indigo-100 p-6' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/60 p-4 sm:p-5'
+                    isExpanded ? 'border-indigo-300 ring-2 ring-indigo-100 p-4 sm:p-6' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/60 p-4 sm:p-5'
                   }`}
                 >
                   {/* Timeline Dot */}
-                  <div className={`absolute -left-[31px] top-5 w-4 h-4 rounded-full border-4 border-white shadow-xs transition-colors ${isExpanded ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-400'}`} />
+                  <div className={`absolute -left-[25px] sm:-left-[31px] top-5 w-4 h-4 rounded-full border-4 border-white shadow-xs transition-colors ${isExpanded ? 'bg-indigo-600 ring-2 ring-indigo-200' : 'bg-slate-400'}`} />
 
                   {/* CABEÇALHO COMPACTO (Sempre visível: data, profissional, módulo, procedimento, status e seta) */}
                   <div
@@ -567,22 +567,22 @@ export const ClinicalRecordsView: React.FC = () => {
 
       {/* MODAL 1: VISUALIZAR PRONTUÁRIO */}
       {viewingRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-xs font-bold text-teal-600 uppercase tracking-wider">Visualização de Prontuário</span>
-                <h3 className="text-lg font-bold text-slate-900">{viewingRecord.title}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">{viewingRecord.title}</h3>
               </div>
               <button
                 onClick={() => setViewingRecord(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-100">
               <div>
                 <span className="text-slate-400 font-medium">Paciente:</span>
                 <p className="font-bold text-slate-800">{currentPatient?.full_name}</p>
@@ -676,10 +676,10 @@ export const ClinicalRecordsView: React.FC = () => {
               </div>
             )}
 
-            <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => handlePrintRecord(viewingRecord)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl shadow-xs"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl shadow-xs min-h-[40px]"
               >
                 <Printer className="w-3.5 h-3.5 text-teal-600" />
                 <span>Imprimir Folha A4</span>
@@ -687,7 +687,7 @@ export const ClinicalRecordsView: React.FC = () => {
 
               <button
                 onClick={() => setViewingRecord(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
               >
                 Fechar
               </button>
@@ -698,16 +698,16 @@ export const ClinicalRecordsView: React.FC = () => {
 
       {/* MODAL 2: EDITAR PRONTUÁRIO COM AUDITORIA */}
       {editingRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-xs font-bold text-indigo-600 uppercase">Edição com Auditoria LGPD</span>
-                <h3 className="text-lg font-bold text-slate-900">{editingRecord.title}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">{editingRecord.title}</h3>
               </div>
               <button
                 onClick={() => setEditingRecord(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -765,17 +765,17 @@ export const ClinicalRecordsView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
               <button
                 onClick={() => setEditingRecord(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSaveEdit}
                 disabled={savingEdit}
-                className="px-6 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50"
+                className="w-full sm:w-auto px-6 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs disabled:opacity-50 min-h-[40px]"
               >
                 {savingEdit ? 'Salvando...' : 'Salvar Alterações'}
               </button>
@@ -786,20 +786,20 @@ export const ClinicalRecordsView: React.FC = () => {
 
       {/* MODAL 3: NOVA EVOLUÇÃO */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <div>
                 <span className="text-xs font-bold text-indigo-600 uppercase">Novo Registro Clínico</span>
-                <h3 className="text-xl font-bold text-slate-900">{currentPatient?.full_name}</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900">{currentPatient?.full_name}</h3>
               </div>
-              <button onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+              <button onClick={() => setShowNewModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Data do Atendimento *</label>
                   <input
@@ -860,16 +860,16 @@ export const ClinicalRecordsView: React.FC = () => {
                 </label>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   onClick={() => setShowNewModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleSaveRecord}
-                  className="px-6 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
+                  className="w-full sm:w-auto px-6 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs min-h-[40px]"
                 >
                   Salvar no Prontuário
                 </button>

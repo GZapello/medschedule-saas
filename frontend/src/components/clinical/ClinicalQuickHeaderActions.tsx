@@ -8,6 +8,7 @@ export type { ClinicalQuickToolItem };
 
 interface ClinicalQuickHeaderActionsProps {
   onViewPreviousRecords?: () => void;
+  onLoadSavedClinicalData?: () => void;
   onFinishConsultation?: () => void;
   autosaveStatus?: AutosaveStatus;
   lastSavedTime?: string | null;
@@ -23,6 +24,7 @@ interface ClinicalQuickHeaderActionsProps {
 
 export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProps> = ({
   onViewPreviousRecords,
+  onLoadSavedClinicalData,
   onFinishConsultation,
   autosaveStatus,
   lastSavedTime,
@@ -59,6 +61,12 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
       )}
 
       {/* Acesso: Ferramentas Rápidas (Menu Dropdown Centralizado) */}
+      {onLoadSavedClinicalData && <button type="button" disabled={isSubmitting}
+        onClick={onLoadSavedClinicalData}
+        title="Carregar os últimos registros clínicos nos campos atuais para revisão e edição"
+        className="px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200">
+        Carregar últimos dados salvos
+      </button>}
       {tools && tools.length > 0 && (
         <div data-tour="clinical-tools" className="inline-flex">
           <ClinicalQuickToolsMenu

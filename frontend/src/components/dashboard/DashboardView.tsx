@@ -202,27 +202,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header & Quick Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             HOJE
           </h2>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
           <button
             onClick={onOpenNewPatient}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all min-h-[40px] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Novo {clientTermLabel}
           </button>
           <button
             onClick={onOpenNewAppointment}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer min-h-[40px]"
           >
             <Plus className="w-4 h-4" />
             Novo Agendamento
@@ -231,9 +231,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI Cards Grid (5 Cards - Ocupação removida) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {/* Atendimentos Hoje */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">Hoje</span>
             <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
@@ -304,7 +304,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Main Content Area: Today's Appointments & Monthly Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Atendimentos de Hoje (2/3 width) */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs">
           <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="font-bold text-slate-900 text-lg">Agenda de Hoje</h3>
@@ -312,14 +312,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <button
               onClick={() => onNavigate('calendar')}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
             >
               Ver agenda completa <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {/* Filtros Rápidos (Item 3) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-2.5 mb-3 text-xs border-b border-slate-100">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2.5 mb-3 text-xs border-b border-slate-100 no-scrollbar">
             {[
               { id: 'all', label: `Todos (${allTodayAppts.length})` },
               { id: 'scheduled', label: `Agendados (${countScheduled})` },
@@ -332,7 +332,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setFilterTab(tab.id as any)}
-                className={`px-3 py-1 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                   filterTab === tab.id
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -393,6 +393,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                         <p className="text-xs text-slate-500">
                           {appt.service_name} • <span className="font-medium text-slate-700">{appt.professional_name}</span>
+                          {appt.clinical_module && appt.clinical_module !== 'general' && <span> · {appt.clinical_module === 'ZemdaBody' ? 'Zemda360' : appt.clinical_module}</span>}
                         </p>
 
                         <div className="flex items-center gap-3 text-[11px] text-slate-400 flex-wrap">
@@ -499,6 +500,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       )}
 
                       {/* Botão de Envio Manual de Lembrete pelo WhatsApp */}
+                      {['scheduled', 'confirmed', 'rescheduled'].includes(appt.status) && (
+                        <button type="button" onClick={() => handleUpdateStatus(appt.id, 'cancelled')}
+                          className="px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
+                          Cancelar
+                        </button>
+                      )}
                       {(() => {
                         const hasPhone = isValidPhoneNumber(appt.patient_phone);
                         return (
@@ -531,7 +538,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Monthly Trend & Quick Stats (1/3 width) */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs flex flex-col justify-between">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-slate-900 text-lg mb-1">Evolução Mensal</h3>
             <p className="text-xs text-slate-500 mb-4">Volume de atendimentos nos últimos meses.</p>

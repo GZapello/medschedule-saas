@@ -196,7 +196,7 @@ export const FinancialView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Header & Actions */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">Módulo Financeiro</h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -204,10 +204,10 @@ export const FinancialView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto">
           <button
             onClick={handleExportCsv}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all min-h-[40px]"
           >
             <Download className="w-4 h-4" /> Exportar CSV
           </button>
@@ -218,7 +218,7 @@ export const FinancialView: React.FC = () => {
               setNotes('');
               setShowModal(true);
             }}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all min-h-[40px]"
           >
             <Plus className="w-4 h-4" /> Novo Recebimento
           </button>
@@ -226,10 +226,10 @@ export const FinancialView: React.FC = () => {
       </div>
 
       {/* Sub-tab Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth">
         <button
           onClick={() => setFinancialTab('transactions')}
-          className={`px-4 py-2 rounded-xl transition-all ${
+          className={`px-4 py-2 rounded-xl transition-all shrink-0 whitespace-nowrap ${
             financialTab === 'transactions'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -239,7 +239,7 @@ export const FinancialView: React.FC = () => {
         </button>
         <button
           onClick={() => setFinancialTab('cash_register')}
-          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+          className={`px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
             financialTab === 'cash_register'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -296,11 +296,11 @@ export const FinancialView: React.FC = () => {
             <div className="p-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
               <h3 className="font-bold text-slate-900 text-sm">Transações e Recebimentos</h3>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
-                  className="text-xs font-semibold border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50"
+                  className="flex-1 sm:flex-initial text-xs font-semibold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 min-h-[38px]"
                 >
                   <option value="all">Todos os Status</option>
                   <option value="paid">Pago</option>
@@ -310,7 +310,7 @@ export const FinancialView: React.FC = () => {
                 <select
                   value={methodFilter}
                   onChange={e => setMethodFilter(e.target.value)}
-                  className="text-xs font-semibold border border-slate-200 rounded-xl px-3 py-1.5 bg-slate-50"
+                  className="flex-1 sm:flex-initial text-xs font-semibold border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 min-h-[38px]"
                 >
                   <option value="all">Todas as Formas</option>
                   <option value="pix">PIX</option>
@@ -571,8 +571,8 @@ export const FinancialView: React.FC = () => {
 
       {/* Modal Abertura de Caixa */}
       {showOpenCashModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Abertura de Caixa</h3>
               <button onClick={() => setShowOpenCashModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
@@ -592,11 +592,11 @@ export const FinancialView: React.FC = () => {
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
-              <button onClick={() => setShowOpenCashModal(false)} className="px-3 py-1.5 border rounded-xl text-slate-600">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
+              <button onClick={() => setShowOpenCashModal(false)} className="w-full sm:w-auto px-3 py-2 border rounded-xl text-slate-600 min-h-[40px]">
                 Cancelar
               </button>
-              <button onClick={handleOpenCash} className="px-5 py-1.5 bg-emerald-600 text-white font-bold rounded-xl shadow-xs">
+              <button onClick={handleOpenCash} className="w-full sm:w-auto px-5 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-xs min-h-[40px]">
                 Confirmar Abertura
               </button>
             </div>
@@ -606,8 +606,8 @@ export const FinancialView: React.FC = () => {
 
       {/* Modal Fechamento de Caixa */}
       {showCloseCashModal && cashRegister && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900">Fechamento & Conferência de Caixa</h3>
               <button onClick={() => setShowCloseCashModal(false)} className="p-1 text-slate-400 hover:text-slate-700">
@@ -676,11 +676,11 @@ export const FinancialView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
-              <button onClick={() => setShowCloseCashModal(false)} className="px-3 py-1.5 border rounded-xl text-slate-600">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100 text-xs">
+              <button onClick={() => setShowCloseCashModal(false)} className="w-full sm:w-auto px-3 py-2 border rounded-xl text-slate-600 min-h-[40px]">
                 Cancelar
               </button>
-              <button onClick={handleCloseCash} className="px-5 py-1.5 bg-rose-600 text-white font-bold rounded-xl shadow-xs">
+              <button onClick={handleCloseCash} className="w-full sm:w-auto px-5 py-2 bg-rose-600 text-white font-bold rounded-xl shadow-xs min-h-[40px]">
                 Encerrar Caixa
               </button>
             </div>
@@ -690,8 +690,8 @@ export const FinancialView: React.FC = () => {
 
       {/* Modal Novo Pagamento */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
               <h3 className="text-lg font-bold text-slate-900">Registrar Recebimento</h3>
               <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
@@ -722,13 +722,13 @@ export const FinancialView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Forma</label>
                   <select
                     value={paymentMethod}
                     onChange={e => setPaymentMethod(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 min-h-[38px]"
                   >
                     <option value="pix">PIX</option>
                     <option value="credit_card">Cartão de Crédito</option>
@@ -741,7 +741,7 @@ export const FinancialView: React.FC = () => {
                   <select
                     value={paymentStatus}
                     onChange={e => setPaymentStatus(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 min-h-[38px]"
                   >
                     <option value="paid">Pago</option>
                     <option value="pending">Pendente</option>
@@ -760,16 +760,16 @@ export const FinancialView: React.FC = () => {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
+                  className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl min-h-[40px]"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleCreatePayment}
-                  className="px-6 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs"
+                  className="w-full sm:w-auto px-6 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs min-h-[40px]"
                 >
                   Salvar
                 </button>
