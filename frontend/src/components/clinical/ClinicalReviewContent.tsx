@@ -1,5 +1,5 @@
 import React from 'react';
-import { labels as recordLabels } from './ClinicalSnapshot';
+import { clinicalLabels as recordLabels } from './clinicalLabels';
 
 // Presentation only: never mutate the payload submitted by the consultation.
 const labels: Record<string, string> = { ...recordLabels,
