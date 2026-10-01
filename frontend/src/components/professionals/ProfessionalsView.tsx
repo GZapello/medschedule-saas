@@ -31,7 +31,8 @@ const getCouncilForProfession = (prof?: Profession | null, profNameOrId?: string
   if (target.includes('dentist') || target.includes('odonto')) return 'CRO';
   if (target.includes('médic') || target.includes('medic')) return 'CRM';
   if (target.includes('fisioterap') || target.includes('fisio')) return 'CREFITO';
-  if (target.includes('psicólog') || target.includes('psicolog') || target.includes('psicanal')) return 'CRP';
+  if (target.includes('psicanal')) return 'Registro Associação';
+  if (target.includes('psicólog') || target.includes('psicolog')) return 'CRP';
   if (target.includes('nutri')) return 'CRN';
   if (target.includes('fono')) return 'CRFa';
   if (target.includes('ocupacional')) return 'CREFITO';
@@ -382,7 +383,7 @@ export const ProfessionalsView: React.FC = () => {
                     }`}
                   >
                     {professions.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                      <option key={p.id} value={p.id}>{p.label || p.name}</option>
                     ))}
                   </select>
 

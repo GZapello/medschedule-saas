@@ -94,11 +94,22 @@ export interface Profession {
   category_id: string;
   category_name?: string;
   name: string;
+  label?: string;
   slug: string;
   registration_board_label?: string;
+  boardLabel?: string;
   registration_required: number;
   custom_fields_schema?: any;
   active: number;
+  module?: string;
+  modules?: string[];
+  accessLabel?: string;
+  displayOption?: string;
+  canonicalId?: string;
+  canonicalName?: string;
+  clinicalWorkspace?: string | null;
+  taxonomyCategory?: string;
+  isSpecificAlias?: boolean;
 }
 
 export interface Specialty {

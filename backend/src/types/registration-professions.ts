@@ -166,6 +166,13 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "canonicalName": "Psicólogo"
   },
   {
+    "id": "prof-psicanalista",
+    "label": "Psicanalista",
+    "boardLabel": "Registro Associação",
+    "slug": "psicanalista",
+    "canonicalName": "Psicólogo"
+  },
+  {
     "id": "prof-terapeuta-ocupacional",
     "label": "Terapeuta Ocupacional",
     "boardLabel": "CREFITO",

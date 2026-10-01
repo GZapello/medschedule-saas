@@ -270,7 +270,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
 
   const finalProfessionName = selectedProfessionId === 'prof-outro'
     ? (customProfession.trim() || 'Outro')
-    : (selectedOption?.canonicalName || selectedOption?.label || selectedProfessionId);
+    : (selectedOption?.label || (selectedOption as any)?.name || selectedOption?.canonicalName || selectedProfessionId);
 
   const togglePracticeArea = (areaId: string) => {
     setSelectedPracticeAreaIds(prev =>

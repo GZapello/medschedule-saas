@@ -627,7 +627,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       canonicalName: 'Psicólogo',
       commercialModule: 'ZemdaPsico',
       clinicalWorkspace: 'ZemdaPsico',
-      boardLabel: 'CRP',
+      boardLabel: (pId === 'prof-psicanalista' || combined.includes('psicanal')) ? (regType || 'Registro Associação') : 'CRP',
       taxonomyCategory: category,
       isSpecificAlias: true,
       inferredAreaId: areaId,

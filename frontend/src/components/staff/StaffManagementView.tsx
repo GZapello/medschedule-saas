@@ -1022,14 +1022,14 @@ export const StaffManagementView: React.FC = () => {
                     setEditRoleForm({
                       ...editRoleForm,
                       professionId: pid,
-                      professionName: pObj ? pObj.name : ''
+                      professionName: pObj ? (pObj.label || pObj.name) : ''
                     });
                   }}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 font-medium"
                 >
                   <option value="">Nenhuma (Apenas função administrativa/operacional)</option>
                   {canonicalProfessions.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
+                    <option key={p.id} value={p.id}>{p.label || p.name}</option>
                   ))}
                 </select>
                 <p className="text-[11px] text-slate-400 mt-1">

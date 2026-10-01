@@ -1,3 +1,4 @@
+const SystemIntegrityView = React.lazy(() => import('./SystemIntegrityView'));
 import { GlobalBillingView } from '../billing/GlobalBillingView';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
@@ -37,11 +38,11 @@ export const SuperAdminView: React.FC = () => {
   const { showToast } = useToast();
 
   // Navegação Principal do SuperAdmin
-  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory'>(() => {
+  const [mainSection, setMainSection] = useState<'tenants' | 'professions' | 'categories' | 'subscriptions' | 'integrations' | 'free_trials' | 'whatsapp' | 'laboratory' | 'integrity'>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const s = params.get('section');
-      if (s && ['tenants', 'professions', 'categories', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory'].includes(s)) {
+      if (s && ['tenants', 'professions', 'categories', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity'].includes(s)) {
         return s as any;
       }
     } catch {}
@@ -52,7 +53,7 @@ export const SuperAdminView: React.FC = () => {
     const handleUrlChange = () => {
       const params = new URLSearchParams(window.location.search);
       const s = params.get('section');
-      if (s && ['tenants', 'professions', 'categories', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory'].includes(s)) {
+      if (s && ['tenants', 'professions', 'categories', 'subscriptions', 'integrations', 'free_trials', 'whatsapp', 'laboratory', 'integrity'].includes(s)) {
         setMainSection(s as any);
       }
     };
@@ -397,6 +398,7 @@ export const SuperAdminView: React.FC = () => {
     const term = searchProf.toLowerCase();
     return (
       p.name?.toLowerCase().includes(term) ||
+      p.label?.toLowerCase().includes(term) ||
       p.category_name?.toLowerCase().includes(term) ||
       p.registration_board_label?.toLowerCase().includes(term)
     );
@@ -460,6 +462,7 @@ export const SuperAdminView: React.FC = () => {
         {/* Menu Superior de Módulos Globais */}
         <div className="flex items-center gap-1.5 p-1.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-xs font-bold">
           <button onClick={()=>setMainSection('subscriptions')} className="px-3 py-2 rounded-xl hover:bg-white/10">Assinaturas</button>
+          <button onClick={() => setMainSection('integrity')} className="px-3 py-2 rounded-xl hover:bg-white/10">Integridade</button>
           <button onClick={()=>setMainSection('integrations')} className="px-3 py-2 rounded-xl hover:bg-white/10">Integrações</button>
           <button
             onClick={() => setMainSection('tenants')}
@@ -538,6 +541,7 @@ export const SuperAdminView: React.FC = () => {
       {/* ========================================================================= */}
       {/* SEÇÕES GLOBAIS DE GOVERNANÇA DO SAAS */}
       {/* ========================================================================= */}
+      {mainSection === 'integrity' && <React.Suspense fallback={<p>Carregando integridade…</p>}><SystemIntegrityView /></React.Suspense>}
       {mainSection === 'subscriptions' && <GlobalBillingView />}
       {mainSection === 'integrations' && <GlobalBillingView integration />}
       {mainSection === 'free_trials' && <FreeTrialsAdminView />}
@@ -860,7 +864,7 @@ export const SuperAdminView: React.FC = () => {
                   filteredProfessions.map(p => (
                   <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-4 font-bold text-slate-900 text-sm">
-                      {p.name}
+                      {p.label || p.name}
                     </td>
                     <td className="py-3 px-4 text-slate-600">
                       <span className="px-2 py-0.5 rounded-lg bg-slate-100 font-medium text-[11px]">

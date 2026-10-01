@@ -659,7 +659,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       const professionNameToSend =
         formData.profession === 'prof-outro-saude' && formData.customProfession.trim()
           ? formData.customProfession.trim()
-          : (selectedOption?.canonicalName || selectedOption?.label || (selectedOption as any)?.name || formData.profession);
+          : (selectedOption?.label || (selectedOption as any)?.name || selectedOption?.canonicalName || formData.profession);
 
       const isSpecificMedical = practiceAreas.length > 0 && !!practiceAreas[0].medicalSpecialtyId;
       const isGenericDoc = formData.profession === 'prof-medico';

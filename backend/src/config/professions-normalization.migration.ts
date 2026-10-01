@@ -32,6 +32,7 @@ export function migrateProfessionsNormalization(rawDb: DatabaseSync): void {
     { id: 'prof-fonoaudiologo', name: 'Fonoaudiólogo', slug: 'fonoaudiologo', reg_label: 'CRFa', reg_req: 1, cat_id: 'cat-fono' },
     { id: 'prof-nutricionista', name: 'Nutricionista', slug: 'nutricionista', reg_label: 'CRN', reg_req: 1, cat_id: 'cat-nutri' },
     { id: 'prof-psicologo', name: 'Psicólogo', slug: 'psicologo', reg_label: 'CRP', reg_req: 1, cat_id: 'cat-mental' },
+    { id: 'prof-psicanalista', name: 'Psicanalista', slug: 'psicanalista', reg_label: 'Registro Associação', reg_req: 0, cat_id: 'cat-mental' },
     { id: 'prof-terapeuta-ocupacional', name: 'Terapeuta Ocupacional', slug: 'terapeuta-ocupacional', reg_label: 'CREFITO', reg_req: 1, cat_id: 'cat-reab' },
     { id: 'prof-psicopedagogo', name: 'Psicopedagogo', slug: 'psicopedagogo', reg_label: 'ABPp', reg_req: 0, cat_id: 'cat-mental' },
     { id: 'prof-personal-trainer', name: 'Profissional de Educação Física', slug: 'personal-trainer', reg_label: 'CREF', reg_req: 1, cat_id: 'cat-esporte' },
@@ -79,7 +80,7 @@ export function migrateProfessionsNormalization(rawDb: DatabaseSync): void {
     // Especialidades / nomes de área odontológicos
     'prof-odontologia', 'prof-ortodontista',
     // Especialidades / nomes de área de psicologia
-    'prof-psicologia', 'prof-neuropsicologo', 'prof-psicanalista', 'prof-terapeuta-familiar',
+    'prof-psicologia', 'prof-neuropsicologo', 'prof-terapeuta-familiar',
     // Variações de área x profissional
     'prof-fisioterapia', 'prof-fonoaudiologia', 'prof-enfermagem', 'prof-nutricao',
     'prof-terapia-ocupacional', 'prof-psicopedagogia', 'prof-educacao-fisica',
@@ -96,6 +97,19 @@ export function migrateProfessionsNormalization(rawDb: DatabaseSync): void {
       updateCanonicalZero.run(id);
     } catch (_) {}
   }
+
+  try {
+    rawDb.prepare(`
+      UPDATE professions 
+      SET active = 1, is_canonical = 1, category_id = 'cat-mental', registration_board_label = 'Registro Associação'
+      WHERE id = 'prof-psicanalista'
+    `).run();
+    rawDb.prepare(`
+      UPDATE professions 
+      SET active = 1, is_canonical = 1 
+      WHERE id IN ('prof-fonoaudiologo', 'prof-psicopedagogo', 'prof-terapeuta-ocupacional')
+    `).run();
+  } catch (_) {}
 
   // 3. Semeia e Padroniza Especialidades Odontológicas em 'specialties' (prof_id = 'prof-dentista')
   const dentalSpecialties = [

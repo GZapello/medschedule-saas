@@ -253,10 +253,16 @@ export class StaffController {
       let finalProfName: string | null = professionName || null;
 
       if (rawProf && rawProf !== 'none') {
-        canonicalProfId = (REGISTRATION_PROFESSION_ALIASES as Record<string, string>)[rawProf] || rawProf;
-        const pRow = db.prepare('SELECT id, name FROM professions WHERE id = ?').get(canonicalProfId) as any;
-        if (pRow) {
-          finalProfName = pRow.name;
+        const directRow = db.prepare('SELECT id, name FROM professions WHERE id = ?').get(rawProf) as any;
+        if (directRow) {
+          canonicalProfId = directRow.id;
+          finalProfName = professionName || directRow.name;
+        } else {
+          canonicalProfId = (REGISTRATION_PROFESSION_ALIASES as Record<string, string>)[rawProf] || rawProf;
+          const pRow = db.prepare('SELECT id, name FROM professions WHERE id = ?').get(canonicalProfId) as any;
+          if (pRow) {
+            finalProfName = pRow.name;
+          }
         }
       } else if (professionName && professionName !== 'none') {
         const canonical = resolveCanonicalProfession({ name: professionName });

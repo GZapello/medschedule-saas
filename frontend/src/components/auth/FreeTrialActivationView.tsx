@@ -56,15 +56,17 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
 
   // Lista de Profissões e Área de Atuação com respectivos módulos
   const DEFAULT_PROFESSIONS = [
-    { id: 'prof-fonoaudiologia', name: 'Fonoaudiologia → ZemdaFono' },
-    { id: 'prof-psicologia', name: 'Psicologia → ZemdaPsico' },
-    { id: 'prof-terapia-ocupacional', name: 'Terapia Ocupacional → ZemdaTO' },
-    { id: 'prof-nutricao', name: 'Nutrição → ZemdaNutri' },
-    { id: 'prof-fisioterapia', name: 'Fisioterapia → ZemdaFisio' },
+    { id: 'prof-fonoaudiologo', name: 'Fonoaudiólogo(a) → ZemdaFono' },
+    { id: 'prof-psicologo', name: 'Psicólogo(a) → ZemdaPsico' },
+    { id: 'prof-psicanalista', name: 'Psicanalista → ZemdaPsico' },
+    { id: 'prof-terapeuta-ocupacional', name: 'Terapeuta Ocupacional → ZemdaTO' },
+    { id: 'prof-psicopedagogo', name: 'Psicopedagogo(a) → ZemdaPP' },
+    { id: 'prof-nutricionista', name: 'Nutricionista → ZemdaNutri' },
+    { id: 'prof-fisioterapeuta', name: 'Fisioterapeuta → ZemdaFisio' },
     { id: 'prof-personal-trainer', name: 'Personal Trainer → ZemdaPersonal' },
-    { id: 'prof-odontologia', name: 'Odontologia/Dentista → ZemdaOdonto' },
-    { id: 'prof-medicina', name: 'Medicina / Médico' },
-    { id: 'prof-gestao', name: 'Gestão Administrativa' },
+    { id: 'prof-dentista', name: 'Cirurgião-Dentista → ZemdaOdonto' },
+    { id: 'prof-medico', name: 'Médico(a) → ZemdaMed' },
+    { id: 'prof-esteticista', name: 'Esteticista → ZemdaEstetic' },
     { id: 'prof-outro-saude', name: 'Outro profissional da saúde' }
   ];
 
@@ -92,7 +94,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
     try {
       const data = await ApiClient.get<any[]>('/v1/taxonomy/professions');
       if (Array.isArray(data) && data.length > 0) {
-        setProfessions(data.map(p => ({ id: p.id, name: p.name })));
+        setProfessions(data.map(p => ({ id: p.id, name: p.label || p.name })));
       }
     } catch {
       // Fallback padrão já definido

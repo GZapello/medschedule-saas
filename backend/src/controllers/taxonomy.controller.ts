@@ -3,7 +3,7 @@ import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 import { comparePassword } from '../utils/password';
-import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
+import { REGISTRATION_PROFESSION_ALIASES, REGISTRATION_PROFESSIONS } from '../types/registration-professions';
 
 export class TaxonomyController {
   // Categorias (Tipos de Serviço Macro)
@@ -141,8 +141,8 @@ export class TaxonomyController {
 
       if (!showAll) {
         conditions.push('p.active = 1');
-        // Apenas profissões canônicas (exclui especialidades médicas no nível base e cargos administrativos)
-        conditions.push('(p.is_canonical = 1 OR p.is_canonical IS NULL)');
+        // Apenas profissões canônicas e abordagens visíveis (exclui especialidades médicas no nível base e cargos administrativos)
+        conditions.push('(p.is_canonical = 1 OR p.is_canonical IS NULL OR p.id = \'prof-psicanalista\')');
         conditions.push("(p.category_id != 'cat-admin' OR p.category_id IS NULL)");
       }
 
@@ -170,11 +170,14 @@ export class TaxonomyController {
         const primaryModule = resolution.commercialModule;
         const modules = primaryModule ? [primaryModule, 'ZemdaBody'] : ['Recursos gerais do Zemda', 'ZemdaBody'];
         const accessLabel = modules.join(' + ');
-        const displayOption = `${p.name} — ${accessLabel}`;
+
+        const regOption = REGISTRATION_PROFESSIONS.find(opt => opt.id === p.id);
+        const label = regOption?.label || p.name;
+        const displayOption = `${label} — ${accessLabel}`;
         const isAdministrative = resolution.taxonomyCategory === 'ADMINISTRATIVE' || p.category_is_clinical === 0 || p.category_id === 'cat-admin';
         return {
           ...p,
-          label: p.name,
+          label,
           canonicalId: resolution.canonicalId,
           canonicalName: resolution.canonicalName,
           boardLabel: p.registration_board_label || resolution.boardLabel,
