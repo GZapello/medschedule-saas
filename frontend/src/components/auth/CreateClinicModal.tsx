@@ -59,7 +59,7 @@ interface CreateClinicModalProps {
   presentation?: 'modal' | 'page';
 }
 
-type RegistrationStep = 'initial_data' | 'profession' | 'security' | 'verify_email' | 'plans' | 'profile';
+type RegistrationStep = 'signup' | 'verify_email' | 'plans' | 'profile';
 
 export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   isOpen,
@@ -72,8 +72,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   const { showToast } = useToast();
   const { currentUser, loginWithToken, reloadSession, logout } = useAuth();
 
-  // 1. Estado da Etapa Atual
-  const [step, setStep] = useState<RegistrationStep>('initial_data');
+  // 1. Estado da Etapa Atual (Cadastro em tela única e Onboarding em 3 etapas)
+  const [step, setStep] = useState<RegistrationStep>('signup');
   const [selectedPlanCode, setSelectedPlanCode] = useState(initialPlan || (isTrial ? 'SOLO' : ''));
   const [plans, setPlans] = useState<RegistrationPlan[]>([]);
   const [planError, setPlanError] = useState('');
@@ -376,17 +376,16 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   };
 
   // ==========================================
-  // NAVEGAÇÃO E VALIDAÇÕES DAS 4 ETAPAS
+  // CRIAÇÃO DA CONTA EM TELA ÚNICA
   // ==========================================
 
-  // Avançar da Etapa 1 (Dados Iniciais) para Etapa 2 (Profissão)
-  const handleProceedFromInitialData = (e: React.FormEvent) => {
+  const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     notifySignupStarted();
 
     if (!formData.responsibleName.trim()) {
       trackSignupValidationError({
-        step: 'initial_data',
+        step: 'signup',
         field: 'name',
         errorCode: 'NAME_MISSING'
       });
@@ -397,7 +396,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     const cleanPhone = formData.phone.replace(/\D/g, '');
     if (cleanPhone.length < 10) {
       trackSignupValidationError({
-        step: 'initial_data',
+        step: 'signup',
         field: 'phone',
         errorCode: 'INVALID_PHONE_FORMAT'
       });
@@ -408,7 +407,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email.trim())) {
       trackSignupValidationError({
-        step: 'initial_data',
+        step: 'signup',
         field: 'email',
         errorCode: 'INVALID_EMAIL_FORMAT'
       });
@@ -416,17 +415,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       return;
     }
 
-    // Avança para etapa 2
-    setStep('profession');
-  };
-
-  // Avançar da Etapa 2 (Profissão) para Etapa 3 (Segurança)
-  const handleProceedFromProfession = (e: React.FormEvent) => {
-    e.preventDefault();
-
     if (!formData.profession) {
       trackSignupValidationError({
-        step: 'profession',
+        step: 'signup',
         field: 'profession',
         errorCode: 'PROFESSION_MISSING'
       });
@@ -436,7 +427,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     if (formData.profession === 'prof-outro-saude' && !formData.customProfession.trim()) {
       trackSignupValidationError({
-        step: 'profession',
+        step: 'signup',
         field: 'customProfession',
         errorCode: 'CUSTOM_PROFESSION_MISSING'
       });
@@ -444,16 +435,9 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       return;
     }
 
-    setStep('security');
-  };
-
-  // Etapa 3 (Segurança): Valida campos essenciais e CRIA A CONTA IMEDIATAMENTE no backend
-  const handleProceedFromSecurity = async (e: React.FormEvent) => {
-    e.preventDefault();
-
     if (!formData.password || formData.password.length < 6) {
       trackSignupValidationError({
-        step: 'security',
+        step: 'signup',
         field: 'password',
         errorCode: 'PASSWORD_TOO_SHORT'
       });
@@ -463,7 +447,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     if (formData.password !== formData.confirmPassword) {
       trackSignupValidationError({
-        step: 'security',
+        step: 'signup',
         field: 'confirmPassword',
         errorCode: 'PASSWORD_MISMATCH'
       });
@@ -473,7 +457,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     if (!formData.termsAccepted || !formData.privacyAccepted) {
       trackSignupValidationError({
-        step: 'security',
+        step: 'signup',
         field: 'terms',
         errorCode: 'TERMS_NOT_ACCEPTED'
       });
@@ -481,7 +465,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       return;
     }
 
-    // Cria a conta imediatamente com dados mínimos
+    // Cria a conta imediatamente com todos os dados mínimos
     try {
       setLoading(true);
       trackSignupSubmit({
@@ -543,7 +527,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       }
     } catch (err: any) {
       trackSignupError({
-        step: 'security',
+        step: 'signup',
         errorCode: err.code || 'REGISTRATION_FAILED',
         errorType: err.code ? 'api_error' : 'network_error',
         planCode: selectedPlanCode || initialPlan,
@@ -551,6 +535,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       });
       if (err.code === 'ACCOUNT_EXISTS_ONBOARDING_PENDING') {
         showToast('Já existe um cadastro em andamento com este e-mail. Faça login para continuar o onboarding.', 'info');
+      } else if (err.code === 'EMAIL_ALREADY_EXISTS') {
+        showToast('Este e-mail já está cadastrado. Faça login para acessar sua conta.', 'info');
       } else {
         showToast(err.message || 'Erro ao realizar cadastro.', 'error');
       }
@@ -809,44 +795,20 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     }
   };
 
-  const isCadastro = step === 'initial_data' || step === 'profession' || step === 'security';
+  const isCadastro = step === 'signup';
 
-  // Informações da etapa atual divididas rigorosamente entre Cadastro e Onboarding
+  // Informações da etapa atual divididas rigorosamente entre Cadastro (tela única) e Onboarding (3 etapas)
   const stepInfo = useMemo(() => {
     if (isCadastro) {
-      switch (step) {
-        case 'initial_data':
-          return {
-            current: 1,
-            total: 3,
-            title: 'Dados iniciais',
-            progressText: 'Dados → Profissão → Segurança',
-            percentage: '33%',
-            headerTitle: 'Criar Minha Conta',
-            headerSubtitle: 'Plataforma integrada de gestão e atendimento clínico'
-          };
-        case 'profession':
-          return {
-            current: 2,
-            total: 3,
-            title: 'Profissão',
-            progressText: 'Dados → Profissão → Segurança',
-            percentage: '66%',
-            headerTitle: 'Criar Minha Conta',
-            headerSubtitle: 'Plataforma integrada de gestão e atendimento clínico'
-          };
-        case 'security':
-        default:
-          return {
-            current: 3,
-            total: 3,
-            title: 'Segurança',
-            progressText: 'Dados → Profissão → Segurança',
-            percentage: '100%',
-            headerTitle: 'Criar Minha Conta',
-            headerSubtitle: 'Plataforma integrada de gestão e atendimento clínico'
-          };
-      }
+      return {
+        headerTitle: 'Criar Minha Conta',
+        headerSubtitle: 'Plataforma integrada de gestão e atendimento clínico',
+        current: 1,
+        total: 1,
+        title: 'Criar Minha Conta',
+        progressText: '',
+        percentage: '0%'
+      };
     } else {
       switch (step) {
         case 'verify_email':
@@ -854,7 +816,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
             current: 1,
             total: 3,
             title: 'Verifique seu e-mail',
-            progressText: 'Verificação → Plano → Perfil',
+            progressText: '1 de 3 — Verifique seu e-mail',
             percentage: '33%',
             headerTitle: 'Configure seu acesso ao Zemda',
             headerSubtitle: 'Conclua as etapas abaixo para liberar seu painel'
@@ -864,7 +826,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
             current: 2,
             total: 3,
             title: 'Escolha seu plano',
-            progressText: 'Verificação → Plano → Perfil',
+            progressText: '2 de 3 — Escolha seu plano',
             percentage: '66%',
             headerTitle: 'Configure seu acesso ao Zemda',
             headerSubtitle: 'Conclua as etapas abaixo para liberar seu painel'
@@ -875,7 +837,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
             current: 3,
             total: 3,
             title: 'Complete seu perfil',
-            progressText: 'Verificação → Plano → Perfil',
+            progressText: '3 de 3 — Complete seu perfil',
             percentage: '100%',
             headerTitle: 'Configure seu acesso ao Zemda',
             headerSubtitle: 'Conclua as etapas abaixo para liberar seu painel'
@@ -904,7 +866,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       )}
       <div
         className={`${presentation === 'page' ? 'signup-card' : ''} bg-white w-full h-[100dvh] sm:h-auto sm:max-h-[92dvh] sm:rounded-3xl flex flex-col ${
-          step === 'plans' ? 'sm:max-w-4xl' : step === 'profession' ? 'sm:max-w-2xl sm:min-h-[680px]' : 'sm:max-w-xl'
+          step === 'plans' ? 'sm:max-w-4xl' : step === 'profile' ? 'sm:max-w-2xl sm:min-h-[680px]' : 'sm:max-w-xl'
         } overflow-hidden shadow-2xl border border-slate-100 transition-all duration-300`}
       >
         {/* Top Header com Marca e Fechar */}
@@ -941,8 +903,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
           </button>
         </div>
 
-        {/* Indicador de Progresso (1 de 3 / 2 de 3 / 3 de 3) */}
-        {!successData && (
+        {/* Indicador de Progresso (Exibido apenas nas 3 etapas do Onboarding) */}
+        {!isCadastro && !successData && (
           <div className="px-5 pt-4 pb-3 sm:px-6 border-b border-slate-100 bg-slate-50/70 shrink-0">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -1004,26 +966,26 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 Entrar e escolher o plano
               </button>
             </div>
-          ) : step === 'initial_data' ? (
+          ) : step === 'signup' ? (
             /* ======================================================== */
-            /* ETAPA 1: DADOS INICIAIS                                    */
+            /* ETAPA ÚNICA: CRIAÇÃO DA CONTA                            */
             /* ======================================================== */
-            <form onSubmit={handleProceedFromInitialData} className="space-y-5">
+            <form onSubmit={handleCreateAccount} className="space-y-4">
               <div className="space-y-1">
                 <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200/60">
                   <Sparkles className="w-3.5 h-3.5 text-teal-600" />
                   Teste o Zemda grátis por 7 dias
                 </span>
                 <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight pt-1">
-                  Crie sua conta grátis
+                  Crie sua conta
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                  Leva menos de 1 minuto.
+                  Preencha os dados abaixo para começar imediatamente.
                 </p>
               </div>
 
-              <div className="space-y-4 pt-1">
-                {/* Nome completo */}
+              <div className="space-y-3.5 pt-1">
+                {/* 1. Nome completo */}
                 <div>
                   <label htmlFor="signup-name" className="block text-xs font-bold text-slate-700 mb-1.5">
                     Nome completo *
@@ -1040,12 +1002,12 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                         notifySignupStarted();
                         setFormData({ ...formData, responsibleName: e.target.value });
                       }}
-                      className="w-full pl-11 pr-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                      className="w-full pl-11 pr-4 py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
                     />
                   </div>
                 </div>
 
-                {/* WhatsApp / Celular */}
+                {/* 2. WhatsApp */}
                 <div>
                   <label htmlFor="signup-phone" className="block text-xs font-bold text-slate-700 mb-1.5">
                     WhatsApp *
@@ -1062,12 +1024,12 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                         notifySignupStarted();
                         setFormData({ ...formData, phone: formatPhone(e.target.value) });
                       }}
-                      className="w-full pl-11 pr-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                      className="w-full pl-11 pr-4 py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
                     />
                   </div>
                 </div>
 
-                {/* E-mail */}
+                {/* 3. E-mail */}
                 <div>
                   <label htmlFor="signup-email" className="block text-xs font-bold text-slate-700 mb-1.5">
                     E-mail *
@@ -1084,53 +1046,30 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                         notifySignupStarted();
                         setFormData({ ...formData, email: e.target.value });
                       }}
-                      className="w-full pl-11 pr-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                      className="w-full pl-11 pr-4 py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* Botões de Ação */}
-              <div className="pt-3">
-                <button
-                  type="submit"
-                  className="w-full min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>Continuar cadastro</span>
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              </div>
-            </form>
-          ) : step === 'profession' ? (
-            /* ======================================================== */
-            /* ETAPA 2: PROFISSÃO                                        */
-            /* ======================================================== */
-            <form onSubmit={handleProceedFromProfession} className="space-y-5">
-              <div className="space-y-1">
-                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  Qual é a sua profissão?
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                  Personalizamos os módulos clínicos e de gestão para o seu dia a dia.
-                </p>
-              </div>
-
-              <div className="space-y-4 pt-1">
+                {/* 4. Profissão */}
                 <div>
                   <label htmlFor="registration-profession" className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Profissão ou Especialidade *
+                    Profissão *
                   </label>
                   <div className="relative">
                     <Briefcase className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     <RegistrationProfessionSelect
                       value={formData.profession}
-                      onChange={profession => setFormData({ ...formData, profession })}
+                      onChange={profession => {
+                        notifySignupStarted();
+                        setFormData({ ...formData, profession });
+                      }}
                       options={professionOptions}
                       loading={loadingProfessions}
                     />
                   </div>
 
-                  {/* Bloco informativo dinâmico dos módulos */}
+                  {/* Bloco informativo dinâmico dos módulos inclusos */}
                   {(() => {
                     const selected = professionOptions.find(p => p.id === formData.profession);
                     if (!selected) return null;
@@ -1138,16 +1077,16 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                       ? selected.modules
                       : (selected.module ? [selected.module, 'Zemda360'] : ['Recursos gerais do Zemda', 'Zemda360']);
                     return (
-                      <div className="mt-3 p-3.5 rounded-2xl bg-teal-50/90 border border-teal-200/90 text-xs text-teal-950 animate-in fade-in duration-200 shadow-xs">
-                        <div className="flex items-center gap-2 font-extrabold text-teal-900 mb-1.5">
-                          <Sparkles className="w-4 h-4 text-teal-600 shrink-0" />
+                      <div className="mt-2.5 p-3 rounded-2xl bg-teal-50/90 border border-teal-200/90 text-xs text-teal-950 animate-in fade-in duration-200 shadow-2xs">
+                        <div className="flex items-center gap-1.5 font-extrabold text-teal-900 mb-1 text-[11px]">
+                          <Sparkles className="w-3.5 h-3.5 text-teal-600 shrink-0" />
                           <span>Módulos inclusos para sua área:</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 text-xs">
                           {mods.map((m, idx) => (
                             <React.Fragment key={m}>
                               {idx > 0 && <span className="text-teal-400 font-bold">•</span>}
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white border border-teal-200 text-teal-950 font-bold shadow-2xs">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-white border border-teal-200 text-teal-950 font-bold text-[11px] shadow-2xs">
                                 {m}
                               </span>
                             </React.Fragment>
@@ -1158,7 +1097,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                   })()}
 
                   {formData.profession === 'prof-outro-saude' && (
-                    <div className="mt-3">
+                    <div className="mt-2.5">
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Especifique sua profissão da saúde *
                       </label>
@@ -1168,106 +1107,67 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                         placeholder="Ex: Biomédico(a), Quiropraxista..."
                         value={formData.customProfession}
                         onChange={e => setFormData({ ...formData, customProfession: e.target.value })}
-                        className="w-full px-4 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                        className="w-full px-4 py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
                       />
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Botões de Ação */}
-              <div className="flex items-center gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setStep('initial_data');
-                  }}
-                  className="min-h-[48px] px-4 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs sm:text-sm rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Voltar</span>
-                </button>
+                {/* 5. Senha e Confirmar senha */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Senha *
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        placeholder="Mínimo 6 caracteres"
+                        value={formData.password}
+                        onChange={e => setFormData({ ...formData, password: e.target.value })}
+                        className="w-full pl-11 pr-10 py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+                        aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
 
-                <button
-                  type="submit"
-                  className="flex-1 min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <span>Continuar</span>
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              </div>
-            </form>
-          ) : step === 'security' ? (
-            /* ======================================================== */
-            /* ETAPA 3: SEGURANÇA                                        */
-            /* ======================================================== */
-            <form onSubmit={handleProceedFromSecurity} className="space-y-5">
-              <div className="space-y-1">
-                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  Crie sua senha de acesso
-                </h3>
-                <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                  Sua senha protegerá o acesso ao consultório e dados dos pacientes.
-                </p>
-              </div>
-
-              <div className="space-y-4 pt-1">
-                {/* Senha */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Senha de Acesso *
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required
-                      placeholder="Mínimo de 6 caracteres"
-                      value={formData.password}
-                      onChange={e => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full pl-11 pr-11 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
-                      aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Confirmar senha *
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        required
+                        placeholder="Repita a senha"
+                        value={formData.confirmPassword}
+                        onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                        className="w-full pl-11 pr-10 py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+                        aria-label={showConfirmPassword ? 'Ocultar confirmação de senha' : 'Exibir confirmação de senha'}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                {/* Confirmar Senha */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Confirmar Senha *
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      required
-                      placeholder="Repita a senha digitada"
-                      value={formData.confirmPassword}
-                      onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                      className="w-full pl-11 pr-11 py-3 sm:py-2.5 text-base sm:text-sm border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-1"
-                      aria-label={showConfirmPassword ? 'Ocultar confirmação de senha' : 'Exibir confirmação de senha'}
-                    >
-                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Aceites Legais Obrigatórios */}
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                {/* 6. Checkboxes: Termos e Privacidade */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
                   <label className="flex items-start gap-3 text-xs text-slate-800 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1300,21 +1200,21 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                       className="w-4 h-4 mt-0.5 rounded text-teal-600 focus:ring-teal-500 cursor-pointer"
                     />
                     <span className="leading-relaxed">
-                      Li e estou ciente da{' '}
+                      Li e aceito a{' '}
                       <a
                         href="/privacidade"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="font-bold text-teal-600 underline hover:text-teal-700 inline-flex items-center gap-0.5"
                       >
-                        Política de Privacidade e Proteção de Dados
+                        Política de Privacidade
                         <ExternalLink className="w-3 h-3" />
                       </a>{' '}
                       *
                     </span>
                   </label>
 
-                  <div className="pt-2 border-t border-slate-200">
+                  <div className="pt-2 border-t border-slate-200/80">
                     <label className="flex items-start gap-3 text-[11px] text-slate-500 cursor-pointer">
                       <input
                         type="checkbox"
@@ -1330,35 +1230,22 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 </div>
               </div>
 
-              {/* Botões de Ação */}
-              <div className="flex items-center gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setStep('profession');
-                  }}
-                  className="min-h-[48px] px-4 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs sm:text-sm rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Voltar</span>
-                </button>
-
+              {/* 7. Botão: CRIAR MINHA CONTA */}
+              <div className="pt-2">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full min-h-[50px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-extrabold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Enviando código...</span>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Criando sua conta...</span>
                     </>
                   ) : (
                     <>
-                      <span>Continuar</span>
-                      <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span>CRIAR MINHA CONTA</span>
+                      <ArrowRight className="w-5 h-5" />
                     </>
                   )}
                 </button>
@@ -1464,26 +1351,13 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 )}
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setStep('security');
-                  }}
-                  className="min-h-[48px] px-4 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs sm:text-sm rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Voltar</span>
-                </button>
-
+              {/* Action */}
+              <div className="pt-2">
                 <button
                   type="button"
                   onClick={() => handleVerifyOtpAndAdvance()}
                   disabled={isVerifying || otpDigits.join('').length !== 6}
-                  className="flex-1 min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {isVerifying ? (
                     <>
@@ -1931,12 +1805,25 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 </div>
               </div>
 
-              {/* Botão de Finalização */}
-              <div className="pt-3">
+              {/* Botões de Ação */}
+              <div className="flex items-center gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setStep('plans');
+                  }}
+                  className="min-h-[48px] px-4 py-3 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs sm:text-sm rounded-2xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Voltar</span>
+                </button>
+
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="flex-1 min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {loading ? (
                     <>
