@@ -528,12 +528,8 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
         <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-2 select-none">
-            <div className="flex items-center justify-center gap-3 mb-1">
-              <img src="/brand/zemda-icon.png" alt="Zemda" className="w-12 h-12 object-contain drop-shadow-sm" />
-              <div className="flex items-center gap-1.5">
-                <span className="text-3xl font-black text-slate-950 tracking-tight">Zemda</span>
-                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-              </div>
+            <div className="flex items-center justify-center mb-1">
+              <img src="/brand/zemda-logo.png" alt="Zemda" className="h-12 sm:h-14 w-auto object-contain drop-shadow-xs" />
             </div>
             <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">Saúde e Gestão em Harmonia</p>
           </div>
@@ -553,12 +549,8 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
         <div className="w-full max-w-md space-y-6">
           <div className="text-center space-y-2 select-none">
-            <div className="flex items-center justify-center gap-3 mb-1">
-              <img src="/brand/zemda-icon.png" alt="Zemda" className="w-12 h-12 object-contain drop-shadow-sm" />
-              <div className="flex items-center gap-1.5">
-                <span className="text-3xl font-black text-slate-950 tracking-tight">Zemda</span>
-                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-              </div>
+            <div className="flex items-center justify-center mb-1">
+              <img src="/brand/zemda-logo.png" alt="Zemda" className="h-12 sm:h-14 w-auto object-contain drop-shadow-xs" />
             </div>
             <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">Saúde e Gestão em Harmonia</p>
           </div>
@@ -652,16 +644,12 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
 
         {/* Brand Header */}
         <div className="text-center space-y-2 select-none">
-          <div className="flex items-center justify-center gap-3 mb-1">
+          <div className="flex items-center justify-center mb-1">
             <img
-              src="/brand/zemda-icon.png"
+              src="/brand/zemda-logo.png"
               alt="Zemda"
-              className="w-12 h-12 object-contain drop-shadow-sm"
+              className="h-12 sm:h-14 w-auto object-contain drop-shadow-xs"
             />
-            <div className="flex items-center gap-1.5">
-              <span className="text-3xl font-black text-slate-950 tracking-tight">Zemda</span>
-              <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-            </div>
           </div>
           <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">
             Saúde e Gestão em Harmonia

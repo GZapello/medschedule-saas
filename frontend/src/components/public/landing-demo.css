@@ -24,7 +24,7 @@
 @keyframes zd-appear{from{opacity:.4}to{opacity:1}}@keyframes zd-slide{from{transform:translateX(100%)}to{transform:none}}@keyframes zd-slide-out{to{transform:translateX(100%)}}
 .zd-screen .zd-display{position:absolute;inset:0;display:flex;flex-direction:row;border-radius:0;box-shadow:none;font-size:20px;transform-origin:top left;max-width:none}
 .zd-screen .zd-sidebar{display:block;width:280px;padding:28px 16px;border-right:1px solid #e7edf5;border-bottom:0;overflow:auto}
-.zd-screen .zd-brand{display:flex;font-size:36px;gap:16px;padding:0 10px 32px}.zd-screen .zd-brand img{width:44px;height:44px}.zd-screen .zd-brand small{font-size:17px}
+.zd-screen .zd-brand{display:flex;align-items:center;padding:0 10px 32px}.zd-screen .zd-brand img{width:auto;height:44px;max-width:200px;object-fit:contain}
 .zd-screen .zd-nav-label{display:block;font-size:13px;margin:10px 8px 22px}
 .zd-screen .zd-sidebar nav{display:flex;flex-direction:column;gap:9px}.zd-screen .zd-sidebar nav button{font-size:18px;min-height:68px;padding:13px 10px;gap:13px;border-radius:13px}.zd-screen .zd-sidebar nav button svg{width:24px;height:24px}
 .zd-screen .zd-viewport{flex:1;min-width:0;overflow:auto}.zd-screen .zd-print-viewport{display:flex;align-items:center}.zd-screen .zd-print{width:100%;min-width:0}

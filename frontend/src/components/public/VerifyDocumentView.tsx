@@ -106,7 +106,8 @@ export const VerifyDocumentView: React.FC<VerifyDocumentViewProps> = ({
               <span>Início</span>
             </button>
             <div className="h-5 w-px bg-slate-800" />
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              <img src="/brand/zemda-icon.png" alt="Zemda" className="w-7 h-7 object-contain" />
               <span className="font-black tracking-tight text-white text-lg">Zemda</span>
               <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
                 Verificador Oficial

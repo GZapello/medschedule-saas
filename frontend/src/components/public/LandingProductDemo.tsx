@@ -99,7 +99,7 @@ export const LandingProductDemo: React.FC = () => {
       <div className="zd-scaled-size" style={{ width: DESKTOP_WIDTH * scale, height: DESKTOP_HEIGHT * scale }}>
       <div className="zd-display" style={{ width: DESKTOP_WIDTH, height: DESKTOP_HEIGHT, transform: `scale(${scale})` }}>
         <aside className="zd-sidebar">
-          <div className="zd-brand"><img src="/brand/zemda-icon-96.webp" alt="" width="27" height="27" /><span>Zemda<small>Saúde &amp; Gestão</small></span></div>
+          <div className="zd-brand"><img src="/brand/zemda-logo.png" alt="Zemda" className="h-7 w-auto object-contain" /></div>
           <span className="zd-nav-label">ATENDIMENTO &amp; GESTÃO</span>
           <nav aria-label="Menu da demonstração">
             {views.map(([id, name, Icon]) => <button key={id} ref={id === 'professional' ? moduleRef : undefined}

@@ -49,27 +49,13 @@ export const PublicHeader: React.FC<PublicHeaderProps> = ({
           onClick={(e) => {
             handleNavClick(e, '/');
           }}
-          className="flex items-center gap-3 cursor-pointer group select-none"
+          className="flex items-center cursor-pointer group select-none"
         >
-          <div className="relative flex items-center justify-center">
-            <img
-              src="/brand/zemda-icon-96.webp"
-              alt="Zemda"
-              width={36} height={36}
-              className="w-9 h-9 object-contain rounded-xl drop-shadow-xs group-hover:scale-105 transition-transform"
-            />
-          </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="text-2xl font-black tracking-tight text-slate-900">
-                Zemda
-              </span>
-              <span className="inline-block w-2 h-2 rounded-full bg-teal-500" />
-            </div>
-            <span className="text-[10px] uppercase font-bold tracking-widest text-teal-600">
-              Saúde e Gestão
-            </span>
-          </div>
+          <img
+            src="/brand/zemda-logo.png"
+            alt="Zemda"
+            className="h-10 w-auto object-contain group-hover:opacity-90 transition-opacity"
+          />
         </a>
 
         {/* Desktop Navigation Links (Links HTML Rastreáveis) */}

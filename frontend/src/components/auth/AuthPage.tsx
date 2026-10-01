@@ -111,16 +111,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
         {/* Brand Header Institucional Zemda */}
         <div className="text-center space-y-2 select-none">
-          <div className="flex items-center justify-center gap-3 mb-1">
+          <div className="flex items-center justify-center mb-1">
             <img
-              src="/brand/zemda-icon.png"
+              src="/brand/zemda-logo.png"
               alt="Zemda"
-              className="w-12 h-12 object-contain drop-shadow-sm"
+              className="h-12 sm:h-14 w-auto object-contain drop-shadow-xs"
             />
-            <div className="flex items-center gap-1.5">
-              <span className="text-3xl font-black text-slate-950 tracking-tight">Zemda</span>
-              <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-            </div>
           </div>
           <p className="text-xs text-teal-700 font-bold uppercase tracking-widest">
             Saúde e Gestão em Harmonia

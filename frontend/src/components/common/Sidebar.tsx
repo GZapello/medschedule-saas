@@ -288,16 +288,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         {/* Brand Header */}
         <div className="h-16 flex items-center justify-between px-5 border-b border-slate-100 bg-white">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center">
             <img
-              src="/brand/zemda-icon.png"
+              src="/brand/zemda-logo.png"
               alt="Zemda"
-              className="w-7 h-7 object-contain rounded-lg shadow-xs"
+              className="h-8 w-auto object-contain"
             />
-            <div className="flex flex-col">
-              <span className="font-bold text-slate-900 text-base tracking-tight leading-tight">Zemda</span>
-              <span className="text-[10px] text-teal-600 font-bold">Saúde & Gestão</span>
-            </div>
           </div>
           <button
             onClick={onClose}

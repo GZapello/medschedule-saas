@@ -300,6 +300,9 @@ export const OnboardingWizardView: React.FC<OnboardingWizardViewProps> = ({ onCo
       <div className="w-full max-w-3xl space-y-6">
         {/* Top Branding & Greeting */}
         <div className="text-center space-y-2">
+          <div className="flex justify-center mb-1">
+            <img src="/brand/zemda-logo.png" alt="Zemda" className="h-10 w-auto object-contain" />
+          </div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-bold uppercase tracking-wider border border-teal-200/80">
             <Sparkles className="w-3.5 h-3.5 text-teal-600" />
             Configuração Inicial Obrigatória

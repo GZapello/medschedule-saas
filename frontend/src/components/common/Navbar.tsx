@@ -39,9 +39,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, onNavigate }) =
         </button>
 
         <div className="flex items-center gap-2.5 sm:gap-3 cursor-pointer min-w-0" onClick={() => onNavigate('dashboard')}>
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0">
-            {currentTenant?.name?.charAt(0) || 'Z'}
-          </div>
+          {currentTenant?.logo_url ? (
+            <img
+              src={currentTenant.logo_url}
+              alt={currentTenant?.trade_name || currentTenant?.name || 'Clínica'}
+              className="w-9 h-9 rounded-xl object-contain border border-slate-100 shadow-xs shrink-0"
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-600 to-emerald-500 flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0">
+              {currentTenant?.name?.charAt(0) || 'Z'}
+            </div>
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-slate-900 text-sm sm:text-base leading-tight truncate">
