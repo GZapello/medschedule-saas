@@ -1,5 +1,5 @@
 import './CreateClinicModal.css';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { RegistrationPlans, RegistrationPlan } from './RegistrationPlans';
 import { RegistrationProfessionSelect } from './RegistrationProfessionSelect';
 import {
@@ -52,6 +52,7 @@ import { PracticeArea, MedicalSpecialtyItem } from '../../types/capabilities';
 interface CreateClinicModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
   initialPlan?: string;
   isTrial?: boolean;
   presentation?: 'modal' | 'page';
@@ -62,6 +63,7 @@ type RegistrationStep = 'initial_data' | 'profession' | 'security' | 'verify_ema
 export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   isOpen,
   onClose,
+  onSuccess,
   initialPlan,
   isTrial,
   presentation = 'modal'
@@ -587,13 +589,19 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
     try {
       setIsVerifying(true);
-      await ApiClient.post<any>('/v1/onboarding/verify-email', { code });
+      const res = await ApiClient.post<any>('/v1/onboarding/verify-email', { code });
 
       trackEmailVerified({
         professionCode: formData.profession || undefined
       });
       showToast('E-mail verificado com sucesso!', 'success');
-      setStep('plans');
+
+      // Se já houver plano/trial válido, pula etapa de planos e avança direto para o perfil
+      if (res?.hasPlan || res?.onboardingStatus === 'pending_profile') {
+        setStep('profile');
+      } else {
+        setStep('plans');
+      }
     } catch (err: any) {
       trackSignupError({
         step: 'verify_email',
@@ -749,11 +757,15 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       });
 
       await reloadSession();
-      showToast('Onboarding concluído com sucesso! Bem-vindo ao Zemda.', 'success');
-      onClose();
-      window.history.pushState(null, '', '/');
-      window.dispatchEvent(new PopStateEvent('popstate'));
+
+      // Transição direta para o Dashboard com a mesma sessão autenticada (sem logout nem redirect para login)
+      sessionStorage.setItem('activeView', 'dashboard');
+      window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
       window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
+      window.dispatchEvent(new PopStateEvent('popstate'));
+
+      onSuccess?.();
+      showToast('Onboarding concluído com sucesso! Bem-vindo ao Zemda.', 'success');
     } catch (err: any) {
       trackSignupError({
         step: 'profile',
@@ -769,33 +781,80 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     }
   };
 
-  // Cálculo do indicador numérico e progresso
-  const getStepNumber = () => {
-    switch (step) {
-      case 'initial_data':
-        return 1;
-      case 'profession':
-        return 2;
-      case 'security':
-        return 3;
-      case 'verify_email':
-        return 3;
-      case 'plans':
-        return 4;
-      case 'profile':
-        return 4;
-      default:
-        return 1;
-    }
-  };
+  const isCadastro = step === 'initial_data' || step === 'profession' || step === 'security';
 
-  const stepNumber = getStepNumber();
-  const stepTitles = [
-    'Dados iniciais',
-    'Sua profissão',
-    'Segurança e acesso',
-    'Escolha do plano'
-  ];
+  // Informações da etapa atual divididas rigorosamente entre Cadastro e Onboarding
+  const stepInfo = useMemo(() => {
+    if (isCadastro) {
+      switch (step) {
+        case 'initial_data':
+          return {
+            current: 1,
+            total: 3,
+            title: 'Dados iniciais',
+            progressText: 'Dados → Profissão → Segurança',
+            percentage: '33%',
+            headerTitle: 'Criar Minha Conta',
+            headerSubtitle: 'Plataforma integrada de gestão e atendimento clínico'
+          };
+        case 'profession':
+          return {
+            current: 2,
+            total: 3,
+            title: 'Profissão',
+            progressText: 'Dados → Profissão → Segurança',
+            percentage: '66%',
+            headerTitle: 'Criar Minha Conta',
+            headerSubtitle: 'Plataforma integrada de gestão e atendimento clínico'
+          };
+        case 'security':
+        default:
+          return {
+            current: 3,
+            total: 3,
+            title: 'Segurança',
+            progressText: 'Dados → Profissão → Segurança',
+            percentage: '100%',
+            headerTitle: 'Criar Minha Conta',
+            headerSubtitle: 'Plataforma integrada de gestão e atendimento clínico'
+          };
+      }
+    } else {
+      switch (step) {
+        case 'verify_email':
+          return {
+            current: 1,
+            total: 3,
+            title: 'Verifique seu e-mail',
+            progressText: 'Verificação → Plano → Perfil',
+            percentage: '33%',
+            headerTitle: 'Configure seu acesso ao Zemda',
+            headerSubtitle: 'Conclua as etapas abaixo para liberar seu painel'
+          };
+        case 'plans':
+          return {
+            current: 2,
+            total: 3,
+            title: 'Escolha seu plano',
+            progressText: 'Verificação → Plano → Perfil',
+            percentage: '66%',
+            headerTitle: 'Configure seu acesso ao Zemda',
+            headerSubtitle: 'Conclua as etapas abaixo para liberar seu painel'
+          };
+        case 'profile':
+        default:
+          return {
+            current: 3,
+            total: 3,
+            title: 'Complete seu perfil',
+            progressText: 'Verificação → Plano → Perfil',
+            percentage: '100%',
+            headerTitle: 'Configure seu acesso ao Zemda',
+            headerSubtitle: 'Conclua as etapas abaixo para liberar seu painel'
+          };
+      }
+    }
+  }, [isCadastro, step]);
 
   return (
     <div ref={presentation === 'page' ? contentRef : undefined} className={presentation === 'page' ? 'signup-page' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto'}>
@@ -828,8 +887,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
             />
             <div>
               <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                <span>Criar Minha Conta</span>
-                {isTrial && (
+                <span>{stepInfo.headerTitle}</span>
+                {isTrial && isCadastro && (
                   <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/30">
                     <Sparkles className="w-2.5 h-2.5" />
                     Trial 7 dias
@@ -837,7 +896,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 )}
               </h2>
               <p className="text-[11px] sm:text-xs text-teal-200/80">
-                Plataforma integrada de gestão e atendimento clínico
+                {stepInfo.headerSubtitle}
               </p>
             </div>
           </div>
@@ -852,53 +911,31 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
           </button>
         </div>
 
-        {/* Indicador de Progresso (1 de 4 / 2 de 4 / 3 de 4 / 4 de 4) */}
+        {/* Indicador de Progresso (1 de 3 / 2 de 3 / 3 de 3) */}
         {!successData && (
           <div className="px-5 pt-4 pb-3 sm:px-6 border-b border-slate-100 bg-slate-50/70 shrink-0">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-black bg-teal-700 text-white shadow-xs">
-                  {stepNumber} de 4
+                  {stepInfo.current} de {stepInfo.total}
                 </span>
                 <span className="text-xs sm:text-sm font-bold text-slate-800">
-                  {step === 'verify_email'
-                    ? 'Confirmação de E-mail'
-                    : step === 'profile'
-                    ? 'Especialidade & Áreas'
-                    : stepTitles[stepNumber - 1]}
+                  {stepInfo.title}
                 </span>
               </div>
               <div className="text-[11px] font-semibold text-slate-500">
-                {step === 'initial_data' && '25%'}
-                {step === 'profession' && '50%'}
-                {step === 'security' && '75%'}
-                {step === 'verify_email' && '80%'}
-                {step === 'plans' && '90%'}
-                {step === 'profile' && '100%'}
+                {stepInfo.percentage}
               </div>
             </div>
 
             <p className="mb-3 text-[11px] sm:text-xs text-slate-600 leading-relaxed">
-              Dados → Profissão → Segurança → Finalizar
+              {stepInfo.progressText}
             </p>
             {/* Barra Visual de Progresso */}
             <div className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-300 rounded-full"
-                style={{
-                  width:
-                    step === 'initial_data'
-                      ? '25%'
-                      : step === 'profession'
-                      ? '50%'
-                      : step === 'security'
-                      ? '75%'
-                      : step === 'verify_email'
-                      ? '80%'
-                      : step === 'plans'
-                      ? '90%'
-                      : '100%'
-                }}
+                style={{ width: stepInfo.percentage }}
               />
             </div>
           </div>
@@ -1307,22 +1344,21 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 <div className="w-14 h-14 bg-gradient-to-tr from-teal-500 to-emerald-400 text-white rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-teal-500/20">
                   <KeyRound className="w-7 h-7" />
                 </div>
+                <div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold shadow-xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Sua conta já foi criada com sucesso!</span>
+                  </span>
+                </div>
                 <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  Código de Verificação
+                  Confirme seu E-mail
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-                  Digite o código de 6 dígitos que enviamos para o e-mail:
+                  Para validar seu acesso e proteger seus dados, digite o código de 6 dígitos que enviamos para o e-mail:
                 </p>
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 font-bold text-xs sm:text-sm">
                   <Mail className="w-4 h-4 text-teal-600" />
-                  <span>{maskEmail(formData.email)}</span>
-                  <button
-                    type="button"
-                    onClick={() => setStep('initial_data')}
-                    className="text-[11px] text-teal-600 hover:text-teal-800 underline font-semibold ml-1 cursor-pointer"
-                  >
-                    (Alterar)
-                  </button>
+                  <span>{maskEmail(formData.email || currentUser?.email || '')}</span>
                 </div>
               </div>
 

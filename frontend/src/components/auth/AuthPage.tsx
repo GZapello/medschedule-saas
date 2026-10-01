@@ -284,6 +284,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         presentation="page"
         isOpen={isCreateClinicOpen}
         onClose={() => setIsCreateClinicOpen(false)}
+        onSuccess={() => {
+          setIsCreateClinicOpen(false);
+          sessionStorage.setItem('activeView', 'dashboard');
+          window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
+          window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
+        }}
         initialPlan={initialPlan}
         isTrial={isTrial}
       />

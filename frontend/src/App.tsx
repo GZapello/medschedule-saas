@@ -1174,6 +1174,11 @@ const AppContent: React.FC = () => {
         onClose={() => {
           logout();
         }}
+        onSuccess={() => {
+          setCurrentView('dashboard');
+          sessionStorage.setItem('activeView', 'dashboard');
+          window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
+        }}
         presentation="page"
       />
     );
