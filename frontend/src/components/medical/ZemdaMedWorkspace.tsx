@@ -502,12 +502,12 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
 
   // Exame Físico Geral (Clínica Médica e Base)
   const [physicalExam, setPhysicalExam] = useState<MedicalPhysicalExam>({
-    generalStatus: 'Bom estado geral, corado, hidratado, acianótico, anictérico.',
+    generalStatus: '',
     headAndNeck: '',
-    cardiovascular: 'Bulhas rítmicas normofonéticas em 2 tempos, sem sopros audíveis.',
-    respiratory: 'Murmúrio vesicular universalmente audível, sem ruídos adventícios.',
-    abdomen: 'Plano, flácido, indolor à palpação superficial e profunda, ruídos hidroaéreos presentes.',
-    extremities: 'Sem edemas, pulsos periféricos palpáveis e simétricos, boa perfusão periférica.',
+    cardiovascular: '',
+    respiratory: '',
+    abdomen: '',
+    extremities: '',
     skin: '',
     additionalNotes: ''
   });
@@ -672,12 +672,12 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     setSharedAssessments({});
     setVitalSigns({});
     setPhysicalExam({
-      generalStatus: 'Bom estado geral, corado, hidratado, acianótico, anictérico.',
+      generalStatus: '',
       headAndNeck: '',
-      cardiovascular: 'Bulhas rítmicas normofonéticas em 2 tempos, sem sopros audíveis.',
-      respiratory: 'Murmúrio vesicular universalmente audível, sem ruídos adventícios.',
-      abdomen: 'Plano, flácido, indolor à palpação superficial e profunda, ruídos hidroaéreos presentes.',
-      extremities: 'Sem edemas, pulsos periféricos palpáveis e simétricos, boa perfusão periférica.',
+      cardiovascular: '',
+      respiratory: '',
+      abdomen: '',
+      extremities: '',
       skin: '',
       additionalNotes: ''
     });

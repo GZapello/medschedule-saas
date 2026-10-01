@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -199,7 +200,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
     tdicInfo: {
       platform: 'Telemedicina Zemda',
       securityAcknowledged: true,
-      technicalConditions: 'Estáveis e adequadas',
+      technicalConditions: '',
       emergencyContact: ''
     },
     currentDemand: '',
@@ -222,6 +223,17 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
     strategy: '',
     notes: ''
   });
+
+  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [mentalState, setMentalState],
+    [riskAssessment, setRiskAssessment],
+    [newAssessment, setNewAssessment],
+    [newInstrument, setNewInstrument],
+    [newScreening, setNewScreening],
+    [currentSession, setCurrentSession],
+    [newGoal, setNewGoal],
+  ]);
+
 
   // Documentos emitidos do paciente
   const [documentsList, setDocumentsList] = useState<any[]>([]);
@@ -299,6 +311,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       setAutosaveStatus('idle');
       setLoading(true);
       const data: any = await ApiClient.get(`/v1/psychology/profile/${id}`);
+      if (!isCurrentClinicalContext()) return;
 
       setSelectedPatient(data.patient || null);
 
@@ -411,6 +424,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       // Recuperação do Rascunho Persistido (Backend + LocalStorage)
       try {
         const draftRes: any = await ApiClient.get(`/v1/psychology/draft/${id}${initialAppointmentId ? `?appointment_id=${initialAppointmentId}` : ''}`);
+      if (!isCurrentClinicalContext()) return;
         const localDraftRaw = localStorage.getItem(`zemda_psico_draft_${id}_${initialAppointmentId || 'none'}`);
         let localDraft: any = null;
         if (localDraftRaw) {

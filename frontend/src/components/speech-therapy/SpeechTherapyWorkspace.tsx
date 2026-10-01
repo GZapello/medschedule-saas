@@ -1,3 +1,5 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
+import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -144,12 +146,12 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
   // 2. Avaliação de Linguagem
   const [languageData, setLanguageData] = useState<any>({
-    comprehensiveLanguage: 'Adequada para a faixa etária',
-    expressiveLanguage: 'Vocabulário e estruturação frasal adequados',
-    pragmatics: 'Contato visual e turnos comunicativos preservados',
-    semantics: 'Compreensão de conceitos espaciais, temporais e categorias semânticas',
-    morphosyntax: 'Concordância nominal e verbal estruturada',
-    narrativeDiscourse: 'Sequência lógica com início, meio e desfecho',
+    comprehensiveLanguage: '',
+    expressiveLanguage: '',
+    pragmatics: '',
+    semantics: '',
+    morphosyntax: '',
+    narrativeDiscourse: '',
     readingWriting: '',
     notes: ''
   });
@@ -157,55 +159,55 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   // 3. Painel Fonêmico Interativo
   // Fonemas do Português: /p/, /b/, /t/, /d/, /k/, /g/, /f/, /v/, /s/, /z/, /ʃ/, /ʒ/, /m/, /n/, /ɲ/, /l/, /ʎ/, /r/, /ɾ/, encontros (/pl/, /pr/, /tr/ etc.)
   const DEFAULT_PHONEMES = [
-    { phoneme: '/p/', example: 'Pato / Sopa', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/b/', example: 'Bola / Cabelo', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/t/', example: 'Tatu / Bota', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/d/', example: 'Dado / Roda', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/k/', example: 'Casa / Boca', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/g/', example: 'Gato / Fogo', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/f/', example: 'Faca / Café', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/v/', example: 'Vaca / Uva', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/s/', example: 'Sapo / Passarinho / Lápis', initial: 'correct', medial: 'correct', final: 'correct', target: '' },
-    { phoneme: '/z/', example: 'Zebra / Mesa / Nariz', initial: 'correct', medial: 'correct', final: 'correct', target: '' },
-    { phoneme: '/ʃ/ (ch/x)', example: 'Chave / Peixe', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/ʒ/ (j/g)', example: 'Jacaré / Coruja', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/m/', example: 'Mala / Cama', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/n/', example: 'Navio / Caneta', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/ɲ/ (nh)', example: 'Galinha', initial: 'not_applicable', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/l/', example: 'Lata / Bola / Sol', initial: 'correct', medial: 'correct', final: 'correct', target: '' },
-    { phoneme: '/ʎ/ (lh)', example: 'Palhaço', initial: 'not_applicable', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: '/ɾ/ (r brando)', example: 'Arara / Porta', initial: 'not_applicable', medial: 'correct', final: 'correct', target: '' },
-    { phoneme: '/r/ (r forte)', example: 'Rato / Carro', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: 'Encontros com L (pl, cl, bl)', example: 'Placa, Flor, Blusa', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' },
-    { phoneme: 'Encontros com R (pr, tr, br)', example: 'Prato, Trem, Braço', initial: 'correct', medial: 'correct', final: 'not_applicable', target: '' }
+    { phoneme: '/p/', example: 'Pato / Sopa', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/b/', example: 'Bola / Cabelo', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/t/', example: 'Tatu / Bota', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/d/', example: 'Dado / Roda', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/k/', example: 'Casa / Boca', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/g/', example: 'Gato / Fogo', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/f/', example: 'Faca / Café', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/v/', example: 'Vaca / Uva', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/s/', example: 'Sapo / Passarinho / Lápis', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/z/', example: 'Zebra / Mesa / Nariz', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/ʃ/ (ch/x)', example: 'Chave / Peixe', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/ʒ/ (j/g)', example: 'Jacaré / Coruja', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/m/', example: 'Mala / Cama', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/n/', example: 'Navio / Caneta', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/ɲ/ (nh)', example: 'Galinha', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/l/', example: 'Lata / Bola / Sol', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/ʎ/ (lh)', example: 'Palhaço', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/ɾ/ (r brando)', example: 'Arara / Porta', initial: '', medial: '', final: '', target: '' },
+    { phoneme: '/r/ (r forte)', example: 'Rato / Carro', initial: '', medial: '', final: '', target: '' },
+    { phoneme: 'Encontros com L (pl, cl, bl)', example: 'Placa, Flor, Blusa', initial: '', medial: '', final: '', target: '' },
+    { phoneme: 'Encontros com R (pr, tr, br)', example: 'Prato, Trem, Braço', initial: '', medial: '', final: '', target: '' }
   ];
   const [phonemesList, setPhonemesList] = useState<any[]>(DEFAULT_PHONEMES);
 
   // 4. Motricidade Orofacial
   const [orofacialData, setOrofacialData] = useState<any>({
-    lips: 'Adequados em repouso e vedamento labial competente',
-    tongue: 'Posicionamento em papila palatina, frênulo lingual normal',
-    cheeks: 'Tônus simétrico e sem acúmulo de alimento',
-    hardSoftPalate: 'Palato duro e úvula sem fissuras ou alterações',
-    mandibleOcclusion: 'Normoclusão (Classe I de Angle)',
-    breathingMode: 'nasal', // nasal, mouth, mixed
-    chewingPattern: 'bilateral_alternated', // bilateral_alternated, unilateral_right, unilateral_left
-    swallowingPattern: 'typical', // typical, atypical, adapted
+    lips: '',
+    tongue: '',
+    cheeks: '',
+    hardSoftPalate: '',
+    mandibleOcclusion: '',
+    breathingMode: '', // nasal, mouth, mixed
+    chewingPattern: '', // bilateral_alternated, unilateral_right, unilateral_left
+    swallowingPattern: '', // typical, atypical, adapted
     notes: ''
   });
 
   // 5. Avaliação da Voz & Gravador de Áudio
   const [voiceData, setVoiceData] = useState<any>({
-    degreeOfDeviation: '0', // 0 a 3
-    roughness: '0',
-    breathiness: '0',
-    asthenia: '0',
-    strain: '0',
-    instability: '0',
-    pitch: 'adequado', // adequado, agudo, grave
-    loudness: 'adequada', // adequada, baixa, excessiva
-    tmfSSeconds: '16',
-    tmfZSeconds: '16',
+    degreeOfDeviation: '', // 0 a 3
+    roughness: '',
+    breathiness: '',
+    asthenia: '',
+    strain: '',
+    instability: '',
+    pitch: '', // adequado, agudo, grave
+    loudness: '', // adequada, baixa, excessiva
+    tmfSSeconds: '',
+    tmfZSeconds: '',
     audioUrl: '',
     notes: ''
   });
@@ -216,32 +218,32 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
   // 6. Fluência da Fala
   const [fluencyData, setFluencyData] = useState<any>({
-    wordsPerMinute: '120',
-    typicalDisfluencies: 'Hesitações e interjeições ocasionais',
-    atypicalDisfluencies: 'Ausência de bloqueios ou prolongamentos patológicos',
-    physicalTension: 'Nenhuma tensão facial ou esforço associado observado',
-    diagnosisFluency: 'Fluência típica para a idade',
+    wordsPerMinute: '',
+    typicalDisfluencies: '',
+    atypicalDisfluencies: '',
+    physicalTension: '',
+    diagnosisFluency: '',
     notes: ''
   });
 
   // 7. Disfagia e Alimentação Funcional
   const [dysphagiaData, setDysphagiaData] = useState<any>({
     testedConsistencies: {
-      thinLiquid: true,
-      nectar: true,
-      honey: false,
-      pudding: true,
-      solid: true
+      thinLiquid: undefined,
+      nectar: undefined,
+      honey: undefined,
+      pudding: undefined,
+      solid: undefined
     },
     penetrationAspirationSigns: {
-      cough: false,
-      choking: false,
-      throatClearing: false,
-      wetVoice: false,
-      cyanosis: false
+      cough: undefined,
+      choking: undefined,
+      throatClearing: undefined,
+      wetVoice: undefined,
+      cyanosis: undefined
     },
-    compensatoryManeuvers: 'Nenhuma necessária no momento',
-    dietaryConsistencyPrescribed: 'Livre / Geral',
+    compensatoryManeuvers: '',
+    dietaryConsistencyPrescribed: '',
     notes: ''
   });
 
@@ -262,28 +264,13 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
   const [treatmentPlans, setTreatmentPlans] = useState<any[]>([]);
   const [planForm, setPlanForm] = useState({
     title: 'Plano Terapêutico Fonoaudiológico Individualizado',
-    goals: 'Instalação e automatização do fonema /r/ brando em fala espontânea e treino miofuncional de vedamento labial.',
-    strategies: 'Bombardeio auditivo, pistas proprioceptivas táteis e espelho, jogos de pareamento fonológico.',
-    homeSchoolGuidance: 'Não interromper a fala da criança; valorizar a comunicação espontânea e repetir com o modelo correto sem cobrar perfeição imediata.',
-    frequencySessions: '1 a 2 vezes por semana, duração de 45 minutos'
+    goals: '',
+    strategies: '',
+    homeSchoolGuidance: '',
+    frequencySessions: ''
   });
   const [planReferredBy, setPlanReferredBy] = useState<string>('');
-  const [structuredGoals, setStructuredGoals] = useState<StructuredGoalItem[]>([
-    {
-      id: 'g-1',
-      goal: 'Instalação e automatização do fonema /r/ brando em fala espontânea',
-      interventions: 'Bombardeio auditivo com fones, discriminação com pares mínimos e modelagem proprioceptiva.',
-      targetPeriod: '12 sessões',
-      status: 'em_andamento'
-    },
-    {
-      id: 'g-2',
-      goal: 'Adequação de vedamento labial e tônus orbicular em repouso',
-      interventions: 'Exercícios miofuncionais com botão, contra-resistência de espátula e treino mastigatório bilateral.',
-      targetPeriod: '8 sessões',
-      status: 'em_andamento'
-    }
-  ]);
+  const [structuredGoals, setStructuredGoals] = useState<StructuredGoalItem[]>([]);
 
   // Testes Complementares & Anexos
   const [complementaryTests, setComplementaryTests] = useState<any[]>([]);
@@ -301,12 +288,29 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
   // Campos específicos de Fala & Fonologia
   const [speechReferredBy, setSpeechReferredBy] = useState<string>('');
-  const [coarticulationBreakdown, setCoarticulationBreakdown] = useState<string>('Ausente (coarticulação fluida)');
+  const [coarticulationBreakdown, setCoarticulationBreakdown] = useState<string>('');
 
   // 10. Finalização da Consulta
   const [consultationTitle, setConsultationTitle] = useState<string>('Consulta Fonoaudiológica');
   const [consultationEvolution, setConsultationEvolution] = useState<string>('');
   const [consultationConducts, setConsultationConducts] = useState<string>('');
+
+  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [anamnesisData, setAnamnesisData],
+    [languageData, setLanguageData],
+    [phonemesList, setPhonemesList],
+    [orofacialData, setOrofacialData],
+    [voiceData, setVoiceData],
+    [fluencyData, setFluencyData],
+    [dysphagiaData, setDysphagiaData],
+    [audiologyData, setAudiologyData],
+    [planForm, setPlanForm],
+    [structuredGoals, setStructuredGoals],
+    [coarticulationBreakdown, setCoarticulationBreakdown],
+    [consultationEvolution, setConsultationEvolution],
+    [consultationConducts, setConsultationConducts],
+  ]);
+
 
   // Payload do Autosave Universal Clínico (ZemdaFono)
   const autosavePayload = React.useMemo(() => ({
@@ -385,6 +389,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
       return;
     }
     ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
+      if (!isCurrentClinicalContext()) return;
       const patData = p?.patient || p;
       setSelectedPatient(patData);
       loadPatientData(selectedPatientId);
@@ -410,6 +415,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
         ApiClient.get<any[]>(`/v1/speech-therapy/treatment-plans/${patId}`),
         ApiClient.get<any[]>(`/v1/speech-therapy/complementary-tests/${patId}`)
       ]);
+      if (!isCurrentClinicalContext()) return;
 
       if (anaRes.status === 'fulfilled' && anaRes.value && anaRes.value.data) setAnamnesisData(anaRes.value.data);
       if (langRes.status === 'fulfilled' && langRes.value && langRes.value.data) setLanguageData(langRes.value.data);
@@ -889,7 +895,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                       value={coarticulationBreakdown}
                       onChange={e => setCoarticulationBreakdown(e.target.value)}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:border-sky-500 focus:outline-none"
-                    >
+                    ><option value="">Selecione / não avaliado</option>
                       <option value="Ausente (coarticulação fluida)">Ausente (coarticulação fluida entre sílabas e palavras)</option>
                       <option value="Leve em encontros consonantais">Leve (quebras pontuais em encontros consonantais / clusters)</option>
                       <option value="Moderada em polissílabos">Moderada (dificuldade em transições silábicas e polissílabos)</option>
@@ -931,7 +937,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                                   setPhonemesList(updated);
                                 }}
                                 className={`px-2 py-1 rounded-lg text-xs font-bold border ${
-                                  item.initial === 'correct'
+                                  !item.initial ? 'bg-white text-slate-500 border-slate-200' : item.initial === 'correct'
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                     : item.initial === 'omission'
                                     ? 'bg-red-50 text-red-800 border-red-200'
@@ -939,7 +945,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                                     ? 'bg-amber-50 text-amber-800 border-amber-200'
                                     : 'bg-purple-50 text-purple-800 border-purple-200'
                                 }`}
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="correct">Correto</option>
                                 <option value="omission">Omissão</option>
                                 <option value="substitution">Substituição</option>
@@ -961,7 +967,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                                   setPhonemesList(updated);
                                 }}
                                 className={`px-2 py-1 rounded-lg text-xs font-bold border ${
-                                  item.medial === 'correct'
+                                  !item.medial ? 'bg-white text-slate-500 border-slate-200' : item.medial === 'correct'
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                     : item.medial === 'omission'
                                     ? 'bg-red-50 text-red-800 border-red-200'
@@ -969,7 +975,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                                     ? 'bg-amber-50 text-amber-800 border-amber-200'
                                     : 'bg-purple-50 text-purple-800 border-purple-200'
                                 }`}
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="correct">Correto</option>
                                 <option value="omission">Omissão</option>
                                 <option value="substitution">Substituição</option>
@@ -991,7 +997,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                                   setPhonemesList(updated);
                                 }}
                                 className={`px-2 py-1 rounded-lg text-xs font-bold border ${
-                                  item.final === 'correct'
+                                  !item.final ? 'bg-white text-slate-500 border-slate-200' : item.final === 'correct'
                                     ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                                     : item.final === 'omission'
                                     ? 'bg-red-50 text-red-800 border-red-200'
@@ -999,7 +1005,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                                     ? 'bg-amber-50 text-amber-800 border-amber-200'
                                     : 'bg-purple-50 text-purple-800 border-purple-200'
                                 }`}
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="correct">Correto</option>
                                 <option value="omission">Omissão</option>
                                 <option value="substitution">Substituição</option>
@@ -1115,7 +1121,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                         value={voiceData[param.key]}
                         onChange={e => setVoiceData({ ...voiceData, [param.key]: e.target.value })}
                         className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg text-center font-bold"
-                      >
+                      ><option value="">Selecione / não avaliado</option>
                         <option value="0">0 - Neutro / Sem desvio</option>
                         <option value="1">1 - Leve</option>
                         <option value="2">2 - Moderado</option>
@@ -1150,7 +1156,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                     <div className="px-3 py-2 text-xs rounded-xl border border-sky-200 bg-sky-50 font-extrabold text-sky-800 flex items-center justify-between">
                       <span>{calculatedSzRatio || '-'}</span>
                       <span className="text-[10px] font-normal text-slate-500">
-                        {calculatedSzRatio && calculatedSzRatio > 1.2 ? 'Sugere fenda glótica' : 'Padrão normal (0.8 - 1.2)'}
+                        {!calculatedSzRatio ? 'Não avaliado' : calculatedSzRatio > 1.2 ? 'Sugere fenda glótica' : 'Padrão normal (0.8 - 1.2)'}
                       </span>
                     </div>
                   </div>
@@ -1169,7 +1175,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               </div>
 
               {/* IDV-10: Índice de Desvantagem Vocal & Comparativo */}
-              <Idv10AssessmentSection patientId={selectedPatientId} />
+              <Idv10AssessmentSection key={selectedPatientId + (initialAppointmentId || "")} patientId={selectedPatientId} />
               </div>
             )}
 
@@ -1215,7 +1221,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                       value={orofacialData.breathingMode}
                       onChange={e => setOrofacialData({ ...orofacialData, breathingMode: e.target.value })}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="nasal">Nasal competente</option>
                       <option value="mouth">Oral crônico (respiração bucal)</option>
                       <option value="mixed">Oronasal / Misto</option>
@@ -1228,7 +1234,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                       value={orofacialData.swallowingPattern}
                       onChange={e => setOrofacialData({ ...orofacialData, swallowingPattern: e.target.value })}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="typical">Deglutição Típica</option>
                       <option value="atypical">Deglutição Atípica (com interposição de língua)</option>
                       <option value="adapted">Deglutição Adaptada (por má oclusão dental)</option>
@@ -1399,19 +1405,15 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                       {Object.entries(dysphagiaData.penetrationAspirationSigns).map(([key, val]) => (
                         <label key={key} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
-                          <input
-                            type="checkbox"
-                            checked={val as boolean}
-                            onChange={e => {
+                          <ClinicalBooleanSelect value={val as boolean | undefined} onChange={value => {
                               setDysphagiaData({
                                 ...dysphagiaData,
                                 penetrationAspirationSigns: {
                                   ...dysphagiaData.penetrationAspirationSigns,
-                                  [key]: e.target.checked
+                                  [key]: value
                                 }
                               });
-                            }}
-                          />
+                            }} />
                           <span className="capitalize">{key === 'cough' ? 'Tosse' : key === 'choking' ? 'Engasgo' : key === 'throatClearing' ? 'Pigarro' : key === 'wetVoice' ? 'Voz Molhada' : 'Cianose'}</span>
                         </label>
                       ))}
@@ -1420,7 +1422,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                 </div>
 
                 {/* FOIS — Escala de Ingestão Oral Funcional & Comparativo Longitudinal */}
-                <FoisAssessmentSection patientId={selectedPatientId} />
+                <FoisAssessmentSection key={selectedPatientId + (initialAppointmentId || "")} patientId={selectedPatientId} />
               </div>
             )}
 
@@ -1574,7 +1576,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                                     ? 'bg-sky-50 text-sky-800 border-sky-200'
                                     : 'bg-slate-50 text-slate-700 border-slate-200'
                                 }`}
-                              >
+                              ><option value="">Selecione / não avaliado</option>
                                 <option value="a_iniciar">A Iniciar</option>
                                 <option value="em_andamento">Em Andamento</option>
                                 <option value="alcancado">Alcançado</option>
@@ -1793,13 +1795,13 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
       {/* MODAIS AVANÇADOS DE FONOAUDIOLOGIA */}
       {selectedPatientId && (
         <>
-          <FluencyCounterModal
+          <FluencyCounterModal key={selectedPatientId + (initialAppointmentId || "")}
             isOpen={isFluencyModalOpen}
             onClose={() => setIsFluencyModalOpen(false)}
             patientId={selectedPatientId}
             patientName={selectedPatient?.full_name}
           />
-          <LanguageSampleModal
+          <LanguageSampleModal key={selectedPatientId + (initialAppointmentId || "")}
             isOpen={isLanguageSampleModalOpen}
             onClose={() => setIsLanguageSampleModalOpen(false)}
             patientId={selectedPatientId}
@@ -1812,7 +1814,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               setActiveTab('language');
             }}
           />
-          <DysphagiaMatrixModal
+          <DysphagiaMatrixModal key={selectedPatientId + (initialAppointmentId || "")}
             isOpen={isDysphagiaModalOpen}
             onClose={() => setIsDysphagiaModalOpen(false)}
             patientId={selectedPatientId}

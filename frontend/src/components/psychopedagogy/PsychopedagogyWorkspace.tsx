@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -195,7 +196,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     title: 'Plano de Estimulação e Intervenção Psicopedagógica',
     objectives: '',
     methodology: '',
-    frequency: '1x por semana (50 minutos)',
+    frequency: '',
     start_date: new Date().toISOString().split('T')[0],
     review_date: '',
     status: 'active'
@@ -244,6 +245,19 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     guidance_summary: '',
     signature_mode: 'sha256' as 'sha256' | 'pades'
   });
+
+  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [currentSession, setCurrentSession],
+    [profile, setProfile],
+    [assessment, setAssessment],
+    [learningForm, setLearningForm],
+    [currentPlan, setCurrentPlan],
+    [newContact, setNewContact],
+    [institutionalCase, setInstitutionalCase],
+    [newInstrument, setNewInstrument],
+    [finishForm, setFinishForm],
+  ]);
+
 
   // Payload do Autosave Universal Clínico (ZemdaPP)
   const autosavePayload = useMemo(() => ({
@@ -314,6 +328,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
           ApiClient.get<any[]>(`/v1/psychopedagogy/school-contacts/${selectedPatientId}`).catch(() => []),
           ApiClient.get<any[]>(`/v1/psychopedagogy/institutional-cases`).catch(() => [])
         ]);
+      if (!isCurrentClinicalContext()) return;
 
         setPatientData(pat);
         if (profRes) {

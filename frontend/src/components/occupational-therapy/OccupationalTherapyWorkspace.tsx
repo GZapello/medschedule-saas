@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { ADLAssessment } from '../clinical/ADLAssessment';
 import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import React, { useState, useEffect } from 'react';
@@ -138,44 +139,44 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   // 5: Supervisão / Preparo
   // 6: Independência Completa / Modificada (100%)
   const [adlItems, setAdlItems] = useState<any[]>([
-    { key: 'feeding', label: 'Alimentação (uso de talheres, copo)', score: 6, notes: '' },
-    { key: 'grooming', label: 'Higiene Pessoal (dentes, face, pentear)', score: 6, notes: '' },
-    { key: 'bathing', label: 'Banho (lavar corpo, secar-se)', score: 6, notes: '' },
-    { key: 'upper_dressing', label: 'Vestuário Superior (camisa, casaco)', score: 6, notes: '' },
-    { key: 'lower_dressing', label: 'Vestuário Inferior (calça, meia, tênis)', score: 6, notes: '' },
-    { key: 'toileting', label: 'Uso do Sanitário (higiene, manejo de roupas)', score: 6, notes: '' },
-    { key: 'functional_mobility', label: 'Mobilidade Funcional (transferências)', score: 6, notes: '' },
-    { key: 'medication_management', label: 'Gestão de Medicamentos (AIVD)', score: 6, notes: '' },
-    { key: 'home_maintenance', label: 'Cuidados com a Casa / Limpeza (AIVD)', score: 6, notes: '' },
-    { key: 'tech_use', label: 'Uso do Celular / Computador (AIVD)', score: 6, notes: '' },
-    { key: 'financial_management', label: 'Gestão Financeira e Compras (AIVD)', score: 6, notes: '' }
+    { key: 'feeding', label: 'Alimentação (uso de talheres, copo)', score: '', notes: '' },
+    { key: 'grooming', label: 'Higiene Pessoal (dentes, face, pentear)', score: '', notes: '' },
+    { key: 'bathing', label: 'Banho (lavar corpo, secar-se)', score: '', notes: '' },
+    { key: 'upper_dressing', label: 'Vestuário Superior (camisa, casaco)', score: '', notes: '' },
+    { key: 'lower_dressing', label: 'Vestuário Inferior (calça, meia, tênis)', score: '', notes: '' },
+    { key: 'toileting', label: 'Uso do Sanitário (higiene, manejo de roupas)', score: '', notes: '' },
+    { key: 'functional_mobility', label: 'Mobilidade Funcional (transferências)', score: '', notes: '' },
+    { key: 'medication_management', label: 'Gestão de Medicamentos (AIVD)', score: '', notes: '' },
+    { key: 'home_maintenance', label: 'Cuidados com a Casa / Limpeza (AIVD)', score: '', notes: '' },
+    { key: 'tech_use', label: 'Uso do Celular / Computador (AIVD)', score: '', notes: '' },
+    { key: 'financial_management', label: 'Gestão Financeira e Compras (AIVD)', score: '', notes: '' }
   ]);
   const [adlList, setAdlList] = useState<any[]>([]);
 
   // 3. Processamento Sensorial (8 Sistemas)
   const [sensorySystems, setSensorySystems] = useState<any>({
-    visual: { pattern: 'typical', notes: '' },
-    auditory: { pattern: 'typical', notes: '' },
-    tactile: { pattern: 'typical', notes: '' },
-    vestibular: { pattern: 'typical', notes: '' },
-    proprioceptive: { pattern: 'typical', notes: '' },
-    olfactory: { pattern: 'typical', notes: '' },
-    gustatory: { pattern: 'typical', notes: '' },
-    interoceptive: { pattern: 'typical', notes: '' }
+    visual: { pattern: '', notes: '' },
+    auditory: { pattern: '', notes: '' },
+    tactile: { pattern: '', notes: '' },
+    vestibular: { pattern: '', notes: '' },
+    proprioceptive: { pattern: '', notes: '' },
+    olfactory: { pattern: '', notes: '' },
+    gustatory: { pattern: '', notes: '' },
+    interoceptive: { pattern: '', notes: '' }
   });
   const [sensoryNotes, setSensoryNotes] = useState<string>('');
 
   // 4. Avaliação Motora e Cognitiva
   const [motorCognitiveData, setMotorCognitiveData] = useState<any>({
-    fineMotorCoordination: 'Típica / Adequada para a faixa etária',
-    grossMotorCoordination: 'Sem déficits significativos observados',
-    palmarGrasp: 'Cilíndrica e esférica preservadas',
-    digitalPinches: 'Pinça trípode madura e eficiente',
-    motorPlanningPraxis: 'Ideatória e ideomotora sem alterações',
-    muscleTone: 'Normotonia',
-    jointRom: 'Amplitude articular completa nos quatro membros',
-    attentionConcentration: 'Sustentada e direcionada durante as atividades',
-    executiveFunctions: 'Iniciação e planejamento organizados',
+    fineMotorCoordination: '',
+    grossMotorCoordination: '',
+    palmarGrasp: '',
+    digitalPinches: '',
+    motorPlanningPraxis: '',
+    muscleTone: '',
+    jointRom: '',
+    attentionConcentration: '',
+    executiveFunctions: '',
     notes: ''
   });
 
@@ -183,28 +184,41 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   const [treatmentPlans, setTreatmentPlans] = useState<any[]>([]);
   const [planForm, setPlanForm] = useState({
     title: 'Plano Terapêutico Ocupacional Singular',
-    shortTermGoals: 'Aumentar independência na alimentação e no vestuário superior para nível 5 (supervisão).',
-    mediumTermGoals: 'Atingir independência completa na rotina de higiene e autocuidado.',
-    longTermGoals: 'Autonomia nas AIVDs comunitárias e participação social plena.',
-    interventions: 'Integração Sensorial de Ayres, treino funcional de AVD com adaptação de preensão, adaptação ambiental.',
-    familyGuidelines: 'Estimular oportunidade de fazer sozinho em casa, reduzindo assistência física prévia.',
-    frequencySessions: '2 vezes por semana, duração de 50 minutos'
+    shortTermGoals: '',
+    mediumTermGoals: '',
+    longTermGoals: '',
+    interventions: '',
+    familyGuidelines: '',
+    frequencySessions: ''
   });
 
   // 6. Tecnologia Assistiva e Órteses
   const [assistiveList, setAssistiveList] = useState<any[]>([]);
   const [assistiveForm, setAssistiveForm] = useState({
-    resourceType: 'Engrossador de talher / caneta',
-    objective: 'Facilitar preensão palmar e diminuir fadiga durante a refeição e escrita',
-    materialsUsed: 'Espuma termoplástica de alta densidade (EVA)',
-    customFittingNotes: 'Molde adaptado para talher comum com diâmetro de 30mm',
-    maintenanceFollowup: 'Revisão do desgaste em 60 dias'
+    resourceType: '',
+    objective: '',
+    materialsUsed: '',
+    customFittingNotes: '',
+    maintenanceFollowup: ''
   });
 
   // 7. Finalização da Consulta
   const [consultationTitle, setConsultationTitle] = useState<string>('Atendimento de Terapia Ocupacional');
   const [consultationEvolution, setConsultationEvolution] = useState<string>('');
   const [consultationConducts, setConsultationConducts] = useState<string>('');
+
+  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [profileData, setProfileData],
+    [adlItems, setAdlItems],
+    [sensorySystems, setSensorySystems],
+    [sensoryNotes, setSensoryNotes],
+    [motorCognitiveData, setMotorCognitiveData],
+    [planForm, setPlanForm],
+    [assistiveForm, setAssistiveForm],
+    [consultationEvolution, setConsultationEvolution],
+    [consultationConducts, setConsultationConducts],
+  ]);
+
 
   // Payload do Autosave Universal Clínico (ZemdaTO)
   const autosavePayload = React.useMemo(() => ({
@@ -260,6 +274,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
       return;
     }
     ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
+      if (!isCurrentClinicalContext()) return;
       const patData = p?.patient || p;
       setSelectedPatient(patData);
       loadPatientData(selectedPatientId);
@@ -281,6 +296,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
         ApiClient.get<any[]>(`/v1/occupational-therapy/treatment-plans/${patId}`),
         ApiClient.get<any[]>(`/v1/occupational-therapy/assistive-tech/${patId}`)
       ]);
+      if (!isCurrentClinicalContext()) return;
 
       if (profRes.status === 'fulfilled' && profRes.value && profRes.value.profile) {
         setProfileData(profRes.value.profile);
@@ -333,6 +349,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
 
   // Salva Avaliação de AVD
   const handleSaveAdl = async () => {
+    if (adlItems.some(item => !Number.isFinite(item.score))) { showToast('Avalie todos os itens antes de calcular e salvar a escala.', 'info'); return; }
     if (!selectedPatientId) {
       showToast('Selecione um paciente', 'info');
       return;
@@ -526,7 +543,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   const adlSummary = React.useMemo(() => {
     const total = adlItems.reduce((acc, curr) => acc + (curr.score || 0), 0);
     const max = adlItems.length * 6;
-    const pct = Math.round((total / max) * 100);
+    const pct = adlItems.every(item => Number.isFinite(item.score)) ? Math.round((total / max) * 100) : null;
     return { total, max, pct };
   }, [adlItems]);
 
@@ -780,7 +797,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     <div className="flex items-center gap-3 px-4 py-2 bg-teal-50 border border-teal-200 rounded-xl">
                       <div className="text-right">
                         <span className="text-[10px] uppercase font-bold text-teal-800">Taxa de Independência</span>
-                        <p className="text-lg font-extrabold text-teal-700">{adlSummary.pct}%</p>
+                        <p className="text-lg font-extrabold text-teal-700">{adlSummary.pct === null ? 'Não avaliado / incompleto' : `${adlSummary.pct}%`}</p>
                       </div>
                       <div className="h-8 w-px bg-teal-200" />
                       <div className="text-xs text-teal-900 font-semibold">
@@ -831,7 +848,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     { key: 'gustatory', name: 'Sistema Gustativo', desc: 'Seletividade alimentar sensorial (texturas, temperaturas, sabores intensos)' },
                     { key: 'interoceptive', name: 'Sistema Interoceptivo', desc: 'Percepção de fome, sede, dor, temperatura interna e controle esfincteriano' }
                   ].map(sys => {
-                    const currentSys = sensorySystems[sys.key] || { pattern: 'typical', notes: '' };
+                    const currentSys = sensorySystems[sys.key] || { pattern: '', notes: '' };
                     return (
                       <div key={sys.key} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                         <div className="flex items-center justify-between">
@@ -845,7 +862,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                               });
                             }}
                             className="text-xs px-2.5 py-1 bg-white border border-slate-200 rounded-lg font-semibold cursor-pointer outline-none focus:border-teal-500"
-                          >
+                          ><option value="">Selecione / não avaliado</option>
                             <option value="typical">Sensibilidade Típica</option>
                             <option value="hyperreactive">Hiper-reativo (Evitação / Desconforto)</option>
                             <option value="hyporeactive">Hipo-reativo (Baixo Registro)</option>

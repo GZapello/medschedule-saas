@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { Posture, readPosture, emptyPosture } from './posture';
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
@@ -61,8 +62,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const [assessmentDate, setAssessmentDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Tab 1: Antropometria Básica & Perímetros (cm)
-  const [weight, setWeight] = useState<number | ''>(student?.current_weight || '');
-  const [height, setHeight] = useState<number | ''>(student?.height || '');
+  const [weight, setWeight] = useState<number | ''>('');
+  const [height, setHeight] = useState<number | ''>('');
 
   // Perímetros com lateralidade D / E
   const [neckCm, setNeckCm] = useState<number | ''>('');
@@ -132,9 +133,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const [flexibilityWellsCm, setFlexibilityWellsCm] = useState<number | ''>('');
 
   // Testes de Força 1RM (Dinâmico)
-  const [strengthTests, setStrengthTests] = useState<StrengthTestItem[]>([
-    { exercise_name: 'Supino Reto', load_kg: 60, reps: 8, one_rm_kg: 76 }
-  ]);
+  const [strengthTests, setStrengthTests] = useState<StrengthTestItem[]>([]);
 
   // Testes de Resistência Muscular
   const [endurancePushups, setEndurancePushups] = useState<number | ''>('');
@@ -152,6 +151,69 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const [photoLeft, setPhotoLeft] = useState('');
   const [photoLeftFileId, setPhotoLeftFileId] = useState('');
   const [notes, setNotes] = useState('');
+  useClinicalFormReset((assessmentToEdit?.patient_id || student?.id || selectedStudentId) + ':' + (assessmentToEdit?.id || 'new') + ':' + isOpen, [
+    [weight, setWeight],
+    [height, setHeight],
+    [neckCm, setNeckCm],
+    [shoulderCm, setShoulderCm],
+    [chestCm, setChestCm],
+    [waistCm, setWaistCm],
+    [abdomenCm, setAbdomenCm],
+    [hipCm, setHipCm],
+    [armRightRelaxed, setArmRightRelaxed],
+    [armLeftRelaxed, setArmLeftRelaxed],
+    [armRightFlexed, setArmRightFlexed],
+    [armLeftFlexed, setArmLeftFlexed],
+    [forearmRight, setForearmRight],
+    [forearmLeft, setForearmLeft],
+    [wristRight, setWristRight],
+    [wristLeft, setWristLeft],
+    [thighRightProx, setThighRightProx],
+    [thighLeftProx, setThighLeftProx],
+    [thighRightMed, setThighRightMed],
+    [thighLeftMed, setThighLeftMed],
+    [thighRightDist, setThighRightDist],
+    [thighLeftDist, setThighLeftDist],
+    [calfRight, setCalfRight],
+    [calfLeft, setCalfLeft],
+    [manualFatPct, setManualFatPct],
+    [manualMuscleMass, setManualMuscleMass],
+    [bodyWaterLiters, setBodyWaterLiters],
+    [bmrKcal, setBmrKcal],
+    [tavValue, setTavValue],
+    [tavProtocolId, setTavProtocolId],
+    [tavClassification, setTavClassification],
+    [tavNotes, setTavNotes],
+    [foldTriceps, setFoldTriceps],
+    [foldSubscapular, setFoldSubscapular],
+    [foldBiceps, setFoldBiceps],
+    [foldChest, setFoldChest],
+    [foldAxillary, setFoldAxillary],
+    [foldSuprailiac, setFoldSuprailiac],
+    [foldAbdominal, setFoldAbdominal],
+    [foldThigh, setFoldThigh],
+    [foldCalf, setFoldCalf],
+    [restingHeartRate, setRestingHeartRate],
+    [bloodPressureSystolic, setBloodPressureSystolic],
+    [bloodPressureDiastolic, setBloodPressureDiastolic],
+    [vo2Max, setVo2Max],
+    [flexibilityWellsCm, setFlexibilityWellsCm],
+    [strengthTests, setStrengthTests],
+    [endurancePushups, setEndurancePushups],
+    [enduranceSitups, setEnduranceSitups],
+    [enduranceSquats, setEnduranceSquats],
+    [endurancePlankSeconds, setEndurancePlankSeconds],
+    [photoFront, setPhotoFront],
+    [photoFrontFileId, setPhotoFrontFileId],
+    [photoBack, setPhotoBack],
+    [photoBackFileId, setPhotoBackFileId],
+    [photoRight, setPhotoRight],
+    [photoRightFileId, setPhotoRightFileId],
+    [photoLeft, setPhotoLeft],
+    [photoLeftFileId, setPhotoLeftFileId],
+    [notes, setNotes],
+  ]);
+
 
   const [saving, setSaving] = useState(false);
   const [posture,setPosture] = useState<Posture|null>(null);
@@ -344,8 +406,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     if (student) {
       setSelectedStudentId(student.id);
       setSelectedStudent(student);
-      if (student.current_weight) setWeight(student.current_weight);
-      if (student.height) setHeight(student.height);
+      setWeight('');
+      setHeight('');
     }
   }, [student]);
 
@@ -538,10 +600,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
   // Manipuladores de Testes 1RM
   const handleAddStrengthTest = () => {
-    setStrengthTests([
-      ...strengthTests,
-      { exercise_name: 'Novo Exercício', load_kg: 50, reps: 10, one_rm_kg: 67 }
-    ]);
+    setStrengthTests([...strengthTests, { exercise_name: '', load_kg: undefined, reps: undefined, one_rm_kg: undefined }]);
   };
 
   const handleUpdateStrengthTest = (index: number, field: keyof StrengthTestItem, value: any) => {
@@ -552,7 +611,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
       const reps = Number(field === 'reps' ? value : updated[index].reps) || 0;
       if (load > 0 && reps > 0) {
         updated[index].one_rm_kg = Math.round(load * (1 + reps / 30) * 10) / 10;
-      }
+      } else { updated[index].one_rm_kg = undefined; }
     }
     setStrengthTests(updated);
   };

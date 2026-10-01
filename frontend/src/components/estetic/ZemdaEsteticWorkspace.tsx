@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
@@ -114,26 +115,26 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     complaint: '',
     expectations: '',
     // Facial
-    fitzpatrick: 'III',
-    glogau: 'II',
+    fitzpatrick: '',
+    glogau: '',
     dynamicLines: [] as string[],
     staticLines: [] as string[],
     flaccidityRegions: [] as string[],
     volumeLossRegions: [] as string[],
     // Corporal
     targetRegions: [] as string[],
-    bodyAlterationType: 'GORDURA_E_FLACIDEZ',
-    celluliteGrade: 'GRAU_II',
-    stretchMarks: 'NENHUMA',
+    bodyAlterationType: '',
+    celluliteGrade: '',
+    stretchMarks: '',
     circumferences: { cintura: '', abdomen: '', quadril: '', coxaDir: '', coxaEsq: '', bracoDir: '', bracoEsq: '' },
-    habits: { physicalActivity: 'MODERADA', waterIntake: '1.5_2L', smoking: 'NAO' },
+    habits: { physicalActivity: '', waterIntake: '', smoking: '' },
     // Capilar
-    hairLossPattern: 'DIFUSA',
-    hairLossScale: 'NORWOOD_II',
-    scalpCondition: { oiliness: 'NORMAL', flaking: 'AUSENTE', erythema: 'AUSENTE', sensitivity: 'AUSENTE' },
-    pullTest: 'NEGATIVO',
-    fiberDensity: 'MODERADA',
-    familyHistory: 'PAI',
+    hairLossPattern: '',
+    hairLossScale: '',
+    scalpCondition: { oiliness: '', flaking: '', erythema: '', sensitivity: '' },
+    pullTest: '',
+    fiberDensity: '',
+    familyHistory: '',
     // Geral
     previousTreatments: '',
     contraindications: '',
@@ -155,9 +156,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       {
         procedure_name: '',
         target_region: '',
-        sessions_planned: 1,
-        recommended_interval_days: 21,
-        priority: 'ALTA'
+        sessions_planned: '' as number | '',
+        recommended_interval_days: '' as number | '',
+        priority: ''
       }
     ]
   });
@@ -171,11 +172,11 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     product_applied: '',
     lot_number: '',
     expiry_date: '',
-    quantity: '1',
+    quantity: '',
     unit: 'ml',
     technique_notes: '',
     adverse_reactions: '',
-    post_instructions: 'Evitar exposição solar direta e esforço físico intenso nas primeiras 24-48h.',
+    post_instructions: '',
     deduct_inventory: false,
     inventory_item_id: '',
     plan_item_id: ''
@@ -212,6 +213,15 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     touchup_required: false,
     touchup_description: ''
   });
+
+  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [assessmentForm, setAssessmentForm],
+    [planForm, setPlanForm],
+    [procedureForm, setProcedureForm],
+    [evolutionForm, setEvolutionForm],
+    [returnForm, setReturnForm],
+  ]);
+
 
   // Carrega configurações do ZemdaEstetic
   useEffect(() => {
@@ -258,6 +268,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         ApiClient.get<any>(`/v1/estetic/before-after/patient/${patientId}?area=${area}`).catch(() => ({ pairs: [] })),
         ApiClient.get<any>(`/v1/estetic/history/patient/${patientId}?area=${area}`).catch(() => ({ timeline: [] }))
       ]);
+      if (!isCurrentClinicalContext()) return;
 
       setOverviewData(ov);
       setAssessments(assRes?.assessments || []);
@@ -365,7 +376,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         area: activeArea,
         objectives: '',
         notes: '',
-        items: [{ procedure_name: '', target_region: '', sessions_planned: 1, recommended_interval_days: 21, priority: 'ALTA' }]
+        items: [{ procedure_name: '', target_region: '', sessions_planned: '' as number | '', recommended_interval_days: '' as number | '', priority: '' }]
       });
       loadPatientData(selectedPatientId, activeArea);
     } catch (err: any) {
@@ -398,7 +409,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         product_applied: procedureForm.product_applied,
         lot_number: procedureForm.lot_number,
         expiry_date: procedureForm.expiry_date,
-        quantity: parseFloat(procedureForm.quantity) || 1,
+        quantity: procedureForm.quantity === '' ? undefined : Number(procedureForm.quantity),
         unit: procedureForm.unit,
         technique_notes: procedureForm.technique_notes,
         adverse_reactions: procedureForm.adverse_reactions,
@@ -418,11 +429,11 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         product_applied: '',
         lot_number: '',
         expiry_date: '',
-        quantity: '1',
+        quantity: '',
         unit: 'ml',
         technique_notes: '',
         adverse_reactions: '',
-        post_instructions: 'Evitar exposição solar direta e esforço físico intenso nas primeiras 24-48h.',
+        post_instructions: '',
         deduct_inventory: false,
         inventory_item_id: '',
         plan_item_id: ''
@@ -1115,7 +1126,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.fitzpatrick}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, fitzpatrick: e.target.value })}
                                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="I">Fototipo I - Pele muito clara, queima sempre, nunca bronzeia</option>
                                 <option value="II">Fototipo II - Pele clara, queima facilmente, bronzeia pouco</option>
                                 <option value="III">Fototipo III - Pele média clara, queima moderadamente, bronzeia gradual</option>
@@ -1130,7 +1141,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.glogau}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, glogau: e.target.value })}
                                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="I">Grau I (Leve) - Sem rugas estáticas, alterações pigmentares mínimas</option>
                                 <option value="II">Grau II (Moderado) - Rugas em movimento, lentigos senis precoces</option>
                                 <option value="III">Grau III (Avançado) - Rugas estáticas presentes em repouso, discromias</option>
@@ -1230,7 +1241,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.bodyAlterationType}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, bodyAlterationType: e.target.value })}
                                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="GORDURA_LOCALIZADA">Gordura Localizada</option>
                                 <option value="FLACIDEZ_TISSULAR">Flacidez Tissular (Cutânea)</option>
                                 <option value="FLACIDEZ_MUSCULAR">Flacidez Muscular</option>
@@ -1244,7 +1255,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.celluliteGrade}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, celluliteGrade: e.target.value })}
                                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="GRAU_0">Grau 0 - Ausente</option>
                                 <option value="GRAU_I">Grau I - Visível apenas à compressão</option>
                                 <option value="GRAU_II">Grau II - Visível em pé, sem palpação</option>
@@ -1258,7 +1269,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.stretchMarks}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, stretchMarks: e.target.value })}
                                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="NENHUMA">Ausentes</option>
                                 <option value="RUBRAS">Rubras (Recentes / Inflamatórias)</option>
                                 <option value="ALBAS">Albas (Antigas / Atróficas)</option>
@@ -1356,7 +1367,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.hairLossPattern}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, hairLossPattern: e.target.value })}
                                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="DIFUSA">Difusa (Eflúvio Telógeno)</option>
                                 <option value="ANDROGENETICA_MASCULINA">Androgenética Masculina (Frontal/Vértex)</option>
                                 <option value="ANDROGENETICA_FEMININA">Androgenética Feminina (Linha Média)</option>
@@ -1370,7 +1381,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.hairLossScale}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, hairLossScale: e.target.value })}
                                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="NORWOOD_I">Norwood I - Linha anterior preservada</option>
                                 <option value="NORWOOD_II">Norwood II - Recesso frontotemporal leve</option>
                                 <option value="NORWOOD_III">Norwood III - Entradas profundas e/ou vértex</option>
@@ -1386,7 +1397,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.pullTest}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, pullTest: e.target.value })}
                                 className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="NEGATIVO">Negativo (Fisiológico &lt; 3 fios)</option>
                                 <option value="POSITIVO_LEVE">Positivo Leve (3 a 5 fios)</option>
                                 <option value="POSITIVO_ACENTUADO">Positivo Acentuado (&gt; 5 fios anágenos/telógenos)</option>
@@ -1405,7 +1416,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                   scalpCondition: { ...assessmentForm.scalpCondition, oiliness: e.target.value }
                                 })}
                                 className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="NORMAL">Normal</option>
                                 <option value="AUMENTADA">Seborréia Leve/Mod</option>
                                 <option value="EXCESSIVA">Seborréia Intensa</option>
@@ -1421,7 +1432,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                   scalpCondition: { ...assessmentForm.scalpCondition, flaking: e.target.value }
                                 })}
                                 className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="AUSENTE">Ausente</option>
                                 <option value="FINA_SECA">Pitiríase Seca</option>
                                 <option value="ADERENTE">Dermatite Seborreica</option>
@@ -1433,7 +1444,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 value={assessmentForm.fiberDensity}
                                 onChange={e => setAssessmentForm({ ...assessmentForm, fiberDensity: e.target.value })}
                                 className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                              >
+                              ><option value="">Não avaliado</option>
                                 <option value="AUSENTE">Fios com calibre uniforme</option>
                                 <option value="MODERADA">Miniaturização moderada (&gt;20%)</option>
                                 <option value="SEVERA">Miniaturização acentuada (&gt;50%)</option>
@@ -1784,7 +1795,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                               ? 'bg-sky-50 text-sky-700 border-sky-200'
                                               : 'bg-amber-50 text-amber-700 border-amber-200'
                                           }`}
-                                        >
+                                        ><option value="">Selecione / não avaliado</option>
                                           <option value="PLANEJADO">Planejado</option>
                                           <option value="EM_ANDAMENTO">Em Andamento</option>
                                           <option value="REALIZADO">Realizado</option>
@@ -2367,7 +2378,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     type="button"
                     onClick={() => setPlanForm({
                       ...planForm,
-                      items: [...planForm.items, { procedure_name: '', target_region: '', sessions_planned: 1, recommended_interval_days: 21, priority: 'MEDIA' }]
+                      items: [...planForm.items, { procedure_name: '', target_region: '', sessions_planned: '' as number | '', recommended_interval_days: '' as number | '', priority: '' }]
                     })}
                     className="text-sky-600 font-bold hover:text-sky-700"
                   >
@@ -2417,7 +2428,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                           value={it.sessions_planned}
                           onChange={e => {
                             const next = [...planForm.items];
-                            next[idx].sessions_planned = parseInt(e.target.value) || 1;
+                            next[idx].sessions_planned = e.target.value === '' ? '' : Number(e.target.value);
                             setPlanForm({ ...planForm, items: next });
                           }}
                           className="w-full p-2 rounded-lg border border-slate-200 bg-white"
@@ -2431,7 +2442,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                           value={it.recommended_interval_days}
                           onChange={e => {
                             const next = [...planForm.items];
-                            next[idx].recommended_interval_days = parseInt(e.target.value) || 14;
+                            next[idx].recommended_interval_days = e.target.value === '' ? '' : Number(e.target.value);
                             setPlanForm({ ...planForm, items: next });
                           }}
                           className="w-full p-2 rounded-lg border border-slate-200 bg-white"
@@ -2447,7 +2458,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                             setPlanForm({ ...planForm, items: next });
                           }}
                           className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                        >
+                        ><option value="">Não avaliado</option>
                           <option value="ALTA">Alta</option>
                           <option value="MEDIA">Média</option>
                           <option value="BAIXA">Baixa</option>
@@ -2570,7 +2581,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       value={procedureForm.unit}
                       onChange={e => setProcedureForm({ ...procedureForm, unit: e.target.value })}
                       className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="ml">ml</option>
                       <option value="U">Unidades (U)</option>
                       <option value="frasco">Frasco(s)</option>
@@ -2858,7 +2869,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     value={returnForm.status}
                     onChange={e => setReturnForm({ ...returnForm, status: e.target.value as any })}
                     className="w-full p-2 rounded-lg border border-slate-200 bg-white"
-                  >
+                  ><option value="">Não avaliado</option>
                     <option value="AGENDADO">Agendado</option>
                     <option value="COMPARECEU">Compareceu</option>
                     <option value="RETOQUE_REALIZADO">Retoque Realizado</option>

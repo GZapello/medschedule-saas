@@ -1,3 +1,5 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
+import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import React, { useState, useEffect } from 'react';
 import {
@@ -103,30 +105,30 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   // Periodontia
   const [perioRecords, setPerioRecords] = useState<any[]>([]);
   const [perioForm, setPerioForm] = useState({
-    toothNumber: '11',
-    site: 'vestibular',
-    probingDepth: '3',
-    bleeding: false,
-    suppuration: false,
-    mobility: '0',
-    furcation: '0',
-    recession: '0',
+    toothNumber: '',
+    site: '',
+    probingDepth: '',
+    bleeding: undefined as boolean | undefined,
+    suppuration: undefined as boolean | undefined,
+    mobility: '',
+    furcation: '',
+    recession: '',
     notes: ''
   });
 
   // Endodontia
   const [endoRecords, setEndoRecords] = useState<any[]>([]);
   const [endoForm, setEndoForm] = useState({
-    toothNumber: '11',
-    pulparDiagnosis: 'Pulpite Irreversível Sintomática',
-    periapicalDiagnosis: 'Periodontite Apical Sintomática',
-    canalsCount: 1,
-    workingLength: '21mm',
-    instrumentation: 'Mecânica Rotatória / WaveOne Gold',
-    irrigation: 'Hipoclorito de Sódio 2.5% + EDTA 17%',
-    intracanalMedication: 'Hidróxido de Cálcio P.A. (Calen)',
-    obturation: 'Onda Contínua / Cone Único com AH Plus',
-    material: 'Guta-percha + Cimento Resinoso',
+    toothNumber: '',
+    pulparDiagnosis: '',
+    periapicalDiagnosis: '',
+    canalsCount: '' as number | '',
+    workingLength: '',
+    instrumentation: '',
+    irrigation: '',
+    intracanalMedication: '',
+    obturation: '',
+    material: '',
     sessionsCount: 1,
     notes: ''
   });
@@ -138,7 +140,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     allergies: [],
     currentMedications: '',
     previousSurgeries: '',
-    anesthesiaHistory: 'Sem histórico de reações adversas a anestésicos locais',
+    anesthesiaHistory: '',
     notes: ''
   });
 
@@ -163,33 +165,49 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   // Prótese / Laboratório
   const [prosthetics, setProsthetics] = useState<any[]>([]);
   const [prostheticForm, setProstheticForm] = useState({
-    labName: 'Laboratório Dental Prime',
-    workType: 'Coroa Total em Zircônia Fresada',
-    toothNumber: '21',
-    shadeColor: 'VITA 3D Master 1M1',
-    material: 'Zircônia Multilayer',
+    labName: '',
+    workType: '',
+    toothNumber: '',
+    shadeColor: '',
+    material: '',
     sentDate: new Date().toISOString().split('T')[0],
     expectedDate: '',
-    costValue: 380,
-    notes: 'Enviar modelo digital escaneado e cor da escala com foto anexa.'
+    costValue: '' as number | '',
+    notes: ''
   });
 
   // Ortodontia e HOF
   const [orthoData, setOrthoData] = useState<any>(null);
   const [hofRecords, setHofRecords] = useState<any[]>([]);
   const [hofForm, setHofForm] = useState({
-    procedureName: 'Aplicação de Toxina Botulínica (Bruxismo / Estético)',
-    facialRegion: 'Terço Superior (Frontal, Glabela, Periocular) e Masseter',
-    productBrand: 'Botox 100U',
-    lotNumber: 'BX2026-99',
-    unitsQuantity: '50 UI',
-    expiryDate: '2027-12-31',
-    notes: 'Relaxamento muscular terapêutico para alívio de DTM e linhas hipercinéticas.'
+    procedureName: '',
+    facialRegion: '',
+    productBrand: '',
+    lotNumber: '',
+    unitsQuantity: '',
+    expiryDate: '',
+    notes: ''
   });
 
   // Finalização Rápida de Atendimento Odontológico
   const [consultationEvolution, setConsultationEvolution] = useState<string>('');
   const [consultationProcedures, setConsultationProcedures] = useState<string>('');
+
+  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [odontogramData, setOdontogramData],
+    [initialOdontogramData, setInitialOdontogramData],
+    [pendingToothChanges, setPendingToothChanges],
+    [perioForm, setPerioForm],
+    [endoForm, setEndoForm],
+    [anamnesis, setAnamnesis],
+    [planForm, setPlanForm],
+    [newPlanItem, setNewPlanItem],
+    [prostheticForm, setProstheticForm],
+    [hofForm, setHofForm],
+    [consultationEvolution, setConsultationEvolution],
+    [consultationProcedures, setConsultationProcedures],
+  ]);
+
 
   // Payload do Autosave Universal Clínico (ZemdaOdonto)
   const autosavePayload = React.useMemo(() => ({
@@ -246,6 +264,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     }
 
     ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
+      if (!isCurrentClinicalContext()) return;
       const patData = p?.patient || p;
       setSelectedPatient(patData);
       loadPatientDentalData(selectedPatientId);
@@ -262,6 +281,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       // 1. Odontogramas
       try {
         const odontoRes = await ApiClient.get<any>(`/v1/dentistry/odontograms/${patientId}`);
+      if (!isCurrentClinicalContext()) return;
         if (odontoRes) {
           if (odontoRes.current?.status_data) {
             setOdontogramData(odontoRes.current.status_data);
@@ -281,6 +301,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       // 2. Anamnese
       try {
         const anaRes = await ApiClient.get<any>(`/v1/dentistry/anamnesis/${patientId}`);
+      if (!isCurrentClinicalContext()) return;
         if (anaRes) {
           setAnamnesis({
             systemicDiseases: anaRes.systemic_diseases || [],
@@ -299,32 +320,38 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       // 3. Planos de Tratamento
       try {
         const plansRes = await ApiClient.get<any[]>(`/v1/dentistry/treatment-plans/${patientId}`);
+      if (!isCurrentClinicalContext()) return;
         setTreatmentPlans(plansRes || []);
       } catch {}
 
       // 4. Perio
       try {
         const perioRes = await ApiClient.get<any[]>(`/v1/dentistry/perio/${patientId}`);
+      if (!isCurrentClinicalContext()) return;
         setPerioRecords(perioRes || []);
       } catch {}
 
       // 5. Endo
       try {
         const endoRes = await ApiClient.get<any[]>(`/v1/dentistry/endo/${patientId}`);
+      if (!isCurrentClinicalContext()) return;
         setEndoRecords(endoRes || []);
       } catch {}
 
       // 6. Prótese
       try {
         const prosthRes = await ApiClient.get<any[]>(`/v1/dentistry/prosthetics/${patientId}`);
+      if (!isCurrentClinicalContext()) return;
         setProsthetics(prosthRes || []);
       } catch {}
 
       // 7. Orto e HOF
       try {
         const orthoRes = await ApiClient.get<any>(`/v1/dentistry/orthodontics/${patientId}`);
+      if (!isCurrentClinicalContext()) return;
         setOrthoData(orthoRes);
         const hofRes = await ApiClient.get<any[]>(`/v1/dentistry/hof/${patientId}`);
+      if (!isCurrentClinicalContext()) return;
         setHofRecords(hofRes || []);
       } catch {}
 
@@ -446,7 +473,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         material: '',
         sentDate: new Date().toISOString().split('T')[0],
         expectedDate: '',
-        costValue: 0,
+        costValue: '' as number | '',
         notes: ''
       });
       window.dispatchEvent(new CustomEvent('zemda-prosthetics-updated'));
@@ -1279,7 +1306,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                       value={perioForm.mobility}
                       onChange={e => setPerioForm({ ...perioForm, mobility: e.target.value })}
                       className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="0">Grau 0 (Fisiológica)</option>
                       <option value="1">Grau I (Horizontal &lt; 1mm)</option>
                       <option value="2">Grau II (Horizontal &gt; 1mm)</option>
@@ -1293,7 +1320,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                       value={perioForm.furcation}
                       onChange={e => setPerioForm({ ...perioForm, furcation: e.target.value })}
                       className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="0">Ausente</option>
                       <option value="1">Grau I</option>
                       <option value="2">Grau II</option>
@@ -1304,22 +1331,12 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
                 <div className="flex items-center gap-6 pt-2">
                   <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={perioForm.bleeding}
-                      onChange={e => setPerioForm({ ...perioForm, bleeding: e.target.checked })}
-                      className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
-                    />
+                    <ClinicalBooleanSelect value={perioForm.bleeding} onChange={value => setPerioForm({ ...perioForm, bleeding: value })} />
                     Sangramento à Sondagem (SS)
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={perioForm.suppuration}
-                      onChange={e => setPerioForm({ ...perioForm, suppuration: e.target.checked })}
-                      className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4"
-                    />
+                    <ClinicalBooleanSelect value={perioForm.suppuration} onChange={value => setPerioForm({ ...perioForm, suppuration: value })} />
                     Supuração Presente
                   </label>
                 </div>
@@ -1416,7 +1433,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                       value={endoForm.pulparDiagnosis}
                       onChange={e => setEndoForm({ ...endoForm, pulparDiagnosis: e.target.value })}
                       className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="Polpa Normal">Polpa Normal</option>
                       <option value="Pulpite Reversível">Pulpite Reversível</option>
                       <option value="Pulpite Irreversível Sintomática">Pulpite Irreversível Sintomática</option>
@@ -1432,7 +1449,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                       value={endoForm.periapicalDiagnosis}
                       onChange={e => setEndoForm({ ...endoForm, periapicalDiagnosis: e.target.value })}
                       className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="Tecidos Periapicais Normais">Tecidos Periapicais Normais</option>
                       <option value="Periodontite Apical Sintomática">Periodontite Apical Sintomática</option>
                       <option value="Periodontite Apical Assintomática">Periodontite Apical Assintomática</option>

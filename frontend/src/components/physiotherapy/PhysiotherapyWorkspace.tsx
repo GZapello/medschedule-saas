@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { PostureGait } from '../clinical/PostureGait';
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
@@ -171,7 +172,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const [consultationTitle, setConsultationTitle] = useState<string>('Atendimento Fisioterapêutico');
   const [clinicalEvolution, setClinicalEvolution] = useState<string>('');
   const [conducts, setConducts] = useState<string>('');
-  const [treatmentResponse, setTreatmentResponse] = useState<string>('Boa tolerância às intervenções propostas');
+  const [treatmentResponse, setTreatmentResponse] = useState<string>('');
 
   // 2. Anamnese
   const [chiefComplaint, setChiefComplaint] = useState<string>('');
@@ -186,10 +187,10 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const [functionalLimitations, setFunctionalLimitations] = useState<string>('');
 
   // 4. Dor & Zemda360 (Avaliações Regionais Integradas)
-  const [painScore, setPainScore] = useState<number>(0);
+  const [painScore, setPainScore] = useState<number | ''>('');
   const [painLocation, setPainLocation] = useState<string>('');
   const [painCharacteristics, setPainCharacteristics] = useState<string>('');
-  const [painBehavior, setPainBehavior] = useState<string>('Piora com movimento, melhora com repouso');
+  const [painBehavior, setPainBehavior] = useState<string>('');
   const [bodyMapJson, setBodyMapJson] = useState<string>('');
   const [bodyMapImage, setBodyMapImage] = useState<string>('');
   const [regionalSummary, setRegionalSummary] = useState<RegionalSummaryItem[]>([]);
@@ -207,17 +208,17 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   // 6. Força Muscular (Oxford 0-5)
   const [muscleStrengthList, setMuscleStrengthList] = useState<{
     group: string;
-    rightGrade: number;
-    leftGrade: number;
+    rightGrade: number | '';
+    leftGrade: number | '';
   }[]>([
-    { group: 'Flexores de Quadril (Psoas)', rightGrade: 5, leftGrade: 5 },
-    { group: 'Extensores de Joelho (Quadríceps)', rightGrade: 5, leftGrade: 5 },
-    { group: 'Flexores de Joelho (Isquiotibiais)', rightGrade: 5, leftGrade: 5 },
-    { group: 'Dorsiflexores (Tibial Anterior)', rightGrade: 5, leftGrade: 5 },
-    { group: 'Flexores Plantares (Tríceps Sural)', rightGrade: 5, leftGrade: 5 },
-    { group: 'Abdutores de Ombro (Deltoide)', rightGrade: 5, leftGrade: 5 },
-    { group: 'Flexores de Cotovelo (Bíceps)', rightGrade: 5, leftGrade: 5 },
-    { group: 'Extensores de Cotovelo (Tríceps)', rightGrade: 5, leftGrade: 5 }
+    { group: 'Flexores de Quadril (Psoas)', rightGrade: '', leftGrade: '' },
+    { group: 'Extensores de Joelho (Quadríceps)', rightGrade: '', leftGrade: '' },
+    { group: 'Flexores de Joelho (Isquiotibiais)', rightGrade: '', leftGrade: '' },
+    { group: 'Dorsiflexores (Tibial Anterior)', rightGrade: '', leftGrade: '' },
+    { group: 'Flexores Plantares (Tríceps Sural)', rightGrade: '', leftGrade: '' },
+    { group: 'Abdutores de Ombro (Deltoide)', rightGrade: '', leftGrade: '' },
+    { group: 'Flexores de Cotovelo (Bíceps)', rightGrade: '', leftGrade: '' },
+    { group: 'Extensores de Cotovelo (Tríceps)', rightGrade: '', leftGrade: '' }
   ]);
 
   // 7. Postura & Marcha (Avaliação Postural Compartilhada + Marcha)
@@ -226,44 +227,67 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const [isPostureModalOpen, setIsPostureModalOpen] = useState<boolean>(false);
   const [isPostureComparisonOpen, setIsPostureComparisonOpen] = useState<boolean>(false);
   const [editingPostureAssessment, setEditingPostureAssessment] = useState<any | null>(null);
-  const [postureAnterior, setPostureAnterior] = useState<string>('Alinhamento simétrico das cristas ilíacas e ombros');
-  const [postureLateral, setPostureLateral] = useState<string>('Curvaturas fisiológicas preservadas');
-  const [posturePosterior, setPosturePosterior] = useState<string>('Espinhas e escápulas alinhadas');
-  const [gaitAnalysis, setGaitAnalysis] = useState<string>('Marcha independente sem claudicação ou uso de dispositivos');
+  const [postureAnterior, setPostureAnterior] = useState<string>('');
+  const [postureLateral, setPostureLateral] = useState<string>('');
+  const [posturePosterior, setPosturePosterior] = useState<string>('');
+  const [gaitAnalysis, setGaitAnalysis] = useState<string>('');
 
   // 8. Testes Funcionais Estruturados
   const [functionalTests, setFunctionalTests] = useState<FunctionalTestItem[]>(DEFAULT_FUNCTIONAL_TESTS);
 
   // 9. CBDF (COFFITO 610/2025)
-  const [cbdfBodyFunction, setCbdfBodyFunction] = useState<string>('b710 Funções de mobilidade articular');
-  const [cbdfBodyStructure, setCbdfBodyStructure] = useState<string>('s750 Estrutura do membro inferior');
-  const [cbdfActivityParticipation, setCbdfActivityParticipation] = useState<string>('d450 Andar e d455 Deslocar-se');
-  const [cbdfContextualFactors, setCbdfContextualFactors] = useState<string>('e110 Produtos e substâncias para consumo pessoal');
+  const [cbdfBodyFunction, setCbdfBodyFunction] = useState<string>('');
+  const [cbdfBodyStructure, setCbdfBodyStructure] = useState<string>('');
+  const [cbdfActivityParticipation, setCbdfActivityParticipation] = useState<string>('');
+  const [cbdfContextualFactors, setCbdfContextualFactors] = useState<string>('');
   const [cbdfDiagnosticSummary, setCbdfDiagnosticSummary] = useState<string>('');
 
   // 10. Plano Terapêutico (RBPF 618/2025)
-  const [treatmentResources, setTreatmentResources] = useState<string>('Cinesioterapia, terapia manual, eletroterapia analgésica');
-  const [sessionFrequency, setSessionFrequency] = useState<string>('2x por semana');
-  const [estimatedSessions, setEstimatedSessions] = useState<number>(10);
+  const [treatmentResources, setTreatmentResources] = useState<string>('');
+  const [sessionFrequency, setSessionFrequency] = useState<string>('');
+  const [estimatedSessions, setEstimatedSessions] = useState<number | ''>('');
   const [reassessmentDate, setReassessmentDate] = useState<string>('');
 
   // 13. Exercícios Domiciliares
-  const [homeExercises, setHomeExercises] = useState<HomeExerciseItem[]>([
-    {
-      name: 'Alongamento de Isquiotibiais em decúbito dorsal',
-      series: '3 séries',
-      repetitions: '30 segundos cada lado',
-      frequency: '2 vezes ao dia',
-      instructions: 'Manter joelho estendido utilizando uma toalha ou faixa, sem prender a respiração.'
-    },
-    {
-      name: 'Ponte bipodal para fortalecimento glúteo',
-      series: '3 séries',
-      repetitions: '12 repetições',
-      frequency: '1 vez ao dia',
-      instructions: 'Contrair glúteos e abdômen, subindo o quadril até alinhar coxa e tronco.'
-    }
+  const [homeExercises, setHomeExercises] = useState<HomeExerciseItem[]>([]);
+
+  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [clinicalEvolution, setClinicalEvolution],
+    [conducts, setConducts],
+    [treatmentResponse, setTreatmentResponse],
+    [chiefComplaint, setChiefComplaint],
+    [hpi, setHpi],
+    [pastMedicalHistory, setPastMedicalHistory],
+    [medicalDiagnosis, setMedicalDiagnosis],
+    [medicationsInUse, setMedicationsInUse],
+    [physioDiagnosis, setPhysioDiagnosis],
+    [inspectionPalpation, setInspectionPalpation],
+    [functionalLimitations, setFunctionalLimitations],
+    [painScore, setPainScore],
+    [painLocation, setPainLocation],
+    [painCharacteristics, setPainCharacteristics],
+    [painBehavior, setPainBehavior],
+    [bodyMapJson, setBodyMapJson],
+    [bodyMapImage, setBodyMapImage],
+    [goniometryList, setGoniometryList],
+    [muscleStrengthList, setMuscleStrengthList],
+    [postureAnterior, setPostureAnterior],
+    [postureLateral, setPostureLateral],
+    [posturePosterior, setPosturePosterior],
+    [gaitAnalysis, setGaitAnalysis],
+    [functionalTests, setFunctionalTests],
+    [cbdfBodyFunction, setCbdfBodyFunction],
+    [cbdfBodyStructure, setCbdfBodyStructure],
+    [cbdfActivityParticipation, setCbdfActivityParticipation],
+    [cbdfContextualFactors, setCbdfContextualFactors],
+    [cbdfDiagnosticSummary, setCbdfDiagnosticSummary],
+    [treatmentResources, setTreatmentResources],
+    [sessionFrequency, setSessionFrequency],
+    [estimatedSessions, setEstimatedSessions],
+    [reassessmentDate, setReassessmentDate],
+    [homeExercises, setHomeExercises],
   ]);
+
 
   // Payload do Autosave Universal Clínico (ZemdaFisio)
   const autosavePayload = React.useMemo(() => ({
@@ -391,6 +415,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
       return;
     }
     ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
+      if (!isCurrentClinicalContext()) return;
       const patData = p?.patient || p;
       setSelectedPatient(patData);
       loadPatientData(selectedPatientId);
@@ -407,6 +432,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
         ApiClient.get<any[]>(`/v1/physiotherapy/assessments/patient/${patId}`),
         ApiClient.get<any[]>(`/v1/physiotherapy/evolutions/patient/${patId}`)
       ]);
+      if (!isCurrentClinicalContext()) return;
 
       if (assessRes.status === 'fulfilled' && Array.isArray(assessRes.value) && assessRes.value.length > 0) {
         const latest = assessRes.value[0];
@@ -440,6 +466,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
     try {
       setLoadingPosturalAssessments(true);
       const res = await ApiClient.get<{ assessments: any[] }>(`/v1/personal/students/${patId}/assessments`);
+      if (!isCurrentClinicalContext()) return;
       setPosturalAssessments(Array.isArray(res?.assessments) ? res.assessments : []);
     } catch (err) {
       console.warn('[PhysiotherapyWorkspace] Erro ao carregar avaliações posturais:', err);
@@ -462,6 +489,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
   const loadRegionalSummary = async (patId: string) => {
     try {
       const res = await ApiClient.get<any>(`/v1/physiotherapy/regional-evaluations/summary/${patId}`);
+      if (!isCurrentClinicalContext()) return;
       setRegionalSummary(normalizeRegionalSummary(res));
     } catch (err) {
       console.warn('Erro ao carregar sumário regional:', err);
@@ -825,14 +853,14 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                 <div className="p-4 bg-rose-50/50 border border-rose-100 rounded-xl space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-800">Escala Visual Analógica (EVA):</span>
-                    <span className="text-base font-extrabold text-rose-700">{painScore} / 10</span>
+                    <span className="text-base font-extrabold text-rose-700">{painScore === '' ? 'Não avaliado' : `${painScore} / 10`}</span>
                   </div>
                   <input
-                    type="range"
+                    type="number"
                     min="0"
                     max="10"
                     value={painScore}
-                    onChange={e => setPainScore(parseInt(e.target.value))}
+                    onChange={e => setPainScore(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full accent-rose-600 cursor-pointer"
                   />
                   <div className="flex justify-between text-[10px] text-slate-400 font-bold">
@@ -1181,11 +1209,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                             value={item.rightGrade}
                             onChange={e => {
                               const updated = [...muscleStrengthList];
-                              updated[idx].rightGrade = parseInt(e.target.value);
+                              updated[idx].rightGrade = e.target.value === '' ? '' : Number(e.target.value);
                               setMuscleStrengthList(updated);
                             }}
                             className="px-2.5 py-1 border rounded-lg font-bold text-teal-800 bg-white"
-                          >
+                          ><option value="">Não avaliado</option>
                             {[0, 1, 2, 3, 4, 5].map(v => (
                               <option key={v} value={v}>{v}/5</option>
                             ))}
@@ -1197,11 +1225,11 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                             value={item.leftGrade}
                             onChange={e => {
                               const updated = [...muscleStrengthList];
-                              updated[idx].leftGrade = parseInt(e.target.value);
+                              updated[idx].leftGrade = e.target.value === '' ? '' : Number(e.target.value);
                               setMuscleStrengthList(updated);
                             }}
                             className="px-2.5 py-1 border rounded-lg font-bold text-teal-800 bg-white"
-                          >
+                          ><option value="">Não avaliado</option>
                             {[0, 1, 2, 3, 4, 5].map(v => (
                               <option key={v} value={v}>{v}/5</option>
                             ))}
@@ -1426,7 +1454,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                               ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                               : 'bg-white text-slate-700 border-slate-200'
                           }`}
-                        >
+                        ><option value="">Selecione / não avaliado</option>
                           <option value="not_tested">Não Testado</option>
                           <option value="negative">Negativo (-)</option>
                           <option value="positive">Positivo (+)</option>
@@ -1546,7 +1574,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                       type="number"
                       min={1}
                       value={estimatedSessions}
-                      onChange={e => setEstimatedSessions(parseInt(e.target.value) || 10)}
+                      onChange={e => setEstimatedSessions(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 font-semibold"
                     />
                   </div>
@@ -1676,7 +1704,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setHomeExercises([...homeExercises, { name: 'Novo Exercício', series: '3 séries', repetitions: '10 reps', frequency: 'Diário', instructions: '' }])}
+                    onClick={() => setHomeExercises([...homeExercises, { name: '', series: '', repetitions: '', frequency: '', instructions: '' }])}
                     className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" /> + Adicionar Exercício à Rotina

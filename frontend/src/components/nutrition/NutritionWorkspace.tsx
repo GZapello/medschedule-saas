@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Apple,
@@ -121,15 +122,15 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
   const [consultationEvolution, setConsultationEvolution] = useState<string>('');
   const [consultationConducts, setConsultationConducts] = useState<string>('');
   const [clinicalComplaints, setClinicalComplaints] = useState<string>('');
-  const [digestiveSymptoms, setDigestiveSymptoms] = useState<string>('Sem queixas digestivas relatadas');
+  const [digestiveSymptoms, setDigestiveSymptoms] = useState<string>('');
 
   // 2. Anamnese Nutricional
   const [anamnesisData, setAnamnesisData] = useState({
-    digestiveHealth: 'regular',
-    bowelHabits: 'Diário, fezes tipo 3 ou 4 na escala de Bristol',
-    waterIntakeLiters: '2.0',
-    sleepQuality: 'Adequada (7-8 horas/noite)',
-    physicalActivity: 'Musculação 3x/semana moderada',
+    digestiveHealth: '',
+    bowelHabits: '',
+    waterIntakeLiters: '',
+    sleepQuality: '',
+    physicalActivity: '',
     foodAllergies: '',
     foodPreferences: '',
     foodAversions: '',
@@ -172,26 +173,26 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     recallDate: new Date().toISOString().split('T')[0],
     isWeekend: false,
     meals: [
-      { name: 'Café da Manhã', time: '07:30', foods: '', notes: '' },
-      { name: 'Colação (Manhã)', time: '10:00', foods: '', notes: '' },
-      { name: 'Almoço', time: '12:30', foods: '', notes: '' },
-      { name: 'Lanche da Tarde', time: '16:00', foods: '', notes: '' },
-      { name: 'Jantar', time: '19:30', foods: '', notes: '' },
-      { name: 'Ceia', time: '22:00', foods: '', notes: '' }
+      { name: 'Café da Manhã', time: '', foods: '', notes: '' },
+      { name: 'Colação (Manhã)', time: '', foods: '', notes: '' },
+      { name: 'Almoço', time: '', foods: '', notes: '' },
+      { name: 'Lanche da Tarde', time: '', foods: '', notes: '' },
+      { name: 'Jantar', time: '', foods: '', notes: '' },
+      { name: 'Ceia', time: '', foods: '', notes: '' }
     ],
-    waterIntakeMl: '2000',
+    waterIntakeMl: '',
     notes: ''
   });
 
   // 6. Calculadoras Nutricionais
   const [calcFormula, setCalcFormula] = useState<'harris_benedict' | 'mifflin_st_jeor' | 'schofield' | 'dri'>('harris_benedict');
-  const [activityFactor, setActivityFactor] = useState<number>(1.2);
-  const [injuryFactor, setInjuryFactor] = useState<number>(1.0);
+  const [activityFactor, setActivityFactor] = useState<number | ''>('');
+  const [injuryFactor, setInjuryFactor] = useState<number | ''>('');
   const [customBmr, setCustomBmr] = useState<string>('');
   const [customGet, setCustomGet] = useState<string>('');
-  const [carbPercent, setCarbPercent] = useState<number>(50);
-  const [proteinPercent, setProteinPercent] = useState<number>(20);
-  const [fatPercent, setFatPercent] = useState<number>(30);
+  const [carbPercent, setCarbPercent] = useState<number | ''>('');
+  const [proteinPercent, setProteinPercent] = useState<number | ''>('');
+  const [fatPercent, setFatPercent] = useState<number | ''>('');
 
   // 7. Construtor de Cardápio / Plano Alimentar (TACO / TBCA)
   const [foodSearchQuery, setFoodSearchQuery] = useState<string>('');
@@ -218,45 +219,50 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     meals: MealPlanMeal[];
   }>({
     title: 'Plano Alimentar Individualizado',
-    calorieTarget: '2000',
-    waterTargetMl: '2500',
-    generalGuidelines: 'Mastigue devagar e evite líquidos em excesso durante as refeições principais. Manter boa hidratação ao longo do dia.',
+    calorieTarget: '',
+    waterTargetMl: '',
+    generalGuidelines: '',
     meals: [
       {
         mealName: 'Café da Manhã',
-        mealTime: '07:30',
-        items: [
-          { food: 'Ovo de galinha inteiro cozido', portion: '100g (2 un)', grams: 100, calories: 146, carb: 0.6, protein: 13.3, fat: 9.5 },
-          { food: 'Pão de trigo francês', portion: '50g (1 un)', grams: 50, calories: 150, carb: 29.3, protein: 4, fat: 1.5 }
-        ]
+        mealTime: '',
+        items: []
       },
       {
         mealName: 'Almoço',
-        mealTime: '12:30',
-        items: [
-          { food: 'Arroz polido cozido', portion: '150g', grams: 150, calories: 192, carb: 42.2, protein: 3.8, fat: 0.3 },
-          { food: 'Feijão carioca cozido', portion: '100g', grams: 100, calories: 76, carb: 13.6, protein: 4.8, fat: 0.5 },
-          { food: 'Frango peito sem pele grelhado', portion: '120g', grams: 120, calories: 191, carb: 0, protein: 38.4, fat: 3.8 }
-        ]
+        mealTime: '',
+        items: []
       },
       {
         mealName: 'Lanche da Tarde',
-        mealTime: '16:00',
-        items: [
-          { food: 'Banana prata crua', portion: '100g (1 un)', grams: 100, calories: 98, carb: 26, protein: 1.3, fat: 0.1 },
-          { food: 'Aveia em flocos', portion: '30g (2 col)', grams: 30, calories: 118, carb: 20, protein: 4.2, fat: 2.2 }
-        ]
+        mealTime: '',
+        items: []
       },
       {
         mealName: 'Jantar',
-        mealTime: '19:30',
-        items: [
-          { food: 'Frango peito sem pele grelhado', portion: '120g', grams: 120, calories: 191, carb: 0, protein: 38.4, fat: 3.8 },
-          { food: 'Batata doce cozida', portion: '150g', grams: 150, calories: 116, carb: 27.6, protein: 0.9, fat: 0.2 }
-        ]
+        mealTime: '',
+        items: []
       }
     ]
   });
+
+  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [consultationEvolution, setConsultationEvolution],
+    [consultationConducts, setConsultationConducts],
+    [clinicalComplaints, setClinicalComplaints],
+    [digestiveSymptoms, setDigestiveSymptoms],
+    [anamnesisData, setAnamnesisData],
+    [anthroForm, setAnthroForm],
+    [bioForm, setBioForm],
+    [recallForm, setRecallForm],
+    [activityFactor, setActivityFactor],
+    [injuryFactor, setInjuryFactor],
+    [carbPercent, setCarbPercent],
+    [proteinPercent, setProteinPercent],
+    [fatPercent, setFatPercent],
+    [planForm, setPlanForm],
+  ]);
+
 
   // Payload do Autosave Universal Clínico (ZemdaNutri)
   const autosavePayload = useMemo(() => ({
@@ -327,6 +333,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       return;
     }
     ApiClient.get<any>(`/v1/patients/${selectedPatientId}`).then(p => {
+      if (!isCurrentClinicalContext()) return;
       const patData = p?.patient || p;
       setSelectedPatient(patData);
       loadPatientData(selectedPatientId);
@@ -346,6 +353,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         ApiClient.get<any[]>(`/v1/nutrition/meal-plans/${patId}`),
         ApiClient.get<any>(`/v1/nutrition/anamnesis/${patId}`)
       ]);
+      if (!isCurrentClinicalContext()) return;
 
       if (assRes.status === 'fulfilled' && Array.isArray(assRes.value)) {
         setAssessments(assRes.value);
@@ -437,13 +445,14 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
   // Cálculos Energéticos (TMB, GET, Macronutrientes)
   const calculatedEnergy = useMemo(() => {
-    const w = parseFloat(anthroForm.weight.replace(',', '.')) || 70;
-    const h = parseFloat(anthroForm.height.replace(',', '.')) || 170;
+    const w = parseFloat(anthroForm.weight.replace(',', '.')) || 0;
+    const h = parseFloat(anthroForm.height.replace(',', '.')) || 0;
     const hCm = h < 3 ? h * 100 : h;
     const isFemale = selectedPatient?.gender === 'female';
     const age = selectedPatient?.birth_date
       ? Math.floor((Date.now() - new Date(selectedPatient.birth_date).getTime()) / (365.25 * 86400000))
-      : 30;
+      : NaN;
+    if (!w || !h || !Number.isFinite(age) || !selectedPatient?.gender) return { bmr: '', totalEnergy: '', carbG: '', protG: '', fatG: '', protGPerKg: '' };
 
     let bmr = 0;
     if (calcFormula === 'harris_benedict') {
@@ -469,11 +478,11 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     }
 
     const finalBmr = customBmr ? parseFloat(customBmr) : Math.round(bmr);
-    const get = customGet ? parseFloat(customGet) : Math.round(finalBmr * activityFactor * injuryFactor);
+    const get = customGet ? parseFloat(customGet) : (activityFactor === '' || injuryFactor === '' ? '' : Math.round(finalBmr * activityFactor * injuryFactor));
 
-    const carbKcal = (get * carbPercent) / 100;
-    const protKcal = (get * proteinPercent) / 100;
-    const fatKcal = (get * fatPercent) / 100;
+    const carbKcal = (Number(get) * Number(carbPercent)) / 100;
+    const protKcal = (Number(get) * Number(proteinPercent)) / 100;
+    const fatKcal = (Number(get) * Number(fatPercent)) / 100;
 
     const carbG = Math.round(carbKcal / 4);
     const protG = Math.round(protKcal / 4);
@@ -483,10 +492,10 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
     return {
       bmr: finalBmr,
       totalEnergy: get,
-      carbG,
-      protG,
-      fatG,
-      protGPerKg
+      carbG: get === '' || carbPercent === '' ? '' : carbG,
+      protG: get === '' || proteinPercent === '' ? '' : protG,
+      fatG: get === '' || fatPercent === '' ? '' : fatG,
+      protGPerKg: get === '' || proteinPercent === '' ? '' : protGPerKg
     };
   }, [
     anthroForm.weight,
@@ -518,10 +527,10 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       });
     });
 
-    const w = parseFloat(anthroForm.weight.replace(',', '.')) || 70;
-    const protPerKg = (protein / w).toFixed(2);
-    const targetKcal = parseInt(planForm.calorieTarget) || calculatedEnergy.totalEnergy || 2000;
-    const caloriePercent = Math.min(150, Math.round((calories / targetKcal) * 100));
+    const w = parseFloat(anthroForm.weight.replace(',', '.')) || 0;
+    const protPerKg = w > 0 ? (protein / w).toFixed(2) : '';
+    const targetKcal = parseInt(planForm.calorieTarget) || Number(calculatedEnergy.totalEnergy) || 0;
+    const caloriePercent = targetKcal > 0 ? Math.min(150, Math.round((calories / targetKcal) * 100)) : 0;
 
     return {
       calories: Math.round(calories),
@@ -618,7 +627,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         ...planForm.meals,
         {
           mealName: newMealName,
-          mealTime: '15:00',
+          mealTime: '',
           items: []
         }
       ]
@@ -1133,7 +1142,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                       value={anamnesisData.digestiveHealth}
                       onChange={e => setAnamnesisData({ ...anamnesisData, digestiveHealth: e.target.value })}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none bg-white"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="otima">Ótima / Sem queixas</option>
                       <option value="regular">Regular / Queixas esporádicas</option>
                       <option value="ruim">Ruim (Azia, refluxo ou dor frequente)</option>
@@ -1687,9 +1696,9 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                     <label className="block text-xs font-bold text-slate-700 mb-1">Fator Atividade Física (FA)</label>
                     <select
                       value={activityFactor}
-                      onChange={e => setActivityFactor(parseFloat(e.target.value))}
+                      onChange={e => setActivityFactor(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none bg-white"
-                    >
+                    ><option value="">Selecione / não avaliado</option>
                       <option value={1.2}>Sedentário (1.20)</option>
                       <option value={1.375}>Levemente ativo (1.375)</option>
                       <option value={1.55}>Moderadamente ativo (1.55)</option>
@@ -1702,9 +1711,9 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                     <label className="block text-xs font-bold text-slate-700 mb-1">Fator Injúria / Estresse (FI)</label>
                     <select
                       value={injuryFactor}
-                      onChange={e => setInjuryFactor(parseFloat(e.target.value))}
+                      onChange={e => setInjuryFactor(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none bg-white"
-                    >
+                    ><option value="">Selecione / não avaliado</option>
                       <option value={1.0}>Normal / Sem estresse (1.00)</option>
                       <option value={1.1}>Pós-operatório leve (1.10)</option>
                       <option value={1.2}>Fratura / Infecção leve (1.20)</option>
@@ -1750,12 +1759,12 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                         <span className="text-slate-500">{calculatedEnergy.carbG}g</span>
                       </div>
                       <input
-                        type="range"
+                        type="number"
                         min="10"
                         max="75"
                         step="5"
                         value={carbPercent}
-                        onChange={e => setCarbPercent(parseInt(e.target.value))}
+                        onChange={e => setCarbPercent(e.target.value === '' ? '' : Number(e.target.value))}
                         className="w-full accent-emerald-600"
                       />
                     </div>
@@ -1765,12 +1774,12 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                         <span className="text-slate-500">{calculatedEnergy.protG}g</span>
                       </div>
                       <input
-                        type="range"
+                        type="number"
                         min="10"
                         max="50"
                         step="5"
                         value={proteinPercent}
-                        onChange={e => setProteinPercent(parseInt(e.target.value))}
+                        onChange={e => setProteinPercent(e.target.value === '' ? '' : Number(e.target.value))}
                         className="w-full accent-emerald-600"
                       />
                     </div>
@@ -1780,18 +1789,18 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                         <span className="text-slate-500">{calculatedEnergy.fatG}g</span>
                       </div>
                       <input
-                        type="range"
+                        type="number"
                         min="10"
                         max="50"
                         step="5"
                         value={fatPercent}
-                        onChange={e => setFatPercent(parseInt(e.target.value))}
+                        onChange={e => setFatPercent(e.target.value === '' ? '' : Number(e.target.value))}
                         className="w-full accent-emerald-600"
                       />
                     </div>
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    Soma atual: {carbPercent + proteinPercent + fatPercent}%
+                    Soma atual: {Number(carbPercent) + Number(proteinPercent) + Number(fatPercent)}%
                   </p>
                 </div>
               </div>
