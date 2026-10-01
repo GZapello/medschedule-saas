@@ -175,7 +175,7 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
             <span className="text-slate-900 font-bold">
               {selectedOption.label || selectedOption.name}{' '}
               <span className="font-normal text-teal-700">
-                — {(selectedOption.modules || (selectedOption.module ? [selectedOption.module, 'ZemdaBody'] : ['Recursos gerais do Zemda', 'ZemdaBody'])).join(' + ')}
+                — {(selectedOption.modules || (selectedOption.module ? [selectedOption.module, 'Zemda360'] : ['Recursos gerais do Zemda', 'Zemda360'])).join(' + ')}
               </span>
             </span>
           ) : loading ? (
@@ -278,7 +278,7 @@ export const RegistrationProfessionSelect: React.FC<RegistrationProfessionSelect
                 filteredList.map((option, idx) => {
                   const isSelected = option.id === value;
                   const isActive = activeIndex === idx;
-                  const modulesList = option.modules || (option.module ? [option.module, 'ZemdaBody'] : ['Recursos gerais do Zemda', 'ZemdaBody']);
+                  const modulesList = option.modules || (option.module ? [option.module, 'Zemda360'] : ['Recursos gerais do Zemda', 'Zemda360']);
                   const modulesLabel = modulesList.join(' + ');
 
                   return (

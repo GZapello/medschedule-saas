@@ -329,8 +329,8 @@ export const REGISTRATION_PROFESSIONS: RegistrationProfessionOption[] = OPTIONS.
   const module = resolution.commercialModule;
   const isHealthSupport = resolution.taxonomyCategory === 'HEALTH_SUPPORT';
   const modules = module 
-    ? [module, 'ZemdaBody'] 
-    : (isHealthSupport ? ['Atendimento Geral', 'ZemdaBody'] : ['Gestão Operacional']);
+    ? [module, 'Zemda360'] 
+    : (isHealthSupport ? ['Atendimento Geral', 'Zemda360'] : ['Gestão Operacional']);
   const accessLabel = modules.join(' + ');
   return {
     ...option,

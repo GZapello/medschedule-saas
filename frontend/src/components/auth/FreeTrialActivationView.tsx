@@ -397,7 +397,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                 </select>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                O Zemda ativará seu módulo específico e o <strong>ZemdaBody (Mapa Corporal)</strong>, liberado para todas as áreas profissionais.
+                O Zemda ativará seu módulo específico e o <strong>Zemda360 (Mapa Corporal)</strong>, liberado para todas as áreas profissionais.
               </p>
             </div>
 

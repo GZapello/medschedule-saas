@@ -129,7 +129,7 @@ export function resolveClinicalModule(appointmentOrProf: any, tenantId: any, may
 
   // 2. Se já existe evolução/prontuário salva neste atendimento, verifica o módulo
   if (appointment.id) {
-    const record = db.prepare("SELECT module_type, clinical_evolution, module_data_json FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' ORDER BY created_at LIMIT 1")
+    const record = db.prepare("SELECT module_type, clinical_evolution, module_data_json FROM records WHERE appointment_id=? AND tenant_id=? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') ORDER BY created_at LIMIT 1")
       .get(appointment.id, effectiveTenantId) as any;
     if (record?.module_type && isPrimaryClinicalModule(record.module_type)) {
       return record.module_type;
@@ -160,8 +160,8 @@ export function resolveClinicalModule(appointmentOrProf: any, tenantId: any, may
     }
   }
 
-  // 5. Fallback para registros já previamente marcados como general ou ZemdaBody
-  if (appointment.clinical_module === 'general' || appointment.clinical_module === 'ZemdaBody') {
+  // 5. Fallback para registros já previamente marcados como general, Zemda360 ou ZemdaBody
+  if (appointment.clinical_module === 'general' || appointment.clinical_module === 'ZemdaBody' || appointment.clinical_module === 'Zemda360') {
     return 'general';
   }
 

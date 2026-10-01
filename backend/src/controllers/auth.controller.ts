@@ -266,9 +266,10 @@ export class AuthController {
         hasEsteticArea ||
         hasEsteticCap
       );
-      const zemdaBodyEnabled = user.role !== 'superadmin' && (
+      const zemda360Enabled = user.role !== 'superadmin' && (
         user.role === 'clinic_admin' || user.role === 'professional'
       );
+      const zemdaBodyEnabled = zemda360Enabled;
 
       const zemdaMedEnabled = isEligibleUser && modFlags.zemda_med_enabled === 1;
 
@@ -316,6 +317,7 @@ export class AuthController {
           zemdaPersonalEnabled,
           zemdaEsteticEnabled: !!zemdaEsteticEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
+          zemda360Enabled,
           zemdaBodyEnabled,
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
           clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,
@@ -478,9 +480,10 @@ export class AuthController {
         hasEsteticArea ||
         hasEsteticCap
       );
-      const zemdaBodyEnabled = user.role !== 'superadmin' && (
+      const zemda360Enabled = user.role !== 'superadmin' && (
         user.role === 'clinic_admin' || user.role === 'professional'
       );
+      const zemdaBodyEnabled = zemda360Enabled;
 
       const zemdaMedEnabled = isEligibleUser && modFlags.zemda_med_enabled === 1;
 
@@ -527,6 +530,7 @@ export class AuthController {
           zemdaPersonalEnabled,
           zemdaEsteticEnabled: !!zemdaEsteticEnabled,
           zemdaMedEnabled: !!zemdaMedEnabled,
+          zemda360Enabled,
           zemdaBodyEnabled,
           commercialModule: professionResolution.commercialModule || computedCaps?.commercialModule || null,
           clinicalWorkspace: professionResolution.clinicalWorkspace || computedCaps?.clinicalWorkspace || null,

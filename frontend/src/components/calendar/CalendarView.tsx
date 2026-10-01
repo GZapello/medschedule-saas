@@ -531,12 +531,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     const existingModule = (appointment as any).clinical_module;
 
     // Se já tiver módulo PRIMÁRIO gravado e válido, mantém o módulo para respeitar a imutabilidade
-    if (existingModule && existingModule !== 'general' && existingModule !== 'ZemdaBody') {
+    if (existingModule && existingModule !== 'general' && existingModule !== 'ZemdaBody' && existingModule !== 'Zemda360') {
       executeStartConsultation(appointment, existingModule);
       return;
     }
 
-    // Se o agendamento estava com 'general', 'ZemdaBody' ou null, promove com segurança para o módulo da profissão do usuário logado
+    // Se o agendamento estava com 'general', 'Zemda360', 'ZemdaBody' ou null, promove com segurança para o módulo da profissão do usuário logado
     const chosenModule = (autoModule && autoModule !== 'general') ? autoModule : (existingModule || autoModule || 'general');
     executeStartConsultation(appointment, chosenModule);
   };

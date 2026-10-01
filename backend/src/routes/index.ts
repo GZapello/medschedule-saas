@@ -1,3 +1,4 @@
+import { SystemIntegrityController } from '../controllers/system-integrity.controller';
 import { PersonalPostureAIController } from '../controllers/personal-posture-ai.controller';
 import { Router } from 'express';
 import { mountBillingRoutes, subscriptionGate } from '../controllers/billing.controller';
@@ -186,6 +187,7 @@ api.put('/v1/tenants/current', requireTenant, requireRole('clinic_admin'), Tenan
 api.get('/v1/tenants', requireRole('superadmin'), TenantController.listAll);
 
 // Gestão Global do SaaS (Exclusivo SuperAdmin / ADM do SaaS)
+api.get('/v1/admin/integrity', requireRole('superadmin'), SystemIntegrityController.get);
 api.get('/v1/admin/metrics', requireRole('superadmin'), TenantController.adminMetrics);
 api.get('/v1/admin/integrations/asaas/status', requireRole('superadmin'), IntegrationsController.getAsaasStatus);
 api.get('/admin/integrations/asaas/status', requireRole('superadmin'), IntegrationsController.getAsaasStatus);
@@ -595,7 +597,7 @@ api.post('/v1/digital-signatures/validate', requireTenant, DigitalCertificateCon
 api.get('/v1/digital-signatures/:id', requireTenant, DigitalCertificateController.getSignature);
 
 // ==========================================
-// MÓDULO CLÍNICO ZEMDABODY (MAPA CORPORAL & CANETA CLÍNICA)
+// MÓDULO CLÍNICO ZEMDA360 (MAPA CORPORAL & CANETA CLÍNICA)
 // ==========================================
 api.get('/v1/body-assessments/patient/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.listByPatient);
 api.get('/v1/body-assessments/appointment/:appointmentId', requireTenant, requireRole('clinic_admin', 'professional'), BodyAssessmentController.getByAppointment);

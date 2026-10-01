@@ -6,16 +6,16 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { ClinicalRecordService } from '../services/clinical-record.service';
 
 /**
- * Validação de acesso ao ZemdaBody:
+ * Validação de acesso ao Zemda360 (legado: ZemdaBody):
  * Regra:
  * - SuperAdmin SaaS: sem acesso aos dados clínicos das clínicas (sempre bloqueado)
- * - clinic_admin ativo: acesso imediato ao ZemdaBody
- * - professional ativo e vinculado ao tenant: acesso automático ao ZemdaBody
+ * - clinic_admin ativo: acesso imediato ao Zemda360
+ * - professional ativo e vinculado ao tenant: acesso automático ao Zemda360
  * - Nenhuma profissão precisa de autorização do gerente
  * - Usuários administrativos/não clínicos (ex: recepcionista) não recebem acesso clínico automaticamente
  * - Sem travas funcionais internas adicionais ou permissões manuais
  */
-export function hasZemdaBodyAccess(req: Request): boolean {
+export function hasZemda360Access(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
   if (req.user.role === 'superadmin') return false;
 
@@ -42,10 +42,13 @@ export function hasZemdaBodyAccess(req: Request): boolean {
       return true;
     }
   } catch (err) {
-    console.error('[hasZemdaBodyAccess] Erro ao validar acesso ao ZemdaBody:', err);
+    console.error('[hasZemda360Access] Erro ao validar acesso ao Zemda360:', err);
   }
   return false;
 }
+
+// Alias de retrocompatibilidade para código existente
+export const hasZemdaBodyAccess = hasZemda360Access;
 
 export class BodyAssessmentController {
   /**
@@ -61,7 +64,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -131,7 +134,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -177,7 +180,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -251,7 +254,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -409,7 +412,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -469,7 +472,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -510,7 +513,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -597,7 +600,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -651,7 +654,7 @@ export class BodyAssessmentController {
         notes
       } = req.body;
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -772,7 +775,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -835,7 +838,7 @@ export class BodyAssessmentController {
         notes
       } = req.body;
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }
@@ -906,7 +909,7 @@ export class BodyAssessmentController {
         return;
       }
 
-      if (!hasZemdaBodyAccess(req)) {
+      if (!hasZemda360Access(req)) {
         res.status(403).json({ error: 'Acesso ao Zemda360 restrito a profissionais de saúde e gestores da clínica' });
         return;
       }

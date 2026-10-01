@@ -169,7 +169,7 @@ function seedCapabilities(rawDb: DatabaseSync): void {
     { id: 'CORE_TIMELINE', category: 'CORE', name: 'Histórico e Linha do Tempo', description: 'Visualização cronológica 360° do paciente' },
 
     // BODY
-    { id: 'BODY_MAP', category: 'BODY', name: 'ZemdaBody (Mapa Corporal)', description: 'Mapeamento anatômico, marcações de queixas e histórico' },
+    { id: 'BODY_MAP', category: 'BODY', name: 'Zemda360 (Mapa Corporal)', description: 'Mapeamento anatômico, marcações de queixas e histórico' },
 
     // ANTHROPOMETRY & COMPOSITION
     { id: 'ANTHROPOMETRY', category: 'ANTHROPOMETRY', name: 'Antropometria', description: 'Peso, altura, IMC, circunferências corporais e medidas' },

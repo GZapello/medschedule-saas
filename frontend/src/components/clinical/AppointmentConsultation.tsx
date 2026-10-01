@@ -71,8 +71,8 @@ export function AppointmentConsultation({
 
   const effectiveModuleType =
     (status?.moduleType && status.moduleType !== 'general' ? status.moduleType : undefined) ||
-    (appointment.clinical_module && appointment.clinical_module !== 'ZemdaBody' && appointment.clinical_module !== 'general' ? appointment.clinical_module : undefined) ||
-    (initialModuleType && initialModuleType !== 'ZemdaBody' && initialModuleType !== 'general' ? initialModuleType : undefined) ||
+    (appointment.clinical_module && appointment.clinical_module !== 'ZemdaBody' && appointment.clinical_module !== 'Zemda360' && appointment.clinical_module !== 'general' ? appointment.clinical_module : undefined) ||
+    (initialModuleType && initialModuleType !== 'ZemdaBody' && initialModuleType !== 'Zemda360' && initialModuleType !== 'general' ? initialModuleType : undefined) ||
     deducedModuleFromProfession ||
     (status?.moduleType === 'general' ? 'general' : undefined) ||
     'general';

@@ -587,7 +587,7 @@ export class AppointmentController {
         clinicalModule = requestedModule;
       } else if (isPrimaryClinicalModule(resolvedProfModule)) {
         clinicalModule = resolvedProfModule;
-      } else if (rawCurrentModule && rawCurrentModule !== 'ZemdaBody') {
+      } else if (rawCurrentModule && rawCurrentModule !== 'ZemdaBody' && rawCurrentModule !== 'Zemda360') {
         clinicalModule = rawCurrentModule;
       } else if (status === 'in_progress') {
         clinicalModule = resolvedProfModule || 'general';
@@ -596,7 +596,7 @@ export class AppointmentController {
       // Regra de Imutabilidade Estrita:
       // Bloqueia troca APENAS quando for mudança REAL e conflitante entre módulos clínicos específicos diferentes
       // (ex.: ZemdaOdonto -> ZemdaFisio, ou ZemdaFono -> ZemdaPsico).
-      // Se o módulo atual for 'general', nulo ou 'ZemdaBody' e o alvo for módulo primário, é PROMOÇÃO SEGURA.
+      // Se o módulo atual for 'general', nulo, 'Zemda360' ou 'ZemdaBody' e o alvo for módulo primário, é PROMOÇÃO SEGURA.
       if (
         isPrimaryClinicalModule(rawCurrentModule) &&
         isPrimaryClinicalModule(clinicalModule) &&
@@ -610,7 +610,7 @@ export class AppointmentController {
 
       // Verifica se já existe evolução salva em outro módulo para este agendamento
       if (clinicalModule) {
-        const existingRec = db.prepare("SELECT id, module_type, clinical_evolution, module_data_json FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(id, tenantId) as any;
+        const existingRec = db.prepare("SELECT id, module_type, clinical_evolution, module_data_json FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') LIMIT 1").get(id, tenantId) as any;
         if (existingRec && existingRec.module_type) {
           if (isPrimaryClinicalModule(existingRec.module_type) && existingRec.module_type !== clinicalModule) {
             res.status(409).json({
@@ -648,7 +648,7 @@ export class AppointmentController {
           cancellation_reason_category = CASE WHEN ? = 'cancelled' THEN ? ELSE cancellation_reason_category END,
           cancelled_by = CASE WHEN ? = 'cancelled' THEN ? ELSE cancelled_by END,
           cancelled_at = CASE WHEN ? = 'cancelled' THEN datetime('now') ELSE cancelled_at END,
-          clinical_module = COALESCE(?, NULLIF(clinical_module, 'ZemdaBody')),
+          clinical_module = COALESCE(?, NULLIF(NULLIF(clinical_module, 'ZemdaBody'), 'Zemda360')),
           profession_id = COALESCE(?, profession_id),
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?

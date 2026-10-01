@@ -66,6 +66,7 @@ interface OnboardingContextType {
   availableModules: ClinicalModuleInfo[];
   clinicalModule: ClinicalModuleInfo | null;
   isPureAdmin: boolean;
+  isZemda360: boolean;
   isZemdaBody: boolean;
 }
 
@@ -93,6 +94,7 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
     isPsychologist,
     isPsychopedagogue,
     isPersonalTrainer,
+    isZemda360,
     isZemdaBody
   } = useAuth();
 
@@ -497,6 +499,7 @@ export const OnboardingProvider: React.FC<{ children: ReactNode }> = ({ children
         availableModules,
         clinicalModule,
         isPureAdmin,
+        isZemda360,
         isZemdaBody
       }}
     >

@@ -274,6 +274,7 @@ export class SandboxService {
       zemdaPsicoEnabled: flags.zemda_psico_enabled === 1,
       zemdaPPEnabled: flags.zemda_pp_enabled === 1,
       zemdaPersonalEnabled: flags.zemda_personal_enabled === 1,
+      zemda360Enabled: true,
       zemdaBodyEnabled: true,
       isSandbox: true,
       sandboxSessionId: sessionId,

@@ -1,3 +1,4 @@
+import { TodayWorklist } from './TodayWorklist';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -88,7 +89,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
       await ApiClient.put(`/v1/appointments/${appointmentId}/status`, payload);
       const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
-      const chosenModule = selectedModule || (appt?.clinical_module !== 'general' && appt?.clinical_module !== 'ZemdaBody' ? appt?.clinical_module : undefined) || 'general';
+      const chosenModule = selectedModule || (appt?.clinical_module !== 'general' && appt?.clinical_module !== 'ZemdaBody' && appt?.clinical_module !== 'Zemda360' ? appt?.clinical_module : undefined) || 'general';
       setActiveConsultationModule(chosenModule);
       setQuickConsultAppt({
         ...appt,
@@ -117,12 +118,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         const existingModule = appt?.clinical_module;
 
         // Se já tiver módulo PRIMÁRIO gravado e válido, mantém o módulo para respeitar a imutabilidade
-        if (existingModule && existingModule !== 'general' && existingModule !== 'ZemdaBody') {
+        if (existingModule && existingModule !== 'general' && existingModule !== 'ZemdaBody' && existingModule !== 'Zemda360') {
           executeStartConsultation(appointmentId, existingModule);
           return;
         }
 
-        // Se for 'general', 'ZemdaBody' ou null, promove com segurança para o módulo da profissão do usuário logado
+        // Se for 'general', 'Zemda360', 'ZemdaBody' ou null, promove com segurança para o módulo da profissão do usuário logado
         const chosenModule = (autoModule && autoModule !== 'general') ? autoModule : (existingModule || autoModule || 'general');
         executeStartConsultation(appointmentId, chosenModule);
         return;
@@ -204,10 +205,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Olá{firstName ? `, ${firstName}` : ''}! 👋
+            HOJE
           </h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Aqui está um resumo da sua rotina hoje.
+            {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
 
@@ -251,8 +252,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900">{metrics?.monthly?.completed || 0}</div>
-          <p className="text-xs text-slate-400 mt-1">finalizados no mês</p>
+          <div className="text-2xl font-bold text-slate-900">{allTodayAppts.filter((a: any) => a.status === 'completed').length}</div>
+          <p className="text-xs text-slate-400 mt-1">finalizados hoje</p>
         </div>
 
         {/* Faltas / No-Show */}
@@ -263,10 +264,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <UserX className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900">{metrics?.monthly?.noShow || 0}</div>
-          <p className="text-xs text-slate-400 mt-1">taxa de ausência</p>
+          <div className="text-2xl font-bold text-slate-900">{allTodayAppts.filter((a: any) => a.status === 'no_show').length}</div>
+          <p className="text-xs text-slate-400 mt-1">faltas hoje</p>
         </div>
 
+        {metrics?.permissions?.finance && <>
         {/* Faturamento Recebido */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
@@ -294,7 +296,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <p className="text-xs text-slate-400 mt-1">a receber</p>
         </div>
+      </>}
       </div>
+
+      <TodayWorklist data={metrics?.worklist} onNavigate={onNavigate} onPatient={setViewPatientId} />
 
       {/* Main Content Area: Today's Appointments & Monthly Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

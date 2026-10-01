@@ -1088,7 +1088,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                     if (!selected) return null;
                     const mods = selected.modules && selected.modules.length > 0
                       ? selected.modules
-                      : (selected.module ? [selected.module, 'ZemdaBody'] : ['Recursos gerais do Zemda', 'ZemdaBody']);
+                      : (selected.module ? [selected.module, 'Zemda360'] : ['Recursos gerais do Zemda', 'Zemda360']);
                     return (
                       <div className="mt-3 p-3.5 rounded-2xl bg-teal-50/90 border border-teal-200/90 text-xs text-teal-950 animate-in fade-in duration-200 shadow-xs">
                         <div className="flex items-center gap-2 font-extrabold text-teal-900 mb-1.5">

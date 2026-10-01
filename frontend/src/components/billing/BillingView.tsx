@@ -334,7 +334,7 @@ export const BillingView:React.FC<{publicPage?:boolean;callback?:string}>=({publ
                     </div>
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                      <span>ZemdaBody liberado</span>
+                      <span>Zemda360 liberado</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />

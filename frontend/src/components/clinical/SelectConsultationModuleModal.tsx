@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export interface ClinicalModuleOption {
-  id: 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'ZemdaEstetic' | 'general';
+  id: 'ZemdaMed' | 'ZemdaFisio' | 'ZemdaFono' | 'ZemdaOdonto' | 'ZemdaNutri' | 'ZemdaTO' | 'ZemdaPsico' | 'ZemdaPP' | 'ZemdaPersonal' | 'ZemdaEstetic' | 'Zemda360' | 'ZemdaBody' | 'general';
   name: string;
   badge: string;
   profession: string;
@@ -232,8 +232,26 @@ export const ALL_CLINICAL_MODULES: Record<string, ClinicalModuleOption> = {
       iconColor: 'text-indigo-600'
     }
   },
+  Zemda360: {
+    id: 'Zemda360',
+    name: 'Zemda360',
+    badge: 'Mapa Corporal',
+    profession: 'Avaliação Corporal & Caneta Clínica',
+    description: 'Mapa anatômico interativo com caneta clínica, escala de dor EVA e marcadores por região.',
+    icon: Activity,
+    colorTheme: {
+      border: 'border-teal-200 hover:border-teal-500',
+      bg: 'bg-white hover:bg-teal-50/50',
+      hoverBg: 'hover:bg-teal-50',
+      text: 'text-teal-900',
+      badgeBg: 'bg-teal-100',
+      badgeText: 'text-teal-800',
+      iconBg: 'bg-teal-100 text-teal-700',
+      iconColor: 'text-teal-600'
+    }
+  },
   ZemdaBody: {
-    id: 'ZemdaBody' as any,
+    id: 'Zemda360',
     name: 'Zemda360',
     badge: 'Mapa Corporal',
     profession: 'Avaliação Corporal & Caneta Clínica',

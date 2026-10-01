@@ -121,6 +121,7 @@ export const VIEW_TO_PATH: Record<string, string> = {
   calendar: '/agenda',
   patients: '/pacientes',
   clinical: '/atendimentos',
+  zemda360: '/zemda360',
   'zemda-body': '/mapa-corporal',
   'zemda-med': '/zemda-med',
   'zemda-personal': '/zemda-personal',
@@ -154,6 +155,7 @@ export const PATH_TO_VIEW: Record<string, string> = {
   '/agenda': 'calendar',
   '/pacientes': 'patients',
   '/atendimentos': 'clinical',
+  '/zemda360': 'zemda-body',
   '/mapa-corporal': 'zemda-body',
   '/zemda-med': 'zemda-med',
   '/zemda-personal': 'zemda-personal',
@@ -1287,7 +1289,7 @@ const AppContent: React.FC = () => {
             )
           )}
 
-          {currentView === 'zemda-body' && <ZemdaBodyRecordsView />}
+          {(currentView === 'zemda-body' || currentView === 'zemda360') && <ZemdaBodyRecordsView />}
 
           {currentView === 'zemda-personal' && (
             (isPersonalTrainer || isZemdaPersonal || currentUser?.commercialModule === 'ZemdaPersonal' || hasCapability('TRAINING_PRESCRIBE') || hasCapability('PHYSICAL_ASSESSMENT') || isSuperAdmin) ? (

@@ -150,7 +150,10 @@ export class ClinicalController {
         ORDER BY r.session_date DESC, r.created_at DESC
       `);
       const records = stmt.all(patientId, tenantId).map((record: any) => ({
-        ...record, attachments: db.prepare('SELECT id, title, file_url FROM documents WHERE record_id=? AND tenant_id=? AND patient_id=?').all(record.id, tenantId, patientId)
+        ...record,
+        module_type: record.module_type === 'ZemdaBody' ? 'Zemda360' : record.module_type,
+        specialty_or_module: record.specialty_or_module === 'ZemdaBody' ? 'Zemda360' : record.specialty_or_module,
+        attachments: db.prepare('SELECT id, title, file_url FROM documents WHERE record_id=? AND tenant_id=? AND patient_id=?').all(record.id, tenantId, patientId)
       }));
 
       logAudit(req, 'VIEW_CLINICAL_RECORDS', 'records', patientId, { totalViewed: records.length });
@@ -186,6 +189,10 @@ export class ClinicalController {
       if (!hasClinicalAccess(req, record.patient_id)) {
         res.status(403).json({ error: 'Acesso restrito ao prontuário deste paciente' });
         return;
+      }
+
+      if (record.module_type === 'ZemdaBody') {
+        record.module_type = 'Zemda360';
       }
 
       res.json(record);
@@ -238,7 +245,7 @@ export class ClinicalController {
           return;
         }
 
-        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL AND module_type != 'ZemdaBody' LIMIT 1").get(appointmentId, tenantId) as { module_type: string } | undefined;
+        const existingRec = db.prepare("SELECT module_type FROM records WHERE appointment_id = ? AND tenant_id = ? AND module_type IS NOT NULL AND module_type NOT IN ('ZemdaBody', 'Zemda360') LIMIT 1").get(appointmentId, tenantId) as { module_type: string } | undefined;
         if (
           existingRec &&
           isPrimaryClinicalModule(existingRec.module_type) &&
