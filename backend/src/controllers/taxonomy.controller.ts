@@ -142,7 +142,7 @@ export class TaxonomyController {
       if (!showAll) {
         conditions.push('p.active = 1');
         // Apenas profissões canônicas e abordagens visíveis (exclui especialidades médicas no nível base e cargos administrativos)
-        conditions.push('(p.is_canonical = 1 OR p.is_canonical IS NULL OR p.id = \'prof-psicanalista\')');
+        conditions.push('(p.is_canonical = 1 OR p.is_canonical IS NULL OR p.id IN (\'prof-psicanalista\', \'prof-psicoterapeuta\'))');
         conditions.push("(p.category_id != 'cat-admin' OR p.category_id IS NULL)");
       }
 

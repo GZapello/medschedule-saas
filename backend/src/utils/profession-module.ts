@@ -602,6 +602,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
   if (
     pId === 'prof-neuropsicologo' || pSlug === 'neuropsicologo' || combined.includes('neuropsic') ||
     pId === 'prof-psicanalista' || pSlug === 'psicanalista' || combined.includes('psicanal') ||
+    pId === 'prof-psicoterapeuta' || pSlug === 'psicoterapeuta' || combined.includes('psicoterap') ||
     pId === 'prof-terapeuta-familiar' || pSlug === 'terapeuta-familiar' || combined.includes('terapeuta familiar')
   ) {
     let areaId = 'pa-psico-clinica';
@@ -616,18 +617,25 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
       areaId = 'pa-psico-psicanalise';
       areaName = 'Psicanálise';
       category = 'APPROACH_ALIAS';
+    } else if (pId === 'prof-psicoterapeuta' || combined.includes('psicoterap')) {
+      areaId = 'pa-psico-clinica';
+      areaName = 'Psicoterapia';
+      category = 'APPROACH_ALIAS';
     } else if (pId === 'prof-terapeuta-familiar' || combined.includes('terapeuta familiar')) {
       areaId = 'pa-psico-familia';
       areaName = 'Terapia Familiar e de Casal';
       category = 'APPROACH_ALIAS';
     }
 
+    const isSpecificBoard = pId === 'prof-psicanalista' || combined.includes('psicanal') || pId === 'prof-psicoterapeuta' || combined.includes('psicoterap');
+    const defaultBoard = (pId === 'prof-psicanalista' || combined.includes('psicanal')) ? 'Registro Associação' : 'CRP / Associação';
+
     return {
       canonicalId: 'prof-psicologo',
       canonicalName: 'Psicólogo',
       commercialModule: 'ZemdaPsico',
       clinicalWorkspace: 'ZemdaPsico',
-      boardLabel: (pId === 'prof-psicanalista' || combined.includes('psicanal')) ? (regType || 'Registro Associação') : 'CRP',
+      boardLabel: isSpecificBoard ? (regType || defaultBoard) : 'CRP',
       taxonomyCategory: category,
       isSpecificAlias: true,
       inferredAreaId: areaId,

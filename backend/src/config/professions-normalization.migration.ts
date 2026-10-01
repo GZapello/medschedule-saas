@@ -33,6 +33,7 @@ export function migrateProfessionsNormalization(rawDb: DatabaseSync): void {
     { id: 'prof-nutricionista', name: 'Nutricionista', slug: 'nutricionista', reg_label: 'CRN', reg_req: 1, cat_id: 'cat-nutri' },
     { id: 'prof-psicologo', name: 'Psicólogo', slug: 'psicologo', reg_label: 'CRP', reg_req: 1, cat_id: 'cat-mental' },
     { id: 'prof-psicanalista', name: 'Psicanalista', slug: 'psicanalista', reg_label: 'Registro Associação', reg_req: 0, cat_id: 'cat-mental' },
+    { id: 'prof-psicoterapeuta', name: 'Psicoterapeuta', slug: 'psicoterapeuta', reg_label: 'CRP / Associação', reg_req: 0, cat_id: 'cat-mental' },
     { id: 'prof-terapeuta-ocupacional', name: 'Terapeuta Ocupacional', slug: 'terapeuta-ocupacional', reg_label: 'CREFITO', reg_req: 1, cat_id: 'cat-reab' },
     { id: 'prof-psicopedagogo', name: 'Psicopedagogo', slug: 'psicopedagogo', reg_label: 'ABPp', reg_req: 0, cat_id: 'cat-mental' },
     { id: 'prof-personal-trainer', name: 'Profissional de Educação Física', slug: 'personal-trainer', reg_label: 'CREF', reg_req: 1, cat_id: 'cat-esporte' },
@@ -106,8 +107,23 @@ export function migrateProfessionsNormalization(rawDb: DatabaseSync): void {
     `).run();
     rawDb.prepare(`
       UPDATE professions 
+      SET active = 1, is_canonical = 1, category_id = 'cat-mental', registration_board_label = 'CRP / Associação'
+      WHERE id = 'prof-psicoterapeuta'
+    `).run();
+    rawDb.prepare(`
+      UPDATE professions 
       SET active = 1, is_canonical = 1 
       WHERE id IN ('prof-fonoaudiologo', 'prof-psicopedagogo', 'prof-terapeuta-ocupacional')
+    `).run();
+    rawDb.prepare(`
+      DELETE FROM deleted_global_professions 
+      WHERE id IN (
+        'prof-fonoaudiologo', 
+        'prof-psicopedagogo', 
+        'prof-terapeuta-ocupacional', 
+        'prof-psicanalista', 
+        'prof-psicoterapeuta'
+      )
     `).run();
   } catch (_) {}
 
@@ -197,6 +213,8 @@ export function migrateProfessionsNormalization(rawDb: DatabaseSync): void {
     'prof-psicologia': { canonicalProfId: 'prof-psicologo', canonicalProfName: 'Psicólogo' },
     'prof-neuropsicologo': { canonicalProfId: 'prof-psicologo', canonicalProfName: 'Psicólogo', specialtyId: 'spec-psi-neuropsi', specialtyName: 'Neuropsicologia Clínica' },
     'prof-psicanalista': { canonicalProfId: 'prof-psicologo', canonicalProfName: 'Psicólogo', specialtyId: 'spec-psi-psicanalise', specialtyName: 'Psicanálise' },
+    'prof-psicoterapeuta': { canonicalProfId: 'prof-psicologo', canonicalProfName: 'Psicólogo' },
+    'prof-psicoterapia': { canonicalProfId: 'prof-psicologo', canonicalProfName: 'Psicólogo' },
     'prof-terapeuta-familiar': { canonicalProfId: 'prof-psicologo', canonicalProfName: 'Psicólogo', specialtyId: 'spec-psi-casal', specialtyName: 'Terapia Familiar e de Casal' },
 
     // Nomes de área
@@ -318,6 +336,10 @@ export function migrateProfessionsNormalization(rawDb: DatabaseSync): void {
       UPDATE professionals SET profession_name = 'Médico' WHERE profession_id = 'prof-medico' AND (profession_name IS NULL OR profession_name = 'Medicina');
       UPDATE users SET profession_name = 'Psicólogo' WHERE profession_id = 'prof-psicologo' AND (profession_name IS NULL OR profession_name = 'Psicologia');
       UPDATE professionals SET profession_name = 'Psicólogo' WHERE profession_id = 'prof-psicologo' AND (profession_name IS NULL OR profession_name = 'Psicologia');
+      UPDATE users SET profession_name = 'Psicanalista' WHERE profession_id = 'prof-psicanalista' AND (profession_name IS NULL OR profession_name = '');
+      UPDATE professionals SET profession_name = 'Psicanalista' WHERE profession_id = 'prof-psicanalista' AND (profession_name IS NULL OR profession_name = '');
+      UPDATE users SET profession_name = 'Psicoterapeuta' WHERE profession_id = 'prof-psicoterapeuta' AND (profession_name IS NULL OR profession_name = '');
+      UPDATE professionals SET profession_name = 'Psicoterapeuta' WHERE profession_id = 'prof-psicoterapeuta' AND (profession_name IS NULL OR profession_name = '');
       UPDATE users SET profession_name = 'Fisioterapeuta' WHERE profession_id = 'prof-fisioterapeuta' AND (profession_name IS NULL OR profession_name = 'Fisioterapia');
       UPDATE professionals SET profession_name = 'Fisioterapeuta' WHERE profession_id = 'prof-fisioterapeuta' AND (profession_name IS NULL OR profession_name = 'Fisioterapia');
       UPDATE users SET profession_name = 'Fonoaudiólogo' WHERE profession_id = 'prof-fonoaudiologo' AND (profession_name IS NULL OR profession_name = 'Fonoaudiologia');

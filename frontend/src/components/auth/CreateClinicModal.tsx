@@ -38,7 +38,7 @@ import {
   ChevronRight,
   Stethoscope
 } from 'lucide-react';
-import { RegistrationProfessionOption } from '../../types/professions';
+import { RegistrationProfessionOption, REGISTRATION_PROFESSIONS } from '../../types/professions';
 import { PracticeArea, MedicalSpecialtyItem } from '../../types/capabilities';
 
 interface CreateClinicModalProps {
@@ -106,7 +106,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   const [successData, setSuccessData] = useState<{ clinicId: string; slug: string; message: string } | null>(null);
 
   // Catálogo de Profissões Dinâmico (Fonte da verdade: SuperAdmin /v1/taxonomy/professions)
-  const [professionOptions, setProfessionOptions] = useState<RegistrationProfessionOption[]>([]);
+  const [professionOptions, setProfessionOptions] = useState<RegistrationProfessionOption[]>(REGISTRATION_PROFESSIONS || []);
   const [loadingProfessions, setLoadingProfessions] = useState(false);
 
   // Áreas de Atuação e Abordagens Clínicas
@@ -143,12 +143,12 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     setLoadingProfessions(true);
     ApiClient.get<RegistrationProfessionOption[]>('/v1/taxonomy/professions')
       .then(data => {
-        if (isMounted && Array.isArray(data)) {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
           setProfessionOptions(data);
         }
       })
       .catch(() => {
-        if (isMounted) setProfessionOptions([]);
+        // Preserva o fallback seguro de REGISTRATION_PROFESSIONS
       })
       .finally(() => {
         if (isMounted) setLoadingProfessions(false);

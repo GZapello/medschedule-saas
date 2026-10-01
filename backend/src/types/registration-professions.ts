@@ -89,6 +89,11 @@ export const REGISTRATION_PROFESSION_ALIASES: Record<string, string> = {
   "psicologia": "prof-psicologo",
   "prof-neuropsicologo": "prof-psicologo",
   "prof-psicanalista": "prof-psicologo",
+  "psicanalista": "prof-psicologo",
+  "prof-psicoterapeuta": "prof-psicologo",
+  "psicoterapeuta": "prof-psicologo",
+  "prof-psicoterapia": "prof-psicologo",
+  "psicoterapia": "prof-psicologo",
   "prof-terapeuta-familiar": "prof-psicologo",
 
   // Psicopedagogia
@@ -170,6 +175,13 @@ const OPTIONS: Omit<RegistrationProfessionOption, 'module' | 'modules' | 'access
     "label": "Psicanalista",
     "boardLabel": "Registro Associação",
     "slug": "psicanalista",
+    "canonicalName": "Psicólogo"
+  },
+  {
+    "id": "prof-psicoterapeuta",
+    "label": "Psicoterapeuta",
+    "boardLabel": "CRP / Associação",
+    "slug": "psicoterapeuta",
     "canonicalName": "Psicólogo"
   },
   {

@@ -59,6 +59,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
     { id: 'prof-fonoaudiologo', name: 'Fonoaudiólogo(a) → ZemdaFono' },
     { id: 'prof-psicologo', name: 'Psicólogo(a) → ZemdaPsico' },
     { id: 'prof-psicanalista', name: 'Psicanalista → ZemdaPsico' },
+    { id: 'prof-psicoterapeuta', name: 'Psicoterapeuta → ZemdaPsico' },
     { id: 'prof-terapeuta-ocupacional', name: 'Terapeuta Ocupacional → ZemdaTO' },
     { id: 'prof-psicopedagogo', name: 'Psicopedagogo(a) → ZemdaPP' },
     { id: 'prof-nutricionista', name: 'Nutricionista → ZemdaNutri' },

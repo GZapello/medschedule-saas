@@ -35,6 +35,7 @@ export function runSeed(db: DatabaseSync): void {
     { id: 'prof-psicopedagogo', cat_id: 'cat-mental', name: 'Psicopedagogo', slug: 'psicopedagogo', reg_label: 'ABPp', reg_req: 0 },
     { id: 'prof-neuropsicologo', cat_id: 'cat-mental', name: 'Neuropsicólogo', slug: 'neuropsicologo', reg_label: 'CRP', reg_req: 1 },
     { id: 'prof-psicanalista', cat_id: 'cat-mental', name: 'Psicanalista', slug: 'psicanalista', reg_label: 'Registro Associação', reg_req: 0 },
+    { id: 'prof-psicoterapeuta', cat_id: 'cat-mental', name: 'Psicoterapeuta', slug: 'psicoterapeuta', reg_label: 'CRP / Associação', reg_req: 0 },
     { id: 'prof-terapeuta-familiar', cat_id: 'cat-mental', name: 'Terapeuta Familiar e de Casal', slug: 'terapeuta-familiar', reg_label: 'Registro', reg_req: 0 },
     // Fonoaudiologia
     { id: 'prof-fonoaudiologo', cat_id: 'cat-fono', name: 'Fonoaudiólogo', slug: 'fonoaudiologo', reg_label: 'CRFa', reg_req: 1 },

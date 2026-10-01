@@ -22,6 +22,7 @@ export const PROFESSION_CATEGORIES: ProfessionCategory[] = [
       { id: 'med_general', label: 'Médico(a) - Todas as Especialidades', category: 'health_wellness', defaultDurationMinutes: 30, bufferMinutes: 0 },
       { id: 'psychology', label: 'Psicólogo(a) / Psicoterapeuta', category: 'health_wellness', defaultDurationMinutes: 50, bufferMinutes: 10 },
       { id: 'prof-psicanalista', label: 'Psicanalista', category: 'health_wellness', defaultDurationMinutes: 50, bufferMinutes: 10 },
+      { id: 'prof-psicoterapeuta', label: 'Psicoterapeuta', category: 'health_wellness', defaultDurationMinutes: 50, bufferMinutes: 10 },
       { id: 'prof-fonoaudiologo', label: 'Fonoaudiólogo(a)', category: 'health_wellness', defaultDurationMinutes: 40, bufferMinutes: 5 },
       { id: 'speech_therapy', label: 'Fonoaudiólogo(a)', category: 'health_wellness', defaultDurationMinutes: 40, bufferMinutes: 5 },
       { id: 'nutrition', label: 'Nutricionista', category: 'health_wellness', defaultDurationMinutes: 45, bufferMinutes: 5 },
