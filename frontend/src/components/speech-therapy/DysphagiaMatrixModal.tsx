@@ -1,3 +1,4 @@
+import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import React, { useState, useEffect } from 'react';
 import { X, AlertTriangle, ShieldCheck, CheckCircle2, Save, Activity, HeartCrack, ChevronRight } from 'lucide-react';
 import { ApiClient } from '../../api/client';
@@ -9,12 +10,12 @@ export interface ConsistencyTrial {
   tested: boolean;
   safe: 'safe' | 'safe_with_maneuvers' | 'unsafe' | 'not_tested';
   signs: {
-    cough: boolean;
-    choking: boolean;
-    wetVoice: boolean;
-    desaturation: boolean;
-    oralResidue: boolean;
-    multipleSwallows: boolean;
+    cough?: boolean;
+    choking?: boolean;
+    wetVoice?: boolean;
+    desaturation?: boolean;
+    oralResidue?: boolean;
+    multipleSwallows?: boolean;
   };
   maneuversUsed?: string;
   notes?: string;
@@ -32,9 +33,9 @@ const DEFAULT_TRIALS: ConsistencyTrial[] = [
   {
     levelId: '0',
     levelName: 'IDDSI 0: Líquido Fino (Água, Chá, Sucos fluidos)',
-    tested: true,
-    safe: 'safe',
-    signs: { cough: false, choking: false, wetVoice: false, desaturation: false, oralResidue: false, multipleSwallows: false },
+    tested: false,
+    safe: 'not_tested',
+    signs: { cough: undefined, choking: undefined, wetVoice: undefined, desaturation: undefined, oralResidue: undefined, multipleSwallows: undefined },
     maneuversUsed: '',
     notes: ''
   },
@@ -43,16 +44,16 @@ const DEFAULT_TRIALS: ConsistencyTrial[] = [
     levelName: 'IDDSI 1: Levemente Espessado (Sucos espessados leves)',
     tested: false,
     safe: 'not_tested',
-    signs: { cough: false, choking: false, wetVoice: false, desaturation: false, oralResidue: false, multipleSwallows: false },
+    signs: { cough: undefined, choking: undefined, wetVoice: undefined, desaturation: undefined, oralResidue: undefined, multipleSwallows: undefined },
     maneuversUsed: '',
     notes: ''
   },
   {
     levelId: '2',
     levelName: 'IDDSI 2: Suavemente Espessado (Consistência Néctar)',
-    tested: true,
-    safe: 'safe',
-    signs: { cough: false, choking: false, wetVoice: false, desaturation: false, oralResidue: false, multipleSwallows: false },
+    tested: false,
+    safe: 'not_tested',
+    signs: { cough: undefined, choking: undefined, wetVoice: undefined, desaturation: undefined, oralResidue: undefined, multipleSwallows: undefined },
     maneuversUsed: '',
     notes: ''
   },
@@ -61,43 +62,43 @@ const DEFAULT_TRIALS: ConsistencyTrial[] = [
     levelName: 'IDDSI 3: Moderadamente Espessado (Consistência Mel)',
     tested: false,
     safe: 'not_tested',
-    signs: { cough: false, choking: false, wetVoice: false, desaturation: false, oralResidue: false, multipleSwallows: false },
+    signs: { cough: undefined, choking: undefined, wetVoice: undefined, desaturation: undefined, oralResidue: undefined, multipleSwallows: undefined },
     maneuversUsed: '',
     notes: ''
   },
   {
     levelId: '4',
     levelName: 'IDDSI 4: Extremamente Espessado / Purê (Pudim, Papinha)',
-    tested: true,
-    safe: 'safe',
-    signs: { cough: false, choking: false, wetVoice: false, desaturation: false, oralResidue: false, multipleSwallows: false },
+    tested: false,
+    safe: 'not_tested',
+    signs: { cough: undefined, choking: undefined, wetVoice: undefined, desaturation: undefined, oralResidue: undefined, multipleSwallows: undefined },
     maneuversUsed: '',
     notes: ''
   },
   {
     levelId: '5',
     levelName: 'IDDSI 5: Moído e Úmido (Carne moída com molho espesso)',
-    tested: true,
-    safe: 'safe',
-    signs: { cough: false, choking: false, wetVoice: false, desaturation: false, oralResidue: false, multipleSwallows: false },
+    tested: false,
+    safe: 'not_tested',
+    signs: { cough: undefined, choking: undefined, wetVoice: undefined, desaturation: undefined, oralResidue: undefined, multipleSwallows: undefined },
     maneuversUsed: '',
     notes: ''
   },
   {
     levelId: '6',
     levelName: 'IDDSI 6: Macio e Pedaços Pequenos (Legumes cozidos, picados)',
-    tested: true,
-    safe: 'safe_with_maneuvers',
-    signs: { cough: false, choking: false, wetVoice: false, desaturation: false, oralResidue: true, multipleSwallows: true },
-    maneuversUsed: 'Pausa entre bocados e deglutição múltipla',
-    notes: 'Pequeno acúmulo em vestíbulo lateral'
+    tested: false,
+    safe: 'not_tested',
+    signs: { cough: undefined, choking: undefined, wetVoice: undefined, desaturation: undefined, oralResidue: undefined, multipleSwallows: undefined },
+    maneuversUsed: '',
+    notes: ''
   },
   {
     levelId: '7',
     levelName: 'IDDSI 7: Regular / Sólidos (Alimentação Geral Normal)',
-    tested: true,
-    safe: 'safe',
-    signs: { cough: false, choking: false, wetVoice: false, desaturation: false, oralResidue: false, multipleSwallows: false },
+    tested: false,
+    safe: 'not_tested',
+    signs: { cough: undefined, choking: undefined, wetVoice: undefined, desaturation: undefined, oralResidue: undefined, multipleSwallows: undefined },
     maneuversUsed: '',
     notes: ''
   }
@@ -150,7 +151,7 @@ export const DysphagiaMatrixModal: React.FC<DysphagiaMatrixModalProps> = ({
     setTrials(updated);
   };
 
-  const handleUpdateSign = (trialIdx: number, signKey: keyof ConsistencyTrial['signs'], val: boolean) => {
+  const handleUpdateSign = (trialIdx: number, signKey: keyof ConsistencyTrial['signs'], val: boolean | undefined) => {
     const updated = [...trials];
     updated[trialIdx].signs = {
       ...updated[trialIdx].signs,
@@ -296,12 +297,7 @@ export const DysphagiaMatrixModal: React.FC<DysphagiaMatrixModalProps> = ({
                                 : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600'
                             }`}
                           >
-                            <input
-                              type="checkbox"
-                              checked={trial.signs[sign.key as keyof ConsistencyTrial['signs']]}
-                              onChange={e => handleUpdateSign(idx, sign.key as any, e.target.checked)}
-                              className="w-3.5 h-3.5 rounded text-red-600"
-                            />
+                            <ClinicalBooleanSelect value={trial.signs[sign.key as keyof ConsistencyTrial['signs']]} onChange={value => handleUpdateSign(idx, sign.key as any, value)} />
                             <span>{sign.label}</span>
                           </label>
                         ))}

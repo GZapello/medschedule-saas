@@ -39,7 +39,7 @@ buildSync({
       }
     }
     const eye = renderToStaticMarkup(<SpecialtySectionRenderer specialty="oftalmologia" value={{ iopOD: '15', iopOE: '19' }} patientId="test" readOnly />);
-    assert.match(eye, /olho direito/); assert.match(eye, /olho esquerdo/); assert.match(eye, />15</); assert.match(eye, />19</);
+    assert.match(eye, /olho direito/i); assert.match(eye, /olho esquerdo/i); assert.match(eye, /(?:>15<|value="15")/); assert.match(eye, /(?:>19<|value="19")/);
     const lesions = renderToStaticMarkup(<SpecialtySectionRenderer specialty="dermatologia" value={{ lesions: [null, { id: 'lesion', identification: 'Lesão antiga', photos: [] }] }} patientId="test" readOnly />);
     assert.match(lesions, /Lesão antiga/);
     const chart = renderToStaticMarkup(<ClinicalTrendChart history={[{ assessment_date: '2026-01-01', value: 0 }, { assessment_date: '2026-02-01', value: -1 }, { assessment_date: 'invalid', value: 999 }]} metric="value" />);

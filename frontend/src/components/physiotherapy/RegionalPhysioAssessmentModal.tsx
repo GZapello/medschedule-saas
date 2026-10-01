@@ -1,3 +1,4 @@
+import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { ClinicalScales } from '../clinical/ClinicalScales';
 import React, { useState, useEffect } from 'react';
 import {
@@ -99,7 +100,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
   // 1. Dor
   const initialPain: PhysioPainAssessment = parseJsonObjSafe<PhysioPainAssessment>(
     initialData?.pain_json,
-    { score: 5, restScore: 2, movementScore: 6, palpationScore: 4, duration: 'Subaguda (3-12 sem)' }
+    {}
   );
 
   const [pain, setPain] = useState<PhysioPainAssessment>(initialPain);
@@ -111,7 +112,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
     normalRange: m.normalRange,
     activeRom: '',
     passiveRom: '',
-    painPresent: false,
+    painPresent: undefined,
     notes: ''
   }));
 
@@ -122,7 +123,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
   // 3. Força Muscular
   const defaultStrengthItems: PhysioStrengthItem[] = jointConfig.defaultMovements.map(m => ({
     movementOrMuscle: m.movement,
-    grade: '5',
+    grade: '',
     notes: ''
   }));
 
@@ -145,14 +146,14 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
   // 5. Palpação & Edema
   const initialPalpation: PhysioPalpationAssessment = parseJsonObjSafe<PhysioPalpationAssessment>(
     initialData?.palpation_json,
-    { muscleTone: 'normal', triggerPoints: false, tenderness: 'mild', localTemperature: 'normal' }
+    {}
   );
 
   const [palpation, setPalpation] = useState<PhysioPalpationAssessment>(initialPalpation);
 
   const initialEdema: PhysioEdemaAssessment = parseJsonObjSafe<PhysioEdemaAssessment>(
     initialData?.edema_json,
-    { present: false, godetScale: '0', perimetryCm: '' }
+    {}
   );
 
   const [edema, setEdema] = useState<PhysioEdemaAssessment>(initialEdema);
@@ -255,7 +256,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
               value={side}
               onChange={e => setSide(e.target.value as any)}
               className="text-xs font-semibold px-2 py-1.5 rounded-lg border border-slate-300 bg-white"
-            >
+            ><option value="">Selecione / não avaliado</option>
               <option value="right">Lado Direito</option>
               <option value="left">Lado Esquerdo</option>
               <option value="midline">Linha Média / Central</option>
@@ -286,7 +287,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
           >
-            <AlertCircle className="w-4 h-4 text-rose-500" /> Dor (EVA: {pain.score}/10)
+            <AlertCircle className="w-4 h-4 text-rose-500" /> Dor (EVA: {pain.score === undefined ? 'Não avaliado' : pain.score + '/10'})
           </button>
 
           <button
@@ -361,15 +362,15 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4 text-rose-600" /> Escala Visual Analógica (EVA Geral):
                   </span>
-                  <span className="text-lg font-black text-rose-700">{pain.score} / 10</span>
+                  <span className="text-lg font-black text-rose-700">{pain.score === undefined ? 'Não avaliado' : pain.score + ' / 10'}</span>
                 </div>
                 <input
-                  type="range"
+                  type="number"
                   min="0"
                   max="10"
-                  value={pain.score}
-                  onChange={e => setPain({ ...pain, score: parseInt(e.target.value) })}
-                  className="w-full accent-rose-600 cursor-pointer h-2 bg-rose-200 rounded-lg"
+                  value={pain.score ?? ''}
+                  onChange={e => setPain({ ...pain, score: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="w-full p-2 border border-slate-200 rounded-lg"
                 />
                 <div className="flex justify-between text-[11px] text-slate-500 font-semibold">
                   <span>0: Sem dor</span>
@@ -385,14 +386,14 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
                     <span>Em Repouso:</span>
-                    <span className="text-rose-600 font-black">{pain.restScore ?? 0} / 10</span>
+                    <span className="text-rose-600 font-black">{pain.restScore === undefined ? 'Não avaliado' : pain.restScore + ' / 10'}</span>
                   </div>
                   <input
-                    type="range"
+                    type="number"
                     min="0"
                     max="10"
-                    value={pain.restScore ?? 0}
-                    onChange={e => setPain({ ...pain, restScore: parseInt(e.target.value) })}
+                    value={pain.restScore ?? ''}
+                    onChange={e => setPain({ ...pain, restScore: e.target.value === '' ? undefined : Number(e.target.value) })}
                     className="w-full accent-rose-500 cursor-pointer"
                   />
                 </div>
@@ -400,14 +401,14 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
                     <span>Ao Movimento:</span>
-                    <span className="text-rose-600 font-black">{pain.movementScore ?? 0} / 10</span>
+                    <span className="text-rose-600 font-black">{pain.movementScore === undefined ? 'Não avaliado' : pain.movementScore + ' / 10'}</span>
                   </div>
                   <input
-                    type="range"
+                    type="number"
                     min="0"
                     max="10"
-                    value={pain.movementScore ?? 0}
-                    onChange={e => setPain({ ...pain, movementScore: parseInt(e.target.value) })}
+                    value={pain.movementScore ?? ''}
+                    onChange={e => setPain({ ...pain, movementScore: e.target.value === '' ? undefined : Number(e.target.value) })}
                     className="w-full accent-rose-500 cursor-pointer"
                   />
                 </div>
@@ -415,14 +416,14 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                   <div className="flex justify-between text-xs font-bold text-slate-700 mb-1">
                     <span>À Palpação:</span>
-                    <span className="text-rose-600 font-black">{pain.palpationScore ?? 0} / 10</span>
+                    <span className="text-rose-600 font-black">{pain.palpationScore === undefined ? 'Não avaliado' : pain.palpationScore + ' / 10'}</span>
                   </div>
                   <input
-                    type="range"
+                    type="number"
                     min="0"
                     max="10"
-                    value={pain.palpationScore ?? 0}
-                    onChange={e => setPain({ ...pain, palpationScore: parseInt(e.target.value) })}
+                    value={pain.palpationScore ?? ''}
+                    onChange={e => setPain({ ...pain, palpationScore: e.target.value === '' ? undefined : Number(e.target.value) })}
                     className="w-full accent-rose-500 cursor-pointer"
                   />
                 </div>
@@ -460,10 +461,10 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Duração / Fase Clínica</label>
                   <select
-                    value={pain.duration || 'Subaguda (3-12 sem)'}
+                    value={pain.duration || ''}
                     onChange={e => setPain({ ...pain, duration: e.target.value })}
                     className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
-                  >
+                  ><option value="">Não avaliado</option>
                     <option value="Aguda (< 3 semanas)">Aguda (&lt; 3 semanas)</option>
                     <option value="Subaguda (3-12 semanas)">Subaguda (3 a 12 semanas)</option>
                     <option value="Crônica (> 3 meses)">Crônica (&gt; 3 meses)</option>
@@ -524,7 +525,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                   onClick={() => {
                     setAdmList([
                       ...admList,
-                      { movement: 'Novo Movimento', normalRange: '—', activeRom: '', passiveRom: '', painPresent: false }
+                      { movement: 'Novo Movimento', normalRange: '—', activeRom: '', passiveRom: '', painPresent: undefined }
                     ]);
                   }}
                   className="flex items-center gap-1 text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1.5 rounded-lg border border-teal-200 hover:bg-teal-100"
@@ -683,7 +684,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                               setStrengthList(updated);
                             }}
                             className="w-full px-2 py-1 rounded border border-slate-200 font-bold bg-white focus:border-indigo-500"
-                          >
+                          ><option value="">Não avaliado</option>
                             <option value="5">Grau 5 (Normal - 100%)</option>
                             <option value="4+">Grau 4+ (Resistência quase total)</option>
                             <option value="4">Grau 4 (Resistência moderada)</option>
@@ -727,7 +728,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                 onClick={() => {
                   setStrengthList([
                     ...strengthList,
-                    { movementOrMuscle: 'Novo Grupo Muscular', grade: '5', notes: '' }
+                    { movementOrMuscle: 'Novo Grupo Muscular', grade: '', notes: '' }
                   ]);
                 }}
                 className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-100"
@@ -884,10 +885,10 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Estado de Tensão:</label>
                     <select
-                      value={palpation.muscleTone || 'normal'}
+                      value={palpation.muscleTone || ''}
                       onChange={e => setPalpation({ ...palpation, muscleTone: e.target.value as any })}
                       className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white font-semibold"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="normal">Normotonia (Normal)</option>
                       <option value="hypertonic">Hipertonia / Tensão aumentada</option>
                       <option value="spasm">Espasmo muscular ativo</option>
@@ -897,12 +898,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
 
                   <div className="pt-2 border-t border-slate-200">
                     <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={palpation.triggerPoints || false}
-                        onChange={e => setPalpation({ ...palpation, triggerPoints: e.target.checked })}
-                        className="rounded text-teal-600 focus:ring-teal-500 w-4 h-4"
-                      />
+                      <ClinicalBooleanSelect value={palpation.triggerPoints} onChange={value => setPalpation({ ...palpation, triggerPoints: value })} />
                       Presença de Pontos-Gatilho (Trigger Points)
                     </label>
                     {palpation.triggerPoints && (
@@ -923,10 +919,10 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Sensibilidade à Palpação:</label>
                     <select
-                      value={palpation.tenderness || 'mild'}
+                      value={palpation.tenderness || ''}
                       onChange={e => setPalpation({ ...palpation, tenderness: e.target.value as any })}
                       className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="none">Ausente (Indolor)</option>
                       <option value="mild">Leve</option>
                       <option value="moderate">Moderada</option>
@@ -937,10 +933,10 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                   <div>
                     <label className="block text-[11px] text-slate-500 mb-1">Temperatura Local:</label>
                     <select
-                      value={palpation.localTemperature || 'normal'}
+                      value={palpation.localTemperature || ''}
                       onChange={e => setPalpation({ ...palpation, localTemperature: e.target.value as any })}
                       className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                    >
+                    ><option value="">Não avaliado</option>
                       <option value="normal">Normal / Isotérmico</option>
                       <option value="increased">Aumentada (Sinal flogístico / Calor local)</option>
                       <option value="decreased">Diminuída (Hipotermia local)</option>
@@ -956,12 +952,7 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                     <Sparkles className="w-4 h-4 text-cyan-600" /> Edema & Perimetria Articular
                   </h4>
                   <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={edema.present || false}
-                      onChange={e => setEdema({ ...edema, present: e.target.checked })}
-                      className="rounded text-cyan-600 focus:ring-cyan-500 w-4 h-4"
-                    />
+                    <ClinicalBooleanSelect value={edema.present} onChange={value => setEdema({ ...edema, present: value })} />
                     Presença de Edema / Derrame Articular
                   </label>
                 </div>
@@ -973,10 +964,10 @@ export const RegionalPhysioAssessmentModal: React.FC<RegionalPhysioAssessmentMod
                         Sinal de Godet / Cacifo:
                       </label>
                       <select
-                        value={edema.godetScale || '0'}
+                        value={edema.godetScale || ''}
                         onChange={e => setEdema({ ...edema, godetScale: e.target.value as any })}
                         className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white"
-                      >
+                      ><option value="">Não avaliado</option>
                         <option value="0">0 (Sem cacifo persistente)</option>
                         <option value="1+">1+ (Depressão leve ~2mm com retorno imediato)</option>
                         <option value="2+">2+ (Depressão ~4mm com retorno em 15s)</option>

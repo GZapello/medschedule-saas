@@ -87,8 +87,8 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
   initialDraft, onDraftChange, measurementsOnly = false, showBodyComposition = true,
   patientId,
   appointmentId,
-  patientSex = 'female',
-  patientAge = 32,
+  patientSex,
+  patientAge,
   readOnly = false
 }) => {
   const { showToast } = useToast();
@@ -99,8 +99,8 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
   const [activeTab, setActiveTab] = useState<'form' | 'history' | 'evolution'>('form');
 
   // Estado do formulário
-  const [selectedSex, setSelectedSex] = useState<'female' | 'male'>(initialDraft?.selectedSex || patientSex);
-  const [selectedAge, setSelectedAge] = useState<number>(initialDraft?.selectedAge ?? patientAge ?? 30);
+  const [selectedSex, setSelectedSex] = useState<'female' | 'male' | ''>(initialDraft?.selectedSex || patientSex || '');
+  const [selectedAge, setSelectedAge] = useState<number | ''>(initialDraft?.selectedAge ?? patientAge ?? '');
   const [assessmentDate, setAssessmentDate] = useState<string>(initialDraft?.assessmentDate || new Date().toISOString().split('T')[0]);
 
   const [weight, setWeight] = useState<string>(initialDraft?.weight || '');
@@ -222,6 +222,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
     let label = 'Baixo Risco Cardiovascular';
     let color = 'text-emerald-700 bg-emerald-100 border-emerald-300';
 
+    if (!selectedSex || selectedAge === '') return null;
     if (selectedSex === 'female') {
       if (val >= 0.85) {
         label = 'Alto Risco Cardiovascular';
@@ -240,7 +241,7 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
       }
     }
     return { val, label, color };
-  }, [numWaist, numHip, selectedSex]);
+  }, [numWaist, numHip, selectedSex, selectedAge]);
 
   // 3. RCEst (Relação Cintura / Estatura)
   const whtrInfo = useMemo(() => {
@@ -256,21 +257,21 @@ export const AnthropometricAssessmentView: React.FC<AnthropometricAssessmentView
 
   // 4. Classificação do % de Gordura por Sexo e Idade
   const fatCategoryInfo = useMemo(() => {
-    if (measurementsOnly || numFatPct <= 0) return null;
+    if (measurementsOnly || numFatPct <= 0 || !selectedSex || selectedAge === '') return null;
 
     // Thresholds: Muito baixo | Baixo | Adequado | Elevado | Muito elevado
     let t = { vLow: 14, low: 17, ok: 24, high: 29 };
     if (selectedSex === 'male') {
-      if (selectedAge < 30) t = { vLow: 8, low: 11, ok: 17, high: 22 };
-      else if (selectedAge < 40) t = { vLow: 9, low: 12, ok: 18, high: 23 };
-      else if (selectedAge < 50) t = { vLow: 10, low: 14, ok: 20, high: 25 };
-      else if (selectedAge < 60) t = { vLow: 11, low: 15, ok: 22, high: 26 };
+      if (Number(selectedAge) < 30) t = { vLow: 8, low: 11, ok: 17, high: 22 };
+      else if (Number(selectedAge) < 40) t = { vLow: 9, low: 12, ok: 18, high: 23 };
+      else if (Number(selectedAge) < 50) t = { vLow: 10, low: 14, ok: 20, high: 25 };
+      else if (Number(selectedAge) < 60) t = { vLow: 11, low: 15, ok: 22, high: 26 };
       else t = { vLow: 12, low: 16, ok: 23, high: 27 };
     } else {
-      if (selectedAge < 30) t = { vLow: 14, low: 17, ok: 23, high: 28 };
-      else if (selectedAge < 40) t = { vLow: 15, low: 18, ok: 24, high: 29 };
-      else if (selectedAge < 50) t = { vLow: 16, low: 19, ok: 25, high: 30 };
-      else if (selectedAge < 60) t = { vLow: 17, low: 20, ok: 27, high: 32 };
+      if (Number(selectedAge) < 30) t = { vLow: 14, low: 17, ok: 23, high: 28 };
+      else if (Number(selectedAge) < 40) t = { vLow: 15, low: 18, ok: 24, high: 29 };
+      else if (Number(selectedAge) < 50) t = { vLow: 16, low: 19, ok: 25, high: 30 };
+      else if (Number(selectedAge) < 60) t = { vLow: 17, low: 20, ok: 27, high: 32 };
       else t = { vLow: 18, low: 21, ok: 29, high: 34 };
     }
 

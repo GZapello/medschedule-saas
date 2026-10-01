@@ -600,7 +600,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
   // Manipuladores de Testes 1RM
   const handleAddStrengthTest = () => {
-    setStrengthTests([...strengthTests, { exercise_name: '', load_kg: undefined, reps: undefined, one_rm_kg: undefined }]);
+    setStrengthTests([...strengthTests, { exercise_name: '' }]);
   };
 
   const handleUpdateStrengthTest = (index: number, field: keyof StrengthTestItem, value: any) => {

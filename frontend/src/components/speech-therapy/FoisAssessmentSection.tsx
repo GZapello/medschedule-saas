@@ -46,7 +46,7 @@ export const FOIS_LEVELS_PEDIATRIC = [
 export const FoisAssessmentSection: React.FC<FoisAssessmentSectionProps> = ({
   patientId,
   appointmentId,
-  currentLevel = 7,
+  currentLevel = 0,
   currentVersion = 'adult',
   currentNotes = '',
   onChange
@@ -78,7 +78,7 @@ export const FoisAssessmentSection: React.FC<FoisAssessmentSectionProps> = ({
 
   const handleNotesChange = (txt: string) => {
     setNotes(txt);
-    onChange?.({ level: selectedLevel, version, notes: txt });
+    if (selectedLevel) onChange?.({ level: selectedLevel, version, notes: txt });
   };
 
   const handleVersionChange = (newVer: 'adult' | 'pediatric') => {
@@ -91,6 +91,7 @@ export const FoisAssessmentSection: React.FC<FoisAssessmentSectionProps> = ({
       showToast('Selecione um paciente', 'info');
       return;
     }
+    if (!selectedLevel) { showToast('Selecione o nível avaliado antes de salvar.', 'info'); return; }
     try {
       setSaving(true);
       await ApiClient.post('/v1/speech-therapy/fois', {
@@ -219,7 +220,7 @@ export const FoisAssessmentSection: React.FC<FoisAssessmentSectionProps> = ({
 
       <div className="flex items-center justify-between pt-2">
         <span className="text-xs text-slate-500">
-          Nível selecionado: <strong className="text-amber-800">FOIS {selectedLevel}</strong> ({version === 'adult' ? 'Adulto' : 'Pediátrico'})
+          Nível selecionado: <strong className="text-amber-800">{selectedLevel ? `FOIS ${selectedLevel}` : 'Não avaliado'}</strong> ({version === 'adult' ? 'Adulto' : 'Pediátrico'})
         </span>
         <button
           type="button"

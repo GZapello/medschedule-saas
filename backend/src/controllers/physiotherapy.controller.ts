@@ -262,7 +262,7 @@ export class PhysiotherapyController {
       `).run(
         id, tenantId, patientId, profId, appointmentId || null, specialtyId || null,
         chiefComplaint, hpi || null, pastMedicalHistory || null, medicalDiagnosis || null, physioDiagnosis || null,
-        painScore !== undefined ? Number(painScore) : 0, painLocation || null, painCharacteristics || null, inspectionPalpation || null,
+        painScore === '' || painScore == null ? null : Number(painScore), painLocation || null, painCharacteristics || null, inspectionPalpation || null,
         rangeOfMotion || null, muscleStrength || null, postureBalance || null, gaitMobility || null,
         functionalLimitations || null, specificTests || null, shortTermGoals || null, longTermGoals || null,
         treatmentPlan || null, conductsExercises || null, guidelines || null, isSealed ? 1 : 0,
@@ -346,7 +346,7 @@ export class PhysiotherapyController {
       `).run(
         specialtyId !== undefined ? specialtyId : null,
         chiefComplaint || null, hpi || null, pastMedicalHistory || null, medicalDiagnosis || null, physioDiagnosis || null,
-        painScore !== undefined ? Number(painScore) : null, painLocation || null, painCharacteristics || null, inspectionPalpation || null,
+        painScore === '' || painScore == null ? null : Number(painScore), painLocation || null, painCharacteristics || null, inspectionPalpation || null,
         rangeOfMotion || null, muscleStrength || null, postureBalance || null, gaitMobility || null,
         functionalLimitations || null, specificTests || null, shortTermGoals || null, longTermGoals || null,
         treatmentPlan || null, conductsExercises || null, guidelines || null,

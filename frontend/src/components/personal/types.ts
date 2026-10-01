@@ -121,8 +121,8 @@ export interface AssessmentPhoto {
 export interface StrengthTestItem {
   id?: string;
   exercise_name: string;
-  load_kg: number;
-  reps: number;
+  load_kg?: number;
+  reps?: number;
   one_rm_kg?: number;
   test_date?: string;
   notes?: string;

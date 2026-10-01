@@ -1331,12 +1331,12 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
                 <div className="flex items-center gap-6 pt-2">
                   <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                    <ClinicalBooleanSelect value={perioForm.bleeding} onChange={value => setPerioForm({ ...perioForm, bleeding: value })} />
+                    <ClinicalBooleanSelect value={perioForm.bleeding} onChange={(value: boolean | undefined) => setPerioForm({ ...perioForm, bleeding: value })} />
                     Sangramento à Sondagem (SS)
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
-                    <ClinicalBooleanSelect value={perioForm.suppuration} onChange={value => setPerioForm({ ...perioForm, suppuration: value })} />
+                    <ClinicalBooleanSelect value={perioForm.suppuration} onChange={(value: boolean | undefined) => setPerioForm({ ...perioForm, suppuration: value })} />
                     Supuração Presente
                   </label>
                 </div>

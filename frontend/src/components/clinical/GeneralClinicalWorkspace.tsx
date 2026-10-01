@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -81,7 +82,7 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
   const [newGoalText, setNewGoalText] = useState('');
 
   // Avaliação de Dor & Queixa Anatômica
-  const [painScale, setPainScale] = useState<number>(0);
+  const [painScale, setPainScale] = useState<number | ''>('');
   const [painLocation, setPainLocation] = useState('');
   const [painCharacteristics, setPainCharacteristics] = useState('');
 
@@ -95,6 +96,34 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
   const [birthPlanNotes, setBirthPlanNotes] = useState('');
   const [lactationNotes, setLactationNotes] = useState('');
+  useClinicalFormReset((initialPatientId || '') + ':' + (initialAppointmentId || ''), [
+    [chiefComplaint, setChiefComplaint],
+    [clinicalEvolution, setClinicalEvolution],
+    [clinicalConduct, setClinicalConduct],
+    [technicalNotes, setTechnicalNotes],
+    [bloodPressureSystolic, setBloodPressureSystolic],
+    [bloodPressureDiastolic, setBloodPressureDiastolic],
+    [heartRate, setHeartRate],
+    [respiratoryRate, setRespiratoryRate],
+    [temperature, setTemperature],
+    [oxygenSaturation, setOxygenSaturation],
+    [capillaryBloodGlucose, setCapillaryBloodGlucose],
+    [weightKg, setWeightKg],
+    [heightCm, setHeightCm],
+    [goals, setGoals],
+    [newGoalText, setNewGoalText],
+    [painScale, setPainScale],
+    [painLocation, setPainLocation],
+    [painCharacteristics, setPainCharacteristics],
+    [woundDescription, setWoundDescription],
+    [woundStage, setWoundStage],
+    [photoNotes, setPhotoNotes],
+    [gestationalWeeks, setGestationalWeeks],
+    [expectedDeliveryDate, setExpectedDeliveryDate],
+    [birthPlanNotes, setBirthPlanNotes],
+    [lactationNotes, setLactationNotes],
+  ]);
+
 
   // Modais auxiliares
   const [showFinishModal, setShowFinishModal] = useState(false);
@@ -278,7 +307,7 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
       if (hasCapability('THERAPEUTIC_GOALS') && goals.length > 0) {
         structuredData.goals = goals;
       }
-      if ((hasCapability('BODY_MAP') || hasCapability('PAIN_ASSESSMENT')) && (painScale > 0 || painLocation)) {
+      if ((hasCapability('BODY_MAP') || hasCapability('PAIN_ASSESSMENT')) && (painScale !== '' || painLocation)) {
         structuredData.painAssessment = {
           scale: painScale,
           location: painLocation,
@@ -947,26 +976,26 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
                 </label>
                 <span className={`text-base font-extrabold ${
                   painScale === 0 ? 'text-teal-600' :
-                  painScale <= 3 ? 'text-emerald-600' :
-                  painScale <= 6 ? 'text-amber-600' : 'text-rose-600'
+                  Number(painScale) <= 3 ? 'text-emerald-600' :
+                  Number(painScale) <= 6 ? 'text-amber-600' : 'text-rose-600'
                 }`}>
                   {painScale} / 10 • {
-                    painScale === 0 ? 'Sem Dor' :
-                    painScale <= 3 ? 'Dor Leve' :
-                    painScale <= 6 ? 'Dor Moderada' :
-                    painScale <= 8 ? 'Dor Intensa' : 'Dor Insuportável'
+                    painScale === '' ? 'Não avaliado' : painScale === 0 ? 'Sem Dor' :
+                    Number(painScale) <= 3 ? 'Dor Leve' :
+                    Number(painScale) <= 6 ? 'Dor Moderada' :
+                    Number(painScale) <= 8 ? 'Dor Intensa' : 'Dor Insuportável'
                   }
                 </span>
               </div>
 
               <input
-                type="range"
+                type="number"
                 min={0}
                 max={10}
                 step={1}
                 value={painScale}
-                onChange={e => setPainScale(parseInt(e.target.value, 10))}
-                className="w-full accent-teal-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                onChange={e => setPainScale(e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-full p-2 border border-slate-200 rounded-lg"
               />
 
               <div className="flex justify-between text-[11px] text-slate-400 font-semibold px-1">

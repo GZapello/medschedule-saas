@@ -1,3 +1,4 @@
+import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -123,7 +124,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [showMedicationsModal, setShowMedicationsModal] = useState<boolean>(false);
   const [showAlertsModal, setShowAlertsModal] = useState<boolean>(false);
   const [editingAllergyId, setEditingAllergyId] = useState<string | null>(null);
-  const [allergyForm, setAllergyForm] = useState({ substance: '', reactionType: 'Cutânea', severity: 'moderate', notes: '' });
+  const [allergyForm, setAllergyForm] = useState({ substance: '', reactionType: '', severity: '', notes: '' });
   const [editingMedicationId, setEditingMedicationId] = useState<string | null>(null);
   const [medicationForm, setMedicationForm] = useState({ medicationName: '', dosage: '', frequency: '', route: 'oral', status: 'active', notes: '' });
   const [alertsForm, setAlertsForm] = useState({ importantAlert: '', clinicalNotes: '', notesAdmin: '' });
@@ -133,7 +134,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   const [zemdaFisioExpanded, setZemdaFisioExpanded] = useState<boolean>(true);
   const [bodyMapJson, setBodyMapJson] = useState<string>('');
   const [bodyMapImage, setBodyMapImage] = useState<string>('');
-  const [painScore, setPainScore] = useState<number>(0);
+  const [painScore, setPainScore] = useState<number | ''>('');
   const [painLocation, setPainLocation] = useState<string>('');
   const [painCharacteristics, setPainCharacteristics] = useState<string>('');
   const [conductsExercises, setConductsExercises] = useState<string>('');
@@ -160,17 +161,17 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   // ZemdaTO - Terapia Ocupacional
   const [isAppointmentTO, setIsAppointmentTO] = useState<boolean>(() => effectiveModule ? effectiveModule === 'ZemdaTO' : !!isOccupationalTherapist);
   const [zemdaTOExpanded, setZemdaTOExpanded] = useState<boolean>(true);
-  const [toIndependenceLevel, setToIndependenceLevel] = useState<number>(5);
-  const [toMainOccupation, setToMainOccupation] = useState<string>('Autocuidado e rotina diária');
-  const [toSensoryStatus, setToSensoryStatus] = useState<string>('Típico / Sem desvios evidentes');
+  const [toIndependenceLevel, setToIndependenceLevel] = useState<number | ''>('');
+  const [toMainOccupation, setToMainOccupation] = useState<string>('');
+  const [toSensoryStatus, setToSensoryStatus] = useState<string>('');
   const [toNotes, setToNotes] = useState<string>('');
 
   // ZemdaFono - Fonoaudiologia
   const [isAppointmentFono, setIsAppointmentFono] = useState<boolean>(() => effectiveModule ? effectiveModule === 'ZemdaFono' : !!isSpeechTherapist);
   const [zemdaFonoExpanded, setZemdaFonoExpanded] = useState<boolean>(true);
   const [fonoPhonemeAltered, setFonoPhonemeAltered] = useState<string>('');
-  const [fonoVoiceQuality, setFonoVoiceQuality] = useState<string>('Adequada');
-  const [fonoOrofacialHabit, setFonoOrofacialHabit] = useState<string>('Nenhum');
+  const [fonoVoiceQuality, setFonoVoiceQuality] = useState<string>('');
+  const [fonoOrofacialHabit, setFonoOrofacialHabit] = useState<string>('');
   const [fonoNotes, setFonoNotes] = useState<string>('');
 
   const activeModuleType = effectiveModule || (
@@ -202,6 +203,33 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   );
   const [clinicalEvolution, setClinicalEvolution] = useState<string>('');
   const [technicalNotes, setTechnicalNotes] = useState<string>('');
+  useClinicalFormReset(appointment.id, [
+    [bodyMapJson, setBodyMapJson],
+    [bodyMapImage, setBodyMapImage],
+    [painScore, setPainScore],
+    [painLocation, setPainLocation],
+    [painCharacteristics, setPainCharacteristics],
+    [conductsExercises, setConductsExercises],
+    [odontogramData, setOdontogramData],
+    [pendingToothChanges, setPendingToothChanges],
+    [nutriWeight, setNutriWeight],
+    [nutriHeight, setNutriHeight],
+    [nutriWaistCirc, setNutriWaistCirc],
+    [nutriAbdominalCirc, setNutriAbdominalCirc],
+    [nutriHipCirc, setNutriHipCirc],
+    [nutriNotes, setNutriNotes],
+    [toIndependenceLevel, setToIndependenceLevel],
+    [toMainOccupation, setToMainOccupation],
+    [toSensoryStatus, setToSensoryStatus],
+    [toNotes, setToNotes],
+    [fonoPhonemeAltered, setFonoPhonemeAltered],
+    [fonoVoiceQuality, setFonoVoiceQuality],
+    [fonoOrofacialHabit, setFonoOrofacialHabit],
+    [fonoNotes, setFonoNotes],
+    [clinicalEvolution, setClinicalEvolution],
+    [technicalNotes, setTechnicalNotes],
+  ]);
+
   const [isSealed, setIsSealed] = useState<boolean>(false);
 
   // Status de autosave
@@ -425,7 +453,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
         await ApiClient.post(`/v1/patients/${appointment.patient_id}/allergies`, allergyForm);
         showToast('Alergia cadastrada com sucesso!', 'success');
       }
-      setAllergyForm({ substance: '', reactionType: 'Cutânea', severity: 'moderate', notes: '' });
+      setAllergyForm({ substance: '', reactionType: '', severity: '', notes: '' });
       setEditingAllergyId(null);
       setShowAllergiesModal(false);
       await loadPatientDetails();
@@ -729,7 +757,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
       });
 
       // Sincroniza dados do ZemdaFisio caso preenchidos
-      if (isAppointmentPhysio && (bodyMapJson || painScore > 0 || conductsExercises.trim() || painLocation.trim())) {
+      if (isAppointmentPhysio && (bodyMapJson || painScore !== '' || conductsExercises.trim() || painLocation.trim())) {
         try {
           const existingForAppt = physioAssessments.find(a => a.appointment_id === appointment.id);
           const physioPayload = {
@@ -1087,7 +1115,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                   type="button"
                   onClick={() => {
                     setEditingAllergyId(null);
-                    setAllergyForm({ substance: '', reactionType: 'Cutânea', severity: 'moderate', notes: '' });
+                    setAllergyForm({ substance: '', reactionType: '', severity: '', notes: '' });
                     setShowAllergiesModal(true);
                   }}
                   className="p-1 rounded-lg hover:bg-black/10 text-slate-700 hover:text-slate-950 transition-colors cursor-pointer"
@@ -1449,7 +1477,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                             if (val) {
                               const found = physioAssessments.find(a => a.id === val);
                               if (found) {
-                                setPainScore(found.pain_score || 0);
+                                setPainScore(found.pain_score ?? '');
                                 setPainLocation(found.pain_location || '');
                                 setPainCharacteristics(found.pain_characteristics || '');
                                 setConductsExercises(found.conducts_exercises || '');
@@ -1491,18 +1519,18 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                           <label className="text-xs font-bold text-slate-700">Intensidade da Dor (EVA)</label>
                           <span className={`text-xs font-black px-2 py-0.5 rounded-md ${
                             painScore === 0 ? 'bg-slate-100 text-slate-600' :
-                            painScore <= 3 ? 'bg-emerald-100 text-emerald-800' :
-                            painScore <= 7 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                            Number(painScore) <= 3 ? 'bg-emerald-100 text-emerald-800' :
+                            Number(painScore) <= 7 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
                           }`}>
-                            {painScore} / 10
+                            {painScore === '' ? 'Não avaliado' : `${painScore} / 10`}
                           </span>
                         </div>
                         <input
-                          type="range"
+                          type="number"
                           min="0"
                           max="10"
                           value={painScore}
-                          onChange={e => setPainScore(Number(e.target.value))}
+                          onChange={e => setPainScore(e.target.value === '' ? '' : Number(e.target.value))}
                           className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
                         />
                         <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-medium">
@@ -2175,8 +2203,8 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                               setEditingAllergyId(alg.id);
                               setAllergyForm({
                                 substance: alg.substance,
-                                reactionType: alg.reaction_type || 'Cutânea',
-                                severity: alg.severity || 'moderate',
+                                reactionType: alg.reaction_type || '',
+                                severity: alg.severity || '',
                                 notes: alg.notes || ''
                               });
                             }}
@@ -2223,7 +2251,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                       value={allergyForm.reactionType}
                       onChange={e => setAllergyForm({ ...allergyForm, reactionType: e.target.value })}
                       className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white"
-                    >
+                    ><option value="">Selecione / não avaliado</option>
                       <option value="Cutânea">Cutânea (Urticária, Rash)</option>
                       <option value="Respiratória">Respiratória (Edema de glote, Broncoespasmo)</option>
                       <option value="Anafilática">Anafilática (Choque anafilático)</option>
@@ -2237,7 +2265,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                       value={allergyForm.severity}
                       onChange={e => setAllergyForm({ ...allergyForm, severity: e.target.value })}
                       className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white"
-                    >
+                    ><option value="">Selecione / não avaliado</option>
                       <option value="mild">Leve</option>
                       <option value="moderate">Moderada</option>
                       <option value="severe">Grave</option>
@@ -2261,7 +2289,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                       type="button"
                       onClick={() => {
                         setEditingAllergyId(null);
-                        setAllergyForm({ substance: '', reactionType: 'Cutânea', severity: 'moderate', notes: '' });
+                        setAllergyForm({ substance: '', reactionType: '', severity: '', notes: '' });
                       }}
                       className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-medium"
                     >
@@ -2403,7 +2431,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                       value={medicationForm.route}
                       onChange={e => setMedicationForm({ ...medicationForm, route: e.target.value })}
                       className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-                    >
+                    ><option value="">Selecione / não avaliado</option>
                       <option value="oral">Oral</option>
                       <option value="sublingual">Sublingual</option>
                       <option value="tópica">Tópica</option>
@@ -2419,7 +2447,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
                       value={medicationForm.status}
                       onChange={e => setMedicationForm({ ...medicationForm, status: e.target.value })}
                       className="w-full text-xs px-2.5 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-                    >
+                    ><option value="">Selecione / não avaliado</option>
                       <option value="active">Uso Ativo / Contínuo</option>
                       <option value="suspended">Suspenso Temporariamente</option>
                       <option value="completed">Concluído</option>

@@ -52,7 +52,7 @@ export const Idv10AssessmentSection: React.FC<Idv10AssessmentSectionProps> = ({
   onScoreCalculated
 }) => {
   const { showToast } = useToast();
-  const [answers, setAnswers] = useState<number[]>(Array.isArray(initialDraft?.answers) && initialDraft.answers.length === 10 ? initialDraft.answers : Array(10).fill(0));
+  const [answers, setAnswers] = useState<Array<number | null>>(Array.isArray(initialDraft?.answers) && initialDraft.answers.length === 10 ? initialDraft.answers : Array(10).fill(null));
   const [notes, setNotes] = useState<string>(initialDraft?.notes || '');
   const [assessmentDate, setAssessmentDate] = useState<string>(
     initialDraft?.assessmentDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
@@ -61,14 +61,16 @@ export const Idv10AssessmentSection: React.FC<Idv10AssessmentSectionProps> = ({
   const [saving, setSaving] = useState<boolean>(false);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
 
+  const complete = answers.every(answer => answer !== null && answer !== undefined);
+
   // Escore Total (0 a 40)
   const totalScore = useMemo(() => {
-    return answers.reduce((acc, curr) => acc + (Number(curr) || 0), 0);
+    return answers.reduce<number>((acc, curr) => acc + (Number(curr) || 0), 0);
   }, [answers]);
 
   useEffect(() => {
-    onScoreCalculated?.(totalScore);
-  }, [totalScore, onScoreCalculated]);
+    if (complete) onScoreCalculated?.(totalScore);
+  }, [totalScore, complete, onScoreCalculated]);
 
   const draftChangeRef = React.useRef(onDraftChange); draftChangeRef.current = onDraftChange;
   useEffect(() => { draftChangeRef.current?.({ answers, notes, assessmentDate }); }, [answers, notes, assessmentDate]);
@@ -91,6 +93,7 @@ export const Idv10AssessmentSection: React.FC<Idv10AssessmentSectionProps> = ({
   };
 
   const handleSaveIdv10 = async () => {
+    if (!complete) { showToast('Responda todos os itens antes de salvar a escala.', 'info'); return; }
     if (!patientId) {
       showToast('Selecione um paciente', 'info');
       return;
@@ -139,11 +142,11 @@ export const Idv10AssessmentSection: React.FC<Idv10AssessmentSectionProps> = ({
         <div className="flex items-center gap-2 px-4 py-2 rounded-2xl border bg-slate-50 border-slate-200 shrink-0">
           <div className="text-right">
             <span className="text-[10px] font-bold text-slate-400 uppercase block">Escore Atual:</span>
-            <span className={`text-base font-black ${totalScore > 7 ? 'text-rose-600' : 'text-emerald-700'}`}>
-              {totalScore} / 40
+            <span className={`text-base font-black ${!complete ? 'text-slate-400' : totalScore > 7 ? 'text-rose-600' : 'text-emerald-700'}`}>
+              {complete ? `${totalScore} / 40` : 'Não avaliado / incompleto'}
             </span>
           </div>
-          <div className={`w-3 h-3 rounded-full ${totalScore > 7 ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
+          <div className={`w-3 h-3 rounded-full ${!complete ? 'text-slate-400' : totalScore > 7 ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
         </div>
       </div>
 

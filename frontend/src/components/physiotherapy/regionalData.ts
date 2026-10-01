@@ -1,5 +1,5 @@
 export interface PhysioPainAssessment {
-  score: number; // 0-10
+  score?: number; // 0-10; undefined means not assessed
   restScore?: number; // 0-10
   movementScore?: number; // 0-10
   palpationScore?: number; // 0-10

@@ -1405,7 +1405,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                       {Object.entries(dysphagiaData.penetrationAspirationSigns).map(([key, val]) => (
                         <label key={key} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
-                          <ClinicalBooleanSelect value={val as boolean | undefined} onChange={value => {
+                          <ClinicalBooleanSelect value={val as boolean | undefined} onChange={(value: boolean | undefined) => {
                               setDysphagiaData({
                                 ...dysphagiaData,
                                 penetrationAspirationSigns: {

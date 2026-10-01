@@ -24,8 +24,8 @@ export const FluencyCounterModal: React.FC<FluencyCounterModalProps> = ({
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Counters
-  const [wordsCount, setWordsCount] = useState(100);
-  const [syllablesCount, setSyllablesCount] = useState(150);
+  const [wordsCount, setWordsCount] = useState(0);
+  const [syllablesCount, setSyllablesCount] = useState(0);
 
   // Típicas
   const [hesitations, setHesitations] = useState(0);
@@ -105,6 +105,7 @@ export const FluencyCounterModal: React.FC<FluencyCounterModalProps> = ({
   const spm = Math.round(syllablesCount / minutes);
 
   const handleSave = async () => {
+    if (!wordsCount || !syllablesCount || !seconds) { showToast('Registre a amostra, a duração e as contagens antes de salvar.', 'info'); return; }
     try {
       setSaving(true);
       await ApiClient.post('/v1/speech-therapy/fluency-samples', {
@@ -223,7 +224,7 @@ export const FluencyCounterModal: React.FC<FluencyCounterModalProps> = ({
                     % Descontinuidade Total
                   </span>
                   <div className="text-2xl font-black text-teal-800 dark:text-teal-300">
-                    {pctDisfluency}%
+                    {wordsCount && seconds ? `${pctDisfluency}%` : 'Não avaliado'}
                   </div>
                   <p className="text-[11px] text-slate-500">
                     {totalDisfluencies} disfluências em {wordsCount} palavras
@@ -236,10 +237,10 @@ export const FluencyCounterModal: React.FC<FluencyCounterModalProps> = ({
                     % Rupturas Gagas (SLD)
                   </span>
                   <div className="text-2xl font-black text-amber-800 dark:text-amber-300">
-                    {pctStuttering}%
+                    {wordsCount && seconds ? `${pctStuttering}%` : 'Não avaliado'}
                   </div>
                   <p className="text-[11px] text-slate-500">
-                    {pctStuttering >= 3 ? 'Indicativo de gagueira (>= 3%)' : 'Dentro do padrão de referência'}
+                    {!wordsCount || !seconds ? 'Aguardando amostra' : pctStuttering >= 3 ? 'Indicativo de gagueira (>= 3%)' : 'Dentro do padrão de referência'}
                   </p>
                 </div>
 
@@ -273,7 +274,7 @@ export const FluencyCounterModal: React.FC<FluencyCounterModalProps> = ({
                     </button>
                     <input
                       type="number"
-                      value={wordsCount}
+                      value={wordsCount || ''}
                       onChange={e => setWordsCount(Number(e.target.value))}
                       className="w-16 px-2 py-1 text-center font-bold text-xs rounded-lg border border-slate-300"
                     />
@@ -301,7 +302,7 @@ export const FluencyCounterModal: React.FC<FluencyCounterModalProps> = ({
                     </button>
                     <input
                       type="number"
-                      value={syllablesCount}
+                      value={syllablesCount || ''}
                       onChange={e => setSyllablesCount(Number(e.target.value))}
                       className="w-16 px-2 py-1 text-center font-bold text-xs rounded-lg border border-slate-300"
                     />
