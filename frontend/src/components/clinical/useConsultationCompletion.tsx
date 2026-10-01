@@ -42,11 +42,14 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
       }
     }
 
-    const result = await ApiClient.post<any>(endpoint, { ...payload, appointmentId, saveOnly: true });
+    const result = await ApiClient.post<any>(endpoint, { ...payload, appointmentId });
     if (result.alreadyCompleted) {
       throw new Error('Este atendimento já foi finalizado. Abra o prontuário para consultar o histórico.');
     }
     setReceipt({ ...result, appointmentId });
+    setShowPostConsultationModal(true);
+    window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: 'completed' } }));
+    window.dispatchEvent(new Event('refresh-appointments'));
     return true;
   };
 
@@ -61,7 +64,7 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
   const dialog = (
     <>
       {review.dialog}
-      {receipt && (
+      {receipt?.awaitingPayment && (
         <ConsultationPaymentModal
           appointmentId={receipt.appointmentId}
           initialPayment={receipt.payment}

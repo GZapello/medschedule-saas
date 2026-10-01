@@ -44,7 +44,8 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Stethoscope
+  Stethoscope,
+  AlertCircle
 } from 'lucide-react';
 import { RegistrationProfessionOption, REGISTRATION_PROFESSIONS } from '../../types/professions';
 import { PracticeArea, MedicalSpecialtyItem } from '../../types/capabilities';
@@ -137,6 +138,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   const [isResending, setIsResending] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState<string | null>(null);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [successData, setSuccessData] = useState<{ clinicId: string; slug: string; message: string } | null>(null);
 
@@ -585,20 +587,22 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   };
 
   // Validar código OTP e avançar para Etapa de Planos (onboarding)
-  const handleVerifyOtpAndAdvance = async () => {
-    const code = otpDigits.join('').trim();
+  const handleVerifyOtpAndAdvance = async (providedCode?: string) => {
+    const code = (typeof providedCode === 'string' ? providedCode : otpDigits.join('')).trim();
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
       trackSignupValidationError({
         step: 'verify_email',
         field: 'otp',
         errorCode: 'INVALID_OTP_FORMAT'
       });
+      setOtpError('Código inválido ou expirado. Verifique e tente novamente.');
       showToast('Por favor, digite o código completo de 6 dígitos numéricos.', 'error');
       return;
     }
 
     try {
       setIsVerifying(true);
+      setOtpError(null);
       const res = await ApiClient.post<any>('/v1/onboarding/verify-email', { code });
 
       trackEmailVerified({
@@ -620,14 +624,16 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
         planCode: selectedPlanCode || initialPlan,
         professionCode: formData.profession || undefined
       });
-      showToast(err.message || 'Código incorreto ou expirado.', 'error');
+      setOtpError('Código inválido ou expirado. Verifique e tente novamente.');
+      showToast('Código inválido ou expirado. Verifique e tente novamente.', 'error');
     } finally {
       setIsVerifying(false);
     }
   };
 
-  // Controles de input do OTP
+  // Controles de input do OTP com submissão automática no 6º dígito
   const handleOtpChange = (index: number, val: string) => {
+    if (otpError) setOtpError(null);
     const clean = val.replace(/\D/g, '');
     if (!clean) {
       const updated = [...otpDigits];
@@ -641,12 +647,17 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     updated[index] = char;
     setOtpDigits(updated);
 
-    if (index < 5) {
+    const fullCode = updated.join('');
+    if (fullCode.length === 6 && /^\d{6}$/.test(fullCode)) {
+      // Submissão automática imediata ao preencher o 6º dígito
+      void handleVerifyOtpAndAdvance(fullCode);
+    } else if (index < 5) {
       otpInputRefs.current[index + 1]?.focus();
     }
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (otpError) setOtpError(null);
     if (e.key === 'Backspace') {
       if (!otpDigits[index] && index > 0) {
         otpInputRefs.current[index - 1]?.focus();
@@ -660,6 +671,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
   const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
+    if (otpError) setOtpError(null);
     const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     if (!pasted) return;
 
@@ -669,8 +681,13 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
     }
     setOtpDigits(updated);
 
-    const nextIndex = Math.min(pasted.length, 5);
-    otpInputRefs.current[nextIndex]?.focus();
+    if (pasted.length === 6 && /^\d{6}$/.test(pasted)) {
+      // Submissão automática ao colar os 6 dígitos completos
+      void handleVerifyOtpAndAdvance(pasted);
+    } else {
+      const nextIndex = Math.min(pasted.length, 5);
+      otpInputRefs.current[nextIndex]?.focus();
+    }
   };
 
   // Seleção e Ativação do Plano no Onboarding
@@ -767,6 +784,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       });
 
       await reloadSession();
+      window.dispatchEvent(new Event('zemda-billing-refresh'));
 
       // Transição direta para o Dashboard com a mesma sessão autenticada (sem logout nem redirect para login)
       sessionStorage.setItem('activeView', 'dashboard');
@@ -1392,14 +1410,31 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                       onKeyDown={e => handleOtpKeyDown(idx, e)}
                       onPaste={handleOtpPaste}
                       className={`w-11 h-14 sm:w-13 sm:h-16 text-center text-2xl font-black rounded-2xl border-2 transition-all outline-none ${
-                        digit
+                        otpError
+                          ? 'border-rose-400 bg-rose-50/50 text-rose-950 ring-2 ring-rose-400/20'
+                          : digit
                           ? 'border-teal-500 bg-teal-50/40 text-teal-950 ring-2 ring-teal-500/20 shadow-xs'
                           : 'border-slate-200 bg-slate-50 text-slate-800 focus:border-teal-500 focus:bg-white focus:ring-4 focus:ring-teal-500/10'
-                      }`}
+                      } ${isVerifying ? 'opacity-70 cursor-wait' : ''}`}
+                      disabled={isVerifying}
                       autoFocus={idx === 0}
                     />
                   ))}
                 </div>
+
+                {otpError && (
+                  <div role="alert" className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center justify-center gap-1.5 animate-in fade-in-50">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{otpError}</span>
+                  </div>
+                )}
+
+                {isVerifying && !otpError && (
+                  <div className="flex items-center justify-center gap-2 text-xs font-semibold text-teal-700 animate-pulse">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-600" />
+                    <span>Validando código automaticamente...</span>
+                  </div>
+                )}
 
                 <div className="text-center">
                   <p className="text-[11px] sm:text-xs text-slate-500">
@@ -1446,7 +1481,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleVerifyOtpAndAdvance}
+                  onClick={() => handleVerifyOtpAndAdvance()}
                   disabled={isVerifying || otpDigits.join('').length !== 6}
                   className="flex-1 min-h-[48px] px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-2xl shadow-lg shadow-teal-700/25 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                 >

@@ -178,9 +178,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
     if (submitting) return; // Prevenção rigorosa de duplo clique
 
     try {
-      setSubmitting(true);
-
-      const payload: any = { saveOnly: true };
+      const payload: any = {};
 
       if (evolution.clinicalEvolution.trim() || evolution.technicalNotes.trim()) {
         payload.evolution = {
@@ -255,10 +253,30 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         payload.referral = referral;
       }
 
-      if (!await review.confirm({ ...payload, patientName: appointment.patient_name, professionalName: appointment.professional_name, serviceName: appointment.service_name })) return;
+      const confirmed = await review.confirm({ ...payload, patientName: appointment.patient_name, professionalName: appointment.professional_name, serviceName: appointment.service_name });
+      if (!confirmed) {
+        return;
+      }
+
+      setSubmitting(true);
       const res = await ApiClient.post<any>(`/v1/appointments/${appointment.id}/finish`, payload);
-      
-      setReceipt(res);
+
+      localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(`zemda_quick_consult_${appointment.id}`);
+
+      window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId: appointment.id, status: 'completed' } }));
+      window.dispatchEvent(new Event('refresh-appointments'));
+
+      setCompletionSummary({
+        hasEvolution: !!res?.generatedDocs?.recordId,
+        hasCertificate: !!res?.generatedDocs?.certificateId,
+        hasPrescription: !!res?.generatedDocs?.prescriptionId,
+        hasExamRequest: !!res?.generatedDocs?.examRequestId,
+        hasReturn: !!res?.generatedDocs?.returnAppointmentId,
+        hasReferral: includeReferral,
+        generatedDocs: res?.generatedDocs
+      });
+      showToast('Atendimento finalizado com sucesso!', 'success');
     } catch (err: any) {
       console.error('Falha ao finalizar atendimento:', err);
       // NUNCA apaga os campos preenchidos

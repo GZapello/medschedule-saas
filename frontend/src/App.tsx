@@ -1250,7 +1250,21 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (currentUser.role !== 'superadmin' && !isSandboxSession && billingSummary && !billingSummary.canOperate) return <BillingView />;
+  const isTrialActive = Boolean(billingSummary?.isTrial && (billingSummary?.trialDaysRemaining === null || billingSummary?.trialDaysRemaining > 0));
+  const isPendingOnboarding = Boolean(currentUser.onboardingStatus && currentUser.onboardingStatus !== 'active');
+  const isUserActive = currentUser.onboardingStatus === 'active';
+
+  if (
+    currentUser.role !== 'superadmin' &&
+    !isSandboxSession &&
+    billingSummary &&
+    !billingSummary.canOperate &&
+    !isTrialActive &&
+    !isUserActive &&
+    !isPendingOnboarding
+  ) {
+    return <BillingView />;
+  }
   if (currentView === 'subscription' || window.location.pathname === '/assinatura') return <BillingView />;
 
   return (

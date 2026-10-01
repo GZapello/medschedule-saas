@@ -500,12 +500,15 @@ export class DocumentsController {
     }
   }
 
-  // 5. FLUXO COMPLETO E SEGURO DE FINALIZAÇÃO DE CONSULTA (TRANSACTIONAL)
   static finishConsultation(req: Request, res: Response): void {
     let currentStage = 'INIT';
     try {
-      const { id: appointmentId } = req.params;
+      const appointmentId = req.params.id || req.body.appointmentId;
       const tenantId = req.tenantId;
+      if (!appointmentId) {
+        res.status(400).json({ error: 'ID do agendamento é obrigatório para finalizar o atendimento.' });
+        return;
+      }
       const {
         evolution,
         certificate,
@@ -632,14 +635,36 @@ export class DocumentsController {
         res.status(409).json({ error: 'O prontuário desta consulta já foi salvo. Retome o recebimento pela agenda. Alterações clínicas devem ser registradas no prontuário.' });
         return;
       }
-      const payment = req.body.payment;
-      if (!saveOnly && appt.status !== 'completed' && (!payment ||
-          !['paid', 'pending', 'exempt'].includes(payment.status) ||
-          !['cash', 'pix', 'credit_card', 'debit_card', 'insurance', 'other'].includes(payment.paymentMethod) ||
-          typeof payment.amount !== 'number' || !Number.isFinite(payment.amount) || payment.amount < 0 ||
-          (payment.status !== 'exempt' && payment.amount <= 0))) {
-        res.status(400).json({ error: 'Informe valor, forma e status do recebimento.' });
-        return;
+      let payment = req.body.payment;
+      if (!saveOnly && appt.status !== 'completed') {
+        if (!payment) {
+          const existingPayment = db.prepare("SELECT id, amount, payment_method, status, notes FROM payments WHERE appointment_id=? AND tenant_id=? AND status NOT IN ('cancelled','refunded') ORDER BY created_at LIMIT 1").get(appointmentId, tenantId) as any;
+          if (existingPayment) {
+            payment = {
+              amount: Number(existingPayment.amount) || 0,
+              paymentMethod: existingPayment.payment_method || 'other',
+              status: existingPayment.status || 'paid',
+              notes: existingPayment.notes || ''
+            };
+          } else {
+            const serviceRow = db.prepare('SELECT price FROM services WHERE id=? AND tenant_id=?').get(appt.service_id, tenantId) as any;
+            const servicePrice = Number(serviceRow?.price) || 0;
+            payment = {
+              amount: servicePrice,
+              paymentMethod: 'other',
+              status: servicePrice > 0 ? 'pending' : 'exempt',
+              notes: 'Gerado na finalização do atendimento'
+            };
+          }
+        } else {
+          if (!['paid', 'pending', 'exempt'].includes(payment.status) ||
+              !['cash', 'pix', 'credit_card', 'debit_card', 'insurance', 'other'].includes(payment.paymentMethod) ||
+              typeof payment.amount !== 'number' || !Number.isFinite(payment.amount) || payment.amount < 0 ||
+              (payment.status !== 'exempt' && payment.amount <= 0)) {
+            res.status(400).json({ error: 'Informe valor, forma e status do recebimento.' });
+            return;
+          }
+        }
       }
 
       // Proteção contra duplo clique e idempotência
@@ -1062,8 +1087,14 @@ export class DocumentsController {
       }
 
       // 7. Marca o agendamento como finalizado / completed
-      db.prepare('INSERT INTO consultation_completions (appointment_id, tenant_id, generated_docs_json, payload_json, saved_by) VALUES (?, ?, ?, ?, ?)')
-        .run(appointmentId, tenantId, JSON.stringify(generatedDocs), clinicalPayload, req.user!.userId);
+      db.prepare(`
+        INSERT INTO consultation_completions (appointment_id, tenant_id, generated_docs_json, payload_json, saved_by)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(appointment_id) DO UPDATE SET
+          generated_docs_json = excluded.generated_docs_json,
+          payload_json = excluded.payload_json,
+          saved_by = excluded.saved_by
+      `).run(appointmentId, tenantId, JSON.stringify(generatedDocs), clinicalPayload, req.user!.userId);
       }
 
       if (saveOnly) {
@@ -1086,9 +1117,16 @@ export class DocumentsController {
       const existingPayment = existingPayments[0];
       if (existingPayment && ['paid', 'partial'].includes(existingPayment.status) &&
           (existingPayment.status !== payment.status || Number(existingPayment.amount) !== amount || existingPayment.payment_method !== payment.paymentMethod)) {
-        db.exec('ROLLBACK');
-        res.status(409).json({ error: 'O recebimento já registrado deve ser conferido no Financeiro.' });
-        return;
+        if (!req.body.payment) {
+          payment.amount = Number(existingPayment.amount) || 0;
+          payment.paymentMethod = existingPayment.payment_method || 'other';
+          payment.status = existingPayment.status || 'paid';
+          payment.notes = existingPayment.notes || '';
+        } else {
+          db.exec('ROLLBACK');
+          res.status(409).json({ error: 'O recebimento já registrado deve ser conferido no Financeiro.' });
+          return;
+        }
       }
       const paymentId = existingPayment?.id || 'pay-' + uuidv4();
       if (existingPayment) {

@@ -48,7 +48,7 @@ export function useClinicalReview(contextKey?: string) {
   });
 
   const dialog = data && createPortal(
-    <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4"
+    <div className="fixed inset-0 z-[100000] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4"
       onKeyDown={event => {
         if (event.key === 'Escape') settle(false);
         if (event.key === 'Tab') {
