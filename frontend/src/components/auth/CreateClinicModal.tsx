@@ -157,12 +157,24 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   const [expandedSpecialtyIds, setExpandedSpecialtyIds] = useState<string[]>(['med-spec-clinica']);
   const [loadingMedicalTree, setLoadingMedicalTree] = useState(false);
 
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Carregar planos
   const loadPlans = () => {
     setPlanError('');
     ApiClient.get<RegistrationPlan[]>('/v1/plans')
-      .then(setPlans)
-      .catch(() => setPlanError('Não foi possível carregar os planos. Tente novamente.'));
+      .then(data => {
+        if (isMountedRef.current) setPlans(data);
+      })
+      .catch(() => {
+        if (isMountedRef.current) setPlanError('Não foi possível carregar os planos. Tente novamente.');
+      });
   };
 
   useEffect(() => {
@@ -338,8 +350,6 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       return () => clearInterval(timer);
     }
   }, [step, cooldownSeconds]);
-
-  if (!isOpen) return null;
 
   // Formatador de Celular / WhatsApp
   const formatPhone = (val: string) => {
@@ -855,6 +865,8 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       }
     }
   }, [isCadastro, step]);
+
+  if (!isOpen) return null;
 
   return (
     <div ref={presentation === 'page' ? contentRef : undefined} className={presentation === 'page' ? 'signup-page' : 'fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4 backdrop-blur-xs overflow-y-auto'}>

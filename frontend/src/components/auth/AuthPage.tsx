@@ -283,7 +283,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       <CreateClinicModal
         presentation="page"
         isOpen={isCreateClinicOpen}
-        onClose={() => setIsCreateClinicOpen(false)}
+        onClose={() => {
+          setIsCreateClinicOpen(false);
+          if (window.location.pathname === '/cadastro') {
+            window.history.pushState(null, '', '/login');
+          }
+        }}
         onSuccess={() => {
           setIsCreateClinicOpen(false);
           sessionStorage.setItem('activeView', 'dashboard');

@@ -74,7 +74,7 @@ const OnboardingWelcomeModal = lazyWithRetry(() => import('./components/onboardi
 const OnboardingHelpModal = lazyWithRetry(() => import('./components/onboarding/OnboardingHelpModal').then(module => ({ default: module.OnboardingHelpModal })), 'OnboardingHelpModal');
 const WhatsNewModal = lazyWithRetry(() => import('./components/onboarding/WhatsNewModal').then(module => ({ default: module.WhatsNewModal })), 'WhatsNewModal');
 import { trackPageView } from './utils/analytics';
-import { Sparkles, AlertCircle } from 'lucide-react';
+import { Sparkles, AlertCircle, ArrowRight } from 'lucide-react';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 
 function updateDocumentSeo(options: {
@@ -358,6 +358,7 @@ const AppContent: React.FC = () => {
   const [publicView, setPublicView] = useState<'landing' | 'login'>(() =>
     window.location.pathname.startsWith('/assinatura') || isDirectAuthPath ? 'login' : 'landing'
   );
+  const [onboardingSuspended, setOnboardingSuspended] = useState<boolean>(false);
 
   // Roteamento de páginas públicas de nicho (SEO)
   const getInitialSeoSlug = (): string | null => {
@@ -1171,13 +1172,75 @@ const AppContent: React.FC = () => {
 
   // Se o usuário estiver autenticado porém em estado de onboarding pendente, renderiza o fluxo de onboarding obrigatório
   if (currentUser.role !== 'superadmin' && !isSandboxSession && currentUser.onboardingStatus && currentUser.onboardingStatus !== 'active') {
+    if (onboardingSuspended) {
+      const getStepLabel = () => {
+        if (currentUser.onboardingStatus === 'pending_verification') return 'Verificação de e-mail (código de 6 dígitos)';
+        if (currentUser.onboardingStatus === 'pending_plan') return 'Escolha do plano ou teste gratuito';
+        if (currentUser.onboardingStatus === 'pending_profile') return 'Perfil profissional e especialidades';
+        return 'Configuração de acesso';
+      };
+
+      return (
+        <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative font-sans">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-b from-teal-100/60 via-emerald-50/30 to-transparent blur-3xl -z-10 pointer-events-none" />
+
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-100 text-center space-y-6">
+            <div className="flex justify-center">
+              <img src="/brand/zemda-logo.png" alt="Zemda" className="h-9 w-auto" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-teal-50 text-teal-700 border border-teal-200/70">
+                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                Configuração em andamento
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Sua conta já está criada!
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+                Olá, <strong>{currentUser.name || 'Doutor(a)'}</strong> ({currentUser.email}). Conclua as etapas do seu onboarding para acessar seu painel no Zemda.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-left space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Etapa pendente:</span>
+              <p className="text-xs font-bold text-teal-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+                {getStepLabel()}
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setOnboardingSuspended(false)}
+                className="w-full py-3.5 px-4 bg-teal-700 hover:bg-teal-800 text-white font-black text-sm rounded-2xl shadow-lg shadow-teal-700/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>Continuar Configuração</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="w-full py-2.5 px-4 text-xs font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+              >
+                Sair da conta
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <CreateClinicModal
         isOpen={true}
         onClose={() => {
-          logout();
+          setOnboardingSuspended(true);
         }}
         onSuccess={() => {
+          setOnboardingSuspended(false);
           setCurrentView('dashboard');
           sessionStorage.setItem('activeView', 'dashboard');
           window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
