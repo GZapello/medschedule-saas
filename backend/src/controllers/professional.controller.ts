@@ -163,15 +163,6 @@ export class ProfessionalController {
         slug, publicBookingEnabled, remunerationType, commissionPercentage, fixedSalary, paymentDay
       } = req.body;
 
-      if (publicBookingEnabled !== undefined && req.user?.role !== 'clinic_admin') {
-        res.status(403).json({ error: 'Somente o administrador pode configurar o link público.' }); return;
-      }
-      if (publicBookingEnabled !== undefined && typeof publicBookingEnabled !== 'boolean') {
-        res.status(400).json({ error: 'Configuração de agendamento inválida.' }); return;
-      }
-      if (slug && (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(slug)) || db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND slug = ? AND id != ?').get(tenantId, slug, id))) {
-        res.status(400).json({ error: 'Link inválido ou já utilizado por outro profissional.' }); return;
-      }
       // 1. Busca profissional atual para validação de existência e verificação da alteração única de profissão
       const currentProf = db.prepare(`
         SELECT id, tenant_id, user_id, profession_id, practice_areas, profession_change_used
@@ -184,10 +175,27 @@ export class ProfessionalController {
         return;
       }
 
+      if (publicBookingEnabled !== undefined) {
+        const role = req.user?.role;
+        const canManageBooking = role === 'clinic_admin' || role === 'superadmin' ||
+          (role === 'professional' && currentProf.user_id === req.user?.userId);
+        if (!canManageBooking) {
+          res.status(403).json({ error: 'Você não tem permissão para alterar o agendamento público deste profissional.' });
+          return;
+        }
+      }
+
       // Se for profissional, valida se está editando o próprio perfil
       if (req.user && req.user.role === 'professional' && currentProf.user_id !== req.user.userId) {
         res.status(403).json({ error: 'Você só pode editar o seu próprio perfil profissional' });
         return;
+      }
+
+      if (publicBookingEnabled !== undefined && typeof publicBookingEnabled !== 'boolean') {
+        res.status(400).json({ error: 'Configuração de agendamento inválida.' }); return;
+      }
+      if (slug && (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(slug)) || db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND slug = ? AND id != ?').get(tenantId, slug, id))) {
+        res.status(400).json({ error: 'Link inválido ou já utilizado por outro profissional.' }); return;
       }
 
       const customSpec = specialtyCustom !== undefined ? specialtyCustom : (specialtyName !== undefined ? specialtyName : null);
