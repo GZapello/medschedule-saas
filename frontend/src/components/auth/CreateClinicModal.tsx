@@ -49,6 +49,7 @@ import {
 } from 'lucide-react';
 import { RegistrationProfessionOption, REGISTRATION_PROFESSIONS } from '../../types/professions';
 import { PracticeArea, MedicalSpecialtyItem } from '../../types/capabilities';
+import { GoogleAuthButton, GoogleIcon, GoogleJwtPayload } from './GoogleAuthButton';
 
 interface CreateClinicModalProps {
   isOpen: boolean;
@@ -57,6 +58,11 @@ interface CreateClinicModalProps {
   initialPlan?: string;
   isTrial?: boolean;
   presentation?: 'modal' | 'page';
+  initialGoogleData?: {
+    idToken: string;
+    name: string;
+    email: string;
+  } | null;
 }
 
 type RegistrationStep = 'signup' | 'verify_email' | 'plans' | 'profile';
@@ -67,10 +73,29 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
   onSuccess,
   initialPlan,
   isTrial,
-  presentation = 'modal'
+  presentation = 'modal',
+  initialGoogleData
 }) => {
   const { showToast } = useToast();
   const { currentUser, loginWithToken, reloadSession, logout } = useAuth();
+
+  // Estado de dados autenticados via Google
+  const [googleAuthData, setGoogleAuthData] = useState<{
+    idToken: string;
+    name: string;
+    email: string;
+  } | null>(initialGoogleData || null);
+
+  useEffect(() => {
+    if (initialGoogleData) {
+      setGoogleAuthData(initialGoogleData);
+      setFormData(prev => ({
+        ...prev,
+        responsibleName: initialGoogleData.name || prev.responsibleName,
+        email: initialGoogleData.email || prev.email
+      }));
+    }
+  }, [initialGoogleData]);
 
   // 1. Estado da Etapa Atual (Cadastro em tela única e Onboarding em 3 etapas)
   const [step, setStep] = useState<RegistrationStep>('signup');
@@ -435,24 +460,27 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
       return;
     }
 
-    if (!formData.password || formData.password.length < 6) {
-      trackSignupValidationError({
-        step: 'signup',
-        field: 'password',
-        errorCode: 'PASSWORD_TOO_SHORT'
-      });
-      showToast('A senha deve ter no mínimo 6 caracteres.', 'error');
-      return;
-    }
+    // Validação de senha dispensada quando autenticado pelo Google
+    if (!googleAuthData) {
+      if (!formData.password || formData.password.length < 6) {
+        trackSignupValidationError({
+          step: 'signup',
+          field: 'password',
+          errorCode: 'PASSWORD_TOO_SHORT'
+        });
+        showToast('A senha deve ter no mínimo 6 caracteres.', 'error');
+        return;
+      }
 
-    if (formData.password !== formData.confirmPassword) {
-      trackSignupValidationError({
-        step: 'signup',
-        field: 'confirmPassword',
-        errorCode: 'PASSWORD_MISMATCH'
-      });
-      showToast('As senhas digitadas não coincidem.', 'error');
-      return;
+      if (formData.password !== formData.confirmPassword) {
+        trackSignupValidationError({
+          step: 'signup',
+          field: 'confirmPassword',
+          errorCode: 'PASSWORD_MISMATCH'
+        });
+        showToast('As senhas digitadas não coincidem.', 'error');
+        return;
+      }
     }
 
     if (!formData.termsAccepted || !formData.privacyAccepted) {
@@ -483,6 +511,52 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
           ? formData.customProfession.trim()
           : (selectedOption?.label || (selectedOption as any)?.name || selectedOption?.canonicalName || formData.profession);
 
+      // FLUXO GOOGLE: Autenticação via Google Identity Services
+      if (googleAuthData) {
+        const data = await ApiClient.post<any>('/v1/auth/google', {
+          idToken: googleAuthData.idToken,
+          context: 'signup',
+          additionalData: {
+            responsibleName: formData.responsibleName.trim(),
+            phone: formData.phone.trim(),
+            profession: professionNameToSend,
+            professionId: selectedOption?.id || undefined,
+            professionName: professionNameToSend,
+            registrationType: selectedOption?.boardLabel || undefined,
+            clinicName: fallbackClinicName,
+            tradeName: fallbackClinicName,
+            termsAccepted: formData.termsAccepted,
+            privacyAccepted: formData.privacyAccepted,
+            marketingAccepted: marketingAccepted,
+            planCode: selectedPlanCode || initialPlan,
+            startTrial: isTrial
+          }
+        });
+
+        if (data.token && data.user) {
+          accountCreated.current = true;
+          loginWithToken(data.token, data.user, data.tenant);
+          trackSignupCompleted({
+            professionCode: formData.profession || undefined,
+            userId: data.user.id
+          });
+          trackGoogleConversionSignup({
+            accountId: data.user.id,
+            planCode: selectedPlanCode || initialPlan || 'SOLO',
+            isTrial: true,
+            value: 0
+          });
+
+          // Pula a etapa de verificação OTP diretamente para planos!
+          setStep('plans');
+          showToast('Conta criada com sucesso via Google! Selecione o plano.', 'success');
+          return;
+        } else {
+          throw new Error(data.message || 'Não foi possível criar a conta com Google.');
+        }
+      }
+
+      // FLUXO PADRÃO: Cadastro local por e-mail e senha
       const data = await ApiClient.post<any>('/v1/public/tenants/register', {
         responsibleName: formData.responsibleName.trim(),
         email: formData.email.trim().toLowerCase(),
@@ -986,6 +1060,53 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 </span>
               </div>
 
+              {/* Autenticação com Google */}
+              {!googleAuthData ? (
+                <div className="space-y-1.5 pb-1">
+                  <GoogleAuthButton
+                    text="signup_with"
+                    customLabel="Cadastrar com Google"
+                    onSuccess={(idToken, payload) => {
+                      const name = payload?.name || '';
+                      const email = payload?.email || '';
+                      setGoogleAuthData({ idToken, name, email });
+                      setFormData(prev => ({
+                        ...prev,
+                        responsibleName: name || prev.responsibleName,
+                        email: email || prev.email
+                      }));
+                      showToast('Google conectado! Complete o WhatsApp e profissão.', 'info');
+                    }}
+                    onError={(err) => showToast(err, 'error')}
+                    disabled={loading}
+                  />
+                  <div className="flex items-center gap-3">
+                    <div className="h-px bg-slate-200/80 flex-1" />
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      ou preencha os dados
+                    </span>
+                    <div className="h-px bg-slate-200/80 flex-1" />
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2 rounded-xl bg-teal-50 border border-teal-200/80 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <GoogleIcon className="w-4 h-4 shrink-0" />
+                    <div>
+                      <p className="font-bold text-teal-900 leading-tight">Cadastrando com Google</p>
+                      <p className="text-[10px] text-teal-700 leading-tight">{googleAuthData.email}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGoogleAuthData(null)}
+                    className="text-[11px] font-bold text-teal-800 hover:text-teal-900 hover:underline cursor-pointer"
+                  >
+                    Trocar
+                  </button>
+                </div>
+              )}
+
               <div className="space-y-2 sm:space-y-2">
                 {/* 1. Nome completo */}
                 <div>
@@ -1033,22 +1154,37 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
 
                 {/* 3. E-mail */}
                 <div>
-                  <label htmlFor="signup-email" className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                    E-mail *
-                  </label>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label htmlFor="signup-email" className="block text-[11px] font-bold text-slate-700">
+                      E-mail *
+                    </label>
+                    {googleAuthData && (
+                      <span className="text-[10px] font-bold text-teal-600 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-teal-600" />
+                        Verificado pelo Google
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     <input
                       id="signup-email"
                       type="email"
                       required
+                      readOnly={!!googleAuthData}
                       placeholder="seuemail@exemplo.com"
                       value={formData.email}
                       onChange={e => {
-                        notifySignupStarted();
-                        setFormData({ ...formData, email: e.target.value });
+                        if (!googleAuthData) {
+                          notifySignupStarted();
+                          setFormData({ ...formData, email: e.target.value });
+                        }
                       }}
-                      className="w-full pl-9 pr-3 py-1.5 sm:py-1.5 text-xs sm:text-xs h-9 sm:h-9 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none transition-all"
+                      className={`w-full pl-9 pr-3 py-1.5 sm:py-1.5 text-xs sm:text-xs h-9 sm:h-9 border border-slate-200 rounded-xl outline-none transition-all ${
+                        googleAuthData
+                          ? 'bg-slate-100/80 text-slate-600 font-semibold cursor-not-allowed'
+                          : 'bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500'
+                      }`}
                     />
                   </div>
                 </div>
@@ -1115,57 +1251,68 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                 </div>
 
                 {/* 5. Senha e Confirmar senha */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                      Senha *
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        placeholder="Mínimo 6 caracteres"
-                        value={formData.password}
-                        onChange={e => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full pl-9 pr-8 py-1.5 sm:py-1.5 text-xs sm:text-xs h-9 sm:h-9 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-                        aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
-                      >
-                        {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
+                {googleAuthData ? (
+                  <div className="p-2 sm:p-2.5 bg-teal-50/50 border border-teal-200/60 rounded-xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span className="text-[11px] font-medium text-slate-700">
+                        Senha dispensada • Acesso protegido pela sua conta Google
+                      </span>
                     </div>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                        Senha *
+                      </label>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          placeholder="Mínimo 6 caracteres"
+                          value={formData.password}
+                          onChange={e => setFormData({ ...formData, password: e.target.value })}
+                          className="w-full pl-9 pr-8 py-1.5 sm:py-1.5 text-xs sm:text-xs h-9 sm:h-9 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                          aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                        >
+                          {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
-                      Confirmar senha *
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
-                        type={showConfirmPassword ? 'text' : 'password'}
-                        required
-                        placeholder="Repita a senha"
-                        value={formData.confirmPassword}
-                        onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
-                        className="w-full pl-9 pr-8 py-1.5 sm:py-1.5 text-xs sm:text-xs h-9 sm:h-9 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-                        aria-label={showConfirmPassword ? 'Ocultar confirmação de senha' : 'Exibir confirmação de senha'}
-                      >
-                        {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-0.5">
+                        Confirmar senha *
+                      </label>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          required
+                          placeholder="Repita a senha"
+                          value={formData.confirmPassword}
+                          onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                          className="w-full pl-9 pr-8 py-1.5 sm:py-1.5 text-xs sm:text-xs h-9 sm:h-9 border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                          aria-label={showConfirmPassword ? 'Ocultar confirmação de senha' : 'Exibir confirmação de senha'}
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* 6. Checkboxes: Termos e Privacidade */}
                 <div className="p-2 sm:p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 sm:space-y-1.5">
@@ -1247,7 +1394,7 @@ export const CreateClinicModal: React.FC<CreateClinicModalProps> = ({
                     </>
                   ) : (
                     <>
-                      <span>CRIAR MINHA CONTA</span>
+                      <span>{googleAuthData ? 'Criar minha conta com Google' : 'CRIAR MINHA CONTA'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}

@@ -53,11 +53,11 @@ export function calculateAvailableSlots(
 ): AvailableSlot[] {
   // 1. Busca dados do serviço
   const serviceStmt = db.prepare(`
-    SELECT duration_minutes, buffer_minutes, min_lead_time_hours, max_advance_days, active
-    FROM services
-    WHERE id = ? AND tenant_id = ? AND active = 1
+    SELECT COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.buffer_minutes, s.min_lead_time_hours, s.max_advance_days, s.active
+    FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
+    WHERE s.id = ? AND s.tenant_id = ? AND s.active = 1
   `);
-  const service = serviceStmt.get(serviceId, tenantId) as {
+  const service = serviceStmt.get(professionalId, serviceId, tenantId) as {
     duration_minutes: number;
     buffer_minutes: number;
     min_lead_time_hours: number;
