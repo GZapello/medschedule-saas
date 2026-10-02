@@ -1,4 +1,3 @@
-import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { Request, Response } from 'express';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { db } from '../config/database';
@@ -9,14 +8,11 @@ export class SlotController {
       let tenantId = req.tenantId;
       const { tenantSlug, professionalId, serviceId, date, roomId } = req.query;
 
-      const isPublic = req.path.startsWith('/v1/public/');
-      if (isPublic) {
-        const tenant = resolveBookingTenant(tenantSlug, req.query.bookingSequence);
-        if (!tenant || tenant.public_booking_enabled !== 1) { res.status(404).json({ error: 'Agendamento online indisponível.' }); return; }
-        tenantId = tenant.id;
-        if (!publicBookingProfessional(tenant.id, String(professionalId)) || !professionalBookingService(tenant.id, String(professionalId), String(serviceId))) { res.status(404).json({ error: 'Atendimento indisponível.' }); return; }
-        if (!validBookingDate(date)) { res.status(400).json({ error: 'Data inválida.' }); return; }
+      if (!tenantId && tenantSlug) {
+        const tenantRow = db.prepare("SELECT id FROM tenants WHERE slug = ? AND status = 'active'").get(tenantSlug) as { id: string } | undefined;
+        if (tenantRow) tenantId = tenantRow.id;
       }
+
       if (!tenantId) {
         res.status(400).json({ error: 'Tenant/Clínica não identificado' });
         return;

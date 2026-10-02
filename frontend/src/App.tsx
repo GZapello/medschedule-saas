@@ -1,4 +1,3 @@
-import { parseBookingRoute, BookingRoute } from './utils/publicBooking';
 import { updatePublicSeo, clearPublicSeo } from './utils/publicSeo';
 import { getRouteByPath } from './data/seoPagesData';
 import { useLayoutEffect } from 'react';
@@ -369,7 +368,14 @@ const AppContent: React.FC = () => {
   const [activeSeoSlug, setActiveSeoSlug] = useState<string | null>(getInitialSeoSlug);
 
   // Roteamento para agendamento individual de profissional (/agendar/:clinicSlug/:profSlug ou /agendar/:slug)
-  const [activeBooking, setActiveBooking] = useState<BookingRoute | null>(() => parseBookingRoute(window.location.pathname));
+  const getInitialBookingRoute = (): { clinicSlug?: string; profSlug: string } | null => {
+    const doubleMatch = window.location.pathname.match(/^\/agendar\/([^/]+)\/([^/]+)/);
+    if (doubleMatch) return { clinicSlug: doubleMatch[1], profSlug: doubleMatch[2] };
+    const singleMatch = window.location.pathname.match(/^\/agendar\/([^/]+)/);
+    if (singleMatch) return { profSlug: singleMatch[1] };
+    return null;
+  };
+  const [activeBooking, setActiveBooking] = useState<{ clinicSlug?: string; profSlug: string } | null>(getInitialBookingRoute);
 
   // Roteamento para convite único de clínica (/convite/:clinicSlug/:token ou /convite/:token)
   const getInitialInvite = (): { clinicSlug?: string; token: string } | null => {
@@ -646,7 +652,12 @@ const AppContent: React.FC = () => {
         window.history.pushState(null, '', '/');
         return;
       }
-      if (activeBooking) { window.history.back(); return; }
+      // 4. Se estiver na página pública individual do profissional, volta para a home
+      if (activeBooking) {
+        setActiveBooking(null);
+        window.history.pushState(null, '', '/');
+        return;
+      }
       // 5. Se estiver em página de SEO de nicho, retorna para a home pública
       if (!currentUser && activeSeoSlug) {
         navigateToHome();
@@ -727,7 +738,13 @@ const AppContent: React.FC = () => {
       const workoutMatch = window.location.pathname.match(/^\/treino\/([^/]+)/);
       setActiveWorkoutToken(workoutMatch ? workoutMatch[1] : null);
 
-      setActiveBooking(parseBookingRoute(window.location.pathname));
+      const doubleBookingMatch = window.location.pathname.match(/^\/agendar\/([^/]+)\/([^/]+)/);
+      if (doubleBookingMatch) {
+        setActiveBooking({ clinicSlug: doubleBookingMatch[1], profSlug: doubleBookingMatch[2] });
+      } else {
+        const singleBookingMatch = window.location.pathname.match(/^\/agendar\/([^/]+)/);
+        setActiveBooking(singleBookingMatch ? { profSlug: singleBookingMatch[1] } : null);
+      }
 
       const doubleInviteMatch = window.location.pathname.match(/^\/convite\/([^/]+)\/([^/]+)/);
       if (doubleInviteMatch) {
@@ -855,7 +872,14 @@ const AppContent: React.FC = () => {
     return (
       <PublicBookingView
         tenantSlug={currentTenant?.slug || 'clinica-viver-bem'}
-        onBackToApp={currentUser ? () => setCurrentView('dashboard') : undefined}
+        onBackToApp={() => {
+          if (currentUser) {
+            setCurrentView('dashboard');
+          } else {
+            setCurrentView('dashboard');
+            setPublicView('landing');
+          }
+        }}
       />
     );
   }
@@ -911,9 +935,21 @@ const AppContent: React.FC = () => {
 
   // Se o usuário está acessando a página pública individual do profissional (/agendar/:clinicSlug/:profSlug ou /agendar/:slug)
   if (activeBooking) {
-    return activeBooking.kind === 'clinic'
-      ? <PublicBookingView tenantSlug={activeBooking.clinicSlug} bookingSequence={activeBooking.sequence} />
-      : <PublicProfessionalBookingView slug={activeBooking.professionalSlug!} clinicSlug={activeBooking.clinicSlug} />;
+    return (
+      <PublicProfessionalBookingView
+        slug={activeBooking.profSlug}
+        clinicSlug={activeBooking.clinicSlug}
+        onBackToApp={() => {
+          setActiveBooking(null);
+          window.history.pushState(null, '', '/');
+          if (currentUser) {
+            setCurrentView('dashboard');
+          } else {
+            setPublicView('landing');
+          }
+        }}
+      />
+    );
   }
 
   // Se o usuário está acessando link único de convite da clínica (/convite/:clinicSlug/:token ou /convite/:token)

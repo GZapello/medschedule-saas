@@ -1,5 +1,3 @@
-import { ensureClinicBookingIdentity } from '../utils/slug';
-import { resolveBookingTenant } from '../utils/public-booking';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService, today, addDays, SOLO_TRIAL_DAYS } from '../services/billing.service';
@@ -963,10 +961,9 @@ export class TenantController {
         return;
       }
 
-      ensureClinicBookingIdentity(db, req.tenantId);
       const stmt = db.prepare(`
         SELECT 
-          t.id, t.slug, t.public_booking_enabled, t.public_booking_slug, t.public_booking_sequence, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
+          t.id, t.slug, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
           t.municipal_registration, t.state_registration, t.professional_board, t.professional_registry,
           t.manager_profession, t.manager_practice_areas,
           t.email, t.phone, t.mobile, t.whatsapp, t.website, t.description,
@@ -1018,12 +1015,6 @@ export class TenantController {
         return;
       }
 
-      if (req.body.publicBookingEnabled !== undefined) {
-        if (req.user?.role !== 'clinic_admin') { res.status(403).json({ error: 'Somente o administrador pode configurar agendamento online.' }); return; }
-        if (typeof req.body.publicBookingEnabled !== 'boolean') { res.status(400).json({ error: 'Configuração de agendamento inválida.' }); return; }
-        ensureClinicBookingIdentity(db, req.tenantId);
-        db.prepare('UPDATE tenants SET public_booking_enabled = ?, updated_at = datetime(\'now\') WHERE id = ?').run(req.body.publicBookingEnabled ? 1 : 0, req.tenantId);
-      }
       const {
         name, corporateName, tradeName, personType, cnpjCpf, municipalRegistration, stateRegistration,
         professionalBoard, professionalRegistry, email, phone, mobile, whatsapp, website, description,
@@ -1165,41 +1156,50 @@ export class TenantController {
   // 10. Perfil público da clínica para a landing page e agendamento online (/c/:slug)
   static getPublicProfile(req: Request, res: Response): void {
     try {
-      const resolved = resolveBookingTenant(req.params.slug, req.query.bookingSequence);
-      if (!resolved || resolved.public_booking_enabled !== 1) {
-        res.status(404).json({ code: 'BOOKING_UNAVAILABLE', error: 'O agendamento online desta clínica está indisponível no momento.' }); return;
+      const { slug } = req.params;
+      const tenantStmt = db.prepare(`
+        SELECT 
+          id, slug, name, trade_name, email, phone, address, city, state, zip_code,
+          logo_url, primary_color, client_term_label, status
+        FROM tenants
+        WHERE slug = ? AND status = 'active'
+      `);
+      const tenant = tenantStmt.get(String(slug)) as any;
+
+      if (!tenant) {
+        res.status(404).json({ error: 'Estabelecimento ou clínica não encontrado ou inativo' });
+        return;
       }
-      const tenant = db.prepare('SELECT slug, name, trade_name, logo_url, city, state FROM tenants WHERE id = ?').get(resolved.id) as any;
+
       // Profissionais ativos da clínica
       const profStmt = db.prepare(`
         SELECT 
-          p.id, p.slug, p.name, p.practice_areas, p.photo_url, p.registration_type, p.registration_number, p.bio,
-          spec.id as specialty_id, COALESCE(p.specialty_custom, spec.name) as specialty_name,
-          COALESCE(prof.name, p.profession_name) as profession_name
+          p.id, p.name, p.photo_url, p.registration_type, p.registration_number, p.bio,
+          spec.id as specialty_id, spec.name as specialty_name, spec.color as specialty_color,
+          prof.name as profession_name
         FROM professionals p
         LEFT JOIN specialties spec ON spec.id = p.specialty_id
         LEFT JOIN professions prof ON prof.id = p.profession_id
-        WHERE p.tenant_id = ? AND p.active = 1 AND p.public_booking_enabled = 1
+        WHERE p.tenant_id = ? AND p.active = 1
         ORDER BY p.name ASC
       `);
-      const professionals = profStmt.all(resolved.id);
+      const professionals = profStmt.all(tenant.id);
 
-      const services = db.prepare(`
-        SELECT s.id, s.name, s.description, s.specialty_id, s.modality, spec.name as specialty_name
-        FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
-        WHERE s.tenant_id = ? AND s.active = 1 AND EXISTS (
-          SELECT 1 FROM professionals p WHERE p.tenant_id = s.tenant_id AND p.active = 1 AND p.public_booking_enabled = 1
-          AND (s.professional_id = p.id OR EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = s.id AND ps.professional_id = p.id))
-        ) ORDER BY s.name
-      `).all(resolved.id);
-      const publicProfessionals = (professionals as any[]).map(p => ({ ...p, services: db.prepare(`
-        SELECT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
-        FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
-        WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
-      `).all(p.id, resolved.id, p.id, p.id) }));
+      // Serviços ativos
+      const srvStmt = db.prepare(`
+        SELECT 
+          s.id, s.name, s.description, s.duration_minutes, s.buffer_minutes, s.price, s.modality,
+          spec.name as specialty_name
+        FROM services s
+        LEFT JOIN specialties spec ON spec.id = s.specialty_id
+        WHERE s.tenant_id = ? AND s.active = 1
+        ORDER BY s.name ASC
+      `);
+      const services = srvStmt.all(tenant.id);
+
       res.json({
         tenant,
-        professionals: publicProfessionals,
+        professionals,
         services
       });
     } catch (err: any) {

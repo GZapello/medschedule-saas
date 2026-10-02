@@ -1,4 +1,3 @@
-import { ClinicBookingSettings, ProfessionalBookingSettings } from '../public-booking/BookingLinkSettings';
 import { BillingView } from '../billing/BillingView';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
@@ -944,13 +943,49 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       )}
 
       {/* SEÇÃO: MINHA PÁGINA DE AGENDAMENTO (Não-Admin) */}
-      {activeSection === 'my_booking' && <ProfessionalBookingSettings />}
+      {activeSection === 'my_booking' && (
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Minha Página Pública de Agendamento</h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Compartilhe seu link exclusivo com seus pacientes para que agendem consultas online nos horários livres da sua escala.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <label className="block font-bold text-slate-800">Seu Link Exclusivo</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={`${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${currentUser?.professionalSlug || (currentUser as any)?.slug || 'profissional'}`}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-mono text-slate-700 select-all"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${currentUser?.professionalSlug || (currentUser as any)?.slug || 'profissional'}`;
+                  navigator.clipboard.writeText(url);
+                  showToast('Link copiado com sucesso!', 'success');
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copiar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SEÇÃO: CLÍNICA & IDENTIDADE (Sub-abas: Dados, Modelos, Convênios) */}
       {activeSection === 'clinic' && (
         <div className="space-y-4">
-          <ClinicBookingSettings />
-          {isClinicAdmin && <ProfessionalBookingSettings />}
           <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
             <button
               type="button"

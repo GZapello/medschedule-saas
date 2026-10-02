@@ -1,5 +1,3 @@
-import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
-import { calculateAvailableSlots } from '../utils/slot-calculator';
 import { hasClinicalAccess } from './clinical.controller';
 import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
 import { Request, Response } from 'express';
@@ -286,21 +284,6 @@ export class AppointmentController {
   }
 
   static create(req: Request, res: Response): void {
-    if (!req.path.startsWith('/v1/public/')) { AppointmentController.createInternal(req, res); return; }
-    // Send success only after the synchronous transaction has committed.
-    let status = 200;
-    let body: any;
-    const pendingResponse = {
-      status(code: number) { status = code; return pendingResponse; },
-      json(value: any) { body = value; return pendingResponse; }
-    } as unknown as Response;
-    try {
-      db.transaction(() => AppointmentController.createInternal(req, pendingResponse))();
-      res.status(status).json(body);
-    } catch { res.status(500).json({ error: 'Não foi possível concluir o agendamento. Tente novamente.' }); }
-  }
-
-  private static createInternal(req: Request, res: Response): void {
     try {
       let tenantId = req.tenantId;
       const {
@@ -311,33 +294,11 @@ export class AppointmentController {
         newPatientData
       } = req.body;
 
-      const isPublic = req.path.startsWith('/v1/public/');
-      if (isPublic) {
-        const tenant = resolveBookingTenant(tenantSlug, req.body.bookingSequence);
-        const individualSlug = typeof req.body.professionalSlug === 'string' ? req.body.professionalSlug : undefined;
-        if (!tenant || (!individualSlug && tenant.public_booking_enabled !== 1)) {
-          res.status(404).json({ error: 'Agendamento online indisponível.' }); return;
-        }
-        tenantId = tenant.id;
-        if (!publicBookingProfessional(tenant.id, String(professionalId), individualSlug) || !professionalBookingService(tenant.id, String(professionalId), String(serviceId))) {
-          res.status(404).json({ error: 'Atendimento indisponível.' }); return;
-        }
-        if (patientId || roomId || internalNotes || insuranceId || referredFromAppointmentId || referredByProfessionalId || referralReason) {
-          res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
-        }
-        if (!newPatientData || typeof newPatientData.fullName !== 'string' || newPatientData.fullName.trim().length < 2 || newPatientData.fullName.length > 150 || typeof newPatientData.phone !== 'string' || !/^\d{10,13}$/.test(newPatientData.phone.replace(/\D/g, '')) || (newPatientData.email && (typeof newPatientData.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatientData.email) || newPatientData.email.length > 254)) || (newPatientData.isChild && (typeof newPatientData.guardianName !== 'string' || !newPatientData.guardianName.trim())) || String(patientNotes || '').length > 1000 || String(newPatientData.notes || '').length > 1000) {
-          res.status(400).json({ error: 'Revise o nome, telefone e demais dados informados.' }); return;
-        }
-        const service = professionalBookingService(tenant.id, String(professionalId), String(serviceId));
-        if (!['presential', 'online', 'home'].includes(modality) || (service.modality !== 'both' && service.modality !== modality) || (service.modality === 'both' && modality === 'home')) {
-          res.status(400).json({ error: 'Modalidade indisponível para este atendimento.' }); return;
-        }
-        const start = String(startTime || '').replace(' ', 'T');
-        const end = String(endTime || '').replace(' ', 'T');
-        if (!validBookingDate(start.slice(0, 10)) || !calculateAvailableSlots(tenant.id, String(professionalId), String(serviceId), start.slice(0, 10)).some(slot => slot.startTime === start && slot.endTime === end)) {
-          res.status(409).json({ code: 'SLOT_UNAVAILABLE', error: 'Este horário não está mais disponível. Escolha outro horário.' }); return;
-        }
+      if (!tenantId && tenantSlug) {
+        const tenantRow = db.prepare("SELECT id FROM tenants WHERE slug = ? AND status = 'active'").get(tenantSlug) as { id: string } | undefined;
+        if (tenantRow) tenantId = tenantRow.id;
       }
+
       if (!tenantId) {
         res.status(400).json({ error: 'Identificação da clínica obrigatória' });
         return;
@@ -352,7 +313,7 @@ export class AppointmentController {
         res.status(403).json({ error: 'O acesso a esta clínica está bloqueado.' }); return;
       }
       BillingService.expireGrace();
-      if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
+      if (!canOperate(tenantId)) { res.status(402).json({code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
       // Resolve ou cria o paciente
       let resolvedPatientId = patientId;
       if (!resolvedPatientId && newPatientData) {
@@ -440,12 +401,12 @@ export class AppointmentController {
         res.status(409).json({
           error: 'Este paciente já possui um atendimento neste horário.',
           code: 'PATIENT_APPOINTMENT_CONFLICT',
-          ...(isPublic ? {} : { conflict: {
+          conflict: {
             startTime: patientConflict.start_time,
             endTime: patientConflict.end_time,
             professionalName: patientConflict.professional_name,
             serviceName: patientConflict.service_name
-          } })
+          }
         });
         return;
       }
@@ -577,7 +538,6 @@ export class AppointmentController {
         message: 'Atendimento agendado com sucesso!'
       });
     } catch (err: any) {
-      if (req.path.startsWith('/v1/public/')) throw err;
       console.error('[AppointmentController.create] Erro:', err);
       res.status(500).json({ error: 'Erro ao registrar agendamento' });
     }
