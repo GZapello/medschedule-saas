@@ -54,6 +54,9 @@ export interface User {
 export * from './capabilities';
 
 export interface Tenant {
+  public_booking_enabled?: number;
+  public_booking_slug?: string;
+  public_booking_sequence?: number;
   id: string;
   slug: string;
   name: string;

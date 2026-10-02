@@ -1,3 +1,4 @@
+import { BookingLinkCard } from '../public-booking/BookingLinkSettings';
 import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -48,7 +49,7 @@ const getCouncilForProfession = (prof?: Profession | null, profNameOrId?: string
 
 export const ProfessionalsView: React.FC = () => {
   const { showToast } = useToast();
-  const { reloadSession, currentTenant } = useAuth();
+  const { reloadSession, currentTenant, isClinicAdmin } = useAuth();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [professions, setProfessions] = useState<Profession[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
@@ -78,12 +79,11 @@ export const ProfessionalsView: React.FC = () => {
   const [editFixedSalary, setEditFixedSalary] = useState<number>(0);
   const [editPaymentDay, setEditPaymentDay] = useState<number>(5);
 
-  const handleCopyBookingLink = (prof: Professional) => {
-    const clinicSlug = currentTenant?.slug || 'clinica';
-    const slugVal = prof.slug || (prof.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
-    const url = `${window.location.origin}/agendar/${clinicSlug}/${slugVal}`;
-    navigator.clipboard.writeText(url);
-    showToast(`Link de agendamento copiado: ${url}`, 'success');
+  const handleCopyBookingLink = async (prof: Professional) => {
+    if (prof.public_booking_enabled !== 1 || !prof.slug || !currentTenant?.slug) { showToast('O link público deste profissional está indisponível.', 'info'); return; }
+    const url = `${window.location.origin}/agendar/${currentTenant.slug}/${prof.slug}`;
+    try { await navigator.clipboard.writeText(url); showToast('Link de agendamento copiado.', 'success'); }
+    catch { showToast('Não foi possível copiar o link.', 'error'); }
   };
 
   // Modal Bloqueio de Horário
@@ -136,7 +136,7 @@ export const ProfessionalsView: React.FC = () => {
         practiceAreas: editPracticeAreas || null,
         bufferMinutes: Number(editBufferMinutes),
         slug: editSlug.trim() || null,
-        publicBookingEnabled: editPublicBookingEnabled,
+        ...(isClinicAdmin ? { publicBookingEnabled: editPublicBookingEnabled } : {}),
         remunerationType: editRemunerationType,
         commissionPercentage: Number(editCommissionPercentage),
         fixedSalary: Number(editFixedSalary),
@@ -556,45 +556,7 @@ export const ProfessionalsView: React.FC = () => {
                 )}
               </div>
 
-              {/* Seção Página Pública e Link de Agendamento */}
-              <div className="bg-teal-50/70 border border-teal-200 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Share2 className="w-4 h-4 text-teal-700" />
-                    <span className="font-bold text-teal-900 text-xs">Página Pública de Agendamento</span>
-                  </div>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-teal-800">
-                    <input
-                      type="checkbox"
-                      checked={editPublicBookingEnabled}
-                      onChange={e => setEditPublicBookingEnabled(e.target.checked)}
-                      className="rounded text-teal-600 focus:ring-teal-500"
-                    />
-                    <span>Ativar link público</span>
-                  </label>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-teal-900 mb-1">Link de Agendamento</label>
-                  <div className="flex items-center gap-2 bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs">
-                    <span className="flex-1 font-mono text-teal-800 truncate select-all">
-                      {`${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${editSlug || 'profissional'}`}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const url = `${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${editSlug || 'profissional'}`;
-                        navigator.clipboard.writeText(url);
-                        showToast('Link de agendamento copiado!', 'success');
-                      }}
-                      className="text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 cursor-pointer shrink-0"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>Copiar</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <BookingLinkCard title={`Página individual — ${editName}`} enabled={editPublicBookingEnabled} url={editingProf?.slug && currentTenant?.slug ? `${window.location.origin}/agendar/${currentTenant.slug}/${editingProf.slug}` : null} onToggle={isClinicAdmin ? setEditPublicBookingEnabled : undefined} />
 
               <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
                 <button

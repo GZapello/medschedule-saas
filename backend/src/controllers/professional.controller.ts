@@ -1,3 +1,4 @@
+import { professionalBookingService, validBookingDate } from '../utils/public-booking';
 import { respondBillingError } from './billing.controller';
 import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
 import { Request, Response } from 'express';
@@ -162,6 +163,15 @@ export class ProfessionalController {
         slug, publicBookingEnabled, remunerationType, commissionPercentage, fixedSalary, paymentDay
       } = req.body;
 
+      if (publicBookingEnabled !== undefined && req.user?.role !== 'clinic_admin') {
+        res.status(403).json({ error: 'Somente o administrador pode configurar o link público.' }); return;
+      }
+      if (publicBookingEnabled !== undefined && typeof publicBookingEnabled !== 'boolean') {
+        res.status(400).json({ error: 'Configuração de agendamento inválida.' }); return;
+      }
+      if (slug && (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(slug)) || db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND slug = ? AND id != ?').get(tenantId, slug, id))) {
+        res.status(400).json({ error: 'Link inválido ou já utilizado por outro profissional.' }); return;
+      }
       // 1. Busca profissional atual para validação de existência e verificação da alteração única de profissão
       const currentProf = db.prepare(`
         SELECT id, tenant_id, user_id, profession_id, practice_areas, profession_change_used
@@ -175,7 +185,7 @@ export class ProfessionalController {
       }
 
       // Se for profissional, valida se está editando o próprio perfil
-      if (req.user && req.user.role === 'professional' && currentProf.user_id && currentProf.user_id !== req.user.userId) {
+      if (req.user && req.user.role === 'professional' && currentProf.user_id !== req.user.userId) {
         res.status(403).json({ error: 'Você só pode editar o seu próprio perfil profissional' });
         return;
       }
@@ -460,8 +470,7 @@ export class ProfessionalController {
 
       if (targetClinicSlug) {
         tenantRow = db.prepare(`
-          SELECT id, name, trade_name, slug, logo_url, phone, mobile, whatsapp, email,
-                 address, street, number, neighborhood, city, state, zip_code, description
+          SELECT id, name, trade_name, slug, logo_url, city, state
           FROM tenants
           WHERE slug = ? AND status = 'active'
         `).get(targetClinicSlug) as any;
@@ -501,8 +510,7 @@ export class ProfessionalController {
 
         if (profRow) {
           tenantRow = db.prepare(`
-            SELECT id, name, trade_name, slug, logo_url, phone, mobile, whatsapp, email,
-                   address, street, number, neighborhood, city, state, zip_code, description
+            SELECT id, name, trade_name, slug, logo_url, city, state
             FROM tenants
             WHERE id = ? AND status = 'active'
           `).get(profRow.tenant_id) as any;
@@ -523,7 +531,6 @@ export class ProfessionalController {
       const services = db.prepare(`
         SELECT s.id, s.name, s.description,
                COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
-               COALESCE(ps.custom_price, s.price) as price,
                s.modality
         FROM services s
         LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
@@ -532,8 +539,8 @@ export class ProfessionalController {
       `).all(profRow.id, profRow.tenant_id, profRow.id, profRow.id) as any[];
 
       res.json({
-        professional: profRow,
-        tenant: tenantRow,
+        professional: (({ tenant_id, gender, ...publicData }) => publicData)(profRow),
+        tenant: (({ id, ...publicData }) => publicData)(tenantRow),
         services
       });
     } catch (err: any) {
@@ -600,6 +607,10 @@ export class ProfessionalController {
         return;
       }
 
+      if (!db.prepare("SELECT id FROM tenants WHERE id = ? AND status = 'active'").get(profRow.tenant_id) || !professionalBookingService(profRow.tenant_id, profRow.id, targetServiceId)) {
+        res.status(404).json({ error: 'Atendimento indisponível.' }); return;
+      }
+      if (!validBookingDate(date)) { res.status(400).json({ error: 'Data inválida.' }); return; }
       const slots = calculateAvailableSlots(
         profRow.tenant_id,
         profRow.id,
