@@ -127,6 +127,12 @@ export function initializeDatabase(): void {
   try {
     rawDb.exec("ALTER TABLE services ADD COLUMN professional_id TEXT REFERENCES professionals(id);");
   } catch (_) {}
+  try {
+    rawDb.exec("ALTER TABLE users ADD COLUMN google_sub TEXT;");
+  } catch (_) {}
+  try {
+    rawDb.exec("ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local';");
+  } catch (_) {}
 
   let schemaPath = path.resolve(__dirname, 'schema.sql');
   if (!fs.existsSync(schemaPath)) {
@@ -335,6 +341,18 @@ export function initializeDatabase(): void {
     addColIfMissing('users', 'onboarding_status', "TEXT DEFAULT 'active'");
     addColIfMissing('users', 'email_verified', 'INTEGER DEFAULT 0');
     addColIfMissing('users', 'email_verified_at', 'TEXT');
+    addColIfMissing('users', 'google_sub', 'TEXT');
+    addColIfMissing('users', 'auth_provider', "TEXT DEFAULT 'local'");
+
+    // Índice UNIQUE seguro para google_sub (não derruba o startup se falhar)
+    try {
+      rawDb.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub
+        ON users (google_sub);
+      `);
+    } catch (e) {
+      console.warn('[Migration] Erro ao criar índice idx_users_google_sub:', e);
+    }
 
     // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
     addColIfMissing('appointments', 'insurance_id', 'TEXT');

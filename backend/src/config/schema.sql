@@ -161,6 +161,8 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified INTEGER DEFAULT 0,
   email_verified_at TEXT,
   two_factor_enabled INTEGER NOT NULL DEFAULT 0,
+  google_sub TEXT,
+  auth_provider TEXT DEFAULT 'local',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -168,6 +170,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
 CREATE INDEX IF NOT EXISTS idx_users_tenant_role ON users (tenant_id, role);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users (google_sub);
 
 -- 7.1 Associação Usuário x Clínica & Permissões Customizadas (clinic_users)
 CREATE TABLE IF NOT EXISTS clinic_users (
