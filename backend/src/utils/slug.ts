@@ -46,16 +46,3 @@ export function generateProfessionalSlug(name: string, tenantId: string, current
     candidate = `${baseSlug}-${counter}`;
   }
 }
-
-/** Clinic booking identity is independent of the tenant's existing global slug. */
-export function clinicBookingSlug(name: string): string {
-  return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'clinica';
-}
-
-export function ensureClinicBookingIdentity(database: any, tenantId: string): void {
-  const tenant = database.prepare('SELECT id, name, trade_name, public_booking_slug, public_booking_sequence FROM tenants WHERE id = ?').get(tenantId);
-  if (!tenant || (tenant.public_booking_slug && tenant.public_booking_sequence)) return;
-  const slug = clinicBookingSlug(tenant.trade_name || tenant.name);
-  const row = database.prepare('SELECT MAX(public_booking_sequence) as sequence FROM tenants WHERE public_booking_slug = ?').get(slug);
-  database.prepare('UPDATE tenants SET public_booking_slug = ?, public_booking_sequence = ? WHERE id = ?').run(slug, Number(row?.sequence || 0) + 1, tenantId);
-}

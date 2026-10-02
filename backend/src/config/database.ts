@@ -13,7 +13,7 @@ import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
 import { migrateEstetic } from './estetic.migration';
 import { migrateProfessionsNormalization } from './professions-normalization.migration';
-import { migrateProfessionalSlugs, migrateClinicBooking } from './slug-migration';
+import { migrateProfessionalSlugs } from './slug-migration';
 import { dbPath } from './db-path';
 
 const dbDir = path.dirname(dbPath);
@@ -329,11 +329,6 @@ export function initializeDatabase(): void {
     addColIfMissing('users', 'onboarding_status', "TEXT DEFAULT 'active'");
     addColIfMissing('users', 'email_verified', 'INTEGER DEFAULT 0');
     addColIfMissing('users', 'email_verified_at', 'TEXT');
-    addColIfMissing('users', 'google_sub', 'TEXT');
-    addColIfMissing('users', 'auth_provider', "TEXT DEFAULT 'local'");
-    try {
-      rawDb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users (google_sub);');
-    } catch (_) {}
 
     // Colunas em agendamentos para convênio, encaminhamento e cancelamento detalhado
     addColIfMissing('appointments', 'insurance_id', 'TEXT');
@@ -3754,7 +3749,6 @@ function repairLegacyPhotoUrls(rawDb: any): void {
 
   try {
     migrateProfessionalSlugs(rawDb);
-    migrateClinicBooking(rawDb);
   } catch (err) {
     console.error('[Database] Erro ao executar migrateProfessionalSlugs:', err);
   }
