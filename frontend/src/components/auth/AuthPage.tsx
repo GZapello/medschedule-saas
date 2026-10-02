@@ -6,7 +6,6 @@ import { trackLoginStarted } from '../../utils/registrationAnalytics';
 import { CreateClinicModal } from './CreateClinicModal';
 import { RegisterUserModal } from './RegisterUserModal';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
-import { GoogleAuthButton, GoogleIcon, GoogleJwtPayload } from './GoogleAuthButton';
 import {
   Lock,
   Mail,
@@ -37,7 +36,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   initialPlan,
   isTrial
 }) => {
-  const { login, loginWithToken } = useAuth();
+  const { login } = useAuth();
   const { showToast } = useToast();
 
   const [email, setEmail] = useState<string>('');
@@ -48,22 +47,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState<boolean>(false);
   const [loginError, setLoginError] = useState<{ message: string; code?: string } | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ email?: string; password?: string }>({});
-
-  // Estados de vinculação segura e novo cadastro via Google
-  const [googleLinkingState, setGoogleLinkingState] = useState<{
-    idToken: string;
-    email: string;
-    name: string;
-  } | null>(null);
-  const [linkingPassword, setLinkingPassword] = useState<string>('');
-  const [linkingError, setLinkingError] = useState<string>('');
-  const [linkingLoading, setLinkingLoading] = useState<boolean>(false);
-
-  const [googleSignupData, setGoogleSignupData] = useState<{
-    idToken: string;
-    name: string;
-    email: string;
-  } | null>(null);
 
   const hasTrackedLoginStarted = useRef<boolean>(false);
   const notifyLoginStarted = () => {
@@ -106,84 +89,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   };
 
-  const handleGoogleSuccess = async (idToken: string, payload?: GoogleJwtPayload) => {
-    try {
-      setLoading(true);
-      setLoginError(null);
-      trackLoginStarted({ method: 'google' });
-
-      const res = await ApiClient.post<any>('/v1/auth/google', {
-        idToken,
-        context: 'login'
-      });
-
-      if (res.token && res.user) {
-        loginWithToken(res.token, res.user, res.tenant);
-        showToast('Login realizado com sucesso via Google!', 'success');
-        return;
-      }
-
-      if (res.requiresPasswordToLink) {
-        setGoogleLinkingState({
-          idToken,
-          email: res.email || payload?.email || '',
-          name: res.name || payload?.name || ''
-        });
-        setLinkingPassword('');
-        setLinkingError('');
-        showToast('Conta existente encontrada. Confirme sua senha para vincular sua conta Google.', 'info');
-        return;
-      }
-
-      if (res.isNewUser) {
-        showToast('Nenhuma conta encontrada com este Google. Preencha seus dados para criar sua conta.', 'info');
-        setGoogleSignupData({
-          idToken,
-          name: res.googleUser?.name || payload?.name || '',
-          email: res.googleUser?.email || payload?.email || ''
-        });
-        setIsCreateClinicOpen(true);
-        return;
-      }
-    } catch (err: any) {
-      setLoginError({ message: err.message || 'Falha na autenticação com Google', code: err.code });
-      showToast(err.message || 'Falha na autenticação com Google', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirmGoogleLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!linkingPassword) {
-      setLinkingError('Digite a sua senha atual.');
-      return;
-    }
-    if (!googleLinkingState) return;
-
-    try {
-      setLinkingLoading(true);
-      setLinkingError('');
-      const res = await ApiClient.post<any>('/v1/auth/google', {
-        idToken: googleLinkingState.idToken,
-        context: 'login',
-        additionalData: {
-          password: linkingPassword
-        }
-      });
-
-      if (res.token && res.user) {
-        setGoogleLinkingState(null);
-        loginWithToken(res.token, res.user, res.tenant);
-        showToast('Conta Google vinculada com sucesso!', 'success');
-      }
-    } catch (err: any) {
-      setLinkingError(err.message || 'Senha incorreta para vincular conta.');
-    } finally {
-      setLinkingLoading(false);
-    }
-  };
-
   return (
     <div className={`${isCreateClinicOpen ? 'signup-auth-host' : ''} min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans`}>
       {/* Glow sutil de fundo característico do Zemda */}
@@ -223,27 +128,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           <div className="space-y-1">
             <h2 className="text-lg font-black text-slate-900">Acessar Plataforma</h2>
             <p className="text-xs text-slate-500">
-              Entre com sua conta Google ou use seu e-mail e senha cadastrados.
+              Digite seu e-mail e senha cadastrados para entrar na sua clínica.
             </p>
-          </div>
-
-          {/* Autenticação com Google */}
-          <div className="space-y-3">
-            <GoogleAuthButton
-              text="continue_with"
-              customLabel="Continuar com Google"
-              onSuccess={handleGoogleSuccess}
-              onError={(err) => showToast(err, 'error')}
-              disabled={loading}
-            />
-
-            <div className="flex items-center gap-3">
-              <div className="h-px bg-slate-200/80 flex-1" />
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                ou com e-mail e senha
-              </span>
-              <div className="h-px bg-slate-200/80 flex-1" />
-            </div>
           </div>
 
           {/* Alertas de Status de Conta (Aguardando Aprovação / Recusado) */}
@@ -395,21 +281,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         isOpen={isCreateClinicOpen}
         onClose={() => {
           setIsCreateClinicOpen(false);
-          setGoogleSignupData(null);
           if (window.location.pathname === '/cadastro') {
             window.history.pushState(null, '', '/login');
           }
         }}
         onSuccess={() => {
           setIsCreateClinicOpen(false);
-          setGoogleSignupData(null);
           sessionStorage.setItem('activeView', 'dashboard');
           window.history.pushState({ view: 'dashboard' }, '', '/dashboard');
           window.dispatchEvent(new CustomEvent('zemda-navigate', { detail: { view: 'dashboard' } }));
         }}
         initialPlan={initialPlan}
         isTrial={isTrial}
-        initialGoogleData={googleSignupData}
       />
 
       <ForgotPasswordModal
@@ -420,69 +303,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           if (userEmail) setEmail(userEmail);
         }}
       />
-
-      {/* Modal de Confirmação de Senha para Vinculação de Conta Google */}
-      {googleLinkingState && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <GoogleIcon className="w-5 h-5" />
-                <h3 className="font-extrabold text-slate-900 text-sm">Vincular Conta Google</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGoogleLinkingState(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Detectamos uma conta existente com o e-mail <strong className="text-slate-900">{googleLinkingState.email}</strong>. Para sua segurança e evitar acessos indevidos, digite a sua senha do Zemda para vincular seu Google.
-            </p>
-
-            <form onSubmit={handleConfirmGoogleLink} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Sua senha do Zemda</label>
-                <input
-                  type="password"
-                  autoFocus
-                  value={linkingPassword}
-                  onChange={(e) => {
-                    setLinkingPassword(e.target.value);
-                    if (linkingError) setLinkingError('');
-                  }}
-                  placeholder="••••••••"
-                  className="w-full px-3 py-2 text-xs font-medium border rounded-xl border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-teal-500"
-                />
-                {linkingError && (
-                  <p className="text-[11px] text-red-600 mt-1 font-semibold">{linkingError}</p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setGoogleLinkingState(null)}
-                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={linkingLoading}
-                  className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 rounded-xl cursor-pointer disabled:opacity-50 shadow-md shadow-teal-600/20"
-                >
-                  {linkingLoading ? 'Vinculando...' : 'Confirmar e Entrar'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
-

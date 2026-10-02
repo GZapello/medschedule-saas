@@ -1,7 +1,6 @@
 import './CreateClinicModal.css';
 import './FreeTrialActivationView.css';
 import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
-import { GoogleAuthButton, GoogleIcon, GoogleJwtPayload } from './GoogleAuthButton';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -89,13 +88,6 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
   const [submitting, setSubmitting] = useState(false);
   const [activationSuccess, setActivationSuccess] = useState(false);
 
-  // Autenticação com Google
-  const [googleAuthData, setGoogleAuthData] = useState<{
-    idToken: string;
-    name: string;
-    email: string;
-  } | null>(null);
-
   useEffect(() => {
     validateTrialToken();
     loadProfessions();
@@ -180,11 +172,9 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
       return;
     }
 
-    if (!googleAuthData) {
-      if (!managerPassword || managerPassword.length < 6) {
-        showToast('A senha deve conter no mínimo 6 caracteres.', 'error');
-        return;
-      }
+    if (!managerPassword || managerPassword.length < 6) {
+      showToast('A senha deve conter no mínimo 6 caracteres.', 'error');
+      return;
     }
 
     if (!termsAccepted || !privacyAccepted) {
@@ -194,47 +184,6 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
 
     try {
       setSubmitting(true);
-
-      // FLUXO GOOGLE: Ativação instantânea via Google Identity Services
-      if (googleAuthData) {
-        const res = await ApiClient.post<{
-          success: boolean;
-          message?: string;
-          token: string;
-          user: any;
-          tenant: any;
-          trialEndAt?: string;
-          durationLabel?: string;
-          durationDays?: number;
-        }>('/v1/auth/google', {
-          idToken: googleAuthData.idToken,
-          context: 'trial',
-          additionalData: {
-            trialToken: token,
-            clinicName: clinicName.trim(),
-            managerName: managerName.trim(),
-            managerPhone: managerPhone.trim() || undefined,
-            professionId: selectedProfessionId,
-            termsAccepted: true,
-            privacyAccepted: true
-          }
-        });
-
-        if (res.success === true && res.token && res.user?.id) {
-          trackCompletedRegistration(res.user.id, res.durationDays || trialData?.durationDays || 14);
-        }
-        setActivationSuccess(true);
-        showToast('Teste grátis ativado com sucesso via Google!', 'success');
-
-        // Login automático imediato
-        setTimeout(() => {
-          loginWithToken(res.token, res.user, res.tenant);
-          onSuccess();
-        }, 1500);
-        return;
-      }
-
-      // FLUXO PADRÃO: Cadastro local por e-mail e senha
       const res = await ApiClient.post<{
         success: boolean;
         message: string;
@@ -401,54 +350,6 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
           </div>
 
           <form onSubmit={handleActivateSubmit} className="trial-form space-y-4">
-            {/* Autenticação Google */}
-            {!googleAuthData ? (
-              <div className="space-y-2 pb-2">
-                <GoogleAuthButton
-                  text="signup_with"
-                  customLabel="Ativar teste com Google"
-                  onSuccess={(idToken, payload) => {
-                    const email = (payload?.email || '').trim().toLowerCase();
-                    const name = (payload?.name || '').trim();
-                    if (trialData?.targetEmail && trialData.targetEmail.toLowerCase() !== email) {
-                      showToast(`Este link de teste é exclusivo para ${trialData.targetEmail}.`, 'error');
-                      return;
-                    }
-                    setGoogleAuthData({ idToken, name, email });
-                    if (email) setManagerEmail(email);
-                    if (name && !managerName) setManagerName(name);
-                    showToast('Conta Google conectada! Verifique os dados abaixo para ativar o teste.', 'info');
-                  }}
-                  onError={(err) => showToast(err, 'error')}
-                  disabled={submitting}
-                />
-                <div className="flex items-center gap-3">
-                  <div className="h-px bg-slate-200/80 flex-1" />
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                    ou preencha os dados
-                  </span>
-                  <div className="h-px bg-slate-200/80 flex-1" />
-                </div>
-              </div>
-            ) : (
-              <div className="p-3 rounded-2xl bg-teal-50 border border-teal-200/80 flex items-center justify-between text-xs mb-3">
-                <div className="flex items-center gap-2.5">
-                  <GoogleIcon className="w-5 h-5 shrink-0" />
-                  <div>
-                    <p className="font-bold text-teal-900 leading-tight">Ativando via Google</p>
-                    <p className="text-[11px] text-teal-700 leading-tight">{googleAuthData.email}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setGoogleAuthData(null)}
-                  className="text-xs font-bold text-teal-800 hover:text-teal-900 hover:underline cursor-pointer"
-                >
-                  Trocar
-                </button>
-              </div>
-            )}
-
             {/* Nome da Clínica */}
             <div>
               <label htmlFor="trial-clinicName" className="block text-xs font-bold text-slate-700 mb-1">
@@ -518,27 +419,19 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
             {/* Grid: E-mail e Telefone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label htmlFor="trial-managerEmail" className="block text-xs font-bold text-slate-700">
-                    E-mail de Acesso <span className="text-rose-500">*</span>
-                  </label>
-                  {googleAuthData && (
-                    <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Verificado pelo Google
-                    </span>
-                  )}
-                </div>
+                <label htmlFor="trial-managerEmail" className="block text-xs font-bold text-slate-700 mb-1">
+                  E-mail de Acesso <span className="text-rose-500">*</span>
+                </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="email"
                     required
-                    readOnly={!!googleAuthData || !!trialData?.targetEmail}
                     placeholder="seuemail@clinica.com"
                     id="trial-managerEmail"
-                    value={managerEmail}
+                  value={managerEmail}
                     onChange={e => setManagerEmail(e.target.value)}
-                    className={`w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium ${(googleAuthData || trialData?.targetEmail) ? 'opacity-80 bg-slate-100 cursor-not-allowed' : ''}`}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
                   />
                 </div>
               </div>
@@ -553,7 +446,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                     type="tel"
                     placeholder="(11) 99999-8888"
                     id="trial-managerPhone"
-                    value={managerPhone}
+                  value={managerPhone}
                     onChange={e => handlePhoneChange(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
                   />
@@ -562,42 +455,33 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
             </div>
 
             {/* Senha */}
-            {!googleAuthData ? (
-              <div>
-                <label htmlFor="trial-managerPassword" className="block text-xs font-bold text-slate-700 mb-1">
-                  Criar Senha de Acesso <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={6}
-                    placeholder="Mínimo 6 caracteres"
-                    id="trial-managerPassword"
-                    value={managerPassword}
-                    onChange={e => setManagerPassword(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
-                  />
-                  <button
-                    type="button"
-                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                    aria-pressed={showPassword}
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+            <div>
+              <label htmlFor="trial-managerPassword" className="block text-xs font-bold text-slate-700 mb-1">
+                Criar Senha de Acesso <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  placeholder="Mínimo 6 caracteres"
+                  id="trial-managerPassword"
+                  value={managerPassword}
+                  onChange={e => setManagerPassword(e.target.value)}
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-            ) : (
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2.5 text-xs text-slate-600">
-                <ShieldCheck className="w-4 h-4 text-teal-600 shrink-0" />
-                <span>
-                  <strong>Senha dispensada:</strong> O acesso ao Zemda será autenticado com segurança pela sua conta Google.
-                </span>
-              </div>
-            )}
+            </div>
 
             {/* Aceite Legal */}
             <div className="pt-2 space-y-2">
@@ -635,13 +519,8 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
               >
                 {submitting ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
                     Ativando seu teste...
-                  </>
-                ) : googleAuthData ? (
-                  <>
-                    <GoogleIcon className="w-4 h-4" />
-                    Ativar Teste Grátis com Google
                   </>
                 ) : (
                   <>
