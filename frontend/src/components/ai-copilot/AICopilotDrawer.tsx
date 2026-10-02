@@ -33,7 +33,8 @@ import {
   FileEdit,
   Download,
   Brain,
-  Shield
+  Shield,
+  Users
 } from 'lucide-react';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { useAuth } from '../../context/AuthContext';
@@ -1170,6 +1171,21 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                       <Check className="w-4 h-4 text-teal-200" />
                       Inserir na {getTargetFieldLabel(selectedTargetField)}
                     </button>
+
+                    {isPsico && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.dispatchEvent(new CustomEvent('open-psico-diarization-modal'));
+                          onClose();
+                        }}
+                        className="w-full mt-2 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        title="Abrir painel completo de Diarização por Falantes e Organização Clínica Estruturada"
+                      >
+                        <Users className="w-4 h-4 text-purple-600" />
+                        Diarização por Falantes & Análise Completa (ZemdaPsico)
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

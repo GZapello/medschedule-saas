@@ -12,6 +12,12 @@ import {
   redactHistory,
   reinsertName
 } from '../utils/ai-privacy';
+import {
+  DIARIZATION_PROVIDERS,
+  DiarizedSegment,
+  parseTranscriptToDiarizedSegments,
+  extractPsychologySectionsLocalFallback
+} from '../services/speech-diarization.service';
 
 /**
  * Validação de perfil administrativo para bloqueio de IA clínica
@@ -1388,6 +1394,102 @@ Paciente ${patientName} encontra-se em acompanhamento fonoaudiológico sistemát
     } catch (err: any) {
       console.error('[AIController.generateFonoEvolutionReport] Erro:', err);
       res.status(500).json({ error: 'Erro ao gerar relatório fonoaudiológico' });
+    }
+  }
+
+  // ================================================================
+  // 11. ESTRUTURAÇÃO DE TRANSCRIÇÃO COM DIARIZAÇÃO (ZEMDAPsico)
+  // ================================================================
+  static async structurePsychologyTranscript(req: Request, res: Response): Promise<void> {
+    try {
+      if (isAdministrativeRole(req)) {
+        res.status(403).json({
+          error: 'Acesso bloqueado: organização de atendimento com IA é restrita a profissionais de saúde autorizados.',
+          code: 'CLINICAL_AI_ACCESS_DENIED'
+        });
+        return;
+      }
+
+      const tenantId = req.tenantId;
+      const { transcript, speakers, patientId, appointmentId } = req.body;
+
+      if (!transcript || (Array.isArray(transcript) && transcript.length === 0) || (typeof transcript === 'string' && !transcript.trim())) {
+        res.status(400).json({ error: 'Nenhum segmento de transcrição foi fornecido para análise.' });
+        return;
+      }
+
+      // Normaliza transcript para DiarizedSegment[]
+      let segments: DiarizedSegment[] = [];
+      if (Array.isArray(transcript)) {
+        segments = transcript.map((s, idx) => ({
+          id: s.id || `seg_${idx + 1}`,
+          speakerId: s.speakerId || 'speaker_1',
+          role: s.role,
+          text: String(s.text || '').trim(),
+          startTime: typeof s.startTime === 'number' ? s.startTime : idx * 5,
+          endTime: typeof s.endTime === 'number' ? s.endTime : (idx + 1) * 5
+        })).filter(s => s.text.length > 0);
+      } else if (typeof transcript === 'string') {
+        segments = parseTranscriptToDiarizedSegments(transcript);
+      }
+
+      const speakersMap: Record<string, string> = (speakers && typeof speakers === 'object') ? speakers : {
+        speaker_1: 'professional',
+        speaker_2: 'patient'
+      };
+
+      // Tenta processar com Gemini
+      if (GeminiService.isAvailable()) {
+        try {
+          const geminiResult = await GeminiService.extractPsychologyStructuredTranscript({
+            transcript: segments,
+            speakers: speakersMap
+          });
+
+          if (geminiResult && geminiResult.sections) {
+            res.json({
+              success: true,
+              provider: 'Google Gemini',
+              summary: geminiResult.summary,
+              sections: geminiResult.sections,
+              disclaimer: 'Conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde (CFP).'
+            });
+            return;
+          }
+        } catch (gemErr) {
+          console.warn('[AIController.structurePsychologyTranscript] Gemini falhou, usando fallback heurístico:', gemErr);
+        }
+      }
+
+      // Fallback heurístico inteligente local
+      const localExtraction = extractPsychologySectionsLocalFallback(segments, speakersMap);
+
+      res.json({
+        success: true,
+        provider: 'Motor Local Inteligente',
+        summary: 'Estruturação baseada em análise dos turnos da sessão.',
+        sections: localExtraction,
+        disclaimer: 'Conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde (CFP).'
+      });
+    } catch (err: any) {
+      console.error('[AIController.structurePsychologyTranscript] Erro ao estruturar transcrição:', err);
+      res.status(500).json({ error: 'Erro ao processar estruturação clínica do atendimento.' });
+    }
+  }
+
+  // ================================================================
+  // 12. STATUS DE DIARIZAÇÃO DE FALANTES (ZEMDAPsico)
+  // ================================================================
+  static async getPsychologyDiarizationStatus(req: Request, res: Response): Promise<void> {
+    try {
+      res.json({
+        providers: DIARIZATION_PROVIDERS,
+        defaultBrowserProvider: 'web_speech_api',
+        geminiMultimodalAvailable: GeminiService.isAvailable(),
+        privacyNotice: 'Zero armazenamento permanente de áudio. Diarização por speaker acústico com mapeamento de papéis confirmado pelo profissional.'
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Erro ao obter status de diarização' });
     }
   }
 }

@@ -791,6 +791,8 @@ api.post('/v1/ai/feedback', requireTenant, AIController.recordFeedback);
 api.post('/v1/ai/dental/parse-dictation', requireTenant, requireRole('clinic_admin', 'professional'), AIController.parseDentalDictation);
 api.post('/v1/ai/to/generate-evolution-report', requireTenant, requireRole('clinic_admin', 'professional'), AIController.generateTOEvolutionReport);
 api.post('/v1/ai/fono/generate-evolution-report', requireTenant, requireRole('clinic_admin', 'professional'), AIController.generateFonoEvolutionReport);
+api.post('/v1/ai/psychology/transcript-structure', requireTenant, requireRole('clinic_admin', 'professional'), AIController.structurePsychologyTranscript);
+api.get('/v1/ai/psychology/diarization-status', requireTenant, requireRole('clinic_admin', 'professional'), AIController.getPsychologyDiarizationStatus);
 
 // Importação Inteligente de Dados (Word .docx, Planilhas .xlsx/.csv/.txt, Heurística e Lotes)
 api.post('/v1/import/parse-file', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), ImportController.parseFile);

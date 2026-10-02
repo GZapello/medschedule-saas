@@ -32,11 +32,13 @@ import {
   Award,
   Info,
   X,
-  Mic
+  Mic,
+  Users
 } from 'lucide-react';
 import { openZemdaAI } from '../../utils/aiHelper';
 import { PsychologyDocumentModal } from './PsychologyDocumentModal';
 import { PsychologyHistoryModal } from './PsychologyHistoryModal';
+import { PsychologyAIOrganizerModal } from './PsychologyAIOrganizerModal';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
@@ -75,6 +77,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   // Modais
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showDiarizationModal, setShowDiarizationModal] = useState(false);
   const [completionSuccessData, setCompletionSuccessData] = useState<any | null>(null);
 
   // Autosave & Finalização Rápida
@@ -321,6 +324,87 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       window.removeEventListener('zemda-ai-apply-to-evolution', handleApplyAiToEvolution);
     };
   }, [showToast]);
+
+  // Listener para abertura de modal de diarização de falantes e estruturação por IA
+  useEffect(() => {
+    const handleOpenDiarization = () => {
+      setShowDiarizationModal(true);
+    };
+    window.addEventListener('open-psico-diarization-modal', handleOpenDiarization);
+    return () => {
+      window.removeEventListener('open-psico-diarization-modal', handleOpenDiarization);
+    };
+  }, []);
+
+  const handleApplyFromAIOrganizer = (
+    section: 'session' | 'anamnese' | 'mentalState' | 'riskAssessment' | 'assessment' | 'goals',
+    fieldKey: string,
+    value: string,
+    action: 'replace' | 'append'
+  ) => {
+    setIsDirty(true);
+    if (section === 'session') {
+      setCurrentSession(prev => {
+        const existing = String((prev as any)[fieldKey] || '').trim();
+        const finalVal = (action === 'append' && existing) ? `${existing}\n\n${value}` : value;
+        return { ...prev, [fieldKey]: finalVal };
+      });
+      setActiveTab('sessions');
+      showToast(`Campo atualizado na Sessão.`, 'success');
+    } else if (section === 'anamnese') {
+      setAnamnese(prev => {
+        const existing = String((prev as any)[fieldKey] || '').trim();
+        const finalVal = (action === 'append' && existing) ? `${existing}\n\n${value}` : value;
+        return { ...prev, [fieldKey]: finalVal };
+      });
+      setActiveTab('anamnese');
+      showToast(`Campo atualizado na Anamnese Psicológica.`, 'success');
+    } else if (section === 'mentalState') {
+      setMentalState(prev => {
+        const existing = String((prev as any)[fieldKey] || '').trim();
+        const finalVal = (action === 'append' && existing) ? `${existing}\n\n${value}` : value;
+        return { ...prev, [fieldKey]: finalVal };
+      });
+      setActiveTab('eem');
+      showToast(`Campo atualizado no Exame do Estado Mental.`, 'success');
+    } else if (section === 'riskAssessment') {
+      setRiskAssessment(prev => {
+        const existing = String((prev as any)[fieldKey] || '').trim();
+        const finalVal = (action === 'append' && existing) ? `${existing}\n\n${value}` : value;
+        return { ...prev, [fieldKey]: finalVal };
+      });
+      setActiveTab('risk');
+      showToast(`Campo de Avaliação de Risco atualizado. Revisão clínica obrigatória.`, 'info');
+    } else if (section === 'assessment') {
+      setNewAssessment(prev => {
+        const existing = String((prev as any)[fieldKey] || '').trim();
+        const finalVal = (action === 'append' && existing) ? `${existing}\n\n${value}` : value;
+        return { ...prev, [fieldKey]: finalVal };
+      });
+      setActiveTab('assessments');
+      showToast(`Campo atualizado em Avaliação Psicológica.`, 'success');
+    }
+  };
+
+  const handleApplyGoalFromAI = (goal: any) => {
+    if (!goal || !goal.title) return;
+    setGoalsList(prev => [
+      ...prev,
+      {
+        id: `goal_${Date.now()}`,
+        title: goal.title,
+        indicator: goal.indicator || '',
+        targetPeriod: goal.targetPeriod || 'Próxima sessão',
+        strategy: goal.strategy || '',
+        notes: goal.notes || 'Pactuado colaborativamente na sessão clínica.',
+        status: 'em_andamento',
+        createdAt: new Date().toISOString()
+      }
+    ]);
+    setActiveTab('goals');
+    setIsDirty(true);
+    showToast(`Meta terapêutica adicionada: "${goal.title}".`, 'success');
+  };
 
   // Persistência de Rascunho (Autosave Backend + Fallback Local)
   const performSaveDraft = useCallback(async () => {
@@ -959,6 +1043,17 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         >
           <Mic className="w-4 h-4 text-purple-600" />
           Ditado & Voz com IA
+        </button>
+
+        <button
+          type="button"
+          data-tour="ai-diarization-organizer"
+          onClick={() => setShowDiarizationModal(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-900 font-bold rounded-xl text-xs border border-teal-200 transition-colors cursor-pointer shadow-2xs"
+          title="Diarização de Falantes e Organização Clínica Estruturada por IA (CFP)"
+        >
+          <Users className="w-4 h-4 text-teal-600" />
+          Diarização & Análise IA
         </button>
 
         <button
@@ -2548,6 +2643,26 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {showDiarizationModal && (
+        <PsychologyAIOrganizerModal
+          isOpen={showDiarizationModal}
+          onClose={() => setShowDiarizationModal(false)}
+          patientId={selectedPatientId || undefined}
+          patientName={selectedPatient?.full_name}
+          appointmentId={initialAppointmentId || undefined}
+          currentData={{
+            session: currentSession,
+            anamnese: anamnese,
+            mentalState: mentalState,
+            riskAssessment: riskAssessment,
+            newAssessment: newAssessment,
+            goalsList: goalsList
+          }}
+          onApplyField={handleApplyFromAIOrganizer}
+          onApplyGoal={handleApplyGoalFromAI}
+        />
       )}
     </div>
   )}</>;
