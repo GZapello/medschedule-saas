@@ -465,6 +465,9 @@ const AppContent: React.FC = () => {
   const [aiInitialPrompt, setAiInitialPrompt] = useState<string | undefined>(undefined);
   const [aiInitialTab, setAiInitialTab] = useState<'chat' | 'audio_draft' | 'improve_text' | undefined>(undefined);
   const [aiAutoSend, setAiAutoSend] = useState<boolean>(false);
+  const [aiClinicalModule, setAiClinicalModule] = useState<string | undefined>(undefined);
+  const [aiProfession, setAiProfession] = useState<string | undefined>(undefined);
+  const [aiTargetField, setAiTargetField] = useState<string | undefined>(undefined);
   const [isAIOpen, setIsAIOpen] = useState<boolean>(false);
 
   const currentUserRef = useRef(currentUser);
@@ -492,6 +495,9 @@ const AppContent: React.FC = () => {
         setAiInitialPrompt(detail.prompt);
         setAiAutoSend(!!detail.autoSend);
       }
+      setAiClinicalModule(detail?.clinicalModule || undefined);
+      setAiProfession(detail?.profession || undefined);
+      setAiTargetField(detail?.targetField || undefined);
       setIsAIOpen(true);
     };
 
@@ -1778,6 +1784,9 @@ const AppContent: React.FC = () => {
           setAiInitialPrompt(undefined);
           setAiInitialTab(undefined);
           setAiAutoSend(false);
+          setAiClinicalModule(undefined);
+          setAiProfession(undefined);
+          setAiTargetField(undefined);
         }}
         onAppointmentCreated={() => {
           window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
@@ -1788,6 +1797,9 @@ const AppContent: React.FC = () => {
         initialPrompt={aiInitialPrompt}
         initialTab={aiInitialTab}
         autoSend={aiAutoSend}
+        clinicalModule={aiClinicalModule}
+        profession={aiProfession}
+        targetField={aiTargetField}
       />
 
       {/* Atalho Rápido Assistente IA com Logo da Clínica e Fundo Transparente */}

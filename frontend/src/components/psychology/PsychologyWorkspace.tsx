@@ -31,8 +31,10 @@ import {
   Printer,
   Award,
   Info,
-  X
+  X,
+  Mic
 } from 'lucide-react';
+import { openZemdaAI } from '../../utils/aiHelper';
 import { PsychologyDocumentModal } from './PsychologyDocumentModal';
 import { PsychologyHistoryModal } from './PsychologyHistoryModal';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
@@ -244,10 +246,81 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   useEffect(() => {
     if (selectedPatientId) {
       loadPatientProfile(selectedPatientId);
+      window.dispatchEvent(new CustomEvent('zemda-ai-patient-context', { detail: { patientId: selectedPatientId } }));
     } else {
       setSelectedPatient(null);
+      window.dispatchEvent(new CustomEvent('zemda-ai-patient-context', { detail: { patientId: undefined } }));
     }
   }, [selectedPatientId]);
+
+  useEffect(() => {
+    if (initialAppointmentId) {
+      window.dispatchEvent(new CustomEvent('zemda-ai-appointment-context', { detail: { appointmentId: initialAppointmentId, patientId: selectedPatientId } }));
+    }
+  }, [initialAppointmentId, selectedPatientId]);
+
+  // Listener para inserção de transcrição/organização do Assistente Zemda
+  useEffect(() => {
+    const handleApplyAiToEvolution = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.text) return;
+
+      const textToInsert = detail.text.trim();
+      const target = detail.targetField || 'clinicalEvolution';
+
+      if (target === 'conductPlan') {
+        setCurrentSession(prev => ({
+          ...prev,
+          conductPlan: prev.conductPlan ? `${prev.conductPlan}\n\n${textToInsert}` : textToInsert
+        }));
+        setActiveTab('sessions');
+        setIsDirty(true);
+        showToast('Texto inserido em Conduta e Encaminhamentos.', 'success');
+      } else if (target === 'nextSessionPlan') {
+        setCurrentSession(prev => ({
+          ...prev,
+          nextSessionPlan: prev.nextSessionPlan ? `${prev.nextSessionPlan}\n\n${textToInsert}` : textToInsert
+        }));
+        setActiveTab('sessions');
+        setIsDirty(true);
+        showToast('Texto inserido em Planejamento para Próxima Sessão.', 'success');
+      } else if (target === 'mentalStateObservations') {
+        setMentalState(prev => ({
+          ...prev,
+          observations: prev.observations ? `${prev.observations}\n\n${textToInsert}` : textToInsert
+        }));
+        setActiveTab('eem');
+        setIsDirty(true);
+        showToast('Texto inserido em Observações do Exame do Estado Mental.', 'success');
+      } else if (target === 'currentDemand') {
+        setCurrentSession(prev => ({
+          ...prev,
+          currentDemand: prev.currentDemand ? `${prev.currentDemand}\n\n${textToInsert}` : textToInsert
+        }));
+        setActiveTab('sessions');
+        setIsDirty(true);
+        showToast('Texto inserido em Demanda da Sessão.', 'success');
+      } else {
+        // Default: clinicalEvolution
+        setCurrentSession(prev => {
+          const existing = (prev.clinicalEvolution || '').trim();
+          const updated = existing ? `${existing}\n\n${textToInsert}` : textToInsert;
+          return {
+            ...prev,
+            clinicalEvolution: updated
+          };
+        });
+        setActiveTab('sessions');
+        setIsDirty(true);
+        showToast('Texto inserido na Evolução Clínica da sessão. Revise antes de salvar.', 'success');
+      }
+    };
+
+    window.addEventListener('zemda-ai-apply-to-evolution', handleApplyAiToEvolution);
+    return () => {
+      window.removeEventListener('zemda-ai-apply-to-evolution', handleApplyAiToEvolution);
+    };
+  }, [showToast]);
 
   // Persistência de Rascunho (Autosave Backend + Fallback Local)
   const performSaveDraft = useCallback(async () => {
@@ -872,11 +945,20 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         <button
           type="button"
           data-tour="psico-ai-btn"
-          onClick={() => setShowAiDrawer(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold rounded-xl text-xs border border-purple-200 transition-colors cursor-pointer"
+          onClick={() => {
+            openZemdaAI({
+              patientId: selectedPatientId,
+              appointmentId: initialAppointmentId,
+              tab: 'audio_draft',
+              clinicalModule: 'ZemdaPsico',
+              profession: 'Psicologia',
+              targetField: 'clinicalEvolution'
+            });
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-900 font-bold rounded-xl text-xs border border-purple-200 transition-colors cursor-pointer shadow-2xs"
         >
-          <Sparkles className="w-4 h-4 text-purple-600" />
-          Assistente IA (CFP)
+          <Mic className="w-4 h-4 text-purple-600" />
+          Ditado & Voz com IA
         </button>
 
         <button
@@ -1125,10 +1207,28 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
                   <div className="space-y-4 text-xs">
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="font-extrabold text-slate-800">
-                          Relato da Evolução Clínica e Intervenções Utilizadas <span className="text-rose-500">*</span>
-                        </label>
+                      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <label className="font-extrabold text-slate-800">
+                            Relato da Evolução Clínica e Intervenções Utilizadas <span className="text-rose-500">*</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => openZemdaAI({
+                              patientId: selectedPatientId || undefined,
+                              appointmentId: initialAppointmentId || undefined,
+                              tab: 'audio_draft',
+                              clinicalModule: 'ZemdaPsico',
+                              profession: 'Psicologia',
+                              targetField: 'clinicalEvolution'
+                            })}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors shadow-2xs"
+                            title="Abrir Ditado & Voz com IA para Relato da Evolução"
+                          >
+                            <Mic className="w-3.5 h-3.5 text-teal-600" />
+                            Ditado & Voz com IA
+                          </button>
+                        </div>
                         <span className="text-[11px] text-slate-500">Obrigatório para conclusão e selamento</span>
                       </div>
                       <textarea
@@ -1143,7 +1243,25 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="font-bold text-slate-700 block mb-1">Conduta e Encaminhamentos</label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-bold text-slate-700">Conduta e Encaminhamentos</label>
+                          <button
+                            type="button"
+                            onClick={() => openZemdaAI({
+                              patientId: selectedPatientId || undefined,
+                              appointmentId: initialAppointmentId || undefined,
+                              tab: 'audio_draft',
+                              clinicalModule: 'ZemdaPsico',
+                              profession: 'Psicologia',
+                              targetField: 'conductPlan'
+                            })}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition-colors"
+                            title="Ditado para Conduta"
+                          >
+                            <Mic className="w-3 h-3 text-teal-600" />
+                            Ditado
+                          </button>
+                        </div>
                         <textarea
                           value={currentSession.conductPlan}
                           onChange={e => setCurrentSession(p => ({ ...p, conductPlan: e.target.value }))}
@@ -1153,7 +1271,25 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="font-bold text-slate-700 block mb-1">Planejamento para a Próxima Sessão</label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-bold text-slate-700">Planejamento para a Próxima Sessão</label>
+                          <button
+                            type="button"
+                            onClick={() => openZemdaAI({
+                              patientId: selectedPatientId || undefined,
+                              appointmentId: initialAppointmentId || undefined,
+                              tab: 'audio_draft',
+                              clinicalModule: 'ZemdaPsico',
+                              profession: 'Psicologia',
+                              targetField: 'nextSessionPlan'
+                            })}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded transition-colors"
+                            title="Ditado para Próxima Sessão"
+                          >
+                            <Mic className="w-3 h-3 text-teal-600" />
+                            Ditado
+                          </button>
+                        </div>
                         <textarea
                           value={currentSession.nextSessionPlan}
                           onChange={e => setCurrentSession(p => ({ ...p, nextSessionPlan: e.target.value }))}
@@ -1586,6 +1722,35 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       value={mentalState.impulseControl}
                       placeholder="Ex: Preservado, impulsividade episódica..."
                       onChange={e => setMentalState(p => ({ ...p, impulseControl: e.target.value }))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-bold text-slate-700">Observações Clínicas Gerais do EEM</label>
+                      <button
+                        type="button"
+                        onClick={() => openZemdaAI({
+                          patientId: selectedPatientId || undefined,
+                          appointmentId: initialAppointmentId || undefined,
+                          tab: 'audio_draft',
+                          clinicalModule: 'ZemdaPsico',
+                          profession: 'Psicologia',
+                          targetField: 'mentalStateObservations'
+                        })}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-md transition-colors"
+                        title="Abrir Ditado & Voz com IA para Observações do EEM"
+                      >
+                        <Mic className="w-3 h-3 text-teal-600" />
+                        Ditado & Voz com IA
+                      </button>
+                    </div>
+                    <textarea
+                      value={mentalState.observations}
+                      placeholder="Síntese fenomenológica e impressões clínicas da avaliação do estado mental..."
+                      rows={3}
+                      onChange={e => setMentalState(p => ({ ...p, observations: e.target.value }))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs"
                     />
                   </div>

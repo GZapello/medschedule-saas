@@ -166,7 +166,7 @@ export class AIController {
           conversationPatientId
         ]);
         const contextStr = redactText(
-          buildContextString(patientContext, appointmentContext, tenantId, req.user),
+          buildContextString(patientContext, appointmentContext, tenantId, req.user, context),
           identifierReplacements
         );
         const geminiReply = await GeminiService.chat({
@@ -417,7 +417,30 @@ export class AIController {
         return;
       }
 
-      // C. Estruturação em SOAP
+      // C. Estruturação em Evolução Psicológica (ZemdaPsico) ou SOAP (Geral)
+      const isPsicoScope = (context?.clinicalModule === 'ZemdaPsico') ||
+        (context?.outputFormat === 'psychology_progress_note') ||
+        (context?.profession && /psico/i.test(context.profession)) ||
+        lower.includes('psicológic') ||
+        lower.includes('psicologia') ||
+        lower.includes('registro psicológico') ||
+        lower.includes('evolução psicológica');
+
+      if (isPsicoScope && (lower.includes('organiz') || lower.includes('estrutur') || lower.includes('evolu') || lower.includes('rascunho') || lower.includes('ditado') || lower.includes('fala') || lower.includes('sessão') || lower.includes('sessao') || lower.includes('relato'))) {
+        let draftText = text.replace(/.*?(psicológica|psicologica|evolução|evolucao|estruturar|organizar|ditado|fala|sessão|sessao|relato):\s*/i, '').trim();
+        if (!draftText || draftText.length < 5) draftText = text;
+
+        const structured = formatPsychologyProgressNoteFallback(draftText);
+        if (convId) saveToConversation(convId, tenantId, text, structured);
+        res.json({
+          reply: `### 🧠 Rascunho Estruturado — Evolução Psicológica\n\n${structured}\n\n> ⚠️ **Aviso Ético (CFP):** Conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde.`,
+          intent: 'PSYCHOLOGY_PROGRESS_NOTE',
+          structuredDraft: structured,
+          conversationId: convId
+        });
+        return;
+      }
+
       if (lower.includes('soap') || lower.includes('organize esta evolução') || lower.includes('organizar evolução') || lower.includes('estruturar')) {
         let draftText = text.replace(/.*?(soap|evolução|estruturar):\s*/i, '').trim();
         if (!draftText || draftText.length < 10) draftText = text;
@@ -934,7 +957,7 @@ export class AIController {
       }
 
       const tenantId = req.tenantId;
-      const { transcript, text, mode, patientId } = req.body;
+      const { transcript, text, mode, patientId, clinicalModule, outputFormat, profession } = req.body;
       const rawInput = transcript || text;
 
       if (!rawInput || typeof rawInput !== 'string' || rawInput.trim().length === 0) {
@@ -943,7 +966,15 @@ export class AIController {
       }
 
       const raw = rawInput.trim();
-      const modeKey = (mode && typeof mode === 'string') ? mode.trim().toLowerCase() : 'organize';
+      let modeKey = (mode && typeof mode === 'string') ? mode.trim().toLowerCase() : 'organize';
+      const isPsico = clinicalModule === 'ZemdaPsico' ||
+        outputFormat === 'psychology_progress_note' ||
+        modeKey === 'psychology_progress_note' ||
+        Boolean(profession && /psico/i.test(profession));
+
+      if (isPsico && (modeKey === 'organize' || modeKey === 'psychology_progress_note')) {
+        modeKey = 'psychology_progress_note';
+      }
 
       // Tenta processar com o Gemini
       if (GeminiService.isAvailable()) {
@@ -959,7 +990,9 @@ export class AIController {
             organizedText: result.organizedText,
             mode: result.mode,
             provider: 'Google Gemini',
-            disclaimer: 'Rascunho gerado por IA — revise antes de salvar.'
+            disclaimer: isPsico
+              ? 'Conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde.'
+              : 'Rascunho gerado por IA — revise antes de salvar.'
           });
           return;
         }
@@ -968,6 +1001,9 @@ export class AIController {
       // Fallback heurístico inteligente local
       let organized = raw;
       switch (modeKey) {
+        case 'psychology_progress_note':
+          organized = formatPsychologyProgressNoteFallback(raw);
+          break;
         case 'summarize':
           organized = summarizeContent(raw);
           break;
@@ -1019,7 +1055,9 @@ export class AIController {
         organizedText: organized,
         mode: modeKey,
         provider: 'Motor Local Inteligente',
-        disclaimer: 'Rascunho gerado por IA — revise antes de salvar.'
+        disclaimer: isPsico
+          ? 'Conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde.'
+          : 'Rascunho gerado por IA — revise antes de salvar.'
       });
     } catch (err: any) {
       console.error('[AIController.organizeEvolution] Erro:', err);
@@ -1362,11 +1400,19 @@ function buildContextString(
   patientCtx: any,
   appointmentCtx: any,
   tenantId: string,
-  user: any
+  user: any,
+  contextOptions?: any
 ): string {
   const parts: string[] = [];
 
   parts.push(`Profissional logado: ${user?.name || 'Não identificado'} (${user?.role || '-'})`);
+  if (contextOptions?.profession) {
+    parts.push(`Profissão/Especialidade: ${contextOptions.profession}`);
+  }
+  if (contextOptions?.clinicalModule === 'ZemdaPsico' || (contextOptions?.profession && /psico/i.test(contextOptions.profession))) {
+    parts.push(`Módulo Clínico Ativo: ZemdaPsico (Psicologia Clínica)`);
+    parts.push(`Normativas Éticas: Resoluções do Conselho Federal de Psicologia (CFP). Não imponha formato SOAP médico/hospitalar. Em registros ou evoluções de sessão, estruture em: Demanda / Relato Inicial, Temas e Aspectos Psicológicos Observados, Intervenções Clínicas Realizadas, e Conduta e Planejamento Terapêutico. Todo conteúdo gerado atua como rascunho de apoio confidencial.`);
+  }
   parts.push(`Data/hora atual: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`);
 
   if (appointmentCtx) {
@@ -1689,6 +1735,51 @@ function formatBullets(text: string): string {
 
 function formatSoapFallback(raw: string): string {
   return `**S (Subjetivo):**\nPaciente relata queixa principal e evolução dos sintomas desde a última sessão: "${raw.slice(0, 150)}..."\n\n**O (Objetivo):**\nExame do estado geral e observações clínicas preservadas. Sinais e postura condizentes com o relato.\n\n**A (Avaliação):**\nQuadro clínico estável. Boa compreensão das orientações e adesão às condutas terapêuticas.\n\n**P (Plano):**\nManutenção da conduta habitual. Orientações preventivas reforçadas. Retorno programado conforme evolução.`;
+}
+
+export function formatPsychologyProgressNoteFallback(raw: string): string {
+  const clean = cleanGrammar(raw.trim());
+  const sentences = clean.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 2);
+
+  const demandKeywords = ['queixa', 'veio', 'relatou', 'disse', 'contou', 'trouxe', 'iniciou', 'chegou', 'falou sobre', 'demanda', 'sentindo', 'angústia', 'angustia', 'ansiedade', 'tristeza', 'conflito', 'dificuldade', 'sintoma', 'medo'];
+  const interventionKeywords = ['trabalhado', 'trabalhou', 'pontuado', 'intervenção', 'intervencao', 'acolhimento', 'escuta', 'reflexão', 'reflexao', 'manejado', 'questionamento', 'técnica', 'tecnica', 'exercício', 'exercicio', 'respiração', 'respiracao', 'reestruturação', 'reestruturacao', 'associação', 'associacao'];
+  const conductKeywords = ['próxima sessão', 'proxima sessao', 'manter', 'frequência', 'frequencia', 'retorno', 'combinado', 'tarefa', 'encaminhamento', 'plano', 'continuidade', 'quinzenal', 'semanal', 'acompanhamento'];
+
+  const demandParts: string[] = [];
+  const themeParts: string[] = [];
+  const interventionParts: string[] = [];
+  const conductParts: string[] = [];
+
+  for (const s of sentences) {
+    const sLower = s.toLowerCase();
+    if (conductKeywords.some(k => sLower.includes(k))) {
+      conductParts.push(s);
+    } else if (interventionKeywords.some(k => sLower.includes(k))) {
+      interventionParts.push(s);
+    } else if (demandKeywords.some(k => sLower.includes(k)) && demandParts.length < 2) {
+      demandParts.push(s);
+    } else {
+      themeParts.push(s);
+    }
+  }
+
+  const demandText = demandParts.length > 0
+    ? demandParts.join('. ') + '.'
+    : (sentences[0] ? sentences[0] + '.' : 'Paciente comparece ao atendimento e compartilha demandas atuais de acompanhamento psicológico.');
+
+  const themesText = themeParts.length > 0
+    ? themeParts.join('. ') + '.'
+    : 'Exploração dos conteúdos trazidos pelo paciente, observando afeto congruente com o relato e processo reflexivo.';
+
+  const interventionsText = interventionParts.length > 0
+    ? interventionParts.join('. ') + '.'
+    : 'Realizada escuta ativa qualificada, acolhimento clínico e intervenções facilitadoras de elaboração.';
+
+  const conductText = conductParts.length > 0
+    ? conductParts.join('. ') + '.'
+    : 'Manutenção do acompanhamento psicológico e continuidade dos objetivos terapêuticos estabelecidos.';
+
+  return `**Demanda / Relato Inicial:**\n${demandText}\n\n**Temas e Aspectos Psicológicos Observados:**\n${themesText}\n\n**Intervenções Clínicas Realizadas:**\n${interventionsText}\n\n**Conduta e Planejamento Terapêutico:**\n${conductText}`;
 }
 
 function parseDateFromText(text: string): Date {

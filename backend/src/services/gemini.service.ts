@@ -202,7 +202,7 @@ REGRAS:
 - Formate em Markdown limpo
 - Ao final, adicione: "> ⚠️ **Rascunho gerado por IA a partir de transcrição** — revise antes de salvar."`;
 
-const CLINICAL_EVOLUTION_PROMPTS: Record<string, string> = {
+export const CLINICAL_EVOLUTION_PROMPTS: Record<string, string> = {
   organize: `Você é um assistente de documentação clínica em saúde.
 Sua função é transformar a fala transcrita do profissional de saúde em um texto clínico formal, fluido e bem estruturado para o prontuário do paciente (campo "Evolução Clínica & Conduta Terapêutica").
 
@@ -252,7 +252,21 @@ REGRAS CRÍTICAS:
 
   grammar: `Você é um assistente de documentação clínica.
 Corrija a gramática, pontuação e concordância verbal da transcrição a seguir, mantendo exatamente as palavras e o sentido do profissional.
-Retorne APENAS o texto corrigido.`
+Retorne APENAS o texto corrigido.`,
+
+  psychology_progress_note: `Você é um assistente de documentação clínica especializado em Psicologia, em estrita conformidade com as diretrizes e resoluções do Conselho Federal de Psicologia (CFP).
+Sua função é transformar a fala ou anotações brutas do profissional de Psicologia em um registro técnico, ético, neutro e bem estruturado para o prontuário psicológico ("Evolução Clínica da Sessão").
+
+REGRAS CRÍTICAS E OBRIGATÓRIAS (NUNCA VIOLE):
+1. PRESERVAÇÃO RIGOROSA: Utilize ESTRITAMENTE as informações, queixas e reflexões informadas pelo psicólogo. NUNCA adicione diagnósticos psiquiátricos, sintomas ou condutas não relatadas.
+2. VETO A DIAGNÓSTICO AUTÔNOMO: A IA não diagnostica e não infere psicopatologias.
+3. NÃO IMPONHA MODELO SOAP: A psicologia clínica não utiliza obrigatoriamente formato SOAP médico. Estruture em tópicos psicológicos pertinentes:
+   - **Demanda / Relato Inicial:** (pontos trazidos pelo paciente na sessão)
+   - **Temas e Aspectos Psicológicos Observados:** (dinâmica reflexiva, afetos e temas emergentes)
+   - **Intervenções e Manejo Clínico:** (escuta qualificada, acolhimento, pontuações e técnicas)
+   - **Conduta e Planejamento Terapêutico:** (continuidade do acompanhamento, frequência e próximos passos)
+4. REDAÇÃO ÉTICA E PROFISSIONAL: Converta termos coloquiais da fala em redação técnica, clara, neutra e respeitosa à dignidade e subjetividade do paciente.
+5. RETORNE APENAS O TEXTO ESTRUTURADO: Não inclua saudações, introduções ou notas extras.`
 };
 
 // ============================================================================

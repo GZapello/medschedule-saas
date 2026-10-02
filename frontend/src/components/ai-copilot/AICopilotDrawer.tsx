@@ -31,9 +31,12 @@ import {
   GitCompare,
   FolderOpen,
   FileEdit,
-  Download
+  Download,
+  Brain,
+  Shield
 } from 'lucide-react';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
+import { useAuth } from '../../context/AuthContext';
 
 interface AICopilotDrawerProps {
   isOpen: boolean;
@@ -44,6 +47,10 @@ interface AICopilotDrawerProps {
   initialPrompt?: string;
   initialTab?: 'chat' | 'audio_draft' | 'improve_text';
   autoSend?: boolean;
+  clinicalModule?: string;
+  profession?: string;
+  targetField?: string;
+  onApplyText?: (text: string, targetField?: string) => void;
 }
 
 interface Message {
@@ -65,10 +72,29 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
   activeAppointmentId,
   initialPrompt,
   initialTab,
-  autoSend
+  autoSend,
+  clinicalModule,
+  profession,
+  targetField,
+  onApplyText
 }) => {
   const { showToast } = useToast();
+  const { isPsychologist, isZemdaPsico } = useAuth();
+
+  const effectiveClinicalModule = clinicalModule || (isPsychologist || isZemdaPsico ? 'ZemdaPsico' : undefined);
+  const isPsico = effectiveClinicalModule === 'ZemdaPsico';
+  const effectiveProfession = profession || (isPsico ? 'Psicologia' : undefined);
+
   const [activeTab, setActiveTab] = useState<'chat' | 'audio_draft' | 'improve_text'>('chat');
+  const [selectedTargetField, setSelectedTargetField] = useState<string>(targetField || 'clinicalEvolution');
+
+  useEffect(() => {
+    if (targetField) setSelectedTargetField(targetField);
+  }, [targetField]);
+
+  const [micStatus, setMicStatus] = useState<
+    'idle' | 'recording' | 'processing' | 'ready' | 'error' | 'blocked' | 'unsupported'
+  >('idle');
   
   // Seletor de Contexto Inteligente
   const [contextScope, setContextScope] = useState<
@@ -162,6 +188,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
+      setMicStatus('unsupported');
       showToast('Reconhecimento de voz não suportado neste navegador. Recomendamos Google Chrome ou Edge.', 'info');
       return;
     }
@@ -175,6 +202,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
     sessionFinalRef.current = '';
     isRecordingRef.current = true;
     setIsRecording(true);
+    setMicStatus('recording');
 
     const initRecognition = () => {
       if (!isRecordingRef.current) return;
@@ -208,6 +236,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
 
         if (activeTabRef.current === 'audio_draft') {
           setRecordedDraft(combined);
+          if (combined.trim()) setMicStatus('recording');
         } else {
           setInput(combined);
         }
@@ -221,17 +250,20 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
         if (event.error === 'not-allowed') {
           isRecordingRef.current = false;
           setIsRecording(false);
-          showToast('Permissão de microfone negada. Habilite o acesso ao microfone no navegador.', 'error');
+          setMicStatus('blocked');
+          showToast('Permita o acesso ao microfone no navegador para utilizar o Ditado por Voz.', 'error');
           return;
         }
         if (event.error === 'network') {
           isRecordingRef.current = false;
           setIsRecording(false);
+          setMicStatus('error');
           showToast('Falha de rede na transcrição de voz. Verifique sua conexão.', 'error');
           return;
         }
         if (event.error !== 'aborted') {
           console.warn('[AICopilotDrawer] Aviso no microfone:', event.error);
+          setMicStatus('error');
         }
       };
 
@@ -248,9 +280,11 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           } catch (_) {
             isRecordingRef.current = false;
             setIsRecording(false);
+            setMicStatus(recordedDraft.trim() ? 'ready' : 'idle');
           }
         } else {
           setIsRecording(false);
+          setMicStatus(recordedDraft.trim() ? 'ready' : 'idle');
         }
       };
 
@@ -261,6 +295,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
         console.warn('[AICopilotDrawer] Falha ao iniciar reconhecimento:', err);
         isRecordingRef.current = false;
         setIsRecording(false);
+        setMicStatus('error');
       }
     };
 
@@ -276,15 +311,102 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
       const finals = sessionFinalRef.current;
       const finalCombined = (base && finals ? `${base} ${finals}` : (finals || base)).trim();
       if (activeTabRef.current === 'audio_draft') {
-        if (finalCombined) setRecordedDraft(finalCombined);
+        if (finalCombined) {
+          setRecordedDraft(finalCombined);
+          setMicStatus('ready');
+        } else {
+          setMicStatus('idle');
+        }
       } else {
         if (finalCombined) setInput(finalCombined);
+        setMicStatus('idle');
       }
-      showToast('Gravação finalizada.', 'info');
+      showToast('Gravação finalizada. Transcrição pronta para revisão.', 'info');
     } else {
       startVoiceSession();
     }
   }, [isRecording, startVoiceSession, stopVoiceSession, showToast]);
+
+  const getTargetFieldLabel = (field: string) => {
+    switch (field) {
+      case 'conductPlan': return 'Conduta e Encaminhamentos';
+      case 'nextSessionPlan': return 'Planejamento Próxima Sessão';
+      case 'mentalStateObservations': return 'Observações do EEM';
+      case 'currentDemand': return 'Demanda da Sessão';
+      case 'clinicalEvolution':
+      default:
+        return 'Evolução Clínica';
+    }
+  };
+
+  const handleOrganizePsico = async () => {
+    if (!recordedDraft.trim()) return;
+    try {
+      setLoading(true);
+      setMicStatus('processing');
+      const convId = await initConversation().catch(() => '');
+      const res = await ApiClient.post<any>('/v1/ai/organize-evolution', {
+        text: recordedDraft,
+        mode: 'psychology_progress_note',
+        clinicalModule: 'ZemdaPsico',
+        profession: effectiveProfession || 'Psicologia',
+        patientId: selectedPatientId || undefined,
+        appointmentId: activeAppointmentId || undefined,
+        conversationId: convId || undefined
+      });
+      const organized = res.organizedText || res.reply || recordedDraft;
+      setRecordedDraft(organized);
+      setMicStatus('ready');
+      showToast('Evolução psicológica organizada com IA!', 'success');
+    } catch (err: any) {
+      // Fallback para /v1/ai/chat caso organize-evolution falhe
+      try {
+        const resChat = await ApiClient.post<any>('/v1/ai/chat', {
+          message: `Organize a seguinte fala/anotação em uma evolução psicológica estruturada e ética (CFP):\n\n"${recordedDraft}"`,
+          context: {
+            scope: contextScope,
+            patientId: selectedPatientId || undefined,
+            appointmentId: activeAppointmentId || undefined,
+            clinicalModule: 'ZemdaPsico',
+            profession: effectiveProfession || 'Psicologia',
+            outputFormat: 'psychology_progress_note'
+          }
+        });
+        const organized = resChat.structuredDraft || resChat.reply || recordedDraft;
+        setRecordedDraft(organized);
+        setMicStatus('ready');
+        showToast('Evolução psicológica organizada com IA!', 'success');
+      } catch (chatErr) {
+        showToast('Não foi possível organizar a evolução com IA no momento. Rascunho mantido.', 'error');
+        setMicStatus('ready');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInsertIntoEvolution = () => {
+    if (!recordedDraft.trim()) return;
+    const label = getTargetFieldLabel(selectedTargetField);
+
+    window.dispatchEvent(
+      new CustomEvent('zemda-ai-apply-to-evolution', {
+        detail: {
+          text: recordedDraft.trim(),
+          targetField: selectedTargetField,
+          clinicalModule: 'ZemdaPsico',
+          patientId: selectedPatientId,
+          appointmentId: activeAppointmentId
+        }
+      })
+    );
+
+    if (onApplyText) {
+      onApplyText(recordedDraft.trim(), selectedTargetField);
+    }
+
+    showToast(`Texto inserido em ${label}! Revise antes de salvar.`, 'success');
+  };
 
   // Se trocar de aba ou fechar, encerra a captação de voz
   useEffect(() => {
@@ -868,22 +990,54 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
           {/* TAB 3: DITADO & VOZ */}
           {activeTab === 'audio_draft' && (
             <div className="flex-1 flex flex-col p-4 space-y-3 overflow-y-auto">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
-                <div className="flex items-center gap-1.5 font-bold mb-1">
-                  <Stethoscope className="w-4 h-4 text-amber-600" />
-                  Ditado em Tempo Real & Transcrição
+              {isPsico ? (
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900">
+                  <div className="flex items-center gap-1.5 font-bold mb-1 text-purple-950">
+                    <Brain className="w-4 h-4 text-purple-600" />
+                    Ditado Psicológico em Tempo Real & Transcrição
+                  </div>
+                  Dite o relato da sessão, observações ou conduta clínica. O sistema transcreve a fala e permite organizar a evolução psicológica com IA com 1 clique (diretrizes éticas do CFP).
                 </div>
-                Grave o atendimento ou dite suas conclusões. O sistema transcreve a fala e permite estruturar em modelo SOAP com 1 clique.
-              </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                  <div className="flex items-center gap-1.5 font-bold mb-1">
+                    <Stethoscope className="w-4 h-4 text-amber-600" />
+                    Ditado em Tempo Real & Transcrição
+                  </div>
+                  Grave o atendimento ou dite suas conclusões. O sistema transcreve a fala e permite estruturar em modelo SOAP com 1 clique.
+                </div>
+              )}
 
-              <div className="flex items-center justify-center py-4 bg-slate-50 border border-slate-200 rounded-2xl">
+              {micStatus === 'blocked' && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Acesso ao Microfone Bloqueado</p>
+                    <p className="text-[11px] mt-0.5">Permita o acesso ao microfone no navegador para utilizar o Ditado por Voz.</p>
+                  </div>
+                </div>
+              )}
+
+              {micStatus === 'unsupported' && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Navegador Não Compatível</p>
+                    <p className="text-[11px] mt-0.5">Reconhecimento de voz não suportado neste navegador. Recomendamos Google Chrome ou Microsoft Edge.</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col items-center justify-center py-4 bg-slate-50 border border-slate-200 rounded-2xl gap-2">
                 <button
                   type="button"
                   onClick={toggleRecording}
-                  className={`flex items-center gap-2.5 px-5 py-2.5 rounded-full font-bold text-xs shadow-md transition-all ${
+                  className={`flex items-center gap-2.5 px-5 py-2.5 rounded-full font-bold text-xs shadow-md transition-all cursor-pointer ${
                     isRecording
                       ? 'bg-rose-600 hover:bg-rose-700 text-white animate-pulse ring-4 ring-rose-200'
-                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      : isPsico
+                        ? 'bg-purple-700 hover:bg-purple-800 text-white'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                   }`}
                 >
                   {isRecording ? (
@@ -896,11 +1050,30 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                     </>
                   )}
                 </button>
+                {isRecording && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-600 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-rose-600" />
+                    Gravando áudio... Fale pausadamente ou dite as conclusões.
+                  </div>
+                )}
+                {loading && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-600 animate-pulse">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    Processando organização com inteligência artificial...
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 flex flex-col">
                 <label className="text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Rascunho da Fala:</span>
+                  <span className="flex items-center gap-1.5">
+                    <span>Rascunho da Fala:</span>
+                    {recordedDraft.trim() && !isRecording && (
+                      <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        ✓ Transcrição Pronta
+                      </span>
+                    )}
+                  </span>
                   {recordedDraft && (
                     <button
                       type="button"
@@ -908,7 +1081,7 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                         navigator.clipboard.writeText(recordedDraft);
                         showToast('Rascunho copiado!', 'success');
                       }}
-                      className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 text-[11px]"
+                      className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 text-[11px] cursor-pointer"
                     >
                       <Copy className="w-3 h-3" /> Copiar
                     </button>
@@ -916,52 +1089,110 @@ export const AICopilotDrawer: React.FC<AICopilotDrawerProps> = ({
                 </label>
                 <textarea
                   value={recordedDraft}
-                  onChange={e => setRecordedDraft(e.target.value)}
-                  placeholder="A fala captada pelo microfone aparecerá aqui automaticamente..."
-                  className="flex-1 w-full border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-teal-500 focus:outline-hidden resize-none min-h-[200px]"
+                  onChange={e => {
+                    setRecordedDraft(e.target.value);
+                    if (e.target.value.trim() && micStatus === 'idle') setMicStatus('ready');
+                  }}
+                  placeholder="A fala captada pelo microfone aparecerá aqui automaticamente para conferência e edição..."
+                  className="flex-1 w-full border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-hidden resize-none min-h-[180px]"
                 />
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!recordedDraft.trim()) return;
-                    try {
-                      setLoading(true);
-                      const res = await ApiClient.post<any>('/v1/ai/chat', {
-                        message: `Estruture o seguinte relato em SOAP:\n\n"${recordedDraft}"`
-                      });
-                      setRecordedDraft(res.reply || recordedDraft);
-                      showToast('Rascunho SOAP gerado!', 'success');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  disabled={loading || !recordedDraft.trim()}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
-                >
-                  <Sparkles className="w-4 h-4 text-teal-200" />
-                  {loading ? 'Estruturando...' : 'Organizar em SOAP com IA'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRecordedDraft('')}
-                  disabled={!recordedDraft}
-                  className="px-3 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-semibold"
-                >
-                  Limpar
-                </button>
+              <div className="space-y-2 pt-1">
+                <div className="flex gap-2">
+                  {isPsico ? (
+                    <button
+                      type="button"
+                      onClick={handleOrganizePsico}
+                      disabled={loading || !recordedDraft.trim()}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-purple-200" />
+                      {loading ? 'Organizando evolução...' : 'Organizar evolução psicológica com IA'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!recordedDraft.trim()) return;
+                        try {
+                          setLoading(true);
+                          const res = await ApiClient.post<any>('/v1/ai/chat', {
+                            message: `Estruture o seguinte relato em SOAP:\n\n"${recordedDraft}"`
+                          });
+                          setRecordedDraft(res.reply || recordedDraft);
+                          showToast('Rascunho SOAP gerado!', 'success');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      disabled={loading || !recordedDraft.trim()}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
+                    >
+                      <Sparkles className="w-4 h-4 text-teal-200" />
+                      {loading ? 'Estruturando...' : 'Organizar em SOAP com IA'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecordedDraft('');
+                      setMicStatus('idle');
+                    }}
+                    disabled={!recordedDraft}
+                    className="px-3 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-semibold cursor-pointer disabled:opacity-40"
+                  >
+                    Limpar
+                  </button>
+                </div>
+
+                {isPsico && recordedDraft.trim() && (
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <label className="font-bold text-slate-700">Campo de destino:</label>
+                      <select
+                        value={selectedTargetField}
+                        onChange={e => setSelectedTargetField(e.target.value)}
+                        className="text-xs bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-slate-700 focus:ring-1 focus:ring-purple-500 focus:outline-hidden"
+                      >
+                        <option value="clinicalEvolution">Evolução Clínica da Sessão</option>
+                        <option value="conductPlan">Conduta e Encaminhamentos</option>
+                        <option value="nextSessionPlan">Planejamento Próxima Sessão</option>
+                        <option value="mentalStateObservations">Observações do EEM</option>
+                        <option value="currentDemand">Demanda da Sessão</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleInsertIntoEvolution}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Check className="w-4 h-4 text-teal-200" />
+                      Inserir na {getTargetFieldLabel(selectedTargetField)}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {/* Legal / Ethical Medical AI Disclaimer */}
           <div className="p-2.5 bg-slate-50 border-t border-slate-200 text-[10px] text-slate-500 flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>
-              <strong>Aviso Ético:</strong> Todo conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde.
-            </span>
+            {isPsico ? (
+              <>
+                <Shield className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                <span className="text-purple-950 font-medium">
+                  <strong>Aviso Ético (CFP):</strong> Conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde.
+                </span>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span>
+                  <strong>Aviso Ético:</strong> Todo conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde.
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>

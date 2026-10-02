@@ -4,6 +4,9 @@ export interface ZemdaAIOptions {
   appointmentId?: string;
   tab?: 'chat' | 'audio_draft' | 'improve_text';
   autoSend?: boolean;
+  clinicalModule?: string;
+  profession?: string;
+  targetField?: string;
 }
 
 export const openZemdaAI = (options?: ZemdaAIOptions): void => {

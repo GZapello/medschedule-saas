@@ -1,3 +1,5 @@
+import './CreateClinicModal.css';
+import './FreeTrialActivationView.css';
 import { trackCompletedRegistration } from '../../utils/registrationAnalytics';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
@@ -311,25 +313,34 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
 
   // 4. Formulário de Ativação
   return (
-    <div className="min-h-screen bg-[#fafbfc] py-10 px-4 sm:px-6 flex items-center justify-center">
-      <div className="max-w-xl w-full space-y-6">
-        {/* Banner Superior */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-black uppercase tracking-wider">
-            <Gift className="w-4 h-4 text-teal-600" />
-            {trialData?.planLabel ? `Plano ${trialData.planLabel} • Teste Grátis` : 'Convite Especial de Teste Grátis'}
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            Ative seu Teste de {trialData?.durationLabel} {trialData?.planLabel ? `(${trialData.planLabel})` : ''}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed">
-            Preencha os dados abaixo para configurar sua clínica e começar a utilizar todos os módulos do Zemda sem nenhum custo.
-          </p>
+    <main className="signup-page trial-activation-page">
+      <aside className="signup-intro">
+        <button type="button" onClick={onBackToHome} className="trial-brand-link" aria-label="Voltar ao início do Zemda">
+          <img src="/brand/zemda-logo.png" alt="Zemda" className="signup-logo" />
+        </button>
+        <div className="signup-pitch">
+          <h1>Sua próxima fase de cuidado começa aqui.</h1>
+          <p>Experimente o Zemda e reúna sua agenda, seus atendimentos e a gestão da sua clínica em um só lugar.</p>
+          <ul>
+            <li><Gift aria-hidden="true" />{trialData?.durationLabel} grátis</li>
+            <li><ShieldCheck aria-hidden="true" />Sem cobrança imediata</li>
+            <li><Sparkles aria-hidden="true" />Configuração rápida</li>
+            <li><Stethoscope aria-hidden="true" />Módulos conforme seu perfil profissional</li>
+          </ul>
         </div>
-
-        {/* Card do Formulário */}
-        <div className="bg-white rounded-3xl shadow-xl shadow-teal-900/5 border border-slate-100 p-6 sm:p-8 space-y-6">
-          <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-center gap-3">
+      </aside>
+      <section className="signup-card trial-activation-card" aria-labelledby="trial-activation-title">
+        <header className="signup-card-header trial-card-header">
+          <div className="trial-card-brand"><img src="/brand/zemda-icon.png" alt="" width="28" height="28" /><span>Ativação do Zemda</span></div>
+          <span className="trial-badge"><Gift size={13} aria-hidden="true" />Teste grátis</span>
+        </header>
+        <div className="signup-content trial-content">
+          <div className="trial-heading">
+            <div className="trial-plan">{trialData?.planLabel ? `Plano ${trialData.planLabel} · ` : ''}{trialData?.durationLabel} para experimentar</div>
+            <h2 id="trial-activation-title">Ative seu teste grátis</h2>
+            <p>Preencha os dados abaixo para configurar sua clínica e iniciar seu acesso ao Zemda.</p>
+          </div>
+          <div className="trial-notice p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-center gap-3">
             <div className="p-2 bg-amber-500 rounded-xl text-slate-950 shrink-0">
               <Sparkles className="w-4 h-4" />
             </div>
@@ -338,10 +349,10 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
             </div>
           </div>
 
-          <form onSubmit={handleActivateSubmit} className="space-y-4">
+          <form onSubmit={handleActivateSubmit} className="trial-form space-y-4">
             {/* Nome da Clínica */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="trial-clinicName" className="block text-xs font-bold text-slate-700 mb-1">
                 Nome da Clínica ou Consultório <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
@@ -350,16 +361,17 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                   type="text"
                   required
                   placeholder="Ex: Clínica Bem Viver"
+                  id="trial-clinicName"
                   value={clinicName}
                   onChange={e => setClinicName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all font-medium"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
                 />
               </div>
             </div>
 
             {/* Nome do Gestor */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="trial-managerName" className="block text-xs font-bold text-slate-700 mb-1">
                 Nome Completo do Responsável <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
@@ -368,25 +380,28 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                   type="text"
                   required
                   placeholder="Ex: Dr. Roberto Guimarães"
+                  id="trial-managerName"
                   value={managerName}
                   onChange={e => setManagerName(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all font-medium"
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
                 />
               </div>
             </div>
 
             {/* Área de Atuação do Profissional */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="trial-selectedProfessionId" className="block text-xs font-bold text-slate-700 mb-1">
                 Área de Atuação do Profissional <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <Stethoscope className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <select
                   required
+                  aria-describedby="trial-profession-help"
+                  id="trial-selectedProfessionId"
                   value={selectedProfessionId}
                   onChange={e => setSelectedProfessionId(e.target.value)}
-                  className="w-full pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all font-medium text-slate-800"
+                  className="w-full pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium text-slate-800"
                 >
                   <option value="">Selecione sua área de atuação...</option>
                   {professions.map(p => (
@@ -396,15 +411,15 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                   ))}
                 </select>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1">
-                O Zemda ativará seu módulo específico e o <strong>Zemda360 (Mapa Corporal)</strong>, liberado para todas as áreas profissionais.
+              <p id="trial-profession-help" className="trial-module-note">
+                Seu módulo profissional + <strong>Zemda360 (Mapa Corporal)</strong>, disponível para todas as áreas.
               </p>
             </div>
 
             {/* Grid: E-mail e Telefone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label htmlFor="trial-managerEmail" className="block text-xs font-bold text-slate-700 mb-1">
                   E-mail de Acesso <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
@@ -413,15 +428,16 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                     type="email"
                     required
                     placeholder="seuemail@clinica.com"
-                    value={managerEmail}
+                    id="trial-managerEmail"
+                  value={managerEmail}
                     onChange={e => setManagerEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all font-medium"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label htmlFor="trial-managerPhone" className="block text-xs font-bold text-slate-700 mb-1">
                   WhatsApp / Telefone
                 </label>
                 <div className="relative">
@@ -429,9 +445,10 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                   <input
                     type="tel"
                     placeholder="(11) 99999-8888"
-                    value={managerPhone}
+                    id="trial-managerPhone"
+                  value={managerPhone}
                     onChange={e => handlePhoneChange(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all font-medium"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
                   />
                 </div>
               </div>
@@ -439,7 +456,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
 
             {/* Senha */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label htmlFor="trial-managerPassword" className="block text-xs font-bold text-slate-700 mb-1">
                 Criar Senha de Acesso <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
@@ -449,12 +466,15 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                   required
                   minLength={6}
                   placeholder="Mínimo 6 caracteres"
+                  id="trial-managerPassword"
                   value={managerPassword}
                   onChange={e => setManagerPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all font-medium"
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all font-medium"
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  aria-pressed={showPassword}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
                 >
@@ -474,7 +494,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                     setTermsAccepted(e.target.checked);
                     setPrivacyAccepted(e.target.checked);
                   }}
-                  className="mt-0.5 rounded border-slate-300 text-amber-500 focus:ring-amber-400"
+                  className="mt-0.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                 />
                 <span className="leading-relaxed">
                   Declaro que li e concordo com os{' '}
@@ -495,7 +515,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-2xl shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50"
+                className="trial-submit w-full py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold rounded-2xl transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50"
               >
                 {submitting ? (
                   <>
@@ -505,7 +525,7 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    Ativar Meu Teste Grátis de {trialData?.durationLabel}
+                    Criar conta e iniciar teste
                   </>
                 )}
               </button>
@@ -514,11 +534,11 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
         </div>
 
         {/* Rodapé Seguro */}
-        <div className="text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
+        <div className="trial-security text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
           Seus dados estão protegidos por criptografia de ponta a ponta.
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 };
