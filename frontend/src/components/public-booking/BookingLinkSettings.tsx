@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { Copy, ExternalLink, Calendar, ChevronDown, UserRound, Check } from 'lucide-react';
+import { Copy, ExternalLink, Calendar, ChevronDown, UserRound, Check, Users } from 'lucide-react';
 import { ApiClient } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -37,11 +37,34 @@ export function ClinicBookingSettings() {
   return <BookingLinkCard title="Agendamento Online — página da clínica" description="Permita que pacientes encontrem a especialidade desejada, escolham um profissional disponível e agendem um horário." enabled={tenant.public_booking_enabled===1} url={path?window.location.origin+path:null} disabled={saving} onToggle={toggle}/>;
 }
 export function ProfessionalBookingSettings() {
+  const [sectionExpanded,setSectionExpanded]=useState(false);
+  const sectionId=useId();
   const [expandedId,setExpandedId]=useState<string|null>(null);
   const {currentUser,currentTenant,isClinicAdmin,isProfessional}=useAuth();const {showToast}=useToast();const[professionals,setProfessionals]=useState<any[]>([]);const[loading,setLoading]=useState(true);const[saving,setSaving]=useState('');const savingRef=useRef(false);const[error,setError]=useState('');
   useEffect(()=>{let active=true;setLoading(true);if(!isClinicAdmin&&!isProfessional){setLoading(false);return;}const load=currentUser?.professionalId&&!isClinicAdmin?ApiClient.get<any>(`/v1/professionals/${currentUser.professionalId}`).then(data=>[data.professional]):ApiClient.get<any[]>('/v1/professionals');load.then(data=>{if(active)setProfessionals(isClinicAdmin?data:data.filter(p=>p.user_id===currentUser?.id));}).catch(()=>{if(active)setError('Não foi possível carregar os links dos profissionais.');}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[currentTenant?.id,currentUser?.id,isClinicAdmin,isProfessional]);
   const toggle=async(p:any,value:boolean)=>{if(savingRef.current)return;savingRef.current=true;setSaving(p.id);try{await ApiClient.put(`/v1/professionals/${p.id}`,{publicBookingEnabled:value});setProfessionals(items=>items.map(item=>item.id===p.id?{...item,public_booking_enabled:value?1:0}:item));showToast(value?'Página pública de agendamento ativada.':'Página pública de agendamento desativada.','success');}catch(e:any){showToast(e.message||'Não foi possível salvar.','error');}finally{savingRef.current=false;setSaving('');}};
   if(!isClinicAdmin&&!isProfessional)return null;
   if(loading)return <p role="status" className="text-sm text-slate-500">Carregando links…</p>;
-  return <section className="min-w-0 space-y-3"><div><h2 className="text-base font-bold text-slate-900">Links individuais dos profissionais</h2><p className="mt-1 text-sm text-slate-600">Gerencie quais profissionais possuem uma página pública de agendamento.</p></div>{error&&<p role="alert" className="text-sm text-red-700">{error}</p>}{!professionals.length&&!error&&<p className="text-sm text-slate-500">Nenhum perfil profissional disponível para compartilhar.</p>}{professionals.map(p=><BookingLinkCard key={p.id} title={p.name} accordion={{expanded:expandedId===p.id,onExpand:()=>setExpandedId(current=>current===p.id?null:p.id),subtitle:[p.profession_name,p.specialty_custom||p.specialty_name].filter(Boolean).join(' · ')}} enabled={p.public_booking_enabled===1} url={p.slug&&currentTenant?.slug?`${window.location.origin}/agendar/${currentTenant.slug}/${p.slug}`:null} disabled={Boolean(saving)} saving={saving===p.id} onToggle={(isClinicAdmin||(isProfessional&&p.user_id===currentUser?.id))?value=>toggle(p,value):undefined}/>)}</section>;
+  const activeCount=professionals.filter(p=>p.public_booking_enabled===1).length;
+  return <section className="min-w-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <h2><button type="button" id={`${sectionId}-heading`} aria-expanded={sectionExpanded} aria-controls={`${sectionId}-team`} onClick={()=>setSectionExpanded(open=>!open)} className="flex w-full items-center gap-3 rounded-2xl p-4 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600">
+      <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700 sm:flex"><Users aria-hidden="true" className="h-5 w-5" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold text-slate-900">Links individuais dos profissionais</span>
+        <span className="block text-xs text-slate-500">Gerencie as páginas públicas de agendamento da sua equipe.</span>
+        <span className="mt-1 block text-xs font-medium text-slate-600">{professionals.length} {professionals.length===1?'profissional':'profissionais'} • {activeCount ? `${activeCount} ${activeCount===1?'ativo':'ativos'}` : 'Nenhum ativo'}</span>
+      </span>
+      <span className="shrink-0 text-xs font-semibold text-teal-700">Gerenciar</span>
+      <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 motion-reduce:transition-none ${sectionExpanded?'rotate-180':''}`} />
+    </button></h2>
+    <div id={`${sectionId}-team`} role="region" aria-labelledby={`${sectionId}-heading`} className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${sectionExpanded?'grid-rows-[1fr]':'grid-rows-[0fr]'}`}>
+      <div className={`min-h-0 min-w-0 overflow-hidden ${sectionExpanded?'':'invisible'}`}>
+        <div className="space-y-3 border-t border-slate-100 p-3 sm:p-4">
+          {error&&<p role="alert" className="text-sm text-red-700">{error}</p>}
+          {!professionals.length&&!error&&<p className="text-sm text-slate-500">Nenhum perfil profissional disponível para compartilhar.</p>}
+          {professionals.map(p=><BookingLinkCard key={p.id} title={p.name} accordion={{expanded:expandedId===p.id,onExpand:()=>setExpandedId(current=>current===p.id?null:p.id),subtitle:[p.profession_name,p.specialty_custom||p.specialty_name].filter(Boolean).join(' · ')}} enabled={p.public_booking_enabled===1} url={p.slug&&currentTenant?.slug?`${window.location.origin}/agendar/${currentTenant.slug}/${p.slug}`:null} disabled={Boolean(saving)} saving={saving===p.id} onToggle={(isClinicAdmin||(isProfessional&&p.user_id===currentUser?.id))?value=>toggle(p,value):undefined}/>)}
+        </div>
+      </div>
+    </div>
+  </section>;
 }
