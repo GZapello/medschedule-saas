@@ -21,9 +21,37 @@ export default function PersonalPostureEditor({value,onChange,photos,patientId,o
   const add=(r:Region)=>{if(value.observations.length>=180)return;setRegion(r);onChange({...value,observations:[...value.observations,{id:crypto.randomUUID(),region:r,view,text:'',evolution:'unrated',source:'manual',reviewed:true}]});};
   const edit=(id:string,patch:Partial<Observation>)=>onChange({...value,observations:value.observations.map(o=>o.id===id?{...o,...patch}:o)});
   const analyze=async()=>{if(busy)return;setBusy(true);onBusy?.(true);setMessage('');const request=++generation.current;
-    try {const result=await ApiClient.post<{suggestions:Observation[]}>('/v1/personal/posture-ai/analyze',{patient_id:patientId,photos:photos.filter(p=>p.fileId).map(p=>({view:p.view,file_id:p.fileId}))});if(request===generation.current){onChange({...value,observations:[...value.observations,...result.suggestions].slice(0,180)});setMessage('Sugestões adicionadas. Revise cada uma antes de incluí-la na evolução.');}}
-    catch(e:any){if(request===generation.current)setMessage(e.message||'Não foi possível analisar as fotos.');}
-    finally {if(request===generation.current){setBusy(false);onBusy?.(false);}}
+    try {
+      const result=await ApiClient.post<{suggestions:Observation[]}>('/v1/personal/posture-ai/analyze',{patient_id:patientId,photos:photos.filter(p=>p.fileId).map(p=>({view:p.view,file_id:p.fileId}))});
+      if(request===generation.current){
+        onChange({...value,observations:[...value.observations,...result.suggestions].slice(0,180)});
+        setMessage('Sugestões adicionadas. Revise cada uma antes de incluí-la na evolução.');
+      }
+    } catch(e:any){
+      if(request===generation.current){
+        let msg = 'Não foi possível analisar as fotos.';
+        const code = e?.code || '';
+        const raw = String(e?.message || '');
+        if (code === 'POSTURE_AI_NOT_CONFIGURED' || e?.status === 503 || raw.includes('não está configurada')) {
+          msg = 'Análise por IA ainda não está configurada.';
+        } else if (code === 'POSTURE_AI_IMAGE_ERROR' || code === 'POSTURE_AI_FILE_UNAVAILABLE' || (raw.includes('foto') && !raw.includes('indisponível'))) {
+          msg = 'Não foi possível acessar uma das fotos.';
+        } else if (
+          code === 'POSTURE_AI_PROVIDER_ERROR' ||
+          code === 'POSTURE_AI_TIMEOUT' ||
+          e?.status === 502 ||
+          e?.status === 504 ||
+          raw.includes('502') ||
+          raw.includes('HTML') ||
+          raw.includes('indisponível')
+        ) {
+          msg = 'O serviço de análise por IA está temporariamente indisponível.';
+        } else if (e?.message && !e.message.includes('HTML') && !e.message.includes('<') && !e.message.includes('Erro 502')) {
+          msg = e.message;
+        }
+        setMessage(msg);
+      }
+    } finally {if(request===generation.current){setBusy(false);onBusy?.(false);}}
   };
   return <section className="rounded-2xl border border-indigo-100 bg-indigo-50/30 p-4 space-y-4" aria-label="Avaliação Postural">
     <div><h3 className="font-bold text-slate-800">Avaliação Postural</h3><p className="text-xs text-slate-500">Marcações manuais sobre as fotos originais. Salve a avaliação para preservar as marcações e observações. Guias visuais não representam medidas clínicas.</p></div>
@@ -51,7 +79,7 @@ export default function PersonalPostureEditor({value,onChange,photos,patientId,o
         <p className="text-[11px] text-slate-500">{value.observations.filter(o=>o.reviewed&&o.text.trim()).length} observações revisadas • {value.observations.filter(o=>!o.reviewed).length} pendentes. Classificação definida pelo profissional.</p>
       </aside>
     </div>
-    <div className="border-t pt-3 space-y-2"><button type="button" disabled={busy||!ai.available||!photos.some(p=>p.fileId)||value.observations.length>=180} onClick={analyze} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold disabled:opacity-40">{busy?'Analisando…':'Analisar postura com IA'}</button>
+    <div className="border-t pt-3 space-y-2"><button type="button" disabled={busy||!ai.available||!photos.some(p=>p.fileId)||value.observations.length>=180} onClick={analyze} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold disabled:opacity-40">{busy?'Analisando postura...':'Analisar postura com IA'}</button>
       <p className="text-[11px] text-slate-500">{ai.available?(photos.some(p=>p.fileId)?'Ao solicitar, as fotos serão enviadas à IA configurada. Sugestões visuais para revisão profissional; não constituem diagnóstico. Nenhuma análise é automática.':'Adicione pelo menos uma foto corporal para habilitar a análise com IA.'):ai.reason||'Verificando disponibilidade da IA…'}</p>
       {message&&<p role="status" className="text-xs text-indigo-800">{message}</p>}
     </div>

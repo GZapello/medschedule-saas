@@ -42,6 +42,7 @@ export class R2StorageService {
   private isConfigured: boolean = false;
   // Simulação para testes automatizados locais quando credenciais do R2 não estão ativas
   private mockObjects: Set<string> = new Set();
+  private mockBuffers: Map<string, Buffer> = new Map();
 
   constructor() {
     this.bucketName = process.env.R2_BUCKET_NAME || 'zemda-files';
@@ -132,7 +133,38 @@ export class R2StorageService {
       await this.client.send(command);
     }
     this.mockObjects.add(objectKey);
+    this.mockBuffers.set(objectKey, fileBuffer);
     return { objectKey, size: fileBuffer.length };
+  }
+
+  /**
+   * Obtém o buffer binário de um arquivo diretamente do Cloudflare R2 via SDK S3 (ou mock)
+   */
+  async getObjectBuffer(objectKey: string, maxBytes: number = 10 * 1024 * 1024): Promise<Buffer> {
+    if (this.client && this.isConfigured && process.env.R2_MOCK_STORAGE !== 'true') {
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: objectKey
+      });
+      const response = await this.client.send(command);
+      if (!response.Body) {
+        throw new Error('R2_EMPTY_BODY');
+      }
+      const byteArray = await (response.Body as any).transformToByteArray();
+      const buffer = Buffer.from(byteArray);
+      if (buffer.length > maxBytes) {
+        throw new Error('R2_FILE_TOO_LARGE');
+      }
+      return buffer;
+    }
+
+    if (this.mockBuffers.has(objectKey)) {
+      return this.mockBuffers.get(objectKey)!;
+    }
+    if (this.mockObjects.has(objectKey)) {
+      return Buffer.alloc(0);
+    }
+    throw new Error('R2_OBJECT_NOT_FOUND');
   }
 
   /**
@@ -171,6 +203,7 @@ export class R2StorageService {
 
     // Modo mock / desenvolvimento local
     this.mockObjects.delete(objectKey);
+    this.mockBuffers.delete(objectKey);
   }
 
   /**
@@ -251,8 +284,11 @@ export class R2StorageService {
   /**
    * Helper para simular upload nos testes locais
    */
-  simulateMockUpload(objectKey: string): void {
+  simulateMockUpload(objectKey: string, buffer?: Buffer): void {
     this.mockObjects.add(objectKey);
+    if (buffer) {
+      this.mockBuffers.set(objectKey, buffer);
+    }
   }
 
   /**
@@ -260,6 +296,7 @@ export class R2StorageService {
    */
   simulateMockDelete(objectKey: string): void {
     this.mockObjects.delete(objectKey);
+    this.mockBuffers.delete(objectKey);
   }
 }
 

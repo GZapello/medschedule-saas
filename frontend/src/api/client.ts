@@ -202,7 +202,13 @@ export class ApiClient {
             errorMsg = text.trim() || errorMsg;
           }
         } else if (text.trim().startsWith('<') || contentType.includes('text/html')) {
+          console.warn('[ApiClient] Resposta HTML recebida da API:', {
+            status: response.status,
+            contentType,
+            url: requestUrl
+          });
           errorMsg = `Erro ${response.status}: O servidor respondeu com uma página HTML em vez de dados (JSON). Verifique o endereço da API e sua conexão.`;
+          errorCode = response.status === 502 ? 'BAD_GATEWAY_HTML' : 'HTML_RESPONSE';
         } else if (text.trim()) {
           errorMsg = text.trim();
         }
@@ -210,6 +216,8 @@ export class ApiClient {
       const err: any = new Error(errorMsg);
       err.code = errorCode;
       err.status = response.status;
+      err.contentType = contentType;
+      err.requestUrl = requestUrl;
       throw err;
     }
 
