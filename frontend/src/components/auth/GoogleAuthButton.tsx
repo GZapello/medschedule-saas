@@ -102,7 +102,7 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
 
     const script = document.createElement('script');
     script.id = 'google-gsi-client';
-    script.src = 'https://accounts.google.com/gsi/client';
+    script.src = 'https://accounts.google.com/gsi/client?hl=pt-BR';
     script.async = true;
     script.defer = true;
     script.onload = () => {
@@ -111,7 +111,7 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
     script.onerror = () => {
       console.error('[GoogleAuth] Falha ao carregar script do Google Identity Services.');
       setInitFailed(true);
-      onError?.('Não foi possível conectar ao Google Identity Services.');
+      onError?.('Não foi possível abrir o login do Google. Atualize a página e tente novamente.');
     };
     document.head.appendChild(script);
   }, [onError]);
@@ -130,7 +130,10 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
           }
           const payload = parseJwtPayload(response.credential);
           onSuccess(response.credential, payload || undefined);
-        }
+        },
+        use_fedcm_for_button: true,
+        button_auto_select: false,
+        auto_select: false
       });
 
       // Limpa renderizações anteriores
@@ -149,6 +152,7 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
     } catch (err: any) {
       console.error('[GoogleAuth] Erro ao renderizar botão oficial:', err);
       setInitFailed(true);
+      onError?.('Não foi possível abrir o login do Google. Atualize a página e tente novamente.');
     }
   }, [scriptLoaded, clientId, text, theme, shape, size, width, disabled, onSuccess, onError]);
 
@@ -176,7 +180,7 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
         <button
           type="button"
           onClick={() => {
-            onError?.('O bloqueador de anúncios ou navegador impediu a conexão com o Google. Desative o adblocker para tentar novamente.');
+            onError?.('Não foi possível abrir o login do Google. Atualize a página e tente novamente.');
           }}
           className="w-full max-w-[320px] py-2.5 px-4 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-2.5 transition-all shadow-2xs cursor-pointer"
         >

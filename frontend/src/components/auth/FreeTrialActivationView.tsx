@@ -405,8 +405,8 @@ export const FreeTrialActivationView: React.FC<FreeTrialActivationViewProps> = (
             {!googleAuthData ? (
               <div className="space-y-2 pb-2">
                 <GoogleAuthButton
-                  text="signup_with"
-                  customLabel="Ativar teste com Google"
+                  text="continue_with"
+                  customLabel="Continuar com Google"
                   onSuccess={(idToken, payload) => {
                     const email = (payload?.email || '').trim().toLowerCase();
                     const name = (payload?.name || '').trim();
