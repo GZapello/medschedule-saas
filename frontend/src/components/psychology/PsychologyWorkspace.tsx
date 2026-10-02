@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { PsychologyDocumentModal } from './PsychologyDocumentModal';
 import { PsychologyHistoryModal } from './PsychologyHistoryModal';
-import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
@@ -64,7 +64,8 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   const [activeTab, setActiveTab] = useState<TabKey>('sessions');
 
   // Hook para usabilidade e scroll suave das abas de Psicologia
-  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
+  const tabScroll = useHorizontalTabScroll(activeTab);
+  const { tabScrollProps } = tabScroll;
 
   const [loading, setLoading] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
@@ -913,8 +914,9 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       </ProfessionalModuleHeader>
 
       {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
-      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
-        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+      <div className="bg-white border-b border-slate-200 shrink-0">
+        <HorizontalTabNav scroll={tabScroll}>
+          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
           {[
             { id: 'sessions', label: '1. Sessões & Evolução', icon: Clock },
             { id: 'anamnese', label: '2. Anamnese Psicológica', icon: User },
@@ -946,6 +948,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             );
           })}
         </div>
+        </HorizontalTabNav>
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}

@@ -4,7 +4,7 @@ import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
-import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
@@ -94,7 +94,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     | 'history'
   >('overview');
 
-  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
+  const tabScroll = useHorizontalTabScroll(activeTab);
+  const { tabScrollProps } = tabScroll;
 
   // Estados de dados do paciente
   const [loadingOverview, setLoadingOverview] = useState(false);
@@ -816,41 +817,43 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
       {/* 3. MENU HORIZONTAL DE ABAS CLÍNICAS */}
       {selectedPatientId ? (
-        <div className="bg-white border-b border-slate-200 px-3 sm:px-6 shrink-0">
-          <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-2`}>
-            {[
-              { id: 'overview', label: 'Visão Geral', icon: Layers },
-              { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
-              { id: 'photos', label: `Fotos (${photos.length})`, icon: Camera },
-              { id: 'planning', label: `Planejamento (${plans.length})`, icon: Calendar },
-              { id: 'procedures', label: `Procedimentos (${procedures.length})`, icon: Scissors },
-              { id: 'zemda360', label: 'Zemda360', icon: Activity },
-              { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
-              { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
-              { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
-              { id: 'history', label: 'Histórico Completo', icon: RefreshCw }
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  data-active={isActive ? 'true' : 'false'}
-                  data-tour={`tab-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                    isActive
-                      ? areaTheme.activeTab
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
+        <div className="bg-white border-b border-slate-200 shrink-0">
+          <HorizontalTabNav scroll={tabScroll}>
+            <div {...tabScrollProps} className={`${tabScrollProps.className} max-w-7xl mx-auto flex items-center gap-1 py-2`}>
+              {[
+                { id: 'overview', label: 'Visão Geral', icon: Layers },
+                { id: 'assessment', label: 'Avaliação Estética', icon: FileText },
+                { id: 'photos', label: `Fotos (${photos.length})`, icon: Camera },
+                { id: 'planning', label: `Planejamento (${plans.length})`, icon: Calendar },
+                { id: 'procedures', label: `Procedimentos (${procedures.length})`, icon: Scissors },
+                { id: 'zemda360', label: 'Zemda360', icon: Activity },
+                { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
+                { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
+                { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
+                { id: 'history', label: 'Histórico Completo', icon: RefreshCw }
+              ].map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    data-active={isActive ? 'true' : 'false'}
+                    data-tour={`tab-${tab.id}`}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                      isActive
+                        ? areaTheme.activeTab
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </HorizontalTabNav>
         </div>
       ) : null}
 

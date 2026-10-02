@@ -47,7 +47,7 @@ import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsM
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
-import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
@@ -78,7 +78,8 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
   >('odontogram');
 
   // Hook para usabilidade e scroll suave das abas odontológicas
-  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
+  const tabScroll = useHorizontalTabScroll(activeTab);
+  const { tabScrollProps } = tabScroll;
 
   // Dossiê do dente
   const [dossierToothNumber, setDossierToothNumber] = useState<number | null>(null);
@@ -705,40 +706,42 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
       </ProfessionalModuleHeader>
 
       {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
-      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
-        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-          {[
-            { id: 'odontogram', label: 'Odontograma 2D', icon: Smile },
-            { id: 'treatment_plans', label: 'Planos & Orçamento', icon: DollarSign },
-            { id: 'perio', label: 'Periodontia (PERIO)', icon: Activity },
-            { id: 'endo', label: 'Endodontia (ENDO)', icon: Scissors },
-            { id: 'prosthetics', label: 'Prótese & Laboratório', icon: Package },
-            { id: 'ortho_hof', label: 'Ortodontia & HOF', icon: Sparkles },
-            { id: 'anamnesis', label: 'Anamnese Odonto', icon: Shield },
-            { id: 'implants', label: 'Implantes & Cirurgia', icon: CheckCircle2 },
-            { id: 'photos_exams', label: 'Fotos & Exames', icon: Camera }
-          ].map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                data-tour={`tab-${tab.id}`}
-                data-active={isActive}
-                type="button"
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                  isActive
-                    ? 'border-cyan-600 text-cyan-700 bg-cyan-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-600' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="bg-white border-b border-slate-200 shrink-0">
+        <HorizontalTabNav scroll={tabScroll}>
+          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+            {[
+              { id: 'odontogram', label: 'Odontograma 2D', icon: Smile },
+              { id: 'treatment_plans', label: 'Planos & Orçamento', icon: DollarSign },
+              { id: 'perio', label: 'Periodontia (PERIO)', icon: Activity },
+              { id: 'endo', label: 'Endodontia (ENDO)', icon: Scissors },
+              { id: 'prosthetics', label: 'Prótese & Laboratório', icon: Package },
+              { id: 'ortho_hof', label: 'Ortodontia & HOF', icon: Sparkles },
+              { id: 'anamnesis', label: 'Anamnese Odonto', icon: Shield },
+              { id: 'implants', label: 'Implantes & Cirurgia', icon: CheckCircle2 },
+              { id: 'photos_exams', label: 'Fotos & Exames', icon: Camera }
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  data-tour={`tab-${tab.id}`}
+                  data-active={isActive}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                    isActive
+                      ? 'border-cyan-600 text-cyan-700 bg-cyan-50/50'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-600' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </HorizontalTabNav>
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}

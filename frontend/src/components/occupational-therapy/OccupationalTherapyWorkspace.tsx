@@ -49,7 +49,7 @@ import { PatientPreviousRecordsModal } from '../clinical/PatientPreviousRecordsM
 import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { PatientFollowUpDocumentModal } from '../clinical/PatientFollowUpDocumentModal';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
-import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
@@ -552,7 +552,8 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
   }, [adlItems]);
 
   // Hook para usabilidade e scroll horizontal suave da barra de abas
-  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
+  const tabScroll = useHorizontalTabScroll(activeTab);
+  const { tabScrollProps } = tabScroll;
 
   // Ferramentas Clínicas Rápidas do ZemdaTO (desacopladas da trilha de abas)
   const toQuickTools: ClinicalQuickToolItem[] = [
@@ -642,42 +643,44 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
       </ProfessionalModuleHeader>
 
       {/* BARRA HORIZONTAL DE ABAS EXCLUSIVA (SEM INTERFERÊNCIA DE ATALHOS) */}
-      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
-        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-          {[
-            { id: 'dashboard', label: 'Painel Funcional', icon: LayoutDashboard },
-            { id: 'profile', label: 'Perfil Ocupacional', icon: User },
-            { id: 'adl', label: 'AVDs & AIVDs (6 Níveis)', icon: Activity },
-            { id: 'sensory', label: 'Perfil Sensorial (8 Sistemas)', icon: Eye },
-            { id: 'motor_cognitive', label: 'Motor & Cognitivo', icon: Brain },
-            { id: 'tests', label: 'Testes & Protocolos Externos', icon: FileText },
-            { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
-            { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
-            { id: 'treatment_plans', label: 'Plano Singular', icon: Layers },
-            { id: 'assistive_tech', label: 'Tecnologia Assistiva', icon: Wrench },
-            { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
-          ].map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                data-tour={`tab-${tab.id}`}
-                data-active={isActive}
-                type="button"
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                  isActive
-                    ? 'border-teal-600 text-teal-700 bg-teal-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="bg-white border-b border-slate-200 shrink-0">
+        <HorizontalTabNav scroll={tabScroll}>
+          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+            {[
+              { id: 'dashboard', label: 'Painel Funcional', icon: LayoutDashboard },
+              { id: 'profile', label: 'Perfil Ocupacional', icon: User },
+              { id: 'adl', label: 'AVDs & AIVDs (6 Níveis)', icon: Activity },
+              { id: 'sensory', label: 'Perfil Sensorial (8 Sistemas)', icon: Eye },
+              { id: 'motor_cognitive', label: 'Motor & Cognitivo', icon: Brain },
+              { id: 'tests', label: 'Testes & Protocolos Externos', icon: FileText },
+              { id: 'goals', label: 'Metas Mensuráveis', icon: Target },
+              { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
+              { id: 'treatment_plans', label: 'Plano Singular', icon: Layers },
+              { id: 'assistive_tech', label: 'Tecnologia Assistiva', icon: Wrench },
+              { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  data-tour={`tab-${tab.id}`}
+                  data-active={isActive}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                    isActive
+                      ? 'border-teal-600 text-teal-700 bg-teal-50/50'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </HorizontalTabNav>
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}

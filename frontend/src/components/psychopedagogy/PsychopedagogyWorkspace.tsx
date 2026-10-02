@@ -9,7 +9,7 @@ import { ExternalTestsManager } from '../common/ExternalTestsManager';
 import { MeasurableGoalsManager } from '../common/MeasurableGoalsManager';
 import { PsychopedagogyDocumentModal, PsychopedagogyDocType } from './PsychopedagogyDocumentModal';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
-import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/ClinicalQuickHeaderActions';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
@@ -83,7 +83,8 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
   const [activeTab, setActiveTab] = useState<TabKey>('evolution');
 
   // Hook para usabilidade e rolagem horizontal suave das abas de Psicopedagogia
-  const { tabScrollProps } = useHorizontalTabScroll(activeTab);
+  const tabScroll = useHorizontalTabScroll(activeTab);
+  const { tabScrollProps } = tabScroll;
 
   // Subaba da área de Aprendizagem
   const [learningSubTab, setLearningSubTab] = useState<LearningSubTab>('reading');
@@ -878,39 +879,41 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
       </ProfessionalModuleHeader>
 
       {/* 1. NAVEGAÇÃO HORIZONTAL NAS 8 ABAS (PADRÃO MODERNO ZEMDA COM SCROLL FLUIDO) */}
-      <div className="bg-white border-b border-slate-200 px-6 shrink-0">
-        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-          {[
-            { id: 'evolution', label: '1. Evolução', icon: Clock },
-            { id: 'profile_anamnese', label: '2. Perfil & Anamnese', icon: BookOpen },
-            { id: 'assessment', label: '3. Avaliação Psicopedagógica', icon: Brain },
-            { id: 'learning', label: '4. Aprendizagem', icon: Pencil },
-            { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
-            { id: 'family_school', label: '6. Família & Escola', icon: School },
-            { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
-            { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
-          ].map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                data-tour={`tab-${tab.id}`}
-                data-active={isActive}
-                type="button"
-                onClick={() => setActiveTab(tab.id as TabKey)}
-                className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                  isActive
-                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="bg-white border-b border-slate-200 shrink-0">
+        <HorizontalTabNav scroll={tabScroll}>
+          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+            {[
+              { id: 'evolution', label: '1. Evolução', icon: Clock },
+              { id: 'profile_anamnese', label: '2. Perfil & Anamnese', icon: BookOpen },
+              { id: 'assessment', label: '3. Avaliação Psicopedagógica', icon: Brain },
+              { id: 'learning', label: '4. Aprendizagem', icon: Pencil },
+              { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
+              { id: 'family_school', label: '6. Família & Escola', icon: School },
+              { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
+              { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  data-tour={`tab-${tab.id}`}
+                  data-active={isActive}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as TabKey)}
+                  className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                    isActive
+                      ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </HorizontalTabNav>
       </div>
 
       {/* ÁREA DE CONTEÚDO PRINCIPAL DAS 8 ABAS */}

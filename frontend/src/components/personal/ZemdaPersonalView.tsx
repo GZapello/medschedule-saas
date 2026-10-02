@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useHorizontalTabScroll } from '../../hooks/useHorizontalTabScroll';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import {
   Dumbbell,
   Users,
@@ -45,7 +45,8 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   // Abas principais
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'students' | 'exercises' | 'templates' | 'calendar'>('dashboard');
 
-  const { tabScrollProps } = useHorizontalTabScroll(currentTab);
+  const tabScroll = useHorizontalTabScroll(currentTab);
+  const { tabScrollProps } = tabScroll;
 
   // Aluno atualmente selecionado para ver perfil detalhado
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || null);
@@ -374,39 +375,41 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
       </ProfessionalModuleHeader>
 
       {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
-      <div className="bg-white border-b border-slate-200 px-3 sm:px-6 shrink-0">
-        <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
-          {[
-            { id: 'dashboard', label: 'Painel de Treinamento', icon: LayoutDashboard },
-            { id: 'students', label: `Alunos & Prescrições (${students.length})`, icon: Users },
-            { id: 'templates', label: 'Modelos de Treino (Templates)', icon: Layers },
-          ].map(tab => {
-            const Icon = tab.icon;
-            const isActive = currentTab === tab.id && !selectedStudentId;
-            return (
-              <button
-                key={tab.id}
-                data-tour={`personal-${tab.id}-tab`}
-                data-active={isActive ? 'true' : 'false'}
-                type="button"
-                onClick={() => {
-                  if (selectedStudentId) {
-                    handleSelectStudent(null);
-                  }
-                  setCurrentTab(tab.id as any);
-                }}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
-                  isActive
-                    ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="bg-white border-b border-slate-200 shrink-0">
+        <HorizontalTabNav scroll={tabScroll}>
+          <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-1 py-1`}>
+            {[
+              { id: 'dashboard', label: 'Painel de Treinamento', icon: LayoutDashboard },
+              { id: 'students', label: `Alunos & Prescrições (${students.length})`, icon: Users },
+              { id: 'templates', label: 'Modelos de Treino (Templates)', icon: Layers },
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = currentTab === tab.id && !selectedStudentId;
+              return (
+                <button
+                  key={tab.id}
+                  data-tour={`personal-${tab.id}-tab`}
+                  data-active={isActive ? 'true' : 'false'}
+                  type="button"
+                  onClick={() => {
+                    if (selectedStudentId) {
+                      handleSelectStudent(null);
+                    }
+                    setCurrentTab(tab.id as any);
+                  }}
+                  className={`flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors cursor-pointer shrink-0 ${
+                    isActive
+                      ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </HorizontalTabNav>
       </div>
 
       {/* CONTEÚDO PRINCIPAL */}

@@ -39,6 +39,7 @@ import { PrintableDocumentModal } from '../clinical/PrintableDocumentModal';
 import { EditPatientModal } from './EditPatientModal';
 import { ClinicalSnapshot } from '../clinical/ClinicalSnapshot';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
+import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 
 interface PatientProfileModalProps {
   patientId: string;
@@ -69,6 +70,9 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<
     'overview' | 'timeline' | 'allergies_meds' | 'records' | 'physiotherapy' | 'dentistry' | 'nutrition' | 'occupational_therapy' | 'speech_therapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
   >('overview');
+
+  const tabScroll = useHorizontalTabScroll(activeTab);
+  const { tabScrollProps } = tabScroll;
 
   const [loading, setLoading] = useState<boolean>(true);
   const [patientData, setPatientData] = useState<any>(null);
@@ -715,49 +719,56 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="bg-slate-50 border-b border-slate-200 px-3 sm:px-6 flex items-center gap-2 overflow-x-auto text-xs font-semibold text-slate-600 no-scrollbar scroll-smooth">
-          {[
-            { id: 'overview', label: 'Visão Geral', icon: User },
-            { id: 'timeline', label: 'Linha do Tempo 360°', icon: Clock },
-            { id: 'allergies_meds', label: 'Alergias & Remédios', icon: AlertTriangle },
-            { id: 'records', label: 'Prontuário & Evolução', icon: FileText },
-            ...(isPhysiotherapist
-              ? [{ id: 'physiotherapy', label: 'ZemdaFisio', icon: Activity }]
-              : []),
-            ...(isDentist || isZemdaOdonto
-              ? [{ id: 'dentistry', label: 'ZemdaOdonto', icon: Smile }]
-              : []),
-            ...(isNutritionist || isZemdaNutri
-              ? [{ id: 'nutrition', label: 'ZemdaNutri', icon: Apple }]
-              : []),
-            ...(isOccupationalTherapist || isZemdaTO
-              ? [{ id: 'occupational_therapy', label: 'ZemdaTO', icon: Hand }]
-              : []),
-            ...(isSpeechTherapist || isZemdaFono
-              ? [{ id: 'speech_therapy', label: 'ZemdaFono', icon: Mic }]
-              : []),
-            { id: 'anamnesis', label: 'Anamneses', icon: Activity },
-            { id: 'exams', label: 'Exames & Laudos IA', icon: FileUp },
-            { id: 'insurances', label: 'Convênios', icon: CreditCard },
-            { id: 'consents', label: 'Consentimentos', icon: ShieldCheck }
-          ].map(tab => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 py-3.5 px-3 border-b-2 font-bold transition-all whitespace-nowrap shrink-0 ${
-                  active
-                    ? 'border-indigo-600 text-indigo-600 bg-white shadow-2xs rounded-t-xl'
-                    : 'border-transparent text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                <Icon className={`w-4 h-4 ${active ? 'text-indigo-600' : 'text-slate-400'}`} />
-                {tab.label}
-              </button>
-            );
-          })}
+        <div className="bg-slate-50 border-b border-slate-200 shrink-0">
+          <HorizontalTabNav scroll={tabScroll} bgTheme="slate-50">
+            <div {...tabScrollProps} className={`${tabScrollProps.className} flex items-center gap-2 text-xs font-semibold text-slate-600 py-1`}>
+              {[
+                { id: 'overview', label: 'Visão Geral', icon: User },
+                { id: 'timeline', label: 'Linha do Tempo 360°', icon: Clock },
+                { id: 'allergies_meds', label: 'Alergias & Remédios', icon: AlertTriangle },
+                { id: 'records', label: 'Prontuário & Evolução', icon: FileText },
+                ...(isPhysiotherapist
+                  ? [{ id: 'physiotherapy', label: 'ZemdaFisio', icon: Activity }]
+                  : []),
+                ...(isDentist || isZemdaOdonto
+                  ? [{ id: 'dentistry', label: 'ZemdaOdonto', icon: Smile }]
+                  : []),
+                ...(isNutritionist || isZemdaNutri
+                  ? [{ id: 'nutrition', label: 'ZemdaNutri', icon: Apple }]
+                  : []),
+                ...(isOccupationalTherapist || isZemdaTO
+                  ? [{ id: 'occupational_therapy', label: 'ZemdaTO', icon: Hand }]
+                  : []),
+                ...(isSpeechTherapist || isZemdaFono
+                  ? [{ id: 'speech_therapy', label: 'ZemdaFono', icon: Mic }]
+                  : []),
+                { id: 'anamnesis', label: 'Anamneses', icon: Activity },
+                { id: 'exams', label: 'Exames & Laudos IA', icon: FileUp },
+                { id: 'insurances', label: 'Convênios', icon: CreditCard },
+                { id: 'consents', label: 'Consentimentos', icon: ShieldCheck }
+              ].map(tab => {
+                const Icon = tab.icon;
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    data-tour={`patient-tab-${tab.id}`}
+                    data-active={active}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`flex items-center gap-2 py-3 px-3 border-b-2 font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                      active
+                        ? 'border-indigo-600 text-indigo-600 bg-white shadow-2xs rounded-t-xl'
+                        : 'border-transparent text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 ${active ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </HorizontalTabNav>
         </div>
 
         {/* Tab Content Container */}
