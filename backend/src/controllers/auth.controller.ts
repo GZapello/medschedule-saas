@@ -1743,9 +1743,15 @@ export class AuthController {
    */
   static async googleAuth(req: Request, res: Response): Promise<void> {
     try {
-      const { idToken, context = 'login', additionalData = {} } = req.body;
+      const idToken = typeof req.body.idToken === 'string' && req.body.idToken.trim()
+        ? req.body.idToken.trim()
+        : typeof req.body.credential === 'string' && req.body.credential.trim()
+        ? req.body.credential.trim()
+        : '';
+      const context = req.body.context || 'login';
+      const additionalData = req.body.additionalData || {};
 
-      if (!idToken || typeof idToken !== 'string') {
+      if (!idToken) {
         res.status(400).json({ error: 'Token do Google (idToken) não fornecido.' });
         return;
       }
@@ -2026,161 +2032,228 @@ export class AuthController {
 
         let createdProfId: string | null = null;
 
-        // Transação atômica
-        db.transaction(() => {
-          // Status inicial para Google: email_verified=1 e onboarding_status='pending_plan' (OTP PULADO!)
-          const initialTenantStatus = 'pending';
-          const initialUserStatus = 'pending';
-          const initialOnboardingStatus = 'pending_plan';
+        // Transação atômica única com rollback integral
+        let currentStep = 'init';
+        try {
+          db.transaction(() => {
+            // Status inicial para Google: email_verified=1 e onboarding_status='pending_plan' (OTP PULADO!)
+            const initialTenantStatus = 'pending';
+            const initialUserStatus = 'pending';
+            const initialOnboardingStatus = 'pending_plan';
 
-          db.prepare(`
-            INSERT INTO tenants (
-              id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
-              city, state, responsible_name, responsible_email, responsible_phone,
-              manager_profession, manager_practice_areas,
-              status, onboarding_status, onboarding_completed, onboarding_step, manager_confirmed,
-              terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
-              terms_version, privacy_version, plan_id, trial_used, billing_required,
-              created_at, updated_at
-            ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?,
-              ?, ?, ?, ?, ?,
-              ?, ?,
-              ?, ?, 0, 1, 1,
-              1, datetime('now'), 1, datetime('now'),
-              ?, ?, ?, ?, 1,
-              datetime('now'), datetime('now')
-            )
-          `).run(
-            tenantId, slug, clinicName, tradeName || clinicName, cnpjCpf || null, cleanEmail, phone || null,
-            city || null, state || null, responsibleName, cleanEmail, phone || null,
-            resolvedProfName || null, managerPracticeAreas || null,
-            initialTenantStatus, initialOnboardingStatus,
-            CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION,
-            startTrial ? soloPlan?.id : selectedPlan?.id || null,
-            startTrial ? 1 : 0
-          );
+            currentStep = 'tenant';
+            try {
+              db.prepare(`
+                INSERT INTO tenants (
+                  id, slug, name, corporate_name, trade_name, cnpj_cpf, email, phone,
+                  city, state, responsible_name, responsible_email, responsible_phone,
+                  manager_profession, manager_practice_areas,
+                  status, onboarding_status, onboarding_completed, onboarding_step, manager_confirmed,
+                  terms_accepted, terms_accepted_at, privacy_accepted, privacy_accepted_at,
+                  terms_version, privacy_version, plan_id, trial_used, billing_required,
+                  created_at, updated_at
+                ) VALUES (
+                  ?, ?, ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?,
+                  ?, ?,
+                  ?, ?, 0, 1, 1,
+                  1, datetime('now'), 1, datetime('now'),
+                  ?, ?, ?, ?, 1,
+                  datetime('now'), datetime('now')
+                )
+              `).run(
+                tenantId,
+                slug,
+                clinicName,
+                clinicName,              // corporate_name
+                tradeName || clinicName, // trade_name
+                cnpjCpf || null,         // cnpj_cpf
+                cleanEmail,              // email
+                phone || null,           // phone
+                city || null,            // city
+                state || null,           // state
+                responsibleName,         // responsible_name
+                cleanEmail,              // responsible_email
+                phone || null,           // responsible_phone
+                resolvedProfName || null,// manager_profession
+                managerPracticeAreas || null, // manager_practice_areas
+                initialTenantStatus,     // status
+                initialOnboardingStatus, // onboarding_status
+                CURRENT_TERMS_VERSION,   // terms_version
+                CURRENT_PRIVACY_VERSION, // privacy_version
+                startTrial ? soloPlan?.id : selectedPlan?.id || null, // plan_id
+                startTrial ? 1 : 0       // trial_used
+              );
+            } catch (err: any) {
+              console.error('[GoogleAuth.signup] Falha ao criar tenant:', err.message || err);
+              throw err;
+            }
 
-          db.prepare(`
-            INSERT INTO users (
-              id, tenant_id, name, email, password_hash, role, phone, status, onboarding_status, email_verified, email_verified_at,
-              google_sub, auth_provider,
-              profession_id, profession_name, practice_areas, registration_type, registration_number,
-              terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
-              zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled,
-              created_at, updated_at
-            ) VALUES (
-              ?, ?, ?, ?, ?, 'clinic_admin', ?, ?, ?, 1, datetime('now'),
-              ?, 'google',
-              ?, ?, ?, ?, ?,
-              ?, ?, datetime('now'), datetime('now'),
-              ?, ?, ?, ?,
-              ?, ?, ?, ?, ?, ?,
-              datetime('now'), datetime('now')
-            )
-          `).run(
-            userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null, initialUserStatus, initialOnboardingStatus,
-            googleSub,
-            resolvedProfId, resolvedProfName, managerPracticeAreas || null, resolvedBoardLabel, managerRegistrationNumber || null,
-            CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION,
-            modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
-            modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
-          );
+            currentStep = 'user';
+            try {
+              db.prepare(`
+                INSERT INTO users (
+                  id, tenant_id, name, email, password_hash, role, phone, status, onboarding_status, email_verified, email_verified_at,
+                  google_sub, auth_provider,
+                  profession_id, profession_name, practice_areas, registration_type, registration_number,
+                  terms_version_accepted, privacy_version_accepted, terms_accepted_at, privacy_accepted_at,
+                  zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+                  zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled,
+                  created_at, updated_at
+                ) VALUES (
+                  ?, ?, ?, ?, ?, 'clinic_admin', ?, ?, ?, 1, datetime('now'),
+                  ?, 'google',
+                  ?, ?, ?, ?, ?,
+                  ?, ?, datetime('now'), datetime('now'),
+                  ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?, ?,
+                  datetime('now'), datetime('now')
+                )
+              `).run(
+                userId, tenantId, responsibleName, cleanEmail, hashedPassword, phone || null, initialUserStatus, initialOnboardingStatus,
+                googleSub,
+                resolvedProfId, resolvedProfName, managerPracticeAreas || null, resolvedBoardLabel, managerRegistrationNumber || null,
+                CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION,
+                modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
+                modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
+              );
+            } catch (err: any) {
+              console.error('[GoogleAuth.signup] Falha ao criar user:', err.message || err);
+              throw err;
+            }
 
-          db.prepare(`
-            INSERT INTO legal_acceptances (
-              id, user_id, clinic_id, terms_version, privacy_version, marketing_opt_in, accepted_at, ip_address, user_agent, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
-          `).run(
-            'la-' + uuidv4().slice(0, 8),
-            userId,
-            tenantId,
-            CURRENT_TERMS_VERSION,
-            CURRENT_PRIVACY_VERSION,
-            optInMarketing,
-            ipAddress,
-            userAgent
-          );
+            currentStep = 'legal_acceptance';
+            try {
+              db.prepare(`
+                INSERT INTO legal_acceptances (
+                  id, user_id, clinic_id, terms_version, privacy_version, marketing_opt_in, accepted_at, ip_address, user_agent, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, datetime('now'))
+              `).run(
+                'la-' + uuidv4().slice(0, 8),
+                userId,
+                tenantId,
+                CURRENT_TERMS_VERSION,
+                CURRENT_PRIVACY_VERSION,
+                optInMarketing,
+                ipAddress,
+                userAgent
+              );
+            } catch (err: any) {
+              console.error('[GoogleAuth.signup] Falha ao criar legal_acceptance:', err.message || err);
+              throw err;
+            }
 
-          db.prepare(`
-            INSERT INTO clinic_users (
-              id, tenant_id, user_id, role, status, is_manager,
-              profession_id, profession_name, profession_custom, practice_areas, permissions_json,
-              zemda_body_enabled, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-              zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled, created_at
-            ) VALUES (
-              ?, ?, ?, 'clinic_admin', ?, 1,
-              ?, ?, ?, ?, ?,
-              0,
-              ?, ?, ?, ?,
-              ?, ?, ?, ?, ?, ?, datetime('now')
-            )
-          `).run(
-            'cu-' + uuidv4().slice(0, 8),
-            tenantId,
-            userId,
-            initialUserStatus,
-            resolvedProfId,
-            resolvedProfName,
-            resolvedProfName,
-            managerPracticeAreas || null,
-            initialPermissions,
-            modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
-            modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
-          );
+            currentStep = 'clinic_user';
+            try {
+              db.prepare(`
+                INSERT INTO clinic_users (
+                  id, tenant_id, user_id, role, status, is_manager,
+                  profession_id, profession_name, profession_custom, practice_areas, permissions_json,
+                  zemda_body_enabled, zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+                  zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled, created_at
+                ) VALUES (
+                  ?, ?, ?, 'clinic_admin', ?, 1,
+                  ?, ?, ?, ?, ?,
+                  0,
+                  ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?, ?, datetime('now')
+                )
+              `).run(
+                'cu-' + uuidv4().slice(0, 8),
+                tenantId,
+                userId,
+                initialUserStatus,
+                resolvedProfId,
+                resolvedProfName,
+                resolvedProfName,
+                managerPracticeAreas || null,
+                initialPermissions,
+                modFlags.zemda_fisio_enabled, modFlags.zemda_odonto_enabled, modFlags.zemda_nutri_enabled, modFlags.zemda_to_enabled,
+                modFlags.zemda_fono_enabled, modFlags.zemda_pp_enabled, modFlags.zemda_psico_enabled, modFlags.zemda_personal_enabled, modFlags.zemda_med_enabled, modFlags.zemda_estetic_enabled || 0
+              );
+            } catch (err: any) {
+              console.error('[GoogleAuth.signup] Falha ao criar clinic_user:', err.message || err);
+              throw err;
+            }
 
-          if (resolvedProfName && resolvedProfName !== 'Gestor / Administrador' && !matchedCatalogProf?.administrative) {
-            createdProfId = 'pro-' + uuidv4().slice(0, 8);
-            db.prepare(`
-              INSERT INTO professionals (
-                id, tenant_id, user_id, name, profession_id, profession_name,
-                registration_type, registration_number, practice_areas, bio, active,
-                zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
-                zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              createdProfId,
-              tenantId,
-              userId,
-              responsibleName,
-              resolvedProfId,
-              resolvedProfName,
-              resolvedBoardLabel,
-              managerRegistrationNumber || null,
-              managerPracticeAreas || null,
-              managerPracticeAreas || null,
-              modFlags.zemda_fisio_enabled,
-              modFlags.zemda_odonto_enabled,
-              modFlags.zemda_nutri_enabled,
-              modFlags.zemda_to_enabled,
-              modFlags.zemda_fono_enabled,
-              modFlags.zemda_pp_enabled,
-              modFlags.zemda_psico_enabled,
-              modFlags.zemda_personal_enabled,
-              modFlags.zemda_med_enabled,
-              modFlags.zemda_estetic_enabled || 0
-            );
-          }
+            if (resolvedProfName && resolvedProfName !== 'Gestor / Administrador' && !matchedCatalogProf?.administrative) {
+              currentStep = 'professional';
+              try {
+                createdProfId = 'pro-' + uuidv4().slice(0, 8);
+                db.prepare(`
+                  INSERT INTO professionals (
+                    id, tenant_id, user_id, name, profession_id, profession_name,
+                    registration_type, registration_number, practice_areas, bio, active,
+                    zemda_fisio_enabled, zemda_odonto_enabled, zemda_nutri_enabled, zemda_to_enabled,
+                    zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled, zemda_med_enabled, zemda_estetic_enabled
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                  createdProfId,
+                  tenantId,
+                  userId,
+                  responsibleName,
+                  resolvedProfId,
+                  resolvedProfName,
+                  resolvedBoardLabel,
+                  managerRegistrationNumber || null,
+                  managerPracticeAreas || null,
+                  managerPracticeAreas || null,
+                  modFlags.zemda_fisio_enabled,
+                  modFlags.zemda_odonto_enabled,
+                  modFlags.zemda_nutri_enabled,
+                  modFlags.zemda_to_enabled,
+                  modFlags.zemda_fono_enabled,
+                  modFlags.zemda_pp_enabled,
+                  modFlags.zemda_psico_enabled,
+                  modFlags.zemda_personal_enabled,
+                  modFlags.zemda_med_enabled,
+                  modFlags.zemda_estetic_enabled || 0
+                );
+              } catch (err: any) {
+                console.error('[GoogleAuth.signup] Falha ao criar professional:', err.message || err);
+                throw err;
+              }
+            }
 
-          db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
-          ensureDefaultClinicService(tenantId, true);
+            currentStep = 'billing_default_service';
+            try {
+              db.prepare('UPDATE tenants SET billing_required=1 WHERE id=?').run(tenantId);
+              ensureDefaultClinicService(tenantId, true);
+            } catch (err: any) {
+              console.error('[GoogleAuth.signup] Falha ao configurar billing/serviço padrão:', err.message || err);
+              throw err;
+            }
 
-          if (startTrial && soloPlan) {
-            db.prepare(`
-              INSERT INTO subscriptions (
-                id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
-                managed, is_current, trial_started_at, trial_ends_at, updated_at
-              ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
-            `).run(subId, tenantId, tenantId, soloPlan.id, trialStartDay, trialEndDay, trialStartedAt, trialEndsAt);
+            if (startTrial && soloPlan) {
+              currentStep = 'subscription_trial';
+              try {
+                db.prepare(`
+                  INSERT INTO subscriptions (
+                    id, tenant_id, clinic_id, plan_id, status, current_period_start, current_period_end,
+                    managed, is_current, trial_started_at, trial_ends_at, updated_at
+                  ) VALUES (?, ?, ?, ?, 'TRIAL', ?, ?, 1, 1, ?, ?, datetime('now'))
+                `).run(subId, tenantId, tenantId, soloPlan.id, trialStartDay, trialEndDay, trialStartedAt, trialEndsAt);
 
-            db.prepare(`
-              INSERT INTO trial_history (
-                id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-            `).run('th-' + uuidv4().slice(0, 8), tenantId, userId, subId, cleanEmail, cnpjCpf || null, trialStartedAt, trialEndsAt);
-          }
-        })();
+                db.prepare(`
+                  INSERT INTO trial_history (
+                    id, tenant_id, user_id, subscription_id, email, cnpj_cpf, started_at, ends_at, status
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+                `).run('th-' + uuidv4().slice(0, 8), tenantId, userId, subId, cleanEmail, cnpjCpf || null, trialStartedAt, trialEndsAt);
+
+                db.prepare(`
+                  INSERT INTO subscription_audit (id, clinic_id, subscription_id, user_id, action, previous_status, next_status, details_json)
+                  VALUES (?, ?, ?, ?, 'TRIAL_STARTED', NULL, 'TRIAL', ?)
+                `).run(uuidv4(), tenantId, subId, userId, JSON.stringify({ planCode: 'SOLO', trialStartedAt, trialEndsAt }));
+              } catch (err: any) {
+                console.error('[GoogleAuth.signup] Falha ao criar assinatura/trial:', err.message || err);
+                throw err;
+              }
+            }
+          })();
+        } catch (txErr: any) {
+          console.error(`[GoogleAuth.signup] Transação abortada na etapa "${currentStep}". Rollback executado.`);
+          throw txErr;
+        }
 
         // Grava áreas de atuação adicionais se fornecidas
         let rawPracticeAreas: string[] = [];
