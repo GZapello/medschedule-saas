@@ -13,7 +13,7 @@ import { migrateModularArchitecture } from './modular-architecture.migration';
 import { migrateMedicalTree } from './medical-tree.migration';
 import { migrateEstetic } from './estetic.migration';
 import { migrateProfessionsNormalization } from './professions-normalization.migration';
-import { migrateProfessionalSlugs } from './slug-migration';
+import { migrateProfessionalSlugs, migrateClinicBooking } from './slug-migration';
 import { dbPath } from './db-path';
 
 const dbDir = path.dirname(dbPath);
@@ -133,7 +133,9 @@ export function initializeDatabase(): void {
     schemaPath = path.resolve(__dirname, '../../src/config/schema.sql');
   }
   if (fs.existsSync(schemaPath)) {
-    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    // Legacy databases may lack columns or contain duplicate booking identities.
+    // Create this index only in the guarded migration, after columns and repairs.
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8').replace(/CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_booking_identity[^;]*;/, '');
     rawDb.exec(schemaSql);
   } else {
     console.warn('[Database] Arquivo schema.sql não encontrado em', schemaPath);
@@ -168,6 +170,10 @@ export function initializeDatabase(): void {
         }
       }
     };
+
+    addColIfMissing('tenants', 'public_booking_enabled', 'INTEGER NOT NULL DEFAULT 0');
+    addColIfMissing('tenants', 'public_booking_slug', 'TEXT');
+    addColIfMissing('tenants', 'public_booking_sequence', 'INTEGER');
 
     // Colunas em tenants
     addColIfMissing('tenants', 'corporate_name', 'TEXT');
@@ -2920,6 +2926,7 @@ export function initializeDatabase(): void {
   migratePersonalStudentLinks(rawDb);
   seedExerciseLibrary(rawDb);
   seedNutritionFoodDatabase(rawDb);
+  migrateClinicBooking(rawDb);
   repairLegacyPhotoUrls(rawDb);
 }
 

@@ -72,6 +72,9 @@ CREATE TABLE IF NOT EXISTS tenants (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
+  public_booking_enabled INTEGER NOT NULL DEFAULT 0,
+  public_booking_slug TEXT,
+  public_booking_sequence INTEGER,
   corporate_name TEXT, -- Razão Social
   trade_name TEXT,     -- Nome Fantasia
   person_type TEXT NOT NULL DEFAULT 'pj' CHECK(person_type IN ('pj', 'pf')),
@@ -124,6 +127,8 @@ CREATE TABLE IF NOT EXISTS tenants (
   FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE SET NULL
 );
 
+-- Bootstrap defers this unique index until legacy duplicates have been repaired.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_booking_identity ON tenants(public_booking_slug, public_booking_sequence);
 CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants (slug);
 CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants (status);
 

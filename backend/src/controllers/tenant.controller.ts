@@ -1,4 +1,4 @@
-import { ensureClinicBookingIdentity } from '../utils/slug';
+import { ensureClinicBookingIdentity } from '../utils/clinic-booking-identity';
 import { resolveBookingTenant } from '../utils/public-booking';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { respondBillingError } from './billing.controller';
