@@ -85,6 +85,7 @@ api.post('/v1/public/email/verify-code', EmailVerificationController.verifyCode)
 
 // Autenticação e Registro Público
 api.post('/v1/auth/login', AuthController.login);
+api.post('/v1/auth/google', AuthController.googleAuth);
 api.post('/v1/auth/register', AuthController.register);
 api.post('/v1/public/auth/reset-password', AuthController.resetPassword);
 api.post('/v1/auth/reset-password', AuthController.resetPassword);
