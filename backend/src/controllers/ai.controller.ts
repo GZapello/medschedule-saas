@@ -1,3 +1,4 @@
+import { validatePsychologyExtraction } from '../services/speech-diarization.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { calculateAvailableSlots } from '../utils/slot-calculator';
@@ -1418,6 +1419,15 @@ Paciente ${patientName} encontra-se em acompanhamento fonoaudiológico sistemát
         return;
       }
 
+      if (!tenantId || !patientId || !db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId)) {
+        res.status(404).json({ error: 'Paciente não encontrado neste contexto.' }); return;
+      }
+      if (appointmentId && !db.prepare('SELECT id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)) {
+        res.status(404).json({ error: 'Atendimento não encontrado neste contexto.' }); return;
+      }
+      if (!Array.isArray(transcript) || transcript.length > 1000 || transcript.some(s => !s || typeof s.text !== 'string') || transcript.reduce((n, s) => n + s.text.length, 0) > 100000) {
+        res.status(400).json({ error: 'Transcrição inválida ou muito extensa.' }); return;
+      }
       // Normaliza transcript para DiarizedSegment[]
       let segments: DiarizedSegment[] = [];
       if (Array.isArray(transcript)) {
@@ -1426,17 +1436,23 @@ Paciente ${patientName} encontra-se em acompanhamento fonoaudiológico sistemát
           speakerId: s.speakerId || 'speaker_1',
           role: s.role,
           text: String(s.text || '').trim(),
-          startTime: typeof s.startTime === 'number' ? s.startTime : idx * 5,
-          endTime: typeof s.endTime === 'number' ? s.endTime : (idx + 1) * 5
+          startTime: typeof s.startTime === 'number' && Number.isFinite(s.startTime) && s.startTime >= 0 ? s.startTime : undefined,
+          endTime: typeof s.endTime === 'number' ? s.endTime : undefined
         })).filter(s => s.text.length > 0);
       } else if (typeof transcript === 'string') {
         segments = parseTranscriptToDiarizedSegments(transcript);
       }
 
-      const speakersMap: Record<string, string> = (speakers && typeof speakers === 'object') ? speakers : {
-        speaker_1: 'professional',
-        speaker_2: 'patient'
-      };
+      const speakersMap: Record<string, string> = {};
+      for (const segment of segments) {
+        const role = speakers?.[segment.speakerId];
+        if (!['professional', 'patient', 'family', 'other'].includes(role)) {
+          res.status(400).json({ error: 'Confirme o papel de cada falante antes de organizar.' }); return;
+        }
+        speakersMap[segment.speakerId] = role;
+        segment.role = role;
+      }
+      if (!segments.length) { res.status(400).json({ error: 'Nenhum turno contém texto.' }); return; }
 
       // Tenta processar com Gemini
       if (GeminiService.isAvailable()) {
@@ -1451,13 +1467,13 @@ Paciente ${patientName} encontra-se em acompanhamento fonoaudiológico sistemát
               success: true,
               provider: 'Google Gemini',
               summary: geminiResult.summary,
-              sections: geminiResult.sections,
+              sections: validatePsychologyExtraction(geminiResult.sections, segments, speakersMap),
               disclaimer: 'Conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde (CFP).'
             });
             return;
           }
         } catch (gemErr) {
-          console.warn('[AIController.structurePsychologyTranscript] Gemini falhou, usando fallback heurístico:', gemErr);
+          console.warn('[AIController.structurePsychologyTranscript] Provedor indisponível');
         }
       }
 
@@ -1466,13 +1482,13 @@ Paciente ${patientName} encontra-se em acompanhamento fonoaudiológico sistemát
 
       res.json({
         success: true,
-        provider: 'Motor Local Inteligente',
-        summary: 'Estruturação baseada em análise dos turnos da sessão.',
+        provider: 'IA indisponível',
+        summary: 'Provedor de IA indisponível. Nenhuma sugestão clínica foi gerada; tente novamente ou preencha manualmente.',
         sections: localExtraction,
         disclaimer: 'Conteúdo gerado atua como rascunho de apoio. A validação técnica e decisão clínica são exclusivas do profissional de saúde (CFP).'
       });
     } catch (err: any) {
-      console.error('[AIController.structurePsychologyTranscript] Erro ao estruturar transcrição:', err);
+      console.error('[AIController.structurePsychologyTranscript] Falha de estruturação');
       res.status(500).json({ error: 'Erro ao processar estruturação clínica do atendimento.' });
     }
   }
@@ -1486,7 +1502,7 @@ Paciente ${patientName} encontra-se em acompanhamento fonoaudiológico sistemát
         providers: DIARIZATION_PROVIDERS,
         defaultBrowserProvider: 'web_speech_api',
         geminiMultimodalAvailable: GeminiService.isAvailable(),
-        privacyNotice: 'Zero armazenamento permanente de áudio. Diarização por speaker acústico com mapeamento de papéis confirmado pelo profissional.'
+        privacyNotice: 'Este fluxo recebe texto, sem armazenar áudio. Web Speech API: transcrição por turnos com papéis confirmados pelo profissional; sem diarização acústica.'
       });
     } catch (err) {
       res.status(500).json({ error: 'Erro ao obter status de diarização' });

@@ -1,3 +1,97 @@
+export const PSYCHOLOGY_FIELDS = {
+  "session": {
+    "currentDemand": "Demanda Atual",
+    "relevantThemes": "Temas Relevantes",
+    "interventionsUsed": "Intervenções Utilizadas",
+    "patientResponse": "Resposta do Paciente",
+    "clinicalEvolution": "Evolução Clínica",
+    "conductPlan": "Conduta",
+    "referrals": "Encaminhamentos",
+    "nextSessionPlan": "Planejamento da Próxima Sessão",
+    "sessionRiskNotes": "Observações de Risco"
+  },
+  "anamnesis": {
+    "mainComplaint": "Queixa Principal",
+    "demandHistory": "História da Demanda",
+    "psychPsychiatricHistory": "Histórico Psicológico e Psiquiátrico",
+    "medicalHistory": "Histórico Médico",
+    "currentMedications": "Medicações Atuais",
+    "sleepPatterns": "Padrões de Sono",
+    "eatingHabits": "Hábitos Alimentares",
+    "physicalActivity": "Atividade Física",
+    "substanceUse": "Uso de Substâncias",
+    "familyContext": "Contexto Familiar",
+    "developmentalHistory": "Histórico do Desenvolvimento",
+    "maritalRelationshipContext": "Contexto Conjugal",
+    "academicEducationalContext": "Contexto Acadêmico e Educacional",
+    "professionalWorkContext": "Contexto Profissional",
+    "socialContext": "Contexto Social",
+    "supportNetwork": "Rede de Apoio",
+    "protectiveFactors": "Fatores Protetivos",
+    "vulnerabilityFactors": "Fatores de Vulnerabilidade",
+    "significantLifeEvents": "Eventos de Vida Significativos",
+    "previousTreatments": "Tratamentos Anteriores",
+    "treatmentGoals": "Objetivos do Tratamento",
+    "theoreticalApproach": "Abordagem Teórica",
+    "clinicalObservations": "Observações Clínicas"
+  },
+  "mentalState": {
+    "appearance": "Aparência",
+    "attitudeBehavior": "Atitude e Comportamento",
+    "consciousnessLevel": "Nível de Consciência",
+    "orientation": "Orientação",
+    "attention": "Atenção",
+    "memory": "Memória",
+    "languageSpeech": "Linguagem e Fala",
+    "psychomotor": "Psicomotricidade",
+    "mood": "Humor",
+    "affect": "Afeto",
+    "thoughtProcess": "Processo do Pensamento",
+    "sensoryPerception": "Sensopercepção",
+    "cognitiveFunctions": "Funções Cognitivas",
+    "criticalJudgment": "Juízo Crítico",
+    "insight": "Insight",
+    "impulseControl": "Controle de Impulsos",
+    "currentRisk": "Risco Atual",
+    "observations": "Observações"
+  },
+  "riskAssessment": {
+    "suicidalIdeation": "Ideação Suicida",
+    "selfHarm": "Autolesão",
+    "planning": "Planejamento",
+    "intentLevel": "Intenção Verbalizada",
+    "meansAccess": "Acesso a Meios",
+    "historyPreviousAttempts": "Tentativas Anteriores",
+    "precipitatingFactors": "Fatores Precipitantes",
+    "protectiveFactors": "Fatores Protetivos",
+    "supportNetworkActionable": "Rede de Apoio Acionável",
+    "conductAdopted": "Conduta Adotada",
+    "referralDestination": "Destino do Encaminhamento",
+    "safetyPlan": "Plano de Segurança",
+    "reassessmentSchedule": "Reavaliação",
+    "clinicianSummary": "Síntese do Profissional"
+  },
+  "assessment": {
+    "assessmentTitle": "Título da Avaliação",
+    "purpose": "Finalidade",
+    "demandDescription": "Descrição da Demanda",
+    "fundamentalSources": "Fontes Fundamentais",
+    "complementarySources": "Fontes Complementares",
+    "clinicalIntegrationAnalysis": "Análise de Integração Clínica",
+    "conclusionSynthesis": "Síntese Conclusiva",
+    "professionalSynthesis": "Síntese Profissional do Instrumento"
+  },
+  "screenings": {
+    "clinicalNotes": "Notas Clínicas"
+  },
+  "goals": {
+    "title": "Título",
+    "indicator": "Indicador",
+    "targetPeriod": "Prazo",
+    "strategy": "Estratégia",
+    "notes": "Observações"
+  }
+} as const;
 // ============================================================================
 // ZEMDAPsico — Serviço de Diarização de Falantes & Provedores de Áudio
 // ============================================================================
@@ -66,7 +160,7 @@ export const DIARIZATION_PROVIDERS: DiarizationProviderInfo[] = [
     providerType: 'cloud_stt',
     supportsRealtimeDiarization: true,
     supportsRecordedDiarization: true,
-    status: process.env.GOOGLE_APPLICATION_CREDENTIALS ? 'active' : 'requires_configuration',
+    status: 'requires_configuration',
     limitationDescription: undefined,
     configurationRequirement:
       'Requer chave de serviço Google Cloud com permissão para Speech-to-Text v2 e ativação de diarizationConfig { minSpeakerCount: 2, maxSpeakerCount: 4 }.'
@@ -77,7 +171,7 @@ export const DIARIZATION_PROVIDERS: DiarizationProviderInfo[] = [
     providerType: 'cloud_ai',
     supportsRealtimeDiarization: false,
     supportsRecordedDiarization: true,
-    status: process.env.GEMINI_API_KEY ? 'active' : 'requires_configuration',
+    status: 'requires_configuration',
     limitationDescription:
       'Requer envio de arquivo ou chunks de áudio pré-gravados em formato AAC/WebM/WAV para processamento pelo modelo multimodal com instrução de diarização.',
     configurationRequirement: 'Configurar GEMINI_API_KEY no arquivo .env do backend.'
@@ -140,24 +234,9 @@ export function parseTranscriptToDiarizedSegments(rawText: string): DiarizedSegm
         id: `seg_${Date.now()}_${segmentIndex++}`,
         speakerId: currentSpeakerId,
         text: content.trim(),
-        startTime: startTime !== undefined ? startTime : (segmentIndex - 1) * 5,
-        endTime: startTime !== undefined ? startTime + 5 : segmentIndex * 5
+        startTime
       });
     }
-  }
-
-  // Fallback se nenhuma linha foi parseada com tokens de falante: divide por parágrafos alternando falantes
-  if (segments.length === 0 && rawText.trim()) {
-    const rawParagraphs = rawText.split(/[.\n]+/).map(p => p.trim()).filter(p => p.length > 5);
-    rawParagraphs.forEach((p, idx) => {
-      segments.push({
-        id: `seg_${Date.now()}_${idx + 1}`,
-        speakerId: idx % 2 === 0 ? 'speaker_1' : 'speaker_2',
-        text: p,
-        startTime: idx * 8,
-        endTime: (idx + 1) * 8
-      });
-    });
   }
 
   return segments;
@@ -168,287 +247,37 @@ export function parseTranscriptToDiarizedSegments(rawText: string): DiarizedSegm
  * Usado como fallback quando o Gemini não estiver conectado ou falhar.
  * NUNCA inventa dados ausentes, NUNCA prescreve diagnósticos e NUNCA gera scores de risco.
  */
-export function extractPsychologySectionsLocalFallback(
-  segments: DiarizedSegment[],
-  speakersMap: Record<string, string> // Ex: { speaker_1: 'professional', speaker_2: 'patient' }
-): {
-  session: Record<string, StructuredFieldSuggestion | null>;
-  anamnesis: Record<string, StructuredFieldSuggestion | null>;
-  mentalState: Record<string, StructuredFieldSuggestion | null>;
-  riskAssessment: Record<string, StructuredFieldSuggestion | null>;
-  assessment: Record<string, StructuredFieldSuggestion | null>;
-  goals: any[];
-} {
-  const patientSegments: DiarizedSegment[] = [];
-  const professionalSegments: DiarizedSegment[] = [];
-  const otherSegments: DiarizedSegment[] = [];
+export function emptyPsychologySections(): any {
+  return Object.fromEntries(Object.entries(PSYCHOLOGY_FIELDS).map(([section, fields]) =>
+    [section, section === 'goals' ? [] : Object.fromEntries(Object.keys(fields).map(field => [field, null]))]));
+}
 
-  for (const seg of segments) {
-    const role = seg.role || speakersMap[seg.speakerId] || (seg.speakerId === 'speaker_1' ? 'professional' : 'patient');
-    if (role === 'patient') {
-      patientSegments.push(seg);
-    } else if (role === 'professional') {
-      professionalSegments.push(seg);
-    } else {
-      otherSegments.push(seg);
-    }
-  }
-
-  const patientText = patientSegments.map(s => s.text).join(' ');
-  const professionalText = professionalSegments.map(s => s.text).join(' ');
-  const fullText = segments.map(s => s.text).join(' ');
-
-  // Helpers de evidência
-  const findEvidence = (keywords: string[], segList: DiarizedSegment[] = segments): DiarizationEvidence[] => {
-    const ev: DiarizationEvidence[] = [];
-    for (const seg of segList) {
-      const lower = seg.text.toLowerCase();
-      if (keywords.some(k => lower.includes(k))) {
-        const role = seg.role || speakersMap[seg.speakerId] || (seg.speakerId === 'speaker_1' ? 'Profissional' : 'Paciente');
-        ev.push({
-          speaker: seg.speakerId,
-          role,
-          text: seg.text,
-          startTime: seg.startTime
-        });
+// Accept only allowlisted fields with evidence tied to a submitted turn.
+export function validatePsychologyExtraction(raw: any, segments: DiarizedSegment[], speakers: Record<string, string>): any {
+  const sections = emptyPsychologySections();
+  const evidenceFor = (items: any): DiarizationEvidence[] => !Array.isArray(items) ? [] : items.flatMap((e: any) => {
+    const source = segments.find(s => s.speakerId === e?.speaker && typeof e?.text === 'string' && e.text.trim() && s.text.includes(e.text) && (e.startTime === undefined || e.startTime === s.startTime));
+    return source ? [{ speaker: source.speakerId, role: speakers[source.speakerId], text: e.text, startTime: source.startTime }] : [];
+  });
+  for (const [section, fields] of Object.entries(PSYCHOLOGY_FIELDS)) {
+    if (section === 'goals') continue;
+    for (const [field, label] of Object.entries(fields)) {
+      const item = raw?.[section]?.[field];
+      const evidence = evidenceFor(item?.evidence);
+      if (typeof item?.value === 'string' && item.value.trim() && evidence.length) {
+        sections[section][field] = { label, value: item.value.trim(), evidence, requiresProfessionalReview: true };
       }
     }
-    return ev.slice(0, 3);
-  };
-
-  // 1. SESSÃO & EVOLUÇÃO
-  const demandEv = findEvidence(['sinto', 'angústia', 'angustia', 'ansiedade', 'triste', 'difícil', 'dificuldade', 'trabalho', 'conflito', 'demanda', 'problema', 'insegurança'], patientSegments);
-  const currentDemand = demandEv.length > 0 ? {
-    label: 'Demanda Atual da Sessão',
-    value: `Paciente relata como demanda central: ${demandEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: demandEv
-  } : null;
-
-  const themesEv = findEvidence(['família', 'familia', 'trabalho', 'relacionamento', 'cobrança', 'medo', 'isolamento', 'autoestima', 'rotina', 'autonomia'], segments);
-  const relevantThemes = themesEv.length > 0 ? {
-    label: 'Temas Relevantes Trabalhados',
-    value: `Conteúdos emergentes na sessão envolveram: ${themesEv.map(e => e.text).join('; ')}.`,
-    evidence: themesEv
-  } : null;
-
-  const intervEv = findEvidence(['escuta', 'acolhimento', 'psicoeducação', 'psicoeducacao', 'técnica', 'tecnica', 'exercício', 'exercicio', 'questionei', 'pontuado', 'intervenção', 'intervencao', 'trabalhamos'], professionalSegments.length > 0 ? professionalSegments : segments);
-  const interventionsUsed = intervEv.length > 0 ? {
-    label: 'Intervenções Clínicas Utilizadas',
-    value: `Foram realizadas intervenções de escuta clínica qualificada, acolhimento das queixas e técnicas voltadas à elaboração dos conteúdos reflexivos trazidos.`,
-    evidence: intervEv
-  } : (professionalSegments.length > 0 ? {
-    label: 'Intervenções Clínicas Utilizadas',
-    value: 'Escuta clínica ativa, acolhimento psicológico e pontuações reflexivas durante o diálogo terapêutico.',
-    evidence: professionalSegments.slice(0, 2).map(s => ({ speaker: s.speakerId, role: 'Profissional', text: s.text, startTime: s.startTime }))
-  } : null);
-
-  const respEv = findEvidence(['compreendi', 'faz sentido', 'percebi', 'ajudou', 'sinto alívio', 'alivio', 'clareou', 'difícil aceitar'], patientSegments);
-  const patientResponse = respEv.length > 0 ? {
-    label: 'Resposta do Paciente',
-    value: `Paciente demonstrou engajamento com as pontuações clínicas realizadas, manifestando acolhimento da reflexão.`,
-    evidence: respEv
-  } : null;
-
-  const clinicalEvolution = {
-    label: 'Relato da Evolução Clínica',
-    value: `**Demanda e Escuta:** ${currentDemand ? currentDemand.value : 'Paciente compareceu ao atendimento e expôs vivências da semana.'}\n\n**Processo Terapêutico:** Realizada escuta orientada, explorando dinâmica afetiva e fatores de manutenção do sofrimento psíquico relatado.\n\n**Intervenções:** ${interventionsUsed ? interventionsUsed.value : 'Acolhimento clínico e manejo verbal.'}`,
-    evidence: demandEv.concat(intervEv).slice(0, 4)
-  };
-
-  const planEv = findEvidence(['próxima', 'proxima', 'manter', 'semana que vem', 'tarefa', 'registro', 'combinamos', 'continuidade', 'frequência'], segments);
-  const conductPlan = {
-    label: 'Conduta e Encaminhamentos',
-    value: planEv.length > 0
-      ? `Manutenção do acompanhamento psicológico regular. Combinados alinhados: ${planEv.map(e => e.text).join(' ')}`
-      : 'Manutenção do acompanhamento clínico com frequência semanal.',
-    evidence: planEv
-  };
-
-  const nextSessionPlan = planEv.length > 0 ? {
-    label: 'Planejamento para a Próxima Sessão',
-    value: `Retomar pontos emergentes desta sessão e avaliar desdobramentos dos acordos pactuados.`,
-    evidence: planEv
-  } : null;
-
-  const sessionRiskEv = findEvidence(['desespero', 'sumir', 'não aguento', 'nao aguento', 'cansado de viver', 'machucar'], patientSegments);
-  const sessionRiskNotes = sessionRiskEv.length > 0 ? {
-    label: 'Observações de Risco da Sessão',
-    value: `Trecho com expressão de sofrimento psíquico intenso registrado: ${sessionRiskEv.map(e => `"${e.text}"`).join(' ')}. Necessária revisão clínica detalhada.`,
-    evidence: sessionRiskEv,
-    requiresProfessionalReview: true
-  } : null;
-
-  // 2. ANAMNESE PSICOLÓGICA (APENAS SE MENCIONADO)
-  const patientAndFamily = patientSegments.concat(otherSegments);
-  const sleepEv = findEvidence(['dorm', 'sono', 'insôn', 'inson', 'acordo', 'desperto', 'pesadelo'], patientAndFamily);
-  const sleepPatterns = sleepEv.length > 0 ? {
-    label: 'Padrões de Sono',
-    value: `Paciente/familiar relata aspectos da rotina de sono: ${sleepEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: sleepEv
-  } : null;
-
-  const medEv = findEvidence(['remédio', 'remedio', 'medicação', 'medicacao', 'psiquiatra', 'comprimido', 'droga', 'dosagem'], segments);
-  const currentMedications = medEv.length > 0 ? {
-    label: 'Medicações em Uso',
-    value: `Menção a tratamento medicamentoso durante o relato: ${medEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: medEv
-  } : null;
-
-  const workEv = findEvidence(['trabalho', 'emprego', 'chefe', 'empresa', 'demissão', 'demissao', 'cargo', 'profissão', 'profissao'], patientSegments);
-  const professionalWorkContext = workEv.length > 0 ? {
-    label: 'Contexto Profissional e Ocupacional',
-    value: `Aspectos profissionais citados na sessão: ${workEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: workEv
-  } : null;
-
-  const familyEv = findEvidence(['mãe', 'mae', 'pai', 'filho', 'filha', 'marido', 'esposa', 'irmão', 'irmao', 'família', 'familia'], patientSegments);
-  const familyContext = familyEv.length > 0 ? {
-    label: 'Contexto Familiar',
-    value: `Relato envolvendo dinâmica familiar: ${familyEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: familyEv
-  } : null;
-
-  const eatingEv = findEvidence(['alimentação', 'alimentacao', 'apetite', 'comida', 'comer', 'refeição'], patientSegments);
-  const eatingHabits = eatingEv.length > 0 ? {
-    label: 'Hábitos Alimentares',
-    value: `Informação sobre apetite/alimentação referida: ${eatingEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: eatingEv
-  } : null;
-
-  // 3. EXAME DO ESTADO MENTAL (EEM) — Nunca inferir o que não foi dito
-  const moodEv = findEvidence(['triste', 'angustiado', 'ansioso', 'desanimado', 'alegre', 'irritado', 'bravo', 'estressado', 'humor'], patientSegments);
-  const mood = moodEv.length > 0 ? {
-    label: 'Humor (Relatado pelo Paciente)',
-    value: `Verbalização compatível com humor que oscila em torno de: ${moodEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: moodEv
-  } : null;
-
-  const thoughtEv = findEvidence(['pensamento', 'não consigo parar de pensar', 'fico pensando', 'ideia', 'ruminação', 'ruminacao'], patientSegments);
-  const thoughtProcess = thoughtEv.length > 0 ? {
-    label: 'Processo e Conteúdo do Pensamento',
-    value: `Paciente verbaliza curso de pensamento com foco em: ${thoughtEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: thoughtEv
-  } : null;
-
-  const eemObsEv = moodEv.concat(thoughtEv).slice(0, 3);
-  const eemObservations = eemObsEv.length > 0 ? {
-    label: 'Observações Fenomenológicas do EEM',
-    value: `Síntese dos aspectos clínicos expressos verbalmente durante a consulta.`,
-    evidence: eemObsEv
-  } : null;
-
-  // 4. AVALIAÇÃO DE RISCO ESTRUTURADA — Apenas trechos literais, SEM ESCORES
-  const riskIdeationEv = findEvidence(['morrer', 'acabar com tudo', 'não acordar', 'nao acordar', 'desaparecer', 'vida não vale', 'tirar minha vida'], patientSegments);
-  const suicidalIdeation = riskIdeationEv.length > 0 ? {
-    label: 'Ideação Suicida (Relato Literal)',
-    value: `Paciente verbalizou expressamente em sessão: ${riskIdeationEv.map(e => `"${e.text}"`).join(' ')}. Requer acolhimento clínico e avaliação aprofundada de segurança pelo profissional.`,
-    evidence: riskIdeationEv,
-    requiresProfessionalReview: true
-  } : null;
-
-  const supportNetEv = findEvidence(['amigo', 'amiga', 'rede', 'apoio', 'minha mãe', 'meu parceiro', 'ajuda'], patientSegments);
-  const supportNetworkActionable = supportNetEv.length > 0 ? {
-    label: 'Rede de Apoio Acionável Citada',
-    value: `Pessoas ou vínculos de suporte mencionados pelo paciente: ${supportNetEv.map(e => `"${e.text}"`).join(' ')}`,
-    evidence: supportNetEv
-  } : null;
-
-  // 5. METAS TERAPÊUTICAS PACTUADAS
-  const goals: any[] = [];
-  const goalKeywordsEv = findEvidence(['meta', 'objetivo', 'combinado', 'vamos tentar', 'praticar', 'exercício diário', 'higiene do sono'], segments);
-  if (goalKeywordsEv.length > 0) {
-    goals.push({
-      title: 'Manejo e estratégias combinadas em sessão',
-      indicator: 'Adesão aos pontos combinados e relato de bem-estar na próxima sessão',
-      targetPeriod: 'Até o próximo atendimento',
-      strategy: goalKeywordsEv.map(e => e.text).join('; '),
-      notes: 'Pactuado colaborativamente entre profissional e paciente.',
-      evidence: goalKeywordsEv
-    });
   }
+  if (Array.isArray(raw?.goals)) for (const goal of raw.goals) {
+    const evidence = evidenceFor(goal.evidence);
+    if (goal.agreedExplicitly !== true || !evidence.some(e => e.role === 'patient') || !evidence.some(e => e.role === 'professional') || typeof goal.title !== 'string' || !goal.title.trim()) continue;
+    sections.goals.push(Object.assign(Object.fromEntries(Object.keys(PSYCHOLOGY_FIELDS.goals).map(k => [k, typeof goal[k] === 'string' ? goal[k] : null])), { evidence, requiresProfessionalReview: true }));
+  }
+  return sections;
+}
 
-  return {
-    session: {
-      currentDemand,
-      relevantThemes,
-      interventionsUsed,
-      patientResponse,
-      clinicalEvolution,
-      conductPlan,
-      referrals: null,
-      nextSessionPlan,
-      sessionRiskNotes
-    },
-    anamnesis: {
-      mainComplaint: currentDemand ? { label: 'Queixa Principal', value: currentDemand.value, evidence: currentDemand.evidence } : null,
-      demandHistory: null,
-      psychPsychiatricHistory: null,
-      medicalHistory: null,
-      currentMedications,
-      sleepPatterns,
-      eatingHabits,
-      physicalActivity: null,
-      substanceUse: null,
-      familyContext,
-      developmentalHistory: null,
-      maritalRelationshipContext: null,
-      academicEducationalContext: null,
-      professionalWorkContext,
-      socialContext: null,
-      supportNetwork: supportNetworkActionable,
-      protectiveFactors: null,
-      vulnerabilityFactors: null,
-      significantLifeEvents: null,
-      previousTreatments: null,
-      treatmentGoals: null,
-      theoreticalApproach: null,
-      clinicalObservations: null
-    },
-    mentalState: {
-      appearance: null, // Veto a suposição automática
-      attitudeBehavior: null,
-      consciousnessLevel: null,
-      orientation: null, // Veto a "orientado" sem evidência
-      attention: null,
-      memory: null,
-      languageSpeech: null,
-      psychomotor: null,
-      mood,
-      affect: null,
-      thoughtProcess,
-      sensoryPerception: null,
-      cognitiveFunctions: null,
-      criticalJudgment: null,
-      insight: null,
-      impulseControl: null,
-      currentRisk: sessionRiskNotes,
-      observations: eemObservations
-    },
-    riskAssessment: {
-      suicidalIdeation,
-      selfHarm: null,
-      planning: null,
-      intentLevel: null,
-      meansAccess: null,
-      historyPreviousAttempts: null,
-      precipitatingFactors: null,
-      protectiveFactors: null,
-      supportNetworkActionable,
-      conductAdopted: null,
-      referralDestination: null,
-      safetyPlan: null,
-      reassessmentSchedule: null,
-      clinicianSummary: null
-    },
-    assessment: {
-      assessmentTitle: null,
-      purpose: null,
-      demandDescription: currentDemand ? { label: 'Descrição da Demanda', value: currentDemand.value, evidence: currentDemand.evidence } : null,
-      fundamentalSources: null,
-      complementarySources: null,
-      clinicalIntegrationAnalysis: null,
-      conclusionSynthesis: null
-    },
-    goals
-  };
+// No clinical inference when the language model is unavailable.
+export function extractPsychologySectionsLocalFallback(_segments: DiarizedSegment[], _speakers: Record<string, string>): any {
+  return emptyPsychologySections();
 }

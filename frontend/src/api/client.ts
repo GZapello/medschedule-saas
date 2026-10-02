@@ -249,9 +249,10 @@ export class ApiClient {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
-  static post<T>(endpoint: string, data?: any): Promise<T> {
+  static post<T>(endpoint: string, data?: any, options: { signal?: AbortSignal } = {}): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
+      ...options,
       body: data ? JSON.stringify(data) : undefined
     });
   }

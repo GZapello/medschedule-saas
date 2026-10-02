@@ -1,3 +1,98 @@
+import { ApiClient } from '../api/client';
+export const PSYCHOLOGY_FIELDS = {
+  "session": {
+    "currentDemand": "Demanda Atual",
+    "relevantThemes": "Temas Relevantes",
+    "interventionsUsed": "Intervenções Utilizadas",
+    "patientResponse": "Resposta do Paciente",
+    "clinicalEvolution": "Evolução Clínica",
+    "conductPlan": "Conduta",
+    "referrals": "Encaminhamentos",
+    "nextSessionPlan": "Planejamento da Próxima Sessão",
+    "sessionRiskNotes": "Observações de Risco"
+  },
+  "anamnesis": {
+    "mainComplaint": "Queixa Principal",
+    "demandHistory": "História da Demanda",
+    "psychPsychiatricHistory": "Histórico Psicológico e Psiquiátrico",
+    "medicalHistory": "Histórico Médico",
+    "currentMedications": "Medicações Atuais",
+    "sleepPatterns": "Padrões de Sono",
+    "eatingHabits": "Hábitos Alimentares",
+    "physicalActivity": "Atividade Física",
+    "substanceUse": "Uso de Substâncias",
+    "familyContext": "Contexto Familiar",
+    "developmentalHistory": "Histórico do Desenvolvimento",
+    "maritalRelationshipContext": "Contexto Conjugal",
+    "academicEducationalContext": "Contexto Acadêmico e Educacional",
+    "professionalWorkContext": "Contexto Profissional",
+    "socialContext": "Contexto Social",
+    "supportNetwork": "Rede de Apoio",
+    "protectiveFactors": "Fatores Protetivos",
+    "vulnerabilityFactors": "Fatores de Vulnerabilidade",
+    "significantLifeEvents": "Eventos de Vida Significativos",
+    "previousTreatments": "Tratamentos Anteriores",
+    "treatmentGoals": "Objetivos do Tratamento",
+    "theoreticalApproach": "Abordagem Teórica",
+    "clinicalObservations": "Observações Clínicas"
+  },
+  "mentalState": {
+    "appearance": "Aparência",
+    "attitudeBehavior": "Atitude e Comportamento",
+    "consciousnessLevel": "Nível de Consciência",
+    "orientation": "Orientação",
+    "attention": "Atenção",
+    "memory": "Memória",
+    "languageSpeech": "Linguagem e Fala",
+    "psychomotor": "Psicomotricidade",
+    "mood": "Humor",
+    "affect": "Afeto",
+    "thoughtProcess": "Processo do Pensamento",
+    "sensoryPerception": "Sensopercepção",
+    "cognitiveFunctions": "Funções Cognitivas",
+    "criticalJudgment": "Juízo Crítico",
+    "insight": "Insight",
+    "impulseControl": "Controle de Impulsos",
+    "currentRisk": "Risco Atual",
+    "observations": "Observações"
+  },
+  "riskAssessment": {
+    "suicidalIdeation": "Ideação Suicida",
+    "selfHarm": "Autolesão",
+    "planning": "Planejamento",
+    "intentLevel": "Intenção Verbalizada",
+    "meansAccess": "Acesso a Meios",
+    "historyPreviousAttempts": "Tentativas Anteriores",
+    "precipitatingFactors": "Fatores Precipitantes",
+    "protectiveFactors": "Fatores Protetivos",
+    "supportNetworkActionable": "Rede de Apoio Acionável",
+    "conductAdopted": "Conduta Adotada",
+    "referralDestination": "Destino do Encaminhamento",
+    "safetyPlan": "Plano de Segurança",
+    "reassessmentSchedule": "Reavaliação",
+    "clinicianSummary": "Síntese do Profissional"
+  },
+  "assessment": {
+    "assessmentTitle": "Título da Avaliação",
+    "purpose": "Finalidade",
+    "demandDescription": "Descrição da Demanda",
+    "fundamentalSources": "Fontes Fundamentais",
+    "complementarySources": "Fontes Complementares",
+    "clinicalIntegrationAnalysis": "Análise de Integração Clínica",
+    "conclusionSynthesis": "Síntese Conclusiva",
+    "professionalSynthesis": "Síntese Profissional do Instrumento"
+  },
+  "screenings": {
+    "clinicalNotes": "Notas Clínicas"
+  },
+  "goals": {
+    "title": "Título",
+    "indicator": "Indicador",
+    "targetPeriod": "Prazo",
+    "strategy": "Estratégia",
+    "notes": "Observações"
+  }
+} as const;
 // ============================================================================
 // ZEMDAPsico — Provedor de Transcrição, Diarização & Estruturação Clínica
 // ============================================================================
@@ -35,6 +130,7 @@ export interface StructuredExtractionResult {
     anamnesis?: Record<string, StructuredFieldSuggestion | null>;
     mentalState?: Record<string, StructuredFieldSuggestion | null>;
     riskAssessment?: Record<string, StructuredFieldSuggestion | null>;
+    screenings?: Record<string, StructuredFieldSuggestion | null>;
     assessment?: Record<string, StructuredFieldSuggestion | null>;
     goals?: Array<{
       title: string;
@@ -116,24 +212,9 @@ export function parseRawTranscriptToSegments(rawText: string): DiarizedSegment[]
         id: `seg_${Date.now()}_${segmentIndex++}`,
         speakerId: currentSpeakerId,
         text: content.trim(),
-        startTime: startTime !== undefined ? startTime : (segmentIndex - 1) * 6,
-        endTime: startTime !== undefined ? startTime + 6 : segmentIndex * 6
+        startTime
       });
     }
-  }
-
-  // Se nenhuma linha continha marcadores explícitos, segmenta por sentenças alternadas
-  if (segments.length === 0 && rawText.trim()) {
-    const sentences = rawText.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 3);
-    sentences.forEach((s, idx) => {
-      segments.push({
-        id: `seg_${Date.now()}_${idx + 1}`,
-        speakerId: idx % 2 === 0 ? 'speaker_1' : 'speaker_2',
-        text: s,
-        startTime: idx * 6,
-        endTime: (idx + 1) * 6
-      });
-    });
   }
 
   return segments;
@@ -147,45 +228,11 @@ export async function requestPsychologyTranscriptStructure(params: {
   appointmentId?: string;
   transcript: DiarizedSegment[];
   speakers: Record<string, string>;
+  signal?: AbortSignal;
 }): Promise<StructuredExtractionResult> {
-  const token = localStorage.getItem('token') || '';
-  const tenantId = localStorage.getItem('tenantId') || localStorage.getItem('activeTenantId') || '';
-
-  const response = await fetch('/v1/ai/psychology/transcript-structure', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'x-tenant-id': tenantId
-    },
-    body: JSON.stringify(params)
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Erro HTTP ${response.status} ao estruturar atendimento`);
-  }
-
-  return await response.json();
+  const { signal, ...body } = params;
+  return ApiClient.post<StructuredExtractionResult>('/v1/ai/psychology/transcript-structure', body, { signal });
 }
-
-/**
- * Busca status dos provedores de diarização
- */
 export async function fetchDiarizationStatus(): Promise<any> {
-  const token = localStorage.getItem('token') || '';
-  const tenantId = localStorage.getItem('tenantId') || localStorage.getItem('activeTenantId') || '';
-
-  const response = await fetch('/v1/ai/psychology/diarization-status', {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'x-tenant-id': tenantId
-    }
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  return await response.json();
+  return ApiClient.get('/v1/ai/psychology/diarization-status');
 }

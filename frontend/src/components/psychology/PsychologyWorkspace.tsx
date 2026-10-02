@@ -1,3 +1,4 @@
+import { PSYCHOLOGY_FIELDS } from '../../services/transcriptionProvider';
 import { useClinicalReview } from '../clinical/useClinicalReview';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -77,6 +78,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   // Modais
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [organizerTranscript, setOrganizerTranscript] = useState('');
   const [showDiarizationModal, setShowDiarizationModal] = useState(false);
   const [completionSuccessData, setCompletionSuccessData] = useState<any | null>(null);
 
@@ -232,6 +234,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   });
 
   const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+    [anamnese, setAnamnese],
     [mentalState, setMentalState],
     [riskAssessment, setRiskAssessment],
     [newAssessment, setNewAssessment],
@@ -254,7 +257,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       setSelectedPatient(null);
       window.dispatchEvent(new CustomEvent('zemda-ai-patient-context', { detail: { patientId: undefined } }));
     }
-  }, [selectedPatientId]);
+  }, [selectedPatientId, initialAppointmentId]);
 
   useEffect(() => {
     if (initialAppointmentId) {
@@ -266,82 +269,48 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
   useEffect(() => {
     const handleApplyAiToEvolution = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (!detail?.text) return;
-
-      const textToInsert = detail.text.trim();
-      const target = detail.targetField || 'clinicalEvolution';
-
-      if (target === 'conductPlan') {
-        setCurrentSession(prev => ({
-          ...prev,
-          conductPlan: prev.conductPlan ? `${prev.conductPlan}\n\n${textToInsert}` : textToInsert
-        }));
-        setActiveTab('sessions');
-        setIsDirty(true);
-        showToast('Texto inserido em Conduta e Encaminhamentos.', 'success');
-      } else if (target === 'nextSessionPlan') {
-        setCurrentSession(prev => ({
-          ...prev,
-          nextSessionPlan: prev.nextSessionPlan ? `${prev.nextSessionPlan}\n\n${textToInsert}` : textToInsert
-        }));
-        setActiveTab('sessions');
-        setIsDirty(true);
-        showToast('Texto inserido em Planejamento para Próxima Sessão.', 'success');
-      } else if (target === 'mentalStateObservations') {
-        setMentalState(prev => ({
-          ...prev,
-          observations: prev.observations ? `${prev.observations}\n\n${textToInsert}` : textToInsert
-        }));
-        setActiveTab('eem');
-        setIsDirty(true);
-        showToast('Texto inserido em Observações do Exame do Estado Mental.', 'success');
-      } else if (target === 'currentDemand') {
-        setCurrentSession(prev => ({
-          ...prev,
-          currentDemand: prev.currentDemand ? `${prev.currentDemand}\n\n${textToInsert}` : textToInsert
-        }));
-        setActiveTab('sessions');
-        setIsDirty(true);
-        showToast('Texto inserido em Demanda da Sessão.', 'success');
-      } else {
-        // Default: clinicalEvolution
-        setCurrentSession(prev => {
-          const existing = (prev.clinicalEvolution || '').trim();
-          const updated = existing ? `${existing}\n\n${textToInsert}` : textToInsert;
-          return {
-            ...prev,
-            clinicalEvolution: updated
-          };
-        });
-        setActiveTab('sessions');
-        setIsDirty(true);
-        showToast('Texto inserido na Evolução Clínica da sessão. Revise antes de salvar.', 'success');
+      if (detail?.patientId && detail.patientId !== selectedPatientId) return;
+      if (detail?.appointmentId && detail.appointmentId !== initialAppointmentId) return;
+      if (detail?.section && detail?.field && typeof detail.value === 'string') {
+        handleApplyFromAIOrganizer(detail.section === 'anamnesis' ? 'anamnese' : detail.section, detail.field, detail.value, detail.mode === 'replace' ? 'replace' : 'append');
+        return;
       }
+      if (typeof detail?.text !== 'string' || !detail.text.trim()) return;
+      const target = detail.targetField || 'clinicalEvolution';
+      handleApplyFromAIOrganizer(target === 'mentalStateObservations' ? 'mentalState' : 'session', target === 'mentalStateObservations' ? 'observations' : target, detail.text.trim(), 'append');
     };
 
     window.addEventListener('zemda-ai-apply-to-evolution', handleApplyAiToEvolution);
     return () => {
       window.removeEventListener('zemda-ai-apply-to-evolution', handleApplyAiToEvolution);
     };
-  }, [showToast]);
+  }, [showToast, selectedPatientId, initialAppointmentId]);
 
   // Listener para abertura de modal de diarização de falantes e estruturação por IA
   useEffect(() => {
-    const handleOpenDiarization = () => {
+    const handleOpenDiarization = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.patientId && detail.patientId !== selectedPatientId) return;
+      if (detail?.appointmentId && detail.appointmentId !== initialAppointmentId) return;
+      setOrganizerTranscript(typeof detail?.transcript === 'string' ? detail.transcript : '');
       setShowDiarizationModal(true);
     };
     window.addEventListener('open-psico-diarization-modal', handleOpenDiarization);
     return () => {
       window.removeEventListener('open-psico-diarization-modal', handleOpenDiarization);
     };
-  }, []);
+  }, [selectedPatientId, initialAppointmentId]);
+
+  useEffect(() => { setOrganizerTranscript(''); }, [selectedPatientId, initialAppointmentId]);
 
   const handleApplyFromAIOrganizer = (
-    section: 'session' | 'anamnese' | 'mentalState' | 'riskAssessment' | 'assessment' | 'goals',
+    section: 'session' | 'anamnese' | 'mentalState' | 'riskAssessment' | 'assessment' | 'screenings' | 'goals',
     fieldKey: string,
     value: string,
     action: 'replace' | 'append'
   ) => {
+    const schemaSection = section === 'anamnese' ? 'anamnesis' : section;
+    if (!selectedPatientId || !value.trim() || !(fieldKey in ((PSYCHOLOGY_FIELDS as any)[schemaSection] || {}))) return;
     setIsDirty(true);
     if (section === 'session') {
       setCurrentSession(prev => {
@@ -375,6 +344,15 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       });
       setActiveTab('risk');
       showToast(`Campo de Avaliação de Risco atualizado. Revisão clínica obrigatória.`, 'info');
+    } else if (section === 'goals') {
+      setNewGoal(prev => ({ ...prev, [fieldKey]: action === 'append' && (prev as any)[fieldKey] ? `${(prev as any)[fieldKey]}\n\n${value}` : value }));
+      setActiveTab('goals');
+    } else if (section === 'screenings') {
+      setNewScreening(prev => ({ ...prev, clinicalNotes: action === 'append' && prev.clinicalNotes ? `${prev.clinicalNotes}\n\n${value}` : value }));
+      setActiveTab('screenings');
+    } else if (section === 'assessment' && fieldKey === 'professionalSynthesis') {
+      setNewInstrument(prev => ({ ...prev, professionalSynthesis: action === 'append' && prev.professionalSynthesis ? `${prev.professionalSynthesis}\n\n${value}` : value }));
+      setActiveTab('assessments');
     } else if (section === 'assessment') {
       setNewAssessment(prev => {
         const existing = String((prev as any)[fieldKey] || '').trim();
@@ -388,19 +366,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   const handleApplyGoalFromAI = (goal: any) => {
     if (!goal || !goal.title) return;
-    setGoalsList(prev => [
-      ...prev,
-      {
-        id: `goal_${Date.now()}`,
-        title: goal.title,
-        indicator: goal.indicator || '',
-        targetPeriod: goal.targetPeriod || 'Próxima sessão',
-        strategy: goal.strategy || '',
-        notes: goal.notes || 'Pactuado colaborativamente na sessão clínica.',
-        status: 'em_andamento',
-        createdAt: new Date().toISOString()
-      }
-    ]);
+    setNewGoal({ title: goal.title, indicator: goal.indicator || '', targetPeriod: goal.targetPeriod || '', strategy: goal.strategy || '', notes: goal.notes || '' });
     setActiveTab('goals');
     setIsDirty(true);
     showToast(`Meta terapêutica adicionada: "${goal.title}".`, 'success');
@@ -417,6 +383,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       anamnese,
       mentalState,
       riskAssessment,
+      newAssessment, newInstrument, newScreening, newGoal,
       activeTab
     };
 
@@ -459,7 +426,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         setAutosaveStatus('error');
       }
     }
-  }, [selectedPatientId, initialAppointmentId, currentSession, anamnese, mentalState, riskAssessment, activeTab]);
+  }, [selectedPatientId, initialAppointmentId, currentSession, anamnese, mentalState, riskAssessment, newAssessment, newInstrument, newScreening, newGoal, activeTab]);
 
   // Carrega prontuário completo ao alterar paciente selecionado
   const loadPatientProfile = async (id: string) => {
@@ -620,6 +587,10 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
           if (effectiveDraft.riskAssessment) {
             setRiskAssessment(prev => ({ ...prev, ...effectiveDraft.riskAssessment }));
           }
+          if (effectiveDraft.newAssessment) setNewAssessment(prev => ({ ...prev, ...effectiveDraft.newAssessment }));
+          if (effectiveDraft.newScreening) setNewScreening(prev => ({ ...prev, ...effectiveDraft.newScreening }));
+          if (effectiveDraft.newInstrument) setNewInstrument(prev => ({ ...prev, ...effectiveDraft.newInstrument }));
+          if (effectiveDraft.newGoal) setNewGoal(prev => ({ ...prev, ...effectiveDraft.newGoal }));
           if (effectiveDraft.activeTab) {
             setActiveTab(effectiveDraft.activeTab);
           }
@@ -2647,6 +2618,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
       {showDiarizationModal && (
         <PsychologyAIOrganizerModal
+          initialTranscript={organizerTranscript}
           isOpen={showDiarizationModal}
           onClose={() => setShowDiarizationModal(false)}
           patientId={selectedPatientId || undefined}
@@ -2658,6 +2630,9 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
             mentalState: mentalState,
             riskAssessment: riskAssessment,
             newAssessment: newAssessment,
+            newScreening: newScreening,
+            newGoal: newGoal,
+            newInstrument: newInstrument,
             goalsList: goalsList
           }}
           onApplyField={handleApplyFromAIOrganizer}
