@@ -1,3 +1,4 @@
+import {IndicatorDetails,assessmentIndicators} from './PersonalAssessmentIndicator';
 import {ReportTrend,evolutionMetrics,reportNumber} from './PersonalAssessmentReportCharts';
 import { ClinicalTrendChart } from '../clinical/ClinicalTrendChart';
 import React, { useState } from 'react';
@@ -71,7 +72,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
       pctVariation,
       method: cur.tav_method || cur.composition_method || 'Bioimpedância',
       equipment: cur.tav_equipment || 'Não informado',
-      classification: cur.tav_classification || 'Sem classificação',
+      classification: cur.tav_classification || 'Valor registrado — classificação não disponível para o protocolo selecionado.',
       unit: cur.tav_unit || 'nível'
     };
   });
@@ -146,6 +147,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-3">{Object.values(assessmentIndicators(latest)).map((item:any)=><div key={item.label} className="bg-slate-50 rounded-xl p-3 border border-slate-200"><span className="text-xs font-semibold">{item.label}: {reportNumber(item.value)}</span><IndicatorDetails item={item}/></div>)}</div>
       {/* Tabs de Seleção do Gráfico */}
       <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-100 pb-3">
         <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -241,7 +243,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
       {/* Exibição do Gráfico Selecionado */}
       <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-100">
         {selectedMetric === 'weight' && renderSvgChart('weight', '#9333ea', 'kg')}
-        {selectedMetric === 'body_fat' && renderSvgChart('body_fat_percentage', '#f59e0b', '%')}
+        {selectedMetric === 'body_fat' && renderSvgChart('body_fat_percentage', '#f59e0b', '%', undefined, d=>assessmentIndicators(d).bodyFat?.classification || '')}
         {selectedMetric === 'lean_mass' && renderSvgChart('lean_mass_kg', '#10b981', 'kg')}
         {selectedMetric === 'perimeters' && renderSvgChart('waist_cm', '#0ea5e9', 'cm')}
         {selectedMetric === 'tav' &&
@@ -346,7 +348,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
               <tr className="border-b border-slate-200 text-slate-400 font-semibold uppercase text-[10px]">
                 <th className="py-2.5 px-3">Data</th>
                 <th className="py-2.5 px-3">Peso</th>
-                <th className="py-2.5 px-3">% Gordura</th>
+                <th className="py-2.5 px-3">% Gordura</th>{['IMC','RCQ','RCE','VAI indireto'].map(label=><th key={label} className="py-2.5 px-3">{label}</th>)}
                 <th className="py-2.5 px-3">Massa Magra</th>
                 <th className="py-2.5 px-3">TAV</th>
                 <th className="py-2.5 px-3">Cintura</th>
@@ -362,11 +364,12 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
                   </td>
                   <td className="py-2.5 px-3 font-medium text-slate-700">{item.weight || '—'} kg</td>
                   <td className="py-2.5 px-3 font-bold text-amber-600">
-                    {item.body_fat_percentage ? `${item.body_fat_percentage}%` : '—'}
+                    {item.body_fat_percentage!=null ? `${item.body_fat_percentage}%` : '—'}<IndicatorDetails item={assessmentIndicators(item).bodyFat}/>
                   </td>
+                  {['bmi','whr','whtr','vai'].map(key=><td key={key} className="py-2.5 px-3 text-slate-700">{reportNumber(assessmentIndicators(item)[key]?.value)}<IndicatorDetails item={assessmentIndicators(item)[key]}/></td>)}
                   <td className="py-2.5 px-3 text-emerald-600 font-semibold">{item.lean_mass_kg || '—'} kg</td>
                   <td className="py-2.5 px-3 text-indigo-700 font-bold">
-                    {item.tav_value !== null && item.tav_value !== undefined ? `${item.tav_value} ${item.tav_unit || 'nível'}` : '—'}
+                    {item.tav_value !== null && item.tav_value !== undefined ? `${item.tav_value} ${item.tav_unit || 'nível'}` : '—'}<IndicatorDetails item={assessmentIndicators(item).tav}/>
                   </td>
                   <td className="py-2.5 px-3 text-slate-600">{item.waist_cm ? `${item.waist_cm} cm` : '—'}</td>
                   <td className="py-2.5 px-3 text-slate-600">{item.hip_cm ? `${item.hip_cm} cm` : '—'}</td>

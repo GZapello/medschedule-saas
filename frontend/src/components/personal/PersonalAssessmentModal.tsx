@@ -1,3 +1,4 @@
+import {PersonalAssessmentIndicator,IndicatorDetails} from './PersonalAssessmentIndicator';
 import { PersonalTechnicalFields } from './PersonalTechnicalFields';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { Posture, readPosture, emptyPosture } from './posture';
@@ -520,6 +521,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const currentStudent = selectedStudent || studentsList?.find((s) => s.id === selectedStudentId) || student;
   const previewBody = {
     ...(assessmentToEdit?.calculation_version ? {calculation_version:assessmentToEdit.calculation_version,anthropometric_sex_at_assessment:assessmentToEdit.anthropometric_sex_at_assessment,age_at_assessment:assessmentToEdit.age_at_assessment}:{}),
+    anthropometric_sex:currentStudent?.anthropometric_sex ?? null,
+    tav_value:tavValue,tav_equipment:tavEquipment,tav_unit:tavUnit,tav_protocol_id:tavProtocolId,tav_method:tavMethod,
     patient_id:selectedStudentId,assessment_date:assessmentDate,weight,height,waist_cm:waistCm,hip_cm:hipCm,
     composition_method:compositionMethod,protocol:skinfoldsProtocol,skinfolds_protocol:skinfoldsProtocol,
     body_fat_percentage:manualFatPct,muscle_mass_kg:manualMuscleMass,bmr_kcal:assessmentToEdit?.bmr_method==='mifflin_st_jeor'?null:bmrKcal,
@@ -548,40 +551,11 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const fatMassKg=calculationPreview?.values?.fat_mass_kg ?? null,leanMassKg=calculationPreview?.values?.lean_mass_kg ?? null;
   const estimatedMuscleMass=manualMuscleMass !== '' ? Number(manualMuscleMass) : null;
 
-  // Atualização em tempo real da classificação de TAV
-  useEffect(() => {
-    if (tavValue === '' || tavValue === null) {
-      setTavClassification('');
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        const res = await ApiClient.post<{
-          classification: string;
-          protocolName?: string;
-          color?: string;
-        }>('/v1/personal/tav/classify', {
-          protocol_id: tavProtocolId || undefined,
-          method: tavMethod,
-          equipment: tavEquipment,
-          value: Number(tavValue),
-          gender: calculationPreview?.demographics?.sex,
-          age
-        });
-
-        if (res && res.classification) {
-          setTavClassification(res.classification);
-          if (res.color) setTavColorCode(res.color);
-        }
-      } catch (err) {
-        setTavClassification('Classificação não disponível para este método.');
-        setTavColorCode('#64748B');
-      }
-    }, 200);
-
-    return () => clearTimeout(timer);
-  }, [tavValue, tavProtocolId, tavEquipment, tavMethod, age, currentStudent?.gender]);
+  useEffect(()=>{
+    const item=calculationPreview?.classifications?.tav;
+    setTavClassification(tavValue!=='' ? item?.classification || '' : '');
+    setTavColorCode(({teal:'#0D9488',amber:'#F59E0B',rose:'#E11D48'} as Record<string,string>)[item?.tone] || '#64748B');
+  },[calculationPreview,tavValue]);
 
   // Manipuladores de Testes 1RM
   const handleAddStrengthTest = () => {
@@ -837,7 +811,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
           <div className="flex items-center gap-2">
             <span className="text-purple-300 text-[11px]">% Gordura:</span>
-            <strong className="text-amber-300 font-bold">{calculatedFatPct > 0 ? `${calculatedFatPct}%` : '—'}</strong>
+            <strong className="text-amber-300 font-bold">{calculatedFatPct != null ? `${calculatedFatPct}%` : '—'}</strong><span className="text-[10px] text-slate-300">{calculationPreview?.values?.body_fat_classification}</span>
           </div>
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
           <div className="flex items-center gap-2">
@@ -845,15 +819,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             <strong className="text-emerald-300 font-bold">{leanMassKg > 0 ? `${leanMassKg} kg` : '—'}</strong>
           </div>
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
-          <div className="flex items-center gap-2">
+          {tavValue!=='' && <div className="flex items-center gap-2">
             <span className="text-purple-300 text-[11px]">TAV:</span>
-            <strong className="text-cyan-300 font-bold">{tavValue !== '' ? `${tavValue} ${tavUnit}` : '—'}</strong>
+            <strong className="text-cyan-300 font-bold">{`${tavValue} ${tavUnit}`}</strong>
             {tavClassification && (
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-cyan-200">
                 {tavClassification}
               </span>
             )}
-          </div>
+          </div>}
+          {calculationPreview?.values?.vai_value!=null && <div className="text-xs"><span className="text-purple-300">VAI: </span><strong>{Number(calculationPreview.values.vai_value).toLocaleString('pt-BR',{maximumFractionDigits:2})}</strong><span className="text-[10px] text-slate-300"> · Indicador indireto</span></div>}
         </div>
 
         {/* Barra de Navegação das 5 Abas */}
@@ -1337,6 +1312,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">{['bmi','bodyFat','whr','whtr'].map(key=><PersonalAssessmentIndicator key={key} unit={key==='bmi'?'kg/m²':key==='bodyFat'?'%':''} item={calculationPreview?.classifications?.[key]}/>)}</div>
               {/* ÁREA DEDICADA: MÓDULO TAV (TECIDO ADIPOSO VISCERAL) */}
               <div className="p-5 bg-gradient-to-br from-indigo-50/70 via-purple-50/50 to-white rounded-3xl border-2 border-indigo-200/80 shadow-sm space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-indigo-100">
@@ -1346,7 +1322,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-800">
-                        Módulo TAV — Tecido Adiposo Visceral
+                        Adiposidade Visceral
                       </h4>
                       <p className="text-[11px] text-slate-500">
                         Classificação rigorosa por equipamento, escala e tabela de referência oficial.
@@ -1359,6 +1335,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                   </span>
                 </div>
 
+                <div className="space-y-2">
+                  <PersonalAssessmentIndicator item={calculationPreview?.classifications?.vai}/>
+                  <p className="text-[11px] text-slate-500">Indicador indireto de adiposidade visceral. Atualizado automaticamente conforme os dados da avaliação.</p>
+                  <button type="button" onClick={()=>setActiveTab('cardio_tests')} className="text-xs font-semibold text-indigo-700 hover:underline">Preencher dados bioquímicos</button>
+                </div>
+                <h5 className="text-xs font-bold text-slate-700 border-t border-indigo-100 pt-4">TAV medido por equipamento</h5>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   {/* Catálogo de Protocolos & Equipamentos */}
                   <div>
@@ -1397,7 +1379,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       type="text"
                       placeholder="Ex: InBody 770, Tanita BC-549..."
                       value={tavEquipment}
-                      onChange={(e) => setTavEquipment(e.target.value)}
+                      onChange={(e) => {setTavEquipment(e.target.value);setTavProtocolId('');}}
                       className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold"
                     />
                   </div>
@@ -1409,7 +1391,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     </label>
                     <select
                       value={tavUnit}
-                      onChange={(e) => setTavUnit(e.target.value)}
+                      onChange={(e) => {setTavUnit(e.target.value);setTavProtocolId('');}}
                       className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold"
                     >
                       <option value="nível">Nível / Grau (1 a 20, 1 a 59)</option>
@@ -1459,6 +1441,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                   )}
                 </div>
 
+                <IndicatorDetails item={calculationPreview?.classifications?.tav}/>
                 {/* Observação Clínica do TAV */}
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-1">

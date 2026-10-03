@@ -1,3 +1,4 @@
+import {IndicatorDetails,assessmentIndicators,indicatorKey} from './PersonalAssessmentIndicator';
 import { dateLabel } from './posture';
 import React, { useState, useEffect, lazy, Suspense, useRef } from 'react';
 import {
@@ -397,7 +398,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                           : '—'}
                       </div>
                       <div className="text-[11px] text-purple-300 mt-1">
-                        {comparison.tav_comparison.previous.classification || 'Sem classificação'}
+                        {comparison.tav_comparison.previous.classification || 'Valor registrado — classificação não disponível para o protocolo selecionado.'}
                       </div>
                     </div>
 
@@ -474,10 +475,10 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                                 {m.unit && <span className="text-[10px] text-slate-400 ml-1 font-normal">({m.unit})</span>}
                               </td>
                               <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
-                                {m.previous !== null ? `${m.previous} ${m.unit}` : '—'}
+                                {m.previous !== null ? `${m.previous} ${m.unit}` : '—'}<IndicatorDetails item={assessmentIndicators(prevAssess)[indicatorKey[m.field]]}/>
                               </td>
                               <td className="py-2.5 px-3 text-center text-slate-900 font-bold">
-                                {m.current !== null ? `${m.current} ${m.unit}` : '—'}
+                                {m.current !== null ? `${m.current} ${m.unit}` : '—'}<IndicatorDetails item={assessmentIndicators(curAssess)[indicatorKey[m.field]]}/>
                               </td>
                               <td className="py-2.5 px-3 text-center">
                                 {m.diff !== null ? (

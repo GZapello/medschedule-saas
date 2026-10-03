@@ -1,4 +1,4 @@
-import { calculateAssessment, normalizeLegacyAssessmentForReport, referenceSex, numberOrNull } from '../services/personal-assessment-calculation.service';
+import { classifyTav as classifyMeasuredTav, calculateAssessment, normalizeLegacyAssessmentForReport, referenceSex, numberOrNull } from '../services/personal-assessment-calculation.service';
 import { ASSESSMENT_COLUMNS } from '../config/personal-assessment.migration';
 import { exerciseAnimation, getExerciseMaxCompletedLoad } from '../services/exercise-media';
 import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
@@ -403,45 +403,17 @@ export function resolveTavClassification(
     };
   }
 
-  const sex=referenceSex({anthropometric_sex:gender}).sex;
-  const normGender=sex==='male'?'m':sex==='female'?'f':'all';
-  const ranges = db.prepare(`
-    SELECT * FROM personal_tav_ranges
-    WHERE protocol_id = ?
-    ORDER BY min_value ASC
-  `).all(proto.id) as any[];
+  const ranges=db.prepare('SELECT * FROM personal_tav_ranges WHERE protocol_id=? ORDER BY min_value').all(proto.id);
+  const result=classifyMeasuredTav({tav_value:val,tav_unit:proto.unit,tav_equipment:proto.equipment,anthropometric_sex_at_assessment:gender,age_at_assessment:age},{...proto,ranges});
+  return {classification:result.classification,protocolId:proto.id,protocolName:proto.protocol_name,unit:proto.unit,color:result.status==='classified'?'#0D9488':'#64748B'};
 
-  let matchedRange: any = null;
-  for (const r of ranges) {
-    if (r.gender && r.gender !== 'all' && r.gender !== normGender) continue;
-    if (age === undefined && (r.min_age !== null || r.max_age !== null)) continue;
-    if (age !== undefined && r.min_age !== null && age < r.min_age) continue;
-    if (age !== undefined && r.max_age !== null && age > r.max_age) continue;
-    if (val >= r.min_value && val <= r.max_value) {
-      matchedRange = r;
-      break;
-    }
-  }
-
-  if (matchedRange) {
-    return {
-      classification: matchedRange.classification,
-      protocolId: proto.id,
-      protocolName: proto.protocol_name,
-      unit: proto.unit,
-      color: matchedRange.color_code || '#10B981'
-    };
-  }
-
-  return {
-    classification: 'Fora da faixa de referência cadastrada',
-    protocolId: proto.id,
-    protocolName: proto.protocol_name,
-    unit: proto.unit,
-    color: '#F59E0B'
-  };
 }
 
+function assessmentTavContext(a:any,tenantId:string) {
+  if(!a.tav_protocol_id) return undefined;
+  const proto=db.prepare("SELECT * FROM personal_tav_protocols WHERE id=? AND (tenant_id=? OR tenant_id='global') AND is_active=1").get(a.tav_protocol_id,tenantId) as any;
+  return proto ? {...proto,ranges:db.prepare('SELECT * FROM personal_tav_ranges WHERE protocol_id=? ORDER BY min_value').all(proto.id)} : null;
+}
 export class PersonalController {
 
   // ==========================================
@@ -1141,7 +1113,7 @@ export class PersonalController {
     if(!hasPostureAccess(req)) {res.status(403).json({error:'Acesso não autorizado'});return;}
     const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(req.body.patient_id,req.tenantId);
     if(!patient){res.status(404).json({error:'Aluno não encontrado'});return;}
-    res.json(calculateAssessment({...req.body,assessment_date:req.body.assessment_date || new Date().toISOString().slice(0,10)},patient));
+    res.json(calculateAssessment({...req.body,assessment_date:req.body.assessment_date || new Date().toISOString().slice(0,10)},patient,assessmentTavContext(req.body,req.tenantId!)));
   }
   static async assessmentReportData(req: Request,res: Response): Promise<void> {
     try {
@@ -1177,7 +1149,7 @@ export class PersonalController {
         return;
       }
 
-      const calculation = calculateAssessment({...b, calculation_version:undefined, anthropometric_sex_at_assessment:undefined,age_at_assessment:undefined,assessment_date:b.assessment_date || new Date().toISOString().slice(0,10)}, patient);
+      const calculation = calculateAssessment({...b, calculation_version:undefined, anthropometric_sex_at_assessment:undefined,age_at_assessment:undefined,assessment_date:b.assessment_date || new Date().toISOString().slice(0,10)}, patient,assessmentTavContext(b,tenantId));
       const cv = calculation.values;
       Object.assign(b, Object.fromEntries(Object.entries(cv).filter(([k])=>k.startsWith('fold_'))));
       const {bmi,whr,whtr} = cv;
@@ -1186,17 +1158,7 @@ export class PersonalController {
       const protocol=b.skinfolds_protocol || b.protocol || 'pollock_7';
       const [sSub,sTri,sChe,sAxi,sSup,sAbd,sThi,sCal]=['subscapular','triceps','chest','axillary','suprailiac','abdominal','thigh','calf'].map(f=>cv['fold_'+f]);
       const tavVal=numberOrNull(b.tav_value,true);
-      let tavProtocolId=b.tav_protocol_id || null, tavUnit=b.tav_unit || 'nível', tavClassification=cv.tav_classification;
-      if(tavVal !== null && b.tav_protocol_id) {
-        const r=resolveTavClassification(tenantId,b.tav_protocol_id,undefined,undefined,tavVal,cv.anthropometric_sex_at_assessment,cv.age_at_assessment ?? undefined);
-        tavClassification=r.classification; tavUnit=r.unit || tavUnit;
-        cv.tav_classification=tavClassification;
-        const proto=db.prepare("SELECT source_reference FROM personal_tav_protocols WHERE id=? AND (tenant_id=? OR tenant_id='global')").get(b.tav_protocol_id,tenantId) as any;
-        cv.tav_reference_source=proto?.source_reference || null;
-        const metadata=JSON.parse(cv.calculation_metadata_json);
-        metadata.visceralAdiposity.tav={...metadata.visceralAdiposity.tav,classification:tavClassification,unit:tavUnit,reference:cv.tav_reference_source,protocolId:tavProtocolId};
-        cv.calculation_metadata_json=JSON.stringify(metadata);
-      }
+      let tavProtocolId=b.tav_protocol_id || null, tavUnit=calculation.classifications.tav.unit, tavClassification=cv.tav_classification;
       const numericColumns=(db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]).filter(c=>['REAL','INTEGER'].includes(c.type)).map(c=>c.name);
       for(const key of numericColumns) if(key in b && key!=='flexibility_wells_cm') b[key]=numberOrNull(b[key],['tav_value','body_fat_percentage','flexibility_wells_cm'].includes(key));
       // JSON stringified fields
@@ -1402,7 +1364,7 @@ export class PersonalController {
         const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(existing.patient_id,tenantId);
         const merged={...existing,...edits};
         if(!('bmr_kcal' in edits) && existing.bmr_method==='mifflin_st_jeor') merged.bmr_kcal=null;
-        Object.assign(edits,Object.fromEntries(Object.entries(calculateAssessment(merged,patient).values).filter(([k])=>columns.has(k))));
+        Object.assign(edits,Object.fromEntries(Object.entries(calculateAssessment(merged,patient,assessmentTavContext(merged,tenantId)).values).filter(([k])=>columns.has(k))));
       }
       if(!existing.calculation_version) for(const k of ['body_fat_percentage','fat_mass_kg','lean_mass_kg','muscle_mass_kg','bmr_kcal','bmi','whr','whtr']) if(edits[k]===null) delete edits[k];
       if(Object.keys(edits).length) db.prepare(`UPDATE personal_assessments SET ${Object.keys(edits).map(k=>k+'=?').join(',')},updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(...Object.values(edits),id,tenantId);
