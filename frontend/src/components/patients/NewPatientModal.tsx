@@ -1,3 +1,4 @@
+import { AnthropometricSexField } from '../personal/PersonalTechnicalFields';
 import React, { useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -21,6 +22,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
 
   const [fullName, setFullName] = useState<string>('');
   const [socialName, setSocialName] = useState<string>('');
+  const [anthropometricSex,setAnthropometricSex]=useState('');
   const [birthDate, setBirthDate] = useState<string>('');
   const [cpf, setCpf] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
@@ -97,6 +99,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
       await ApiClient.post('/v1/patients', {
         fullName,
         socialName: socialName || null,
+        anthropometric_sex:anthropometricSex || null,
         birthDate: birthDate || null,
         cpf: cpf || null,
         phone,
@@ -182,6 +185,7 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
               />
             </div>
+            <AnthropometricSexField value={anthropometricSex} onChange={setAnthropometricSex}/>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">CPF</label>
               <input

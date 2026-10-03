@@ -1,0 +1,1963 @@
+diff --git a/backend/src/controllers/appointment.controller.ts b/backend/src/controllers/appointment.controller.ts
+index 76a8bc2..9333e2a 100644
+--- a/backend/src/controllers/appointment.controller.ts
++++ b/backend/src/controllers/appointment.controller.ts
+@@ -1,3 +1,5 @@
++import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
++import { calculateAvailableSlots } from '../utils/slot-calculator';
+ import { hasClinicalAccess } from './clinical.controller';
+ import { isPrimaryClinicalModule, resolveClinicalModule } from '../utils/clinical-module';
+ import { Request, Response } from 'express';
+@@ -284,6 +286,21 @@ export class AppointmentController {
+   }
+ 
+   static create(req: Request, res: Response): void {
++    if (!req.path.startsWith('/v1/public/')) { AppointmentController.createInternal(req, res); return; }
++    // Send success only after the synchronous transaction has committed.
++    let status = 200;
++    let body: any;
++    const pendingResponse = {
++      status(code: number) { status = code; return pendingResponse; },
++      json(value: any) { body = value; return pendingResponse; }
++    } as unknown as Response;
++    try {
++      db.transaction(() => AppointmentController.createInternal(req, pendingResponse))();
++      res.status(status).json(body);
++    } catch { res.status(500).json({ error: 'Não foi possível concluir o agendamento. Tente novamente.' }); }
++  }
++
++  private static createInternal(req: Request, res: Response): void {
+     try {
+       let tenantId = req.tenantId;
+       const {
+@@ -294,11 +311,33 @@ export class AppointmentController {
+         newPatientData
+       } = req.body;
+ 
+-      if (!tenantId && tenantSlug) {
+-        const tenantRow = db.prepare("SELECT id FROM tenants WHERE slug = ? AND status = 'active'").get(tenantSlug) as { id: string } | undefined;
+-        if (tenantRow) tenantId = tenantRow.id;
++      const isPublic = req.path.startsWith('/v1/public/');
++      if (isPublic) {
++        const tenant = resolveBookingTenant(tenantSlug, req.body.bookingSequence);
++        const individualSlug = typeof req.body.professionalSlug === 'string' ? req.body.professionalSlug : undefined;
++        if (!tenant || (!individualSlug && tenant.public_booking_enabled !== 1)) {
++          res.status(404).json({ error: 'Agendamento online indisponível.' }); return;
++        }
++        tenantId = tenant.id;
++        if (!publicBookingProfessional(tenant.id, String(professionalId), individualSlug) || !professionalBookingService(tenant.id, String(professionalId), String(serviceId))) {
++          res.status(404).json({ error: 'Atendimento indisponível.' }); return;
++        }
++        if (patientId || roomId || internalNotes || insuranceId || referredFromAppointmentId || referredByProfessionalId || referralReason) {
++          res.status(400).json({ error: 'Dados de agendamento inválidos.' }); return;
++        }
++        if (!newPatientData || typeof newPatientData.fullName !== 'string' || newPatientData.fullName.trim().length < 2 || newPatientData.fullName.length > 150 || typeof newPatientData.phone !== 'string' || !/^\d{10,13}$/.test(newPatientData.phone.replace(/\D/g, '')) || (newPatientData.email && (typeof newPatientData.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newPatientData.email) || newPatientData.email.length > 254)) || (newPatientData.isChild && (typeof newPatientData.guardianName !== 'string' || !newPatientData.guardianName.trim())) || String(patientNotes || '').length > 1000 || String(newPatientData.notes || '').length > 1000) {
++          res.status(400).json({ error: 'Revise o nome, telefone e demais dados informados.' }); return;
++        }
++        const service = professionalBookingService(tenant.id, String(professionalId), String(serviceId));
++        if (!['presential', 'online', 'home'].includes(modality) || (service.modality !== 'both' && service.modality !== modality) || (service.modality === 'both' && modality === 'home')) {
++          res.status(400).json({ error: 'Modalidade indisponível para este atendimento.' }); return;
++        }
++        const start = String(startTime || '').replace(' ', 'T');
++        const end = String(endTime || '').replace(' ', 'T');
++        if (!validBookingDate(start.slice(0, 10)) || !calculateAvailableSlots(tenant.id, String(professionalId), String(serviceId), start.slice(0, 10)).some(slot => slot.startTime === start && slot.endTime === end)) {
++          res.status(409).json({ code: 'SLOT_UNAVAILABLE', error: 'Este horário não está mais disponível. Escolha outro horário.' }); return;
++        }
+       }
+-
+       if (!tenantId) {
+         res.status(400).json({ error: 'Identificação da clínica obrigatória' });
+         return;
+@@ -313,7 +352,7 @@ export class AppointmentController {
+         res.status(403).json({ error: 'O acesso a esta clínica está bloqueado.' }); return;
+       }
+       BillingService.expireGrace();
+-      if (!canOperate(tenantId)) { res.status(402).json({code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
++      if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
+       // Resolve ou cria o paciente
+       let resolvedPatientId = patientId;
+       if (!resolvedPatientId && newPatientData) {
+@@ -401,12 +440,12 @@ export class AppointmentController {
+         res.status(409).json({
+           error: 'Este paciente já possui um atendimento neste horário.',
+           code: 'PATIENT_APPOINTMENT_CONFLICT',
+-          conflict: {
++          ...(isPublic ? {} : { conflict: {
+             startTime: patientConflict.start_time,
+             endTime: patientConflict.end_time,
+             professionalName: patientConflict.professional_name,
+             serviceName: patientConflict.service_name
+-          }
++          } })
+         });
+         return;
+       }
+@@ -538,6 +577,7 @@ export class AppointmentController {
+         message: 'Atendimento agendado com sucesso!'
+       });
+     } catch (err: any) {
++      if (req.path.startsWith('/v1/public/')) throw err;
+       console.error('[AppointmentController.create] Erro:', err);
+       res.status(500).json({ error: 'Erro ao registrar agendamento' });
+     }
+diff --git a/backend/src/controllers/professional.controller.ts b/backend/src/controllers/professional.controller.ts
+index e5b59c6..fc9c564 100644
+--- a/backend/src/controllers/professional.controller.ts
++++ b/backend/src/controllers/professional.controller.ts
+@@ -1,3 +1,4 @@
++import { professionalBookingService, validBookingDate } from '../utils/public-booking';
+ import { respondBillingError } from './billing.controller';
+ import { requireCapacity, pendingBillingManager, BillingService } from '../services/billing.service';
+ import { Request, Response } from 'express';
+@@ -162,6 +163,15 @@ export class ProfessionalController {
+         slug, publicBookingEnabled, remunerationType, commissionPercentage, fixedSalary, paymentDay
+       } = req.body;
+ 
++      if (publicBookingEnabled !== undefined && req.user?.role !== 'clinic_admin') {
++        res.status(403).json({ error: 'Somente o administrador pode configurar o link público.' }); return;
++      }
++      if (publicBookingEnabled !== undefined && typeof publicBookingEnabled !== 'boolean') {
++        res.status(400).json({ error: 'Configuração de agendamento inválida.' }); return;
++      }
++      if (slug && (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(slug)) || db.prepare('SELECT id FROM professionals WHERE tenant_id = ? AND slug = ? AND id != ?').get(tenantId, slug, id))) {
++        res.status(400).json({ error: 'Link inválido ou já utilizado por outro profissional.' }); return;
++      }
+       // 1. Busca profissional atual para validação de existência e verificação da alteração única de profissão
+       const currentProf = db.prepare(`
+         SELECT id, tenant_id, user_id, profession_id, practice_areas, profession_change_used
+@@ -175,7 +185,7 @@ export class ProfessionalController {
+       }
+ 
+       // Se for profissional, valida se está editando o próprio perfil
+-      if (req.user && req.user.role === 'professional' && currentProf.user_id && currentProf.user_id !== req.user.userId) {
++      if (req.user && req.user.role === 'professional' && currentProf.user_id !== req.user.userId) {
+         res.status(403).json({ error: 'Você só pode editar o seu próprio perfil profissional' });
+         return;
+       }
+@@ -460,8 +470,7 @@ export class ProfessionalController {
+ 
+       if (targetClinicSlug) {
+         tenantRow = db.prepare(`
+-          SELECT id, name, trade_name, slug, logo_url, phone, mobile, whatsapp, email,
+-                 address, street, number, neighborhood, city, state, zip_code, description
++          SELECT id, name, trade_name, slug, logo_url, city, state
+           FROM tenants
+           WHERE slug = ? AND status = 'active'
+         `).get(targetClinicSlug) as any;
+@@ -501,8 +510,7 @@ export class ProfessionalController {
+ 
+         if (profRow) {
+           tenantRow = db.prepare(`
+-            SELECT id, name, trade_name, slug, logo_url, phone, mobile, whatsapp, email,
+-                   address, street, number, neighborhood, city, state, zip_code, description
++            SELECT id, name, trade_name, slug, logo_url, city, state
+             FROM tenants
+             WHERE id = ? AND status = 'active'
+           `).get(profRow.tenant_id) as any;
+@@ -523,7 +531,6 @@ export class ProfessionalController {
+       const services = db.prepare(`
+         SELECT s.id, s.name, s.description,
+                COALESCE(ps.custom_duration, s.duration_minutes) as duration_minutes,
+-               COALESCE(ps.custom_price, s.price) as price,
+                s.modality
+         FROM services s
+         LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
+@@ -532,8 +539,8 @@ export class ProfessionalController {
+       `).all(profRow.id, profRow.tenant_id, profRow.id, profRow.id) as any[];
+ 
+       res.json({
+-        professional: profRow,
+-        tenant: tenantRow,
++        professional: (({ tenant_id, gender, ...publicData }) => publicData)(profRow),
++        tenant: (({ id, ...publicData }) => publicData)(tenantRow),
+         services
+       });
+     } catch (err: any) {
+@@ -600,6 +607,10 @@ export class ProfessionalController {
+         return;
+       }
+ 
++      if (!db.prepare("SELECT id FROM tenants WHERE id = ? AND status = 'active'").get(profRow.tenant_id) || !professionalBookingService(profRow.tenant_id, profRow.id, targetServiceId)) {
++        res.status(404).json({ error: 'Atendimento indisponível.' }); return;
++      }
++      if (!validBookingDate(date)) { res.status(400).json({ error: 'Data inválida.' }); return; }
+       const slots = calculateAvailableSlots(
+         profRow.tenant_id,
+         profRow.id,
+diff --git a/backend/src/controllers/slot.controller.ts b/backend/src/controllers/slot.controller.ts
+index 4896ec4..f7f3f18 100644
+--- a/backend/src/controllers/slot.controller.ts
++++ b/backend/src/controllers/slot.controller.ts
+@@ -1,3 +1,4 @@
++import { resolveBookingTenant, publicBookingProfessional, professionalBookingService, validBookingDate } from '../utils/public-booking';
+ import { Request, Response } from 'express';
+ import { calculateAvailableSlots } from '../utils/slot-calculator';
+ import { db } from '../config/database';
+@@ -8,11 +9,14 @@ export class SlotController {
+       let tenantId = req.tenantId;
+       const { tenantSlug, professionalId, serviceId, date, roomId } = req.query;
+ 
+-      if (!tenantId && tenantSlug) {
+-        const tenantRow = db.prepare("SELECT id FROM tenants WHERE slug = ? AND status = 'active'").get(tenantSlug) as { id: string } | undefined;
+-        if (tenantRow) tenantId = tenantRow.id;
++      const isPublic = req.path.startsWith('/v1/public/');
++      if (isPublic) {
++        const tenant = resolveBookingTenant(tenantSlug, req.query.bookingSequence);
++        if (!tenant || tenant.public_booking_enabled !== 1) { res.status(404).json({ error: 'Agendamento online indisponível.' }); return; }
++        tenantId = tenant.id;
++        if (!publicBookingProfessional(tenant.id, String(professionalId)) || !professionalBookingService(tenant.id, String(professionalId), String(serviceId))) { res.status(404).json({ error: 'Atendimento indisponível.' }); return; }
++        if (!validBookingDate(date)) { res.status(400).json({ error: 'Data inválida.' }); return; }
+       }
+-
+       if (!tenantId) {
+         res.status(400).json({ error: 'Tenant/Clínica não identificado' });
+         return;
+diff --git a/backend/src/controllers/tenant.controller.ts b/backend/src/controllers/tenant.controller.ts
+index da5e4d1..ddee093 100644
+--- a/backend/src/controllers/tenant.controller.ts
++++ b/backend/src/controllers/tenant.controller.ts
+@@ -1,3 +1,5 @@
++import { ensureClinicBookingIdentity } from '../utils/slug';
++import { resolveBookingTenant } from '../utils/public-booking';
+ import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
+ import { respondBillingError } from './billing.controller';
+ import { requireCapacity, pendingBillingManager, BillingService, today, addDays, SOLO_TRIAL_DAYS } from '../services/billing.service';
+@@ -961,9 +963,10 @@ export class TenantController {
+         return;
+       }
+ 
++      ensureClinicBookingIdentity(db, req.tenantId);
+       const stmt = db.prepare(`
+         SELECT 
+-          t.id, t.slug, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
++          t.id, t.slug, t.public_booking_enabled, t.public_booking_slug, t.public_booking_sequence, t.name, t.corporate_name, t.trade_name, t.person_type, t.cnpj_cpf,
+           t.municipal_registration, t.state_registration, t.professional_board, t.professional_registry,
+           t.manager_profession, t.manager_practice_areas,
+           t.email, t.phone, t.mobile, t.whatsapp, t.website, t.description,
+@@ -1015,6 +1018,12 @@ export class TenantController {
+         return;
+       }
+ 
++      if (req.body.publicBookingEnabled !== undefined) {
++        if (req.user?.role !== 'clinic_admin') { res.status(403).json({ error: 'Somente o administrador pode configurar agendamento online.' }); return; }
++        if (typeof req.body.publicBookingEnabled !== 'boolean') { res.status(400).json({ error: 'Configuração de agendamento inválida.' }); return; }
++        ensureClinicBookingIdentity(db, req.tenantId);
++        db.prepare('UPDATE tenants SET public_booking_enabled = ?, updated_at = datetime(\'now\') WHERE id = ?').run(req.body.publicBookingEnabled ? 1 : 0, req.tenantId);
++      }
+       const {
+         name, corporateName, tradeName, personType, cnpjCpf, municipalRegistration, stateRegistration,
+         professionalBoard, professionalRegistry, email, phone, mobile, whatsapp, website, description,
+@@ -1156,50 +1165,41 @@ export class TenantController {
+   // 10. Perfil público da clínica para a landing page e agendamento online (/c/:slug)
+   static getPublicProfile(req: Request, res: Response): void {
+     try {
+-      const { slug } = req.params;
+-      const tenantStmt = db.prepare(`
+-        SELECT 
+-          id, slug, name, trade_name, email, phone, address, city, state, zip_code,
+-          logo_url, primary_color, client_term_label, status
+-        FROM tenants
+-        WHERE slug = ? AND status = 'active'
+-      `);
+-      const tenant = tenantStmt.get(String(slug)) as any;
+-
+-      if (!tenant) {
+-        res.status(404).json({ error: 'Estabelecimento ou clínica não encontrado ou inativo' });
+-        return;
++      const resolved = resolveBookingTenant(req.params.slug, req.query.bookingSequence);
++      if (!resolved || resolved.public_booking_enabled !== 1) {
++        res.status(404).json({ code: 'BOOKING_UNAVAILABLE', error: 'O agendamento online desta clínica está indisponível no momento.' }); return;
+       }
+-
++      const tenant = db.prepare('SELECT slug, name, trade_name, logo_url, city, state FROM tenants WHERE id = ?').get(resolved.id) as any;
+       // Profissionais ativos da clínica
+       const profStmt = db.prepare(`
+         SELECT 
+-          p.id, p.name, p.photo_url, p.registration_type, p.registration_number, p.bio,
+-          spec.id as specialty_id, spec.name as specialty_name, spec.color as specialty_color,
+-          prof.name as profession_name
++          p.id, p.slug, p.name, p.practice_areas, p.photo_url, p.registration_type, p.registration_number, p.bio,
++          spec.id as specialty_id, COALESCE(p.specialty_custom, spec.name) as specialty_name,
++          COALESCE(prof.name, p.profession_name) as profession_name
+         FROM professionals p
+         LEFT JOIN specialties spec ON spec.id = p.specialty_id
+         LEFT JOIN professions prof ON prof.id = p.profession_id
+-        WHERE p.tenant_id = ? AND p.active = 1
++        WHERE p.tenant_id = ? AND p.active = 1 AND p.public_booking_enabled = 1
+         ORDER BY p.name ASC
+       `);
+-      const professionals = profStmt.all(tenant.id);
+-
+-      // Serviços ativos
+-      const srvStmt = db.prepare(`
+-        SELECT 
+-          s.id, s.name, s.description, s.duration_minutes, s.buffer_minutes, s.price, s.modality,
+-          spec.name as specialty_name
+-        FROM services s
+-        LEFT JOIN specialties spec ON spec.id = s.specialty_id
+-        WHERE s.tenant_id = ? AND s.active = 1
+-        ORDER BY s.name ASC
+-      `);
+-      const services = srvStmt.all(tenant.id);
+-
++      const professionals = profStmt.all(resolved.id);
++
++      const services = db.prepare(`
++        SELECT s.id, s.name, s.description, s.specialty_id, s.modality, spec.name as specialty_name
++        FROM services s LEFT JOIN specialties spec ON spec.id = s.specialty_id
++        WHERE s.tenant_id = ? AND s.active = 1 AND EXISTS (
++          SELECT 1 FROM professionals p WHERE p.tenant_id = s.tenant_id AND p.active = 1 AND p.public_booking_enabled = 1
++          AND (s.professional_id = p.id OR EXISTS (SELECT 1 FROM professional_services ps WHERE ps.service_id = s.id AND ps.professional_id = p.id))
++        ) ORDER BY s.name
++      `).all(resolved.id);
++      const publicProfessionals = (professionals as any[]).map(p => ({ ...p, services: db.prepare(`
++        SELECT s.id, COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.modality
++        FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
++        WHERE s.tenant_id = ? AND s.active = 1 AND (s.professional_id = ? OR ps.professional_id = ?)
++      `).all(p.id, resolved.id, p.id, p.id) }));
+       res.json({
+         tenant,
+-        professionals,
++        professionals: publicProfessionals,
+         services
+       });
+     } catch (err: any) {
+diff --git a/backend/src/utils/slot-calculator.ts b/backend/src/utils/slot-calculator.ts
+index 0f71501..2849314 100644
+--- a/backend/src/utils/slot-calculator.ts
++++ b/backend/src/utils/slot-calculator.ts
+@@ -53,11 +53,11 @@ export function calculateAvailableSlots(
+ ): AvailableSlot[] {
+   // 1. Busca dados do serviço
+   const serviceStmt = db.prepare(`
+-    SELECT duration_minutes, buffer_minutes, min_lead_time_hours, max_advance_days, active
+-    FROM services
+-    WHERE id = ? AND tenant_id = ? AND active = 1
++    SELECT COALESCE(ps.custom_duration, s.duration_minutes) AS duration_minutes, s.buffer_minutes, s.min_lead_time_hours, s.max_advance_days, s.active
++    FROM services s LEFT JOIN professional_services ps ON ps.service_id = s.id AND ps.professional_id = ?
++    WHERE s.id = ? AND s.tenant_id = ? AND s.active = 1
+   `);
+-  const service = serviceStmt.get(serviceId, tenantId) as {
++  const service = serviceStmt.get(professionalId, serviceId, tenantId) as {
+     duration_minutes: number;
+     buffer_minutes: number;
+     min_lead_time_hours: number;
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index bb0e58e..bdc8d44 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -1,3 +1,4 @@
++import { parseBookingRoute, BookingRoute } from './utils/publicBooking';
+ import { updatePublicSeo, clearPublicSeo } from './utils/publicSeo';
+ import { getRouteByPath } from './data/seoPagesData';
+ import { useLayoutEffect } from 'react';
+@@ -368,14 +369,7 @@ const AppContent: React.FC = () => {
+   const [activeSeoSlug, setActiveSeoSlug] = useState<string | null>(getInitialSeoSlug);
+ 
+   // Roteamento para agendamento individual de profissional (/agendar/:clinicSlug/:profSlug ou /agendar/:slug)
+-  const getInitialBookingRoute = (): { clinicSlug?: string; profSlug: string } | null => {
+-    const doubleMatch = window.location.pathname.match(/^\/agendar\/([^/]+)\/([^/]+)/);
+-    if (doubleMatch) return { clinicSlug: doubleMatch[1], profSlug: doubleMatch[2] };
+-    const singleMatch = window.location.pathname.match(/^\/agendar\/([^/]+)/);
+-    if (singleMatch) return { profSlug: singleMatch[1] };
+-    return null;
+-  };
+-  const [activeBooking, setActiveBooking] = useState<{ clinicSlug?: string; profSlug: string } | null>(getInitialBookingRoute);
++  const [activeBooking, setActiveBooking] = useState<BookingRoute | null>(() => parseBookingRoute(window.location.pathname));
+ 
+   // Roteamento para convite único de clínica (/convite/:clinicSlug/:token ou /convite/:token)
+   const getInitialInvite = (): { clinicSlug?: string; token: string } | null => {
+@@ -652,12 +646,7 @@ const AppContent: React.FC = () => {
+         window.history.pushState(null, '', '/');
+         return;
+       }
+-      // 4. Se estiver na página pública individual do profissional, volta para a home
+-      if (activeBooking) {
+-        setActiveBooking(null);
+-        window.history.pushState(null, '', '/');
+-        return;
+-      }
++      if (activeBooking) { window.history.back(); return; }
+       // 5. Se estiver em página de SEO de nicho, retorna para a home pública
+       if (!currentUser && activeSeoSlug) {
+         navigateToHome();
+@@ -738,13 +727,7 @@ const AppContent: React.FC = () => {
+       const workoutMatch = window.location.pathname.match(/^\/treino\/([^/]+)/);
+       setActiveWorkoutToken(workoutMatch ? workoutMatch[1] : null);
+ 
+-      const doubleBookingMatch = window.location.pathname.match(/^\/agendar\/([^/]+)\/([^/]+)/);
+-      if (doubleBookingMatch) {
+-        setActiveBooking({ clinicSlug: doubleBookingMatch[1], profSlug: doubleBookingMatch[2] });
+-      } else {
+-        const singleBookingMatch = window.location.pathname.match(/^\/agendar\/([^/]+)/);
+-        setActiveBooking(singleBookingMatch ? { profSlug: singleBookingMatch[1] } : null);
+-      }
++      setActiveBooking(parseBookingRoute(window.location.pathname));
+ 
+       const doubleInviteMatch = window.location.pathname.match(/^\/convite\/([^/]+)\/([^/]+)/);
+       if (doubleInviteMatch) {
+@@ -872,14 +855,7 @@ const AppContent: React.FC = () => {
+     return (
+       <PublicBookingView
+         tenantSlug={currentTenant?.slug || 'clinica-viver-bem'}
+-        onBackToApp={() => {
+-          if (currentUser) {
+-            setCurrentView('dashboard');
+-          } else {
+-            setCurrentView('dashboard');
+-            setPublicView('landing');
+-          }
+-        }}
++        onBackToApp={currentUser ? () => setCurrentView('dashboard') : undefined}
+       />
+     );
+   }
+@@ -935,21 +911,9 @@ const AppContent: React.FC = () => {
+ 
+   // Se o usuário está acessando a página pública individual do profissional (/agendar/:clinicSlug/:profSlug ou /agendar/:slug)
+   if (activeBooking) {
+-    return (
+-      <PublicProfessionalBookingView
+-        slug={activeBooking.profSlug}
+-        clinicSlug={activeBooking.clinicSlug}
+-        onBackToApp={() => {
+-          setActiveBooking(null);
+-          window.history.pushState(null, '', '/');
+-          if (currentUser) {
+-            setCurrentView('dashboard');
+-          } else {
+-            setPublicView('landing');
+-          }
+-        }}
+-      />
+-    );
++    return activeBooking.kind === 'clinic'
++      ? <PublicBookingView tenantSlug={activeBooking.clinicSlug} bookingSequence={activeBooking.sequence} />
++      : <PublicProfessionalBookingView slug={activeBooking.professionalSlug!} clinicSlug={activeBooking.clinicSlug} />;
+   }
+ 
+   // Se o usuário está acessando link único de convite da clínica (/convite/:clinicSlug/:token ou /convite/:token)
+diff --git a/frontend/src/components/professionals/ProfessionalsView.tsx b/frontend/src/components/professionals/ProfessionalsView.tsx
+index b2754b8..35af355 100644
+--- a/frontend/src/components/professionals/ProfessionalsView.tsx
++++ b/frontend/src/components/professionals/ProfessionalsView.tsx
+@@ -1,3 +1,4 @@
++import { BookingLinkCard } from '../public-booking/BookingLinkSettings';
+ import React, { useState, useEffect, useRef } from 'react';
+ import { ApiClient } from '../../api/client';
+ import { useToast } from '../../context/ToastContext';
+@@ -48,7 +49,7 @@ const getCouncilForProfession = (prof?: Profession | null, profNameOrId?: string
+ 
+ export const ProfessionalsView: React.FC = () => {
+   const { showToast } = useToast();
+-  const { reloadSession, currentTenant } = useAuth();
++  const { reloadSession, currentTenant, isClinicAdmin } = useAuth();
+   const [professionals, setProfessionals] = useState<Professional[]>([]);
+   const [professions, setProfessions] = useState<Profession[]>([]);
+   const [specialties, setSpecialties] = useState<Specialty[]>([]);
+@@ -78,12 +79,11 @@ export const ProfessionalsView: React.FC = () => {
+   const [editFixedSalary, setEditFixedSalary] = useState<number>(0);
+   const [editPaymentDay, setEditPaymentDay] = useState<number>(5);
+ 
+-  const handleCopyBookingLink = (prof: Professional) => {
+-    const clinicSlug = currentTenant?.slug || 'clinica';
+-    const slugVal = prof.slug || (prof.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
+-    const url = `${window.location.origin}/agendar/${clinicSlug}/${slugVal}`;
+-    navigator.clipboard.writeText(url);
+-    showToast(`Link de agendamento copiado: ${url}`, 'success');
++  const handleCopyBookingLink = async (prof: Professional) => {
++    if (prof.public_booking_enabled !== 1 || !prof.slug || !currentTenant?.slug) { showToast('O link público deste profissional está indisponível.', 'info'); return; }
++    const url = `${window.location.origin}/agendar/${currentTenant.slug}/${prof.slug}`;
++    try { await navigator.clipboard.writeText(url); showToast('Link de agendamento copiado.', 'success'); }
++    catch { showToast('Não foi possível copiar o link.', 'error'); }
+   };
+ 
+   // Modal Bloqueio de Horário
+@@ -136,7 +136,7 @@ export const ProfessionalsView: React.FC = () => {
+         practiceAreas: editPracticeAreas || null,
+         bufferMinutes: Number(editBufferMinutes),
+         slug: editSlug.trim() || null,
+-        publicBookingEnabled: editPublicBookingEnabled,
++        ...(isClinicAdmin ? { publicBookingEnabled: editPublicBookingEnabled } : {}),
+         remunerationType: editRemunerationType,
+         commissionPercentage: Number(editCommissionPercentage),
+         fixedSalary: Number(editFixedSalary),
+@@ -556,45 +556,7 @@ export const ProfessionalsView: React.FC = () => {
+                 )}
+               </div>
+ 
+-              {/* Seção Página Pública e Link de Agendamento */}
+-              <div className="bg-teal-50/70 border border-teal-200 rounded-2xl p-4 space-y-3">
+-                <div className="flex items-center justify-between">
+-                  <div className="flex items-center gap-2">
+-                    <Share2 className="w-4 h-4 text-teal-700" />
+-                    <span className="font-bold text-teal-900 text-xs">Página Pública de Agendamento</span>
+-                  </div>
+-                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-teal-800">
+-                    <input
+-                      type="checkbox"
+-                      checked={editPublicBookingEnabled}
+-                      onChange={e => setEditPublicBookingEnabled(e.target.checked)}
+-                      className="rounded text-teal-600 focus:ring-teal-500"
+-                    />
+-                    <span>Ativar link público</span>
+-                  </label>
+-                </div>
+-
+-                <div>
+-                  <label className="block font-semibold text-teal-900 mb-1">Link de Agendamento</label>
+-                  <div className="flex items-center gap-2 bg-white border border-teal-200 rounded-xl px-3 py-2 text-xs">
+-                    <span className="flex-1 font-mono text-teal-800 truncate select-all">
+-                      {`${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${editSlug || 'profissional'}`}
+-                    </span>
+-                    <button
+-                      type="button"
+-                      onClick={() => {
+-                        const url = `${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${editSlug || 'profissional'}`;
+-                        navigator.clipboard.writeText(url);
+-                        showToast('Link de agendamento copiado!', 'success');
+-                      }}
+-                      className="text-teal-700 hover:text-teal-900 font-bold flex items-center gap-1 cursor-pointer shrink-0"
+-                    >
+-                      <Copy className="w-3.5 h-3.5" />
+-                      <span>Copiar</span>
+-                    </button>
+-                  </div>
+-                </div>
+-              </div>
++              <BookingLinkCard title={`Página individual — ${editName}`} enabled={editPublicBookingEnabled} url={editingProf?.slug && currentTenant?.slug ? `${window.location.origin}/agendar/${currentTenant.slug}/${editingProf.slug}` : null} onToggle={isClinicAdmin ? setEditPublicBookingEnabled : undefined} />
+ 
+               <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-slate-100">
+                 <button
+diff --git a/frontend/src/components/public-booking/PublicBookingView.tsx b/frontend/src/components/public-booking/PublicBookingView.tsx
+index 3272f45..9254246 100644
+--- a/frontend/src/components/public-booking/PublicBookingView.tsx
++++ b/frontend/src/components/public-booking/PublicBookingView.tsx
+@@ -1,610 +1,119 @@
+-import React, { useState, useEffect } from 'react';
++import React, { useEffect, useMemo, useRef, useState } from 'react';
++import { Calendar, CheckCircle2, UserRound, ArrowRight, Stethoscope } from 'lucide-react';
+ import { ApiClient } from '../../api/client';
+-import { useToast } from '../../context/ToastContext';
+-import { Service, Professional, AvailableSlot } from '../../types';
+-import {
+-  Calendar,
+-  Clock,
+-  User,
+-  CheckCircle2,
+-  Video,
+-  MapPin,
+-  ArrowLeft,
+-  ArrowRight,
+-  ShieldCheck,
+-  Building2,
+-  Phone,
+-  Mail,
+-  ChevronRight,
+-  Sparkles
+-} from 'lucide-react';
++import { AvailableSlot } from '../../types';
++import { bookingAreas, calendarBooking } from '../../utils/publicBooking';
++import { PublicBookingShell, BookingStepIndicator, BookingEmptyState, BookingSkeleton, BookingBackButton, bookingButton, bookingSecondary, bookingInput } from './PublicBookingShell';
++
++interface Props { tenantSlug?: string; bookingSequence?: number; professionalSlug?: string; onBackToApp?: () => void }
++const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
++const modalityLabel = (value: string) => ({ online: 'Online', presential: 'Presencial', home: 'Domiciliar', both: 'Presencial ou online' }[value] || value);
++
++export const PublicBookingView: React.FC<Props> = ({ tenantSlug, bookingSequence, professionalSlug, onBackToApp }) => {
++  const individual = !!professionalSlug;
++  const [step, setStep] = useState(individual ? 3 : 1);
++  const [loading, setLoading] = useState(true);
++  const [clinic, setClinic] = useState<any>(null);
++  const [professionals, setProfessionals] = useState<any[]>([]);
++  const [services, setServices] = useState<any[]>([]);
++  const [area, setArea] = useState('');
++  const [professional, setProfessional] = useState<any>(null);
++  const [serviceId, setServiceId] = useState('');
++  const [date, setDate] = useState(today);
++  const [slots, setSlots] = useState<AvailableSlot[]>([]);
++  const [slot, setSlot] = useState<AvailableSlot | null>(null);
++  const [loadingSlots, setLoadingSlots] = useState(false);
++  const [reloadSlots, setReloadSlots] = useState(0);
++  const [error, setError] = useState('');
++  const [profileError, setProfileError] = useState('');
++  const [retry, setRetry] = useState(0);
++  const [submitting, setSubmitting] = useState(false);
++  const [result, setResult] = useState<any>(null);
++  const [form, setForm] = useState({ fullName: '', phone: '', email: '', isChild: false, guardianName: '', notes: '' });
++  const dateInput = useRef<HTMLInputElement>(null);
++  const contextVersion = useRef(0);
++  const slotVersion = useRef(0);
++  const submittingRef = useRef(false);
++  const areas = useMemo(() => bookingAreas(professionals, services), [professionals, services]);
++  const compatible = professionals.filter(p => areas.find(a => a.name === area)?.professionalIds.includes(p.id));
++  const linkedServices = services.filter(s => professional?.services?.some((link: any) => link.id === s.id));
++  const service = linkedServices.find(s => s.id === serviceId);
++  const modality = service?.modality === 'both' ? 'presential' : service?.modality;
++  const [selectedModality, setSelectedModality] = useState('presential');
++  const bookingModality = service?.modality === 'both' ? selectedModality : modality;
++  const professionalEndpoint = `/v1/public/professionals/${tenantSlug ? `${encodeURIComponent(tenantSlug)}/` : ''}${encodeURIComponent(professionalSlug || '')}`;
+ 
+-interface PublicBookingViewProps {
+-  tenantSlug?: string;
+-  onBackToApp?: () => void;
+-}
+-
+-export const PublicBookingView: React.FC<PublicBookingViewProps> = ({
+-  tenantSlug = 'clinica-viver-bem',
+-  onBackToApp
+-}) => {
+-  const { showToast } = useToast();
+-  const [step, setStep] = useState<number>(1);
+-  const [loading, setLoading] = useState<boolean>(true);
+-
+-  // Dados da clínica
+-  const [clinicData, setClinicData] = useState<any>(null);
+-  const [services, setServices] = useState<Service[]>([]);
+-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+-
+-  // Seleções do fluxo
+-  const [selectedService, setSelectedService] = useState<Service | null>(null);
+-  const [selectedProf, setSelectedProf] = useState<Professional | null>(null);
+-  const [selectedDate, setSelectedDate] = useState<string>(() => {
+-    const tomorrow = new Date();
+-    tomorrow.setDate(tomorrow.getDate() + 1);
+-    return tomorrow.toISOString().split('T')[0];
+-  });
+-  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+-  const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
+-  const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+-
+-  // Formulário do paciente
+-  const [fullName, setFullName] = useState<string>('');
+-  const [phone, setPhone] = useState<string>('');
+-  const [email, setEmail] = useState<string>('');
+-  const [isChild, setIsChild] = useState<boolean>(false);
+-  const [guardianName, setGuardianName] = useState<string>('');
+-  const [guardianPhone, setGuardianPhone] = useState<string>('');
+-  const [notes, setNotes] = useState<string>('');
+-
+-  // Resultado
+-  const [bookingResult, setBookingResult] = useState<any>(null);
+-
+-  // Carrega perfil público da clínica
+   useEffect(() => {
+-    async function loadClinic() {
+-      try {
+-        setLoading(true);
+-        const data = await ApiClient.get<any>(`/v1/public/tenants/${tenantSlug}`);
+-        setClinicData(data.tenant);
+-        setServices(data.services || []);
+-        setProfessionals(data.professionals || []);
+-      } catch (err: any) {
+-        showToast(err.message || 'Erro ao carregar clínica', 'error');
+-      } finally {
+-        setLoading(false);
+-      }
+-    }
+-    loadClinic();
+-  }, [tenantSlug]);
++    let active = true; contextVersion.current++; submittingRef.current = false; setSubmitting(false);
++    setLoading(true); setClinic(null); setProfileError(''); setError(''); setResult(null); setArea(''); setProfessional(null); setServiceId(''); setSlots([]); setSlot(null); setDate(today()); setForm({fullName:'',phone:'',email:'',isChild:false,guardianName:'',notes:''}); setStep(individual ? 3 : 1);
++    const endpoint = individual ? professionalEndpoint : `/v1/public/tenants/${encodeURIComponent(tenantSlug || '')}${bookingSequence ? `?bookingSequence=${bookingSequence}` : ''}`;
++    ApiClient.get<any>(endpoint).then(data => {
++      if (!active) return;
++      setClinic(data.tenant); setServices(data.services || []);
++      if (individual) { const p = {...data.professional, services: (data.services || []).map((s: any) => ({id:s.id, duration_minutes:s.duration_minutes, modality:s.modality}))}; setProfessionals([p]); setProfessional(p); setServiceId(data.services?.length === 1 ? data.services[0].id : ''); }
++      else setProfessionals((data.professionals || []).filter((p: any) => p.services?.length));
++    }).catch((e: any) => { if (active) setProfileError(e.status === 404 ? 'O agendamento online está indisponível no momento.' : 'Não foi possível carregar o agendamento. Tente novamente.'); }).finally(() => { if (active) setLoading(false); });
++    return () => { active = false; contextVersion.current++; };
++  }, [tenantSlug, bookingSequence, professionalSlug, retry]);
+ 
+-  // Consulta slots disponíveis quando profissional, serviço e data são selecionados
+   useEffect(() => {
+-    if (selectedProf && selectedService && selectedDate) {
+-      const profId = selectedProf.id;
+-      const srvId = selectedService.id;
+-      const dateVal = selectedDate;
+-      async function loadSlots() {
+-        try {
+-          setLoadingSlots(true);
+-          const data = await ApiClient.get<any>(
+-            `/v1/public/slots/available?tenantSlug=${tenantSlug}&professionalId=${profId}&serviceId=${srvId}&date=${dateVal}`
+-          );
+-          setAvailableSlots(data.slots || []);
+-          setSelectedSlot(null);
+-        } catch (err: any) {
+-          showToast('Erro ao consultar horários livres', 'error');
+-        } finally {
+-          setLoadingSlots(false);
+-        }
+-      }
+-      loadSlots();
+-    }
+-  }, [selectedProf, selectedService, selectedDate, tenantSlug]);
+-
+-  const handleConfirmBooking = async () => {
+-    if (!fullName || !phone) {
+-      showToast('Por favor, informe seu nome completo e telefone WhatsApp', 'error');
+-      return;
+-    }
+-
+-    if (isChild && !guardianName) {
+-      showToast('Para atendimento infantil, informe o nome do responsável legal', 'error');
+-      return;
+-    }
+-
+-    if (!selectedSlot || !selectedService || !selectedProf) {
+-      showToast('Selecione o serviço, profissional e horário', 'error');
+-      return;
+-    }
+-
++    let active = true; const version = ++slotVersion.current;
++    setSlot(null); setSlots([]);
++    if (!professional || !service || !date) { setLoadingSlots(false); return; }
++    setLoadingSlots(true);
++    const query = new URLSearchParams({date,serviceId:service.id});
++    if (!individual) { query.set('tenantSlug', tenantSlug || ''); query.set('professionalId',professional.id); if (bookingSequence) query.set('bookingSequence',String(bookingSequence)); }
++    const endpoint = individual ? `${professionalEndpoint}/slots?${query}` : `/v1/public/slots/available?${query}`;
++    ApiClient.get<any>(endpoint).then(data => { if (active && version === slotVersion.current) setSlots(data.slots || []); }).catch(() => { if (active) setError('Não foi possível consultar os horários. Tente novamente.'); }).finally(() => { if (active) setLoadingSlots(false); });
++    return () => { active = false; };
++  }, [professional, serviceId, date, tenantSlug, bookingSequence, professionalSlug, reloadSlots]);
++
++  const chooseProfessional = (p: any) => { setProfessional(p); setServiceId(p.services.length === 1 ? p.services[0].id : ''); setSlot(null); setSlots([]); setError(''); };
++  const chooseArea = (name: string) => {
++    setArea(name); setProfessional(null); setServiceId(''); setSlot(null); setError('');
++    const matches = professionals.filter(p => areas.find(a => a.name === name)?.professionalIds.includes(p.id));
++    if (matches.length === 1) { chooseProfessional(matches[0]); setStep(matches[0].services.length === 1 ? 3 : 2); } else setStep(2);
++  };
++  const back = () => { setStep(s => Math.max(individual ? 3 : 1, s - 1)); setError(''); };
++  const go = (next: number) => { setStep(next); setError(''); };
++  const reset = () => { setResult(null); setSlot(null); setForm({fullName:'',phone:'',email:'',isChild:false,guardianName:'',notes:''}); setError(''); setDate(today()); setReloadSlots(n=>n+1); if (!individual) { setArea(''); setProfessional(null); setServiceId(''); } setStep(individual ? 3 : 1); };
++  const confirm = async (e: React.FormEvent) => {
++    e.preventDefault(); if (submittingRef.current || !slot || !service || !professional) return;
++    const version = contextVersion.current; submittingRef.current = true; setSubmitting(true); setError('');
+     try {
+-      setLoading(true);
+-      const payload = {
+-        tenantSlug,
+-        professionalId: selectedProf.id,
+-        serviceId: selectedService.id,
+-        startTime: selectedSlot.startTime,
+-        endTime: selectedSlot.endTime,
+-        modality: selectedService.modality === 'both' ? 'presential' : selectedService.modality,
+-        patientNotes: notes || null,
+-        newPatientData: {
+-          fullName,
+-          phone,
+-          email: email || null,
+-          isChild,
+-          guardianName: isChild ? guardianName : null,
+-          guardianPhone: isChild ? (guardianPhone || phone) : null,
+-          notes: notes || null
+-        }
+-      };
+-
+-      const result = await ApiClient.post<any>('/v1/public/appointments', payload);
+-      setBookingResult(result);
+-      setStep(5); // Tela de Sucesso
+-    } catch (err: any) {
+-      showToast(err.message || 'Erro ao concluir agendamento', 'error');
+-    } finally {
+-      setLoading(false);
+-    }
++      const data = await ApiClient.post<any>('/v1/public/appointments', {
++        tenantSlug: individual ? clinic.slug : tenantSlug, ...(individual ? {professionalSlug: professional.slug || professional.id} : {bookingSequence}), professionalId:professional.id, serviceId:service.id,
++        startTime:slot.startTime,endTime:slot.endTime,modality:bookingModality,patientNotes:form.notes.trim() || null,
++        newPatientData:{fullName:form.fullName.trim(),phone:form.phone.trim(),email:form.email.trim() || null,isChild:form.isChild,guardianName:form.isChild?form.guardianName.trim():null,notes:form.notes.trim() || null}
++      });
++      if (version !== contextVersion.current) return; setResult(data); setStep(6);
++    } catch (e: any) {
++      if (version !== contextVersion.current) return;
++      setError(e.status === 409 ? 'Este horário não está mais disponível. Escolha outro horário.' : e.status === 404 ? 'O agendamento online está indisponível no momento.' : e.message || 'Não foi possível concluir o agendamento.');
++      if (e.status === 409) { setSlot(null); setStep(4); setReloadSlots(n=>n+1); }
++    } finally { if (version === contextVersion.current) {setSubmitting(false); submittingRef.current=false;} }
+   };
+-
+-  if (loading && !clinicData) {
+-    return (
+-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+-        <div className="text-center space-y-3">
+-          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+-          <p className="text-sm font-semibold text-slate-600">Carregando página de agendamento...</p>
+-        </div>
+-      </div>
+-    );
+-  }
+-
+-  return (
+-    <div className="min-h-screen bg-slate-100 flex flex-col items-center py-6 px-4 sm:px-6">
+-      {/* Botão de retorno ao painel se acionado internamente */}
+-      {onBackToApp && (
+-        <div className="w-full max-w-2xl mb-3 flex justify-between items-center">
+-          <button
+-            onClick={onBackToApp}
+-            className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs"
+-          >
+-            <ArrowLeft className="w-3.5 h-3.5" /> Voltar ao Painel Interno
+-          </button>
+-          <span className="text-xs text-slate-400 font-medium">Modo de Pré-visualização Pública</span>
+-        </div>
+-      )}
+-
+-      {/* Card Principal da Clínica e Wizard */}
+-      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+-        {/* Header com Identidade Visual da Clínica */}
+-        <div className="bg-gradient-to-r from-indigo-700 via-indigo-600 to-teal-600 text-white p-6 sm:p-8">
+-          <div className="flex items-center gap-4">
+-            <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white text-2xl font-bold shadow-inner">
+-              {clinicData?.name?.charAt(0) || 'C'}
+-            </div>
+-            <div>
+-              <span className="text-xs font-semibold tracking-wider text-teal-200 uppercase">
+-                Agendamento Online Seguro
+-              </span>
+-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mt-0.5">
+-                {clinicData?.trade_name || clinicData?.name}
+-              </h1>
+-              <p className="text-xs text-indigo-100 mt-1 flex items-center gap-2">
+-                <span>{clinicData?.city} - {clinicData?.state}</span>
+-                {clinicData?.phone && <span>• Tel: {clinicData?.phone}</span>}
+-              </p>
+-            </div>
+-          </div>
+-
+-          {/* Stepper Progress Bar (se não estiver no step de sucesso) */}
+-          {step < 5 && (
+-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/20 text-xs font-semibold">
+-              <span className={step >= 1 ? 'text-white' : 'text-indigo-200'}>1. Serviço</span>
+-              <ChevronRight className="w-4 h-4 text-white/40" />
+-              <span className={step >= 2 ? 'text-white' : 'text-indigo-200'}>2. Profissional</span>
+-              <ChevronRight className="w-4 h-4 text-white/40" />
+-              <span className={step >= 3 ? 'text-white' : 'text-indigo-200'}>3. Horário</span>
+-              <ChevronRight className="w-4 h-4 text-white/40" />
+-              <span className={step >= 4 ? 'text-white' : 'text-indigo-200'}>4. Seus Dados</span>
+-            </div>
+-          )}
+-        </div>
+-
+-        {/* Wizard Steps Container */}
+-        <div className="p-6 sm:p-8">
+-          {/* PASSO 1: ESCOLHA DO SERVIÇO */}
+-          {step === 1 && (
+-            <div className="space-y-4 animate-in fade-in duration-200">
+-              <div>
+-                <h2 className="text-lg font-bold text-slate-900">Escolha o Serviço Desejado</h2>
+-                <p className="text-xs text-slate-500">Selecione o atendimento que melhor atende às suas necessidades.</p>
+-              </div>
+-
+-              <div className="grid grid-cols-1 gap-3">
+-                {services.map(srv => {
+-                  const isSelected = selectedService?.id === srv.id;
+-                  return (
+-                    <div
+-                      key={srv.id}
+-                      onClick={() => setSelectedService(srv)}
+-                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+-                        isSelected
+-                          ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
+-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+-                      }`}
+-                    >
+-                      <div className="space-y-1">
+-                        <div className="flex items-center gap-2">
+-                          <h3 className="font-bold text-slate-900 text-sm">{srv.name}</h3>
+-                          {srv.specialty_name && (
+-                            <span className="text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full">
+-                              {srv.specialty_name}
+-                            </span>
+-                          )}
+-                        </div>
+-                        {srv.description && (
+-                          <p className="text-xs text-slate-500 line-clamp-2">{srv.description}</p>
+-                        )}
+-                        <div className="flex items-center gap-3 text-xs text-slate-400 pt-1">
+-                          <span className="flex items-center gap-1 font-medium text-slate-600">
+-                            <Clock className="w-3.5 h-3.5 text-indigo-500" /> {srv.duration_minutes} min
+-                          </span>
+-                          <span>•</span>
+-                          <span>{srv.modality === 'online' ? 'Atendimento Online' : srv.modality === 'presential' ? 'Presencial' : 'Presencial ou Online'}</span>
+-                        </div>
+-                      </div>
+-
+-                      <div className="text-right pl-4">
+-                        <span className="text-lg font-extrabold text-slate-900">
+-                          {Number(srv.price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+-                        </span>
+-                      </div>
+-                    </div>
+-                  );
+-                })}
+-              </div>
+-
+-              <div className="pt-4 flex justify-end">
+-                <button
+-                  disabled={!selectedService}
+-                  onClick={() => setStep(2)}
+-                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+-                >
+-                  Continuar <ArrowRight className="w-4 h-4" />
+-                </button>
+-              </div>
+-            </div>
+-          )}
+-
+-          {/* PASSO 2: ESCOLHA DO PROFISSIONAL */}
+-          {step === 2 && (
+-            <div className="space-y-4 animate-in fade-in duration-200">
+-              <div>
+-                <h2 className="text-lg font-bold text-slate-900">Escolha o Profissional</h2>
+-                <p className="text-xs text-slate-500">Selecione quem irá conduzir o seu atendimento.</p>
+-              </div>
+-
+-              <div className="grid grid-cols-1 gap-3">
+-                {professionals.map(prof => {
+-                  const isSelected = selectedProf?.id === prof.id;
+-                  return (
+-                    <div
+-                      key={prof.id}
+-                      onClick={() => setSelectedProf(prof)}
+-                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+-                        isSelected
+-                          ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
+-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+-                      }`}
+-                    >
+-                      <div className="flex items-center gap-3.5">
+-                        <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base flex-shrink-0">
+-                          {prof.name.charAt(0)}
+-                        </div>
+-                        <div>
+-                          <h3 className="font-bold text-slate-900 text-sm">{prof.name}</h3>
+-                          <p className="text-xs text-indigo-600 font-medium">{prof.specialty_name || prof.profession_name}</p>
+-                          {prof.registration_number && (
+-                            <span className="text-[11px] text-slate-400">{prof.registration_type}: {prof.registration_number}</span>
+-                          )}
+-                        </div>
+-                      </div>
+-                      {isSelected && <CheckCircle2 className="w-5 h-5 text-indigo-600" />}
+-                    </div>
+-                  );
+-                })}
+-              </div>
+-
+-              <div className="pt-4 flex justify-between">
+-                <button
+-                  onClick={() => setStep(1)}
+-                  className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+-                >
+-                  <ArrowLeft className="w-4 h-4" /> Voltar
+-                </button>
+-                <button
+-                  disabled={!selectedProf}
+-                  onClick={() => setStep(3)}
+-                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+-                >
+-                  Continuar <ArrowRight className="w-4 h-4" />
+-                </button>
+-              </div>
+-            </div>
+-          )}
+-
+-          {/* PASSO 3: DATA E HORÁRIOS DISPONÍVEIS */}
+-          {step === 3 && (
+-            <div className="space-y-5 animate-in fade-in duration-200">
+-              <div>
+-                <h2 className="text-lg font-bold text-slate-900">Escolha o Dia e Horário</h2>
+-                <p className="text-xs text-slate-500">Horários disponíveis calculados em tempo real de acordo com a agenda.</p>
+-              </div>
+-
+-              <div>
+-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Data do Atendimento</label>
+-                <input
+-                  type="date"
+-                  value={selectedDate}
+-                  min={new Date().toISOString().split('T')[0]}
+-                  onChange={e => setSelectedDate(e.target.value)}
+-                  className="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 bg-slate-50"
+-                />
+-              </div>
+-
+-              {/* Slot Picker */}
+-              <div>
+-                <label className="block text-xs font-bold text-slate-700 mb-2">Horários Livres Disponíveis</label>
+-
+-                {loadingSlots ? (
+-                  <div className="py-8 text-center text-xs text-slate-400">
+-                    <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+-                    Consultando disponibilidade...
+-                  </div>
+-                ) : availableSlots.length === 0 ? (
+-                  <div className="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-500">
+-                    Nenhum horário livre encontrado para esta data. Por favor, tente outro dia.
+-                  </div>
+-                ) : (
+-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+-                    {availableSlots.map(slot => {
+-                      const isSelected = selectedSlot?.time === slot.time;
+-                      return (
+-                        <button
+-                          key={slot.time}
+-                          type="button"
+-                          onClick={() => setSelectedSlot(slot)}
+-                          className={`py-3 px-2 rounded-xl text-center font-bold text-xs transition-all ${
+-                            isSelected
+-                              ? 'bg-indigo-600 text-white shadow-md scale-105'
+-                              : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-indigo-400 hover:bg-indigo-50/50'
+-                          }`}
+-                        >
+-                          {slot.time}
+-                        </button>
+-                      );
+-                    })}
+-                  </div>
+-                )}
+-              </div>
+-
+-              <div className="pt-4 flex justify-between">
+-                <button
+-                  onClick={() => setStep(2)}
+-                  className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+-                >
+-                  <ArrowLeft className="w-4 h-4" /> Voltar
+-                </button>
+-                <button
+-                  disabled={!selectedSlot}
+-                  onClick={() => setStep(4)}
+-                  className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+-                >
+-                  Continuar <ArrowRight className="w-4 h-4" />
+-                </button>
+-              </div>
+-            </div>
+-          )}
+-
+-          {/* PASSO 4: IDENTIFICAÇÃO DO CLIENTE / PACIENTE / MENOR */}
+-          {step === 4 && (
+-            <div className="space-y-4 animate-in fade-in duration-200">
+-              <div>
+-                <h2 className="text-lg font-bold text-slate-900">Seus Dados para Contato</h2>
+-                <p className="text-xs text-slate-500">
+-                  Enviaremos a confirmação e lembretes diretamente pelo WhatsApp.
+-                </p>
+-              </div>
+-
+-              {/* Checkbox Atendimento Infantil */}
+-              <div className="bg-indigo-50/60 p-3.5 rounded-2xl border border-indigo-100 flex items-center gap-3">
+-                <input
+-                  type="checkbox"
+-                  id="childCheck"
+-                  checked={isChild}
+-                  onChange={e => setIsChild(e.target.checked)}
+-                  className="w-4 h-4 text-indigo-600 rounded-sm focus:ring-indigo-500"
+-                />
+-                <label htmlFor="childCheck" className="text-xs font-semibold text-indigo-900 cursor-pointer">
+-                  Este agendamento é para uma criança, adolescente ou dependente?
+-                </label>
+-              </div>
+-
+-              <div className="space-y-3">
+-                <div>
+-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+-                    {isChild ? 'Nome da Criança / Paciente' : 'Nome Completo'} *
+-                  </label>
+-                  <input
+-                    type="text"
+-                    value={fullName}
+-                    onChange={e => setFullName(e.target.value)}
+-                    placeholder="Ex: Mariana Silva"
+-                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm"
+-                  />
+-                </div>
+-
+-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+-                  <div>
+-                    <label className="block text-xs font-semibold text-slate-700 mb-1">WhatsApp / Telefone *</label>
+-                    <input
+-                      type="tel"
+-                      value={phone}
+-                      onChange={e => setPhone(e.target.value)}
+-                      placeholder="(11) 99999-9999"
+-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm"
+-                    />
+-                  </div>
+-                  <div>
+-                    <label className="block text-xs font-semibold text-slate-700 mb-1">E-mail (opcional)</label>
+-                    <input
+-                      type="email"
+-                      value={email}
+-                      onChange={e => setEmail(e.target.value)}
+-                      placeholder="seuemail@exemplo.com"
+-                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm"
+-                    />
+-                  </div>
+-                </div>
+-
+-                {/* Campos do Responsável se for menor */}
+-                {isChild && (
+-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 animate-in fade-in">
+-                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Dados do Responsável Legal</h4>
+-                    <div>
+-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Nome do Pai, Mãe ou Tutor *</label>
+-                      <input
+-                        type="text"
+-                        value={guardianName}
+-                        onChange={e => setGuardianName(e.target.value)}
+-                        placeholder="Nome do responsável"
+-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white"
+-                      />
+-                    </div>
+-                  </div>
+-                )}
+-
+-                <div>
+-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Observações ou Motivo da Consulta</label>
+-                  <textarea
+-                    rows={2}
+-                    value={notes}
+-                    onChange={e => setNotes(e.target.value)}
+-                    placeholder="Alguma informação importante que o profissional deva saber?"
+-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+-                  />
+-                </div>
+-              </div>
+-
+-              {/* Resumo antes de confirmar */}
+-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-1">
+-                <div className="flex justify-between">
+-                  <span className="text-slate-500">Serviço:</span>
+-                  <span className="font-bold text-slate-800">{selectedService?.name}</span>
+-                </div>
+-                <div className="flex justify-between">
+-                  <span className="text-slate-500">Profissional:</span>
+-                  <span className="font-bold text-slate-800">{selectedProf?.name}</span>
+-                </div>
+-                <div className="flex justify-between">
+-                  <span className="text-slate-500">Horário:</span>
+-                  <span className="font-bold text-indigo-600">{selectedDate} às {selectedSlot?.time}</span>
+-                </div>
+-                <div className="flex justify-between pt-1 border-t border-slate-200">
+-                  <span className="font-bold text-slate-700">Valor Total:</span>
+-                  <span className="font-bold text-slate-900 text-sm">
+-                    {Number(selectedService?.price || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+-                  </span>
+-                </div>
+-              </div>
+-
+-              <p className="text-[11px] text-slate-400 text-center leading-relaxed">
+-                Ao confirmar, seus dados serão compartilhados com a clínica para viabilizar o atendimento, conforme a{' '}
+-                <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">
+-                  Política de Privacidade
+-                </a>.
+-              </p>
+-
+-              <div className="pt-2 flex justify-between">
+-                <button
+-                  onClick={() => setStep(3)}
+-                  className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+-                >
+-                  <ArrowLeft className="w-4 h-4" /> Voltar
+-                </button>
+-                <button
+-                  onClick={handleConfirmBooking}
+-                  className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-emerald-700 transition-all cursor-pointer"
+-                >
+-                  Confirmar Agendamento <CheckCircle2 className="w-4 h-4" />
+-                </button>
+-              </div>
+-            </div>
+-          )}
+-
+-          {/* PASSO 5: TELA DE SUCESSO / COMPROVANTE */}
+-          {step === 5 && (
+-            <div className="py-6 text-center space-y-5 animate-in zoom-in-95 duration-300">
+-              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+-                <CheckCircle2 className="w-10 h-10" />
+-              </div>
+-
+-              <div>
+-                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Agendamento Realizado!</span>
+-                <h2 className="text-2xl font-extrabold text-slate-900 mt-1">Tudo Pronto para o seu Atendimento</h2>
+-                <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+-                  Os detalhes foram registrados com sucesso. Você receberá um lembrete no seu WhatsApp.
+-                </p>
+-              </div>
+-
+-              {/* Card do Comprovante */}
+-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 max-w-md mx-auto text-left space-y-3">
+-                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+-                  <span className="text-xs text-slate-400">Código da Reserva</span>
+-                  <span className="font-extrabold text-indigo-700 text-sm bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100">
+-                    {bookingResult?.appointmentNumber || 'AG-2026-0000'}
+-                  </span>
+-                </div>
+-
+-                <div className="text-xs space-y-2">
+-                  <div>
+-                    <span className="text-slate-400 block">Paciente:</span>
+-                    <span className="font-bold text-slate-800">{fullName}</span>
+-                  </div>
+-                  <div>
+-                    <span className="text-slate-400 block">Profissional:</span>
+-                    <span className="font-bold text-slate-800">{selectedProf?.name}</span>
+-                  </div>
+-                  <div>
+-                    <span className="text-slate-400 block">Serviço:</span>
+-                    <span className="font-bold text-slate-800">{selectedService?.name}</span>
+-                  </div>
+-                  <div>
+-                    <span className="text-slate-400 block">Data & Horário:</span>
+-                    <span className="font-extrabold text-indigo-700 text-sm">{selectedDate} às {selectedSlot?.time}</span>
+-                  </div>
+-                </div>
+-              </div>
+-
+-              <div className="pt-2">
+-                <button
+-                  onClick={() => {
+-                    setStep(1);
+-                    setSelectedService(null);
+-                    setSelectedProf(null);
+-                    setSelectedSlot(null);
+-                  }}
+-                  className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all"
+-                >
+-                  Fazer Outro Agendamento
+-                </button>
+-              </div>
+-            </div>
+-          )}
+-        </div>
+-      </div>
+-    </div>
+-  );
++  const downloadCalendar = () => {
++    if (!slot) return;
++    const blob = new Blob([calendarBooking({startTime:slot.startTime,endTime:slot.endTime,title:`${service?.name} — ${professional?.name}`,clinic:clinic.trade_name || clinic.name})], {type:'text/calendar;charset=utf-8'});
++    const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url;a.download='agendamento-zemda.ics';a.click();URL.revokeObjectURL(url);
++  };
++  const servicePicker = <>{linkedServices.length > 1 && <div><label htmlFor="booking-service" className="mb-1 block text-sm font-semibold">Atendimento</label><select id="booking-service" className={bookingInput} value={serviceId} onChange={e => {setServiceId(e.target.value);setSlot(null);setSlots([]);}}><option value="">Escolha o atendimento</option>{linkedServices.map(s=><option key={s.id} value={s.id}>{s.name} · {professional.services.find((link:any)=>link.id===s.id)?.duration_minutes || s.duration_minutes} min</option>)}</select></div>}{service?.modality==='both' && <div><label htmlFor="booking-modality" className="mb-1 block text-sm font-semibold">Modalidade</label><select id="booking-modality" className={bookingInput} value={selectedModality} onChange={e=>setSelectedModality(e.target.value)}><option value="presential">Presencial</option><option value="online">Online</option></select></div>}</>;
++  const summary = <dl className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2">{[['Especialidade',area || professional?.specialty_name || professional?.profession_name],['Profissional',professional?.name],['Atendimento',service?.name],['Data',date ? new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR'): ''],['Horário',slot?.time],['Modalidade',modalityLabel(bookingModality || '')],['Clínica',clinic?.trade_name || clinic?.name]].map(([label,value])=><div key={label}><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-0.5 font-semibold text-slate-900">{value}</dd></div>)}</dl>;
++
++  return <PublicBookingShell clinic={clinic}>
++    {onBackToApp && <div className="mb-4"><button type="button" className={bookingSecondary} onClick={onBackToApp}>Voltar ao painel</button></div>}
++    {loading ? <BookingSkeleton /> : profileError ? <BookingEmptyState title="Agendamento indisponível" description={profileError}><button className={bookingSecondary} onClick={()=>setRetry(n=>n+1)}>Tentar novamente</button></BookingEmptyState> : <>
++      <BookingStepIndicator step={step} individual={individual} />
++      {professional && step>=3 && step<6 && <div className="mb-5 flex items-center gap-3 rounded-xl bg-teal-50 p-3 text-sm"><UserRound aria-hidden="true" className="h-5 w-5 shrink-0 text-teal-700" /><div><span className="font-semibold">{professional.name}</span><p className="text-xs text-slate-600">{professional.specialty_name || professional.profession_name}</p></div></div>}
++      {error && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
++      {step===1 && <section><h2 className="text-xl font-bold text-slate-900">O que você procura?</h2><p className="mt-1 text-sm text-slate-500">Escolha uma especialidade ou área de atendimento.</p><div className="mt-5 grid gap-3 sm:grid-cols-2">{areas.map(a=><button key={a.name} type="button" onClick={()=>chooseArea(a.name)} className={`${bookingSecondary} justify-start p-4 text-left`}><Stethoscope aria-hidden="true" className="h-5 w-5 shrink-0 text-teal-700"/><div><span className="block">{a.name}</span><span className="text-xs font-normal text-slate-500">{a.professionalIds.length} profissional(is)</span></div><ArrowRight aria-hidden="true" className="ml-auto h-4 w-4 shrink-0"/></button>)}</div>{!areas.length && <BookingEmptyState title="Nenhuma especialidade disponível" description="Não há atendimentos disponíveis para agendamento online no momento."><button className={bookingSecondary} onClick={()=>setRetry(n=>n+1)}>Atualizar disponibilidade</button></BookingEmptyState>}</section>}
++      {step===2 && <section className="space-y-4"><div><h2 className="text-xl font-bold text-slate-900">Escolha o profissional</h2><p className="text-sm text-slate-500">{area}</p></div><div className="grid gap-3">{compatible.map(p=><button key={p.id} type="button" aria-pressed={professional?.id===p.id} onClick={()=>chooseProfessional(p)} className={`flex min-h-20 items-center gap-3 rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${professional?.id===p.id?'border-teal-600 bg-teal-50':'border-slate-200 hover:bg-slate-50'}`}>
++        {p.photo_url?<img alt={`Foto de ${p.name}`} src={p.photo_url} className="h-12 w-12 shrink-0 rounded-xl object-cover"/>:<span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-800"><UserRound aria-hidden="true"/></span>}<div className="min-w-0"><h3 className="font-semibold text-slate-900">{p.name}</h3><p className="text-sm text-slate-600">{[p.profession_name,p.specialty_name].filter(Boolean).join(' · ')}</p>{p.registration_number&&<p className="text-xs text-slate-500">{p.registration_type} {p.registration_number}</p>}<p className="mt-1 text-xs text-teal-700">{[...new Set(p.services.map((s:any)=>modalityLabel(s.modality)))].join(' · ')}</p></div>{professional?.id===p.id&&<CheckCircle2 aria-hidden="true" className="ml-auto h-5 w-5 shrink-0 text-teal-700"/>}</button>)}</div>{professional&&servicePicker}{!compatible.length&&<BookingEmptyState title="Não encontramos horários disponíveis para esta especialidade no momento."><button className={bookingSecondary} onClick={()=>go(1)}>Escolher outra especialidade</button></BookingEmptyState>}<div className="flex justify-between gap-2"><BookingBackButton onClick={back}/><button className={bookingButton} disabled={!service} onClick={()=>go(3)}>Continuar<ArrowRight aria-hidden="true" className="h-4 w-4"/></button></div></section>}
++      {step===3 && <section className="space-y-5"><h2 className="text-xl font-bold text-slate-900">Escolha a data</h2>{servicePicker}{!linkedServices.length ? <BookingEmptyState title="Nenhum atendimento disponível" description="O profissional não possui serviços disponíveis para agendamento online."><button className={bookingSecondary} onClick={()=>setRetry(n=>n+1)}>Atualizar disponibilidade</button></BookingEmptyState> : <><div><label htmlFor="booking-date" className="mb-1 block text-sm font-semibold">Data do atendimento</label><input ref={dateInput} id="booking-date" aria-label="Data do atendimento" className={bookingInput} type="date" min={today()} value={date} onChange={e=>{setDate(e.target.value);setSlot(null);setSlots([]);}}/></div><div className="flex justify-between gap-2">{!individual?<BookingBackButton onClick={back}/>:<span/>}<button className={bookingButton} disabled={!service||!date||date<today()} onClick={()=>go(4)}>Ver horários<Calendar aria-hidden="true" className="h-4 w-4"/></button></div></>}</section>}
++      {step===4 && <section className="space-y-5"><div><h2 className="text-xl font-bold text-slate-900">Escolha o horário</h2><p className="text-sm text-slate-500">{new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR')} · {service?.name}</p></div>{loadingSlots?<BookingSkeleton/>:slots.length?<div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{slots.map(s=><button key={s.startTime} type="button" aria-pressed={slot?.startTime===s.startTime} onClick={()=>setSlot(s)} className={`min-h-12 rounded-xl border text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${slot?.startTime===s.startTime?'border-teal-700 bg-teal-700 text-white':'border-slate-200 bg-white text-slate-700 hover:border-teal-600'}`}>{s.time}</button>)}</div>:<BookingEmptyState title="Nenhum horário disponível nesta data."><button className={bookingSecondary} onClick={()=>{go(3);setTimeout(()=>dateInput.current?.focus(),0);}}>Escolher outra data</button>{!individual&&<><button className={bookingSecondary} onClick={()=>go(2)}>Escolher outro profissional</button><button className={bookingSecondary} onClick={()=>go(1)}>Voltar para especialidades</button></>}<button className={bookingSecondary} onClick={()=>setReloadSlots(n=>n+1)}>Atualizar horários</button></BookingEmptyState>}<div className="flex justify-between gap-2"><BookingBackButton onClick={back}/><button className={bookingButton} disabled={!slot||loadingSlots} onClick={()=>go(5)}>Continuar<ArrowRight aria-hidden="true" className="h-4 w-4"/></button></div></section>}
++      {step===5 && <form onSubmit={confirm} className="space-y-5"><h2 className="text-xl font-bold text-slate-900">Seus dados</h2>{summary}<div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="booking-name" className="mb-1 block text-sm font-semibold">Nome completo</label><input id="booking-name" autoComplete="name" required minLength={2} maxLength={150} className={bookingInput} value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})}/></div><div><label htmlFor="booking-phone" className="mb-1 block text-sm font-semibold">Telefone / WhatsApp</label><input id="booking-phone" type="tel" autoComplete="tel" required maxLength={25} className={bookingInput} value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></div><div className="sm:col-span-2"><label htmlFor="booking-email" className="mb-1 block text-sm font-semibold">E-mail (opcional)</label><input id="booking-email" type="email" autoComplete="email" maxLength={254} className={bookingInput} value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></div></div><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isChild} onChange={e=>setForm({...form,isChild:e.target.checked})}/> Atendimento de criança ou adolescente</label>{form.isChild&&<div><label htmlFor="booking-guardian" className="mb-1 block text-sm font-semibold">Nome do responsável legal</label><input id="booking-guardian" required maxLength={150} className={bookingInput} value={form.guardianName} onChange={e=>setForm({...form,guardianName:e.target.value})}/></div>}<div><label htmlFor="booking-notes" className="mb-1 block text-sm font-semibold">Observação (opcional)</label><textarea id="booking-notes" rows={2} maxLength={1000} className={bookingInput} placeholder="Evite incluir informações clínicas ou sensíveis." value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></div><div className="flex flex-wrap justify-between gap-2"><button type="button" className={bookingSecondary} disabled={submitting} onClick={back}>Voltar</button><button type="submit" disabled={submitting||!slot} className={bookingButton}>{submitting?'Confirmando…':'Confirmar agendamento'}<CheckCircle2 aria-hidden="true" className="h-4 w-4"/></button></div></form>}
++      {step===6&&result&&<section className="space-y-5"><div className="text-center"><CheckCircle2 aria-hidden="true" className="mx-auto mb-3 h-12 w-12 text-teal-700"/><h2 className="text-xl font-bold text-slate-900">Agendamento realizado</h2><p className="mt-1 text-sm text-slate-500">{result.appointmentNumber}</p></div>{summary}<div className="flex flex-wrap justify-center gap-3"><button type="button" className={bookingSecondary} onClick={downloadCalendar}><Calendar aria-hidden="true" className="h-4 w-4"/>Adicionar ao calendário</button><button type="button" className={bookingButton} onClick={reset}>Novo agendamento</button></div></section>}
++    </>}
++  </PublicBookingShell>;
+ };
+diff --git a/frontend/src/components/public-booking/PublicProfessionalBookingView.tsx b/frontend/src/components/public-booking/PublicProfessionalBookingView.tsx
+index 55ffc0b..5e76fc3 100644
+--- a/frontend/src/components/public-booking/PublicProfessionalBookingView.tsx
++++ b/frontend/src/components/public-booking/PublicProfessionalBookingView.tsx
+@@ -1,619 +1,7 @@
+-import React, { useState, useEffect } from 'react';
+-import { ApiClient } from '../../api/client';
+-import { useToast } from '../../context/ToastContext';
+-import { AvailableSlot } from '../../types';
+-import {
+-  Calendar,
+-  Clock,
+-  User,
+-  CheckCircle2,
+-  Building2,
+-  Phone,
+-  Mail,
+-  ArrowRight,
+-  ShieldCheck,
+-  ChevronRight,
+-  MapPin,
+-  Sparkles,
+-  Stethoscope,
+-  Info
+-} from 'lucide-react';
++import React from 'react';
++import { PublicBookingView } from './PublicBookingView';
+ 
+-interface PublicProfessionalBookingViewProps {
+-  slug: string;
+-  clinicSlug?: string;
+-  onBackToLanding?: () => void;
+-  onBackToApp?: () => void;
+-}
+-
+-export const PublicProfessionalBookingView: React.FC<PublicProfessionalBookingViewProps> = ({
+-  slug,
+-  clinicSlug,
+-  onBackToLanding,
+-  onBackToApp
+-}) => {
+-  const { showToast } = useToast();
+-  const [loading, setLoading] = useState<boolean>(true);
+-  const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
+-  const [step, setStep] = useState<number>(1);
+-
+-  // Dados carregados da API
+-  const [professional, setProfessional] = useState<any>(null);
+-  const [tenant, setTenant] = useState<any>(null);
+-  const [services, setServices] = useState<any[]>([]);
+-
+-  // Seleções do fluxo
+-  const [selectedService, setSelectedService] = useState<any>(null);
+-  const [selectedDate, setSelectedDate] = useState<string>(() => {
+-    const d = new Date();
+-    d.setDate(d.getDate() + 1);
+-    // Pula domingo para segunda se for domingo
+-    if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+-    return d.toISOString().split('T')[0];
+-  });
+-  const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+-  const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+-
+-  // Formulário do Paciente
+-  const [fullName, setFullName] = useState<string>('');
+-  const [phone, setPhone] = useState<string>('');
+-  const [email, setEmail] = useState<string>('');
+-  const [isChild, setIsChild] = useState<boolean>(false);
+-  const [guardianName, setGuardianName] = useState<string>('');
+-  const [notes, setNotes] = useState<string>('');
+-  const [submitting, setSubmitting] = useState<boolean>(false);
+-  const [bookingResult, setBookingResult] = useState<any>(null);
+-
+-  // Carrega perfil público do profissional
+-  useEffect(() => {
+-    async function loadProf() {
+-      try {
+-        setLoading(true);
+-        const endpoint = clinicSlug
+-          ? `/v1/public/professionals/${clinicSlug}/${slug}`
+-          : `/v1/public/professionals/${slug}`;
+-        const data = await ApiClient.get<any>(endpoint);
+-        setProfessional(data.professional);
+-        setTenant(data.tenant);
+-        const srvs = data.services || [];
+-        setServices(srvs);
+-        if (srvs.length > 0) {
+-          setSelectedService(srvs[0]);
+-        }
+-      } catch (err: any) {
+-        setProfessional(null);
+-        showToast(err.message || 'Profissional não encontrado ou agendamento desativado', 'error');
+-      } finally {
+-        setLoading(false);
+-      }
+-    }
+-    if (slug) {
+-      loadProf();
+-    }
+-  }, [slug, clinicSlug]);
+-
+-  // Consulta slots disponíveis pela escala oficial quando muda data ou serviço
+-  useEffect(() => {
+-    if (!professional || !selectedService || !selectedDate) return;
+-
+-    async function loadSlots() {
+-      try {
+-        setLoadingSlots(true);
+-        const endpoint = clinicSlug
+-          ? `/v1/public/professionals/${clinicSlug}/${slug}/slots?date=${selectedDate}&serviceId=${selectedService.id}`
+-          : `/v1/public/professionals/${slug}/slots?date=${selectedDate}&serviceId=${selectedService.id}`;
+-        const data = await ApiClient.get<any>(endpoint);
+-        setAvailableSlots(data.slots || []);
+-        setSelectedSlot(null);
+-      } catch (err: any) {
+-        console.error('Erro ao consultar horários:', err);
+-        setAvailableSlots([]);
+-      } finally {
+-        setLoadingSlots(false);
+-      }
+-    }
+-
+-    loadSlots();
+-  }, [slug, clinicSlug, selectedService, selectedDate, professional]);
+-
+-  const handleConfirmBooking = async (e: React.FormEvent) => {
+-    e.preventDefault();
+-    if (!fullName || !phone) {
+-      showToast('Por favor, informe seu nome e telefone WhatsApp', 'error');
+-      return;
+-    }
+-    if (!selectedSlot || !selectedService) {
+-      showToast('Selecione um horário disponível para a consulta', 'error');
+-      return;
+-    }
+-
+-    try {
+-      setSubmitting(true);
+-      const payload = {
+-        tenantId: tenant?.id,
+-        tenantSlug: tenant?.slug,
+-        professionalId: professional.id,
+-        serviceId: selectedService.id,
+-        startTime: selectedSlot.startTime,
+-        endTime: selectedSlot.endTime,
+-        modality: selectedService.modality === 'both' ? 'presential' : (selectedService.modality || 'presential'),
+-        patientNotes: notes || null,
+-        newPatientData: {
+-          fullName,
+-          phone,
+-          email: email || null,
+-          isChild,
+-          guardianName: isChild ? guardianName : null,
+-          notes: notes || null
+-        }
+-      };
+-
+-      const res = await ApiClient.post<any>('/v1/public/appointments', payload);
+-      setBookingResult(res);
+-      setStep(3); // Sucesso
+-      showToast('Agendamento realizado com sucesso!', 'success');
+-    } catch (err: any) {
+-      showToast(err.message || 'Não foi possível concluir o agendamento', 'error');
+-    } finally {
+-      setSubmitting(false);
+-    }
+-  };
+-
+-  if (loading) {
+-    return (
+-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+-        <div className="text-center space-y-3">
+-          <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto" />
+-          <p className="text-slate-300 text-sm font-semibold">Carregando perfil profissional...</p>
+-        </div>
+-      </div>
+-    );
+-  }
+-
+-  if (!professional) {
+-    return (
+-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md text-center space-y-4">
+-          <div className="w-12 h-12 bg-red-500/10 text-red-400 rounded-xl flex items-center justify-center mx-auto">
+-            <Info className="w-6 h-6" />
+-          </div>
+-          <h2 className="text-lg font-bold text-white">Página Não Encontrada</h2>
+-          <p className="text-slate-400 text-sm">
+-            O profissional solicitado não existe ou a página pública de agendamento online está desativada no momento.
+-          </p>
+-          {(onBackToApp || onBackToLanding) && (
+-            <button
+-              onClick={onBackToApp || onBackToLanding}
+-              className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium rounded-xl transition-all"
+-            >
+-              Voltar ao Início
+-            </button>
+-          )}
+-        </div>
+-      </div>
+-    );
+-  }
+-
+-  return (
+-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+-      {/* Header Institucional */}
+-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md sticky top-0 z-30">
+-        <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
+-          <div className="flex items-center gap-3">
+-            {tenant?.logo_url ? (
+-              <img src={tenant.logo_url} alt={tenant.name} className="w-9 h-9 object-contain rounded-lg shadow-xs" />
+-            ) : (
+-              <div className="w-9 h-9 rounded-lg bg-teal-600 flex items-center justify-center text-white font-bold text-sm">
+-                {(tenant?.name || 'Z')[0]}
+-              </div>
+-            )}
+-            <div>
+-              <h1 className="font-semibold text-white text-sm leading-tight">{tenant?.trade_name || tenant?.name}</h1>
+-              <p className="text-xs text-slate-400 flex items-center gap-1">
+-                <MapPin className="w-3 h-3 text-teal-400" />
+-                {tenant?.city ? `${tenant.city} - ${tenant.state || 'Brasil'}` : 'Atendimento Especializado'}
+-              </p>
+-            </div>
+-          </div>
+-          <div className="flex items-center gap-3 text-xs text-slate-400">
+-            {(onBackToApp || onBackToLanding) && (
+-              <button
+-                onClick={onBackToApp || onBackToLanding}
+-                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg transition-all"
+-              >
+-                Voltar
+-              </button>
+-            )}
+-            <div className="flex items-center gap-1.5">
+-              <img src="/brand/zemda-icon.png" alt="Zemda" className="w-5 h-5 object-contain" />
+-              <span className="hidden sm:inline font-medium">Agendamento Oficial Zemda</span>
+-            </div>
+-          </div>
+-        </div>
+-      </header>
+-
+-      {/* Main Container */}
+-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
+-        {step < 3 ? (
+-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+-            {/* Coluna Esquerda: Apresentação do Profissional */}
+-            <div className="lg:col-span-5 space-y-6">
+-              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+-                <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+-
+-                <div className="flex flex-col items-center text-center space-y-4">
+-                  {professional.photo_url ? (
+-                    <img
+-                      src={professional.photo_url}
+-                      alt={professional.name}
+-                      className="w-28 h-28 rounded-full object-cover border-4 border-slate-800 shadow-md ring-2 ring-teal-500/30"
+-                    />
+-                  ) : (
+-                    <div className="w-28 h-28 rounded-full bg-slate-800 border-4 border-slate-700 flex items-center justify-center text-teal-400 font-bold text-3xl shadow-md">
+-                      {professional.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')}
+-                    </div>
+-                  )}
+-
+-                  <div className="space-y-1">
+-                    <h2 className="text-xl font-bold text-white tracking-tight">{professional.name}</h2>
+-                    <p className="text-sm font-semibold text-teal-400">
+-                      {professional.specialty_name || professional.profession_name || 'Profissional de Saúde'}
+-                    </p>
+-                    {professional.registration_number && (
+-                      <p className="text-xs text-slate-400">
+-                        {professional.registration_type || 'Registro'}: {professional.registration_number}
+-                      </p>
+-                    )}
+-                  </div>
+-
+-                  {professional.practice_areas && (
+-                    <div className="flex flex-wrap gap-1.5 justify-center pt-2">
+-                      {professional.practice_areas.split(',').map((area: string, i: number) => (
+-                        <span
+-                          key={i}
+-                          className="px-2.5 py-0.5 bg-slate-800 border border-slate-700/80 text-slate-300 text-xs rounded-full font-medium"
+-                        >
+-                          {area.trim()}
+-                        </span>
+-                      ))}
+-                    </div>
+-                  )}
+-
+-                  {professional.bio && (
+-                    <p className="text-xs text-slate-400 leading-relaxed pt-2 border-t border-slate-800/80 text-justify">
+-                      {professional.bio}
+-                    </p>
+-                  )}
+-                </div>
+-
+-                <div className="mt-6 pt-4 border-t border-slate-800/80 space-y-2 text-xs text-slate-400">
+-                  <div className="flex items-center gap-2">
+-                    <Building2 className="w-4 h-4 text-slate-500 shrink-0" />
+-                    <span>{tenant?.name}</span>
+-                  </div>
+-                  {tenant?.phone && (
+-                    <div className="flex items-center gap-2">
+-                      <Phone className="w-4 h-4 text-slate-500 shrink-0" />
+-                      <span>{tenant.phone}</span>
+-                    </div>
+-                  )}
+-                  <div className="flex items-center gap-2 text-teal-400 font-medium">
+-                    <ShieldCheck className="w-4 h-4 shrink-0" />
+-                    <span>Disponibilidade sincronizada em tempo real</span>
+-                  </div>
+-                </div>
+-              </div>
+-            </div>
+-
+-            {/* Coluna Direita: Seleção de Serviço, Data, Horário e Formulário */}
+-            <div className="lg:col-span-7 space-y-6">
+-              {step === 1 && (
+-                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+-                  <div>
+-                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+-                      <Calendar className="w-5 h-5 text-teal-400" />
+-                      1. Escolha o Serviço e o Horário
+-                    </h3>
+-                    <p className="text-xs text-slate-400 mt-1">
+-                      Selecione o procedimento desejado e o melhor horário disponível na escala oficial do profissional.
+-                    </p>
+-                  </div>
+-
+-                  {/* Lista de Serviços */}
+-                  <div className="space-y-2.5">
+-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+-                      Serviços Disponíveis
+-                    </label>
+-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+-                      {services.map(srv => {
+-                        const isSelected = selectedService?.id === srv.id;
+-                        return (
+-                          <div
+-                            key={srv.id}
+-                            onClick={() => setSelectedService(srv)}
+-                            className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+-                              isSelected
+-                                ? 'bg-teal-950/40 border-teal-500 text-white shadow-xs ring-1 ring-teal-500/50'
+-                                : 'bg-slate-800/60 border-slate-700/60 hover:border-slate-600 text-slate-300'
+-                            }`}
+-                          >
+-                            <div className="font-semibold text-sm leading-tight text-white">{srv.name}</div>
+-                            <div className="flex items-center justify-between text-xs mt-2 pt-2 border-t border-slate-700/40">
+-                              <span className="flex items-center gap-1 text-slate-400">
+-                                <Clock className="w-3.5 h-3.5 text-teal-400" />
+-                                {srv.duration_minutes || 50} min
+-                              </span>
+-                              <span className="font-bold text-teal-400">
+-                                {srv.price > 0 ? `R$ ${Number(srv.price).toFixed(2).replace('.', ',')}` : 'Sob consulta'}
+-                              </span>
+-                            </div>
+-                          </div>
+-                        );
+-                      })}
+-                    </div>
+-                  </div>
+-
+-                  {/* Seletor de Data */}
+-                  <div className="space-y-2">
+-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+-                      Data do Atendimento
+-                    </label>
+-                    <input
+-                      type="date"
+-                      value={selectedDate}
+-                      min={new Date().toISOString().split('T')[0]}
+-                      onChange={e => setSelectedDate(e.target.value)}
+-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-hidden focus:border-teal-500 transition-colors"
+-                    />
+-                  </div>
+-
+-                  {/* Horários Livres */}
+-                  <div className="space-y-2">
+-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+-                      <span>Horários Livres na Escala</span>
+-                      {loadingSlots && <span className="text-teal-400 font-normal">Calculando horários...</span>}
+-                    </label>
+-
+-                    {loadingSlots ? (
+-                      <div className="h-28 flex items-center justify-center">
+-                        <div className="w-6 h-6 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+-                      </div>
+-                    ) : availableSlots.length === 0 ? (
+-                      <div className="bg-slate-800/40 border border-dashed border-slate-700 rounded-2xl p-6 text-center text-slate-400 text-sm">
+-                        Não há horários disponíveis para esta data. Por favor, escolha outro dia.
+-                      </div>
+-                    ) : (
+-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-56 overflow-y-auto pr-1">
+-                        {availableSlots.map((slot, idx) => {
+-                          const isSlotSelected = selectedSlot?.startTime === slot.startTime;
+-                          return (
+-                            <button
+-                              key={idx}
+-                              type="button"
+-                              onClick={() => setSelectedSlot(slot)}
+-                              className={`py-2 px-3 rounded-xl text-sm font-semibold transition-all ${
+-                                isSlotSelected
+-                                  ? 'bg-teal-500 text-slate-950 shadow-md ring-2 ring-teal-400 scale-[1.02]'
+-                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/60'
+-                              }`}
+-                            >
+-                              {slot.time}
+-                            </button>
+-                          );
+-                        })}
+-                      </div>
+-                    )}
+-                  </div>
+-
+-                  <button
+-                    type="button"
+-                    disabled={!selectedSlot}
+-                    onClick={() => setStep(2)}
+-                    className="w-full py-3 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm"
+-                  >
+-                    <span>Prosseguir para Dados do Paciente</span>
+-                    <ArrowRight className="w-4 h-4" />
+-                  </button>
+-                </div>
+-              )}
+-
+-              {step === 2 && (
+-                <form
+-                  onSubmit={handleConfirmBooking}
+-                  className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6"
+-                >
+-                  <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+-                    <div>
+-                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+-                        <User className="w-5 h-5 text-teal-400" />
+-                        2. Seus Dados Pessoais
+-                      </h3>
+-                      <p className="text-xs text-slate-400 mt-0.5">
+-                        Agendamento para {selectedDate.split('-').reverse().join('/')} às {selectedSlot?.time}
+-                      </p>
+-                    </div>
+-                    <button
+-                      type="button"
+-                      onClick={() => setStep(1)}
+-                      className="text-xs text-teal-400 hover:underline"
+-                    >
+-                      Alterar horário
+-                    </button>
+-                  </div>
+-
+-                  <div className="space-y-4">
+-                    <div>
+-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Nome Completo *</label>
+-                      <input
+-                        type="text"
+-                        required
+-                        value={fullName}
+-                        onChange={e => setFullName(e.target.value)}
+-                        placeholder="Ex: Maria Silva"
+-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-hidden focus:border-teal-500"
+-                      />
+-                    </div>
+-
+-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+-                      <div>
+-                        <label className="block text-xs font-semibold text-slate-300 mb-1">WhatsApp / Telefone *</label>
+-                        <input
+-                          type="tel"
+-                          required
+-                          value={phone}
+-                          onChange={e => setPhone(e.target.value)}
+-                          placeholder="(11) 99999-9999"
+-                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-hidden focus:border-teal-500"
+-                        />
+-                      </div>
+-                      <div>
+-                        <label className="block text-xs font-semibold text-slate-300 mb-1">E-mail</label>
+-                        <input
+-                          type="email"
+-                          value={email}
+-                          onChange={e => setEmail(e.target.value)}
+-                          placeholder="seu@email.com"
+-                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-hidden focus:border-teal-500"
+-                        />
+-                      </div>
+-                    </div>
+-
+-                    <div className="pt-2">
+-                      <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 select-none">
+-                        <input
+-                          type="checkbox"
+-                          checked={isChild}
+-                          onChange={e => setIsChild(e.target.checked)}
+-                          className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500"
+-                        />
+-                        <span>O paciente é menor de idade / criança</span>
+-                      </label>
+-                    </div>
+-
+-                    {isChild && (
+-                      <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700 space-y-3">
+-                        <label className="block text-xs font-semibold text-slate-300">
+-                          Nome do Responsável Legal *
+-                        </label>
+-                        <input
+-                          type="text"
+-                          required={isChild}
+-                          value={guardianName}
+-                          onChange={e => setGuardianName(e.target.value)}
+-                          placeholder="Nome do pai, mãe ou tutor"
+-                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-hidden focus:border-teal-500"
+-                        />
+-                      </div>
+-                    )}
+-
+-                    <div>
+-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+-                        Observações ou motivo da consulta (opcional)
+-                      </label>
+-                      <textarea
+-                        rows={3}
+-                        value={notes}
+-                        onChange={e => setNotes(e.target.value)}
+-                        placeholder="Alguma informação importante para o profissional..."
+-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-hidden focus:border-teal-500 resize-none"
+-                      />
+-                    </div>
+-                  </div>
+-
+-                  <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+-                    Ao confirmar, seus dados serão compartilhados com a clínica para viabilizar o atendimento, conforme a{' '}
+-                    <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-300">
+-                      Política de Privacidade
+-                    </a>.
+-                  </p>
+-
+-                  <div className="pt-2 flex gap-3">
+-                    <button
+-                      type="button"
+-                      onClick={() => setStep(1)}
+-                      className="px-5 py-3 border border-slate-700 hover:bg-slate-800 text-slate-300 font-semibold rounded-2xl text-sm transition-all"
+-                    >
+-                      Voltar
+-                    </button>
+-                    <button
+-                      type="submit"
+-                      disabled={submitting}
+-                      className="flex-1 py-3 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-semibold rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm"
+-                    >
+-                      {submitting ? (
+-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+-                      ) : (
+-                        <>
+-                          <CheckCircle2 className="w-4 h-4" />
+-                          <span>Confirmar Agendamento</span>
+-                        </>
+-                      )}
+-                    </button>
+-                  </div>
+-                </form>
+-              )}
+-            </div>
+-          </div>
+-        ) : (
+-          /* Tela de Sucesso */
+-          <div className="max-w-xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl text-center space-y-6">
+-            <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto ring-4 ring-emerald-500/20">
+-              <CheckCircle2 className="w-9 h-9" />
+-            </div>
+-
+-            <div className="space-y-2">
+-              <h2 className="text-2xl font-bold text-white tracking-tight">Consulta Agendada com Sucesso!</h2>
+-              <p className="text-sm text-slate-400">
+-                Seu horário já foi reservado diretamente na agenda oficial do profissional.
+-              </p>
+-            </div>
+-
+-            <div className="bg-slate-800/60 border border-slate-700/70 rounded-2xl p-5 text-left space-y-3 text-sm">
+-              <div className="flex justify-between border-b border-slate-700/60 pb-2">
+-                <span className="text-slate-400">Profissional:</span>
+-                <span className="font-semibold text-white">{professional.name}</span>
+-              </div>
+-              <div className="flex justify-between border-b border-slate-700/60 pb-2">
+-                <span className="text-slate-400">Procedimento:</span>
+-                <span className="font-semibold text-white">{selectedService?.name}</span>
+-              </div>
+-              <div className="flex justify-between border-b border-slate-700/60 pb-2">
+-                <span className="text-slate-400">Data e Horário:</span>
+-                <span className="font-bold text-teal-400">
+-                  {selectedDate.split('-').reverse().join('/')} às {selectedSlot?.time}
+-                </span>
+-              </div>
+-              <div className="flex justify-between border-b border-slate-700/60 pb-2">
+-                <span className="text-slate-400">Paciente:</span>
+-                <span className="font-semibold text-white">{fullName}</span>
+-              </div>
+-              <div className="flex justify-between">
+-                <span className="text-slate-400">Clínica:</span>
+-                <span className="font-semibold text-white">{tenant?.name}</span>
+-              </div>
+-            </div>
+-
+-            <p className="text-xs text-slate-400">
+-              Um comprovante e lembretes serão enviados via WhatsApp para <strong className="text-slate-200">{phone}</strong>.
+-            </p>
+-
+-            <button
+-              onClick={() => {
+-                setStep(1);
+-                setSelectedSlot(null);
+-              }}
+-              className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-xl transition-all"
+-            >
+-              Realizar outro agendamento
+-            </button>
+-          </div>
+-        )}
+-      </main>
+-
+-      {/* Footer */}
+-      <footer className="border-t border-slate-800 py-4 text-center text-xs text-slate-500">
+-        Plataforma Zemda • Tecnologia Médica e Gestão Profissional • LGPD Compliant
+-      </footer>
+-    </div>
+-  );
+-};
++interface Props { slug: string; clinicSlug?: string }
++/** Individual links use the same booking experience with the professional fixed. */
++export const PublicProfessionalBookingView: React.FC<Props> = ({ slug, clinicSlug }) =>
++  <PublicBookingView tenantSlug={clinicSlug} professionalSlug={slug} />;
+diff --git a/frontend/src/components/settings/SettingsView.tsx b/frontend/src/components/settings/SettingsView.tsx
+index 9f76222..7898ab9 100644
+--- a/frontend/src/components/settings/SettingsView.tsx
++++ b/frontend/src/components/settings/SettingsView.tsx
+@@ -1,3 +1,4 @@
++import { ClinicBookingSettings, ProfessionalBookingSettings } from '../public-booking/BookingLinkSettings';
+ import { BillingView } from '../billing/BillingView';
+ import React, { useState, useEffect } from 'react';
+ import { ApiClient } from '../../api/client';
+@@ -943,49 +944,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
+       )}
+ 
+       {/* SEÇÃO: MINHA PÁGINA DE AGENDAMENTO (Não-Admin) */}
+-      {activeSection === 'my_booking' && (
+-        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-5 text-xs">
+-          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+-            <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold">
+-              <Calendar className="w-6 h-6" />
+-            </div>
+-            <div>
+-              <h3 className="font-bold text-slate-900 text-base">Minha Página Pública de Agendamento</h3>
+-              <p className="text-slate-500 text-[11px] mt-0.5">
+-                Compartilhe seu link exclusivo com seus pacientes para que agendem consultas online nos horários livres da sua escala.
+-              </p>
+-            </div>
+-          </div>
+-
+-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+-            <label className="block font-bold text-slate-800">Seu Link Exclusivo</label>
+-            <div className="flex items-center gap-2">
+-              <input
+-                type="text"
+-                readOnly
+-                value={`${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${currentUser?.professionalSlug || (currentUser as any)?.slug || 'profissional'}`}
+-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-mono text-slate-700 select-all"
+-              />
+-              <button
+-                type="button"
+-                onClick={() => {
+-                  const url = `${window.location.origin}/agendar/${currentTenant?.slug || 'clinica'}/${currentUser?.professionalSlug || (currentUser as any)?.slug || 'profissional'}`;
+-                  navigator.clipboard.writeText(url);
+-                  showToast('Link copiado com sucesso!', 'success');
+-                }}
+-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+-              >
+-                <Copy className="w-3.5 h-3.5" />
+-                <span>Copiar</span>
+-              </button>
+-            </div>
+-          </div>
+-        </div>
+-      )}
++      {activeSection === 'my_booking' && <ProfessionalBookingSettings />}
+ 
+       {/* SEÇÃO: CLÍNICA & IDENTIDADE (Sub-abas: Dados, Modelos, Convênios) */}
+       {activeSection === 'clinic' && (
+         <div className="space-y-4">
++          <ClinicBookingSettings />
++          {isClinicAdmin && <ProfessionalBookingSettings />}
+           <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold flex-wrap">
+             <button
+               type="button"
+diff --git a/frontend/src/types/index.ts b/frontend/src/types/index.ts
+index eed49e7..0ad364b 100644
+--- a/frontend/src/types/index.ts
++++ b/frontend/src/types/index.ts
+@@ -54,6 +54,9 @@ export interface User {
+ export * from './capabilities';
+ 
+ export interface Tenant {
++  public_booking_enabled?: number;
++  public_booking_slug?: string;
++  public_booking_sequence?: number;
+   id: string;
+   slug: string;
+   name: string;

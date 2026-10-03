@@ -19,6 +19,7 @@ export interface Student {
   cpf?: string;
   birth_date?: string;
   gender?: string;
+  anthropometric_sex?: 'male' | 'female' | 'not_informed' | null;
   status: string;
   avatar_url?: string | null;
   created_at: string;
@@ -148,6 +149,7 @@ export interface TavRange {
   id: string;
   protocol_id: string;
   gender?: string;
+  anthropometric_sex?: 'male' | 'female' | 'not_informed' | null;
   min_age?: number | null;
   max_age?: number | null;
   min_value: number;
@@ -203,6 +205,7 @@ export interface AssessmentComparison {
 }
 
 export interface Assessment {
+  [key: string]: any;
   id: string;
   patient_id: string;
   professional_id: string;

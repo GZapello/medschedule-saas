@@ -1,3 +1,5 @@
+import { calculateAssessment, normalizeLegacyAssessmentForReport, referenceSex, numberOrNull } from '../services/personal-assessment-calculation.service';
+import { ASSESSMENT_COLUMNS } from '../config/personal-assessment.migration';
 import { exerciseAnimation, getExerciseMaxCompletedLoad } from '../services/exercise-media';
 import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
 import { matchesExercise, insertWorkoutExercise, imageAttribution } from '../services/personal-exercise-utils';
@@ -333,6 +335,11 @@ function saveAssessmentPhotos(
     if (!photo?.photo_type) continue;
     const fileId = requireAttachmentId(photo.file_id || photo.fileId, tenantId);
     if (!fileId) continue;
+      const existingPhoto=db.prepare('SELECT id FROM personal_assessment_photos WHERE assessment_id=? AND tenant_id=? AND photo_type=?').get(assessmentId,tenantId,photo.photo_type) as any;
+      if(existingPhoto) {
+        db.prepare(`UPDATE personal_assessment_photos SET file_id=?,photo_url='',notes=COALESCE(?,notes) WHERE id=? AND tenant_id=?`).run(fileId,photo.notes ?? null,existingPhoto.id,tenantId);
+        continue;
+      }
     db.prepare(`
       INSERT INTO personal_assessment_photos
         (id, tenant_id, assessment_id, patient_id, photo_type, photo_url, photo_date, notes, file_id)
@@ -360,7 +367,7 @@ export function resolveTavClassification(
   gender?: string,
   age?: number
 ): { classification: string; protocolId?: string; protocolName?: string; unit?: string; color?: string } {
-  if (val === undefined || val === null || isNaN(val)) {
+  if (val === undefined || val === null || !Number.isFinite(val)) {
     return { classification: 'Sem valor informado' };
   }
 
@@ -372,6 +379,7 @@ export function resolveTavClassification(
     `).get(protocolId, tenantId);
   }
 
+  if(protocolId && !proto) return {classification:'Classificação não disponível para este método.',color:'#64748B'};
   if (!proto && equipment) {
     const eqTrim = equipment.trim();
     proto = db.prepare(`
@@ -382,17 +390,6 @@ export function resolveTavClassification(
       ORDER BY CASE WHEN tenant_id = ? THEN 0 ELSE 1 END, created_at ASC
       LIMIT 1
     `).get(tenantId, eqTrim, eqTrim, tenantId);
-  }
-
-  if (!proto && method) {
-    proto = db.prepare(`
-      SELECT * FROM personal_tav_protocols
-      WHERE (tenant_id = ? OR tenant_id = 'global')
-        AND LOWER(method) = LOWER(?)
-        AND is_active = 1
-      ORDER BY CASE WHEN tenant_id = ? THEN 0 ELSE 1 END, created_at ASC
-      LIMIT 1
-    `).get(tenantId, method.trim(), tenantId);
   }
 
   // Regra fundamental: Se não há protocolo registrado para o equipamento/método selecionado:
@@ -406,7 +403,8 @@ export function resolveTavClassification(
     };
   }
 
-  const normGender = (gender || '').toLowerCase().startsWith('m') ? 'm' : ((gender || '').toLowerCase().startsWith('f') ? 'f' : 'all');
+  const sex=referenceSex({anthropometric_sex:gender}).sex;
+  const normGender=sex==='male'?'m':sex==='female'?'f':'all';
   const ranges = db.prepare(`
     SELECT * FROM personal_tav_ranges
     WHERE protocol_id = ?
@@ -416,6 +414,7 @@ export function resolveTavClassification(
   let matchedRange: any = null;
   for (const r of ranges) {
     if (r.gender && r.gender !== 'all' && r.gender !== normGender) continue;
+    if (age === undefined && (r.min_age !== null || r.max_age !== null)) continue;
     if (age !== undefined && r.min_age !== null && age < r.min_age) continue;
     if (age !== undefined && r.max_age !== null && age > r.max_age) continue;
     if (val >= r.min_value && val <= r.max_value) {
@@ -556,7 +555,7 @@ export class PersonalController {
       const q = req.query.q ? String(req.query.q).trim() : '';
 
       let sql = `
-        SELECT p.id, COALESCE(p.full_name, p.social_name) as name, p.email, p.phone, p.birth_date, p.gender,
+        SELECT p.id, COALESCE(p.full_name, p.social_name) as name, p.email, p.phone, p.birth_date, p.gender, p.anthropometric_sex,
                CASE WHEN p.active = 1 THEN 'active' ELSE 'inactive' END as status,
                p.photo_url as avatar_url, p.created_at,
                prof.goal, prof.experience_level, prof.weekly_frequency, prof.restrictions,
@@ -596,7 +595,7 @@ export class PersonalController {
       const { id } = req.params;
 
       const student = db.prepare(`
-        SELECT p.id, COALESCE(p.full_name, p.social_name) as name, p.email, p.phone, p.cpf, p.birth_date, p.gender, p.address, p.notes_admin as patient_notes,
+        SELECT p.id, COALESCE(p.full_name, p.social_name) as name, p.email, p.phone, p.cpf, p.birth_date, p.gender, p.anthropometric_sex, p.address, p.notes_admin as patient_notes,
                CASE WHEN p.active = 1 THEN 'active' ELSE 'inactive' END as status,
                p.photo_url as avatar_url, p.created_at,
                prof.goal, prof.experience_level, prof.weekly_frequency, prof.training_preferences,
@@ -746,6 +745,7 @@ export class PersonalController {
           effectiveEmail, effectiveBirth, cpf || null, gender || null, effectivePhoto
         );
 
+        if (req.body.anthropometric_sex !== undefined) db.prepare('UPDATE patients SET anthropometric_sex=? WHERE id=? AND tenant_id=?').run(referenceSex({anthropometric_sex:req.body.anthropometric_sex}).sex,patientId,tenantId);
         // Insere perfil de treinamento
         const pspId = 'psp-' + uuidv4().slice(0, 8);
         db.prepare(`
@@ -835,6 +835,7 @@ export class PersonalController {
           isActive, id, tenantId
         );
 
+        if (req.body.anthropometric_sex !== undefined) db.prepare('UPDATE patients SET anthropometric_sex=? WHERE id=? AND tenant_id=?').run(referenceSex({anthropometric_sex:req.body.anthropometric_sex}).sex,id,tenantId);
         const existingProfile = db.prepare('SELECT id FROM personal_student_profiles WHERE patient_id = ? AND tenant_id = ?').get(id, tenantId) as any;
         if (existingProfile) {
           db.prepare(`
@@ -1136,6 +1137,29 @@ export class PersonalController {
     }
   }
 
+  static async previewAssessment(req: Request,res: Response): Promise<void> {
+    if(!hasPostureAccess(req)) {res.status(403).json({error:'Acesso não autorizado'});return;}
+    const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(req.body.patient_id,req.tenantId);
+    if(!patient){res.status(404).json({error:'Aluno não encontrado'});return;}
+    res.json(calculateAssessment({...req.body,assessment_date:req.body.assessment_date || new Date().toISOString().slice(0,10)},patient));
+  }
+  static async assessmentReportData(req: Request,res: Response): Promise<void> {
+    try {
+      if(!hasPostureAccess(req)){res.status(403).json({error:'Acesso não autorizado'});return;}
+      const tenant=req.tenantId;
+      const original=db.prepare('SELECT * FROM personal_assessments WHERE id=? AND tenant_id=?').get(req.params.id,tenant) as any;
+      if(!original){res.status(404).json({error:'Avaliação não encontrada'});return;}
+      const student=db.prepare('SELECT p.*,s.goal FROM patients p LEFT JOIN personal_student_profiles s ON s.patient_id=p.id AND s.tenant_id=p.tenant_id WHERE p.id=? AND p.tenant_id=?').get(original.patient_id,tenant);
+      const history=db.prepare('SELECT * FROM personal_assessments WHERE patient_id=? AND tenant_id=? ORDER BY assessment_date,created_at,id').all(original.patient_id,tenant).map((a:any)=>normalizeLegacyAssessmentForReport(a,student).assessment);
+      const normalized=normalizeLegacyAssessmentForReport(original,student);
+      const index=history.findIndex((a:any)=>a.id===original.id);
+      const professional=db.prepare('SELECT id,name,registration_type,registration_number FROM professionals WHERE id=? AND tenant_id=?').get(original.professional_id,tenant) || db.prepare('SELECT id,name,registration_type,registration_number FROM users WHERE id=? AND tenant_id=?').get(original.professional_id,tenant);
+      const clinic=db.prepare('SELECT id,name,trade_name FROM tenants WHERE id=?').get(tenant);
+      const photos=db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id=? AND tenant_id=?').all(original.id,tenant);
+      res.json({original,...normalized,student,professional,clinic,photos,previous_assessment:index>0?history[index-1]:null,evolution_history:history,references:normalized.derived.references});
+    }catch(err){console.error('[Personal report]',err);res.status(500).json({error:'Erro ao carregar relatório'});}
+  }
+
   static async createAssessment(req: Request, res: Response): Promise<void> {
     try {
       if (!hasPostureAccess(req)) {
@@ -1147,118 +1171,34 @@ export class PersonalController {
       const b = req.body;
       const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
 
-      const patient = db.prepare('SELECT id, birth_date, gender FROM patients WHERE id = ? AND tenant_id = ?').get(b.patient_id, tenantId) as any;
+      const patient = db.prepare('SELECT id, birth_date, gender, anthropometric_sex FROM patients WHERE id = ? AND tenant_id = ?').get(b.patient_id, tenantId) as any;
       if (!patient) {
         res.status(404).json({ error: 'Aluno não encontrado' });
         return;
       }
 
-      // Calcula idade aproximada
-      let age = 30;
-      if (patient.birth_date) {
-        const diffMs = Date.now() - new Date(patient.birth_date).getTime();
-        age = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 365.25));
+      const calculation = calculateAssessment({...b, calculation_version:undefined, anthropometric_sex_at_assessment:undefined,age_at_assessment:undefined,assessment_date:b.assessment_date || new Date().toISOString().slice(0,10)}, patient);
+      const cv = calculation.values;
+      Object.assign(b, Object.fromEntries(Object.entries(cv).filter(([k])=>k.startsWith('fold_'))));
+      const {bmi,whr,whtr} = cv;
+      const weight = numberOrNull(b.weight), height = numberOrNull(b.height);
+      const bodyFatPct=cv.body_fat_percentage, fatMassKg=cv.fat_mass_kg, leanMassKg=cv.lean_mass_kg, muscleMassKg=cv.muscle_mass_kg;
+      const protocol=b.skinfolds_protocol || b.protocol || 'pollock_7';
+      const [sSub,sTri,sChe,sAxi,sSup,sAbd,sThi,sCal]=['subscapular','triceps','chest','axillary','suprailiac','abdominal','thigh','calf'].map(f=>cv['fold_'+f]);
+      const tavVal=numberOrNull(b.tav_value,true);
+      let tavProtocolId=b.tav_protocol_id || null, tavUnit=b.tav_unit || 'nível', tavClassification=cv.tav_classification;
+      if(tavVal !== null && b.tav_protocol_id) {
+        const r=resolveTavClassification(tenantId,b.tav_protocol_id,undefined,undefined,tavVal,cv.anthropometric_sex_at_assessment,cv.age_at_assessment ?? undefined);
+        tavClassification=r.classification; tavUnit=r.unit || tavUnit;
+        cv.tav_classification=tavClassification;
+        const proto=db.prepare("SELECT source_reference FROM personal_tav_protocols WHERE id=? AND (tenant_id=? OR tenant_id='global')").get(b.tav_protocol_id,tenantId) as any;
+        cv.tav_reference_source=proto?.source_reference || null;
+        const metadata=JSON.parse(cv.calculation_metadata_json);
+        metadata.visceralAdiposity.tav={...metadata.visceralAdiposity.tav,classification:tavClassification,unit:tavUnit,reference:cv.tav_reference_source,protocolId:tavProtocolId};
+        cv.calculation_metadata_json=JSON.stringify(metadata);
       }
-      const isMale = (patient.gender || '').toLowerCase().startsWith('m');
-
-      const weight = Number(b.weight) || 0;
-      const height = Number(b.height) || 0; // cm
-
-      // IMC
-      let bmi = 0;
-      if (weight > 0 && height > 0) {
-        const heightM = height / 100;
-        bmi = parseFloat((weight / (heightM * heightM)).toFixed(2));
-      }
-
-      // Relação Cintura-Quadril (RCQ / WHR)
-      const waist = Number(b.waist_cm) || 0;
-      const hip = Number(b.hip_cm) || 0;
-      let whr = 0;
-      if (waist > 0 && hip > 0) {
-        whr = parseFloat((waist / hip).toFixed(2));
-      }
-
-      // Relação Cintura-Estatura (RCE / WHtR)
-      let whtr = 0;
-      if (waist > 0 && height > 0) {
-        whtr = parseFloat((waist / height).toFixed(2));
-      }
-
-      // Dobras cutâneas
-      const sSub = Number(b.fold_subscapular) || 0;
-      const sTri = Number(b.fold_triceps) || 0;
-      const sChe = Number(b.fold_chest) || 0;
-      const sAxi = Number(b.fold_axillary) || 0;
-      const sSup = Number(b.fold_suprailiac) || 0;
-      const sAbd = Number(b.fold_abdominal) || 0;
-      const sThi = Number(b.fold_thigh) || 0;
-      const sCal = Number(b.fold_calf) || 0;
-
-      let bodyFatPct = Number(b.body_fat_percentage) || 0;
-      const protocol = b.protocol || 'pollock_7';
-
-      if (!bodyFatPct || bodyFatPct <= 0) {
-        if (protocol === 'pollock_7' && (sSub + sTri + sChe + sAxi + sSup + sAbd + sThi) > 0) {
-          const sum7 = sSub + sTri + sChe + sAxi + sSup + sAbd + sThi;
-          let density = 0;
-          if (isMale) {
-            density = 1.112 - (0.00043499 * sum7) + (0.00000055 * sum7 * sum7) - (0.00028826 * age);
-          } else {
-            density = 1.097 - (0.00046971 * sum7) + (0.00000056 * sum7 * sum7) - (0.00012828 * age);
-          }
-          if (density > 0) {
-            bodyFatPct = ((4.95 / density) - 4.5) * 100;
-          }
-        } else if (protocol === 'pollock_3') {
-          let density = 0;
-          if (isMale) {
-            // Pollock 3 Homens: Peito, Abdômen, Coxa
-            const sum3 = sChe + sAbd + sThi;
-            density = 1.10938 - (0.0008267 * sum3) + (0.0000016 * sum3 * sum3) - (0.0002574 * age);
-          } else {
-            // Pollock 3 Mulheres: Tríceps, Suprailíaca, Coxa
-            const sum3 = sTri + sSup + sThi;
-            density = 1.0994921 - (0.0009929 * sum3) + (0.0000023 * sum3 * sum3) - (0.0001392 * age);
-          }
-          if (density > 0) {
-            bodyFatPct = ((4.95 / density) - 4.5) * 100;
-          }
-        }
-      }
-
-      bodyFatPct = Math.max(0, Math.min(65, parseFloat(bodyFatPct.toFixed(2))));
-      const fatMassKg = parseFloat(((weight * bodyFatPct) / 100).toFixed(2));
-      const leanMassKg = parseFloat((weight - fatMassKg).toFixed(2));
-      const muscleMassKg = b.muscle_mass_kg ? Number(b.muscle_mass_kg) : parseFloat((leanMassKg * 0.52).toFixed(2)); // Estimativa aproximada de massa muscular esquelética
-
-      // TAV: resolução de classificação rigorosa por equipamento/protocolo
-      const tavVal = b.tav_value !== undefined && b.tav_value !== null && b.tav_value !== '' ? Number(b.tav_value) : null;
-      let tavClassification = b.tav_classification || null;
-      let tavProtocolId = b.tav_protocol_id || null;
-      let tavUnit = b.tav_unit || 'nível';
-
-      if (tavVal !== null) {
-        const tavRes = resolveTavClassification(
-          tenantId,
-          b.tav_protocol_id,
-          b.tav_method || b.composition_method,
-          b.tav_equipment,
-          tavVal,
-          patient.gender,
-          age
-        );
-        if (!tavClassification) {
-          tavClassification = tavRes.classification;
-        }
-        if (!tavProtocolId && tavRes.protocolId) {
-          tavProtocolId = tavRes.protocolId;
-        }
-        if (tavRes.unit) {
-          tavUnit = tavRes.unit;
-        }
-      }
-
+      const numericColumns=(db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]).filter(c=>['REAL','INTEGER'].includes(c.type)).map(c=>c.name);
+      for(const key of numericColumns) if(key in b && key!=='flexibility_wells_cm') b[key]=numberOrNull(b[key],['tav_value','body_fat_percentage','flexibility_wells_cm'].includes(key));
       // JSON stringified fields
       const strengthTestsJson = Array.isArray(b.strength_tests) ? JSON.stringify(b.strength_tests) : (b.strength_tests_json || null);
       const muscularEnduranceTestsJson = Array.isArray(b.muscular_endurance_tests) ? JSON.stringify(b.muscular_endurance_tests) : (b.muscular_endurance_tests_json || null);
@@ -1271,6 +1211,7 @@ export class PersonalController {
       const assessmentId = 'pass-' + uuidv4().slice(0, 8);
       const assessmentDate = b.assessment_date || new Date().toISOString().split('T')[0];
 
+      db.transaction(()=>{
       db.prepare(`
         INSERT INTO personal_assessments (
           id, tenant_id, patient_id, professional_id, assessment_date,
@@ -1329,7 +1270,7 @@ export class PersonalController {
         sSup || null, sAbd || null, sThi || null, sCal || null,
         b.skinfolds_protocol || null,
         bodyFatPct, fatMassKg, leanMassKg, muscleMassKg,
-        b.composition_method || 'dobras_cutaneas', b.body_water_liters ? Number(b.body_water_liters) : null, b.bmr_kcal ? Number(b.bmr_kcal) : null, rawCompositionJson,
+        b.composition_method || 'dobras_cutaneas', b.body_water_liters ? Number(b.body_water_liters) : null, cv.bmr_kcal, rawCompositionJson,
         tavVal, tavUnit, b.tav_method || null, b.tav_equipment || null, tavProtocolId, tavClassification, b.tav_notes || null,
         b.resting_heart_rate_bpm ? Number(b.resting_heart_rate_bpm) : null, b.blood_pressure_systolic ? Number(b.blood_pressure_systolic) : null, b.blood_pressure_diastolic ? Number(b.blood_pressure_diastolic) : null,
         b.vo2_max ? Number(b.vo2_max) : null, b.vo2_method_type || null, b.vo2_protocol || null,
@@ -1337,6 +1278,9 @@ export class PersonalController {
         b.flexibility_wells_cm ? Number(b.flexibility_wells_cm) : null, flexibilityTestsJson,
         protocol, sourceModule, b.notes || null
       );
+
+      const extra = Object.fromEntries(Object.keys(ASSESSMENT_COLUMNS).map(k=>[k, cv[k] !== undefined ? cv[k] : b[k] ?? null]));
+      db.prepare(`UPDATE personal_assessments SET ${Object.keys(extra).map(k=>k+' = ?').join(', ')} WHERE id=? AND tenant_id=?`).run(...Object.values(extra),assessmentId,tenantId);
 
       // Atualiza peso atual e altura no perfil do aluno
       db.prepare(`
@@ -1355,6 +1299,7 @@ export class PersonalController {
       }
 
       if (postureJson !== undefined) db.prepare('UPDATE personal_assessments SET posture_json = ? WHERE id = ? AND tenant_id = ?').run(postureJson, assessmentId, tenantId);
+      })();
 
       // Sincroniza com o prontuário universal (records) de forma idempotente
       try {
@@ -1367,7 +1312,7 @@ export class PersonalController {
           leanMassKg ? `Massa Magra: ${leanMassKg} kg` : '',
           fatMassKg ? `Massa Gorda: ${fatMassKg} kg` : '',
           muscleMassKg ? `Massa Muscular: ${muscleMassKg} kg` : '',
-          tavVal ? `TAV: ${tavVal} (${tavClassification || 'Normal'})` : '',
+          tavVal ? `TAV: ${tavVal} (${tavClassification || 'Sem classificação'})` : '',
           b.notes ? `Observações: ${b.notes}` : ''
         ].filter(Boolean);
 
@@ -1407,7 +1352,7 @@ export class PersonalController {
       logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
       res.status(201).json({
         id: assessmentId,
-        assessment: { id: assessmentId, source_module: sourceModule },
+        assessment: db.prepare('SELECT * FROM personal_assessments WHERE id=? AND tenant_id=?').get(assessmentId,tenantId),
         bmi,
         whr,
         whtr,
@@ -1437,7 +1382,7 @@ export class PersonalController {
       const b = req.body;
       const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
 
-      const existing = db.prepare('SELECT id, patient_id FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const existing = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Avaliação física não encontrada' });
         return;
@@ -1445,28 +1390,24 @@ export class PersonalController {
 
       validatePosturePhotoAccess(db, tenantId, existing.patient_id, postureJson, b.photos);
 
-      if (b.weight !== undefined || b.height !== undefined || b.notes !== undefined || b.body_fat_percentage !== undefined || b.source_module !== undefined) {
-        db.prepare(`
-          UPDATE personal_assessments
-          SET weight = COALESCE(?, weight),
-              height = COALESCE(?, height),
-              body_fat_percentage = COALESCE(?, body_fat_percentage),
-              notes = COALESCE(?, notes),
-              source_module = COALESCE(?, source_module),
-              updated_at = datetime('now')
-          WHERE id = ? AND tenant_id = ?
-        `).run(
-          b.weight !== undefined ? Number(b.weight) : null,
-          b.height !== undefined ? Number(b.height) : null,
-          b.body_fat_percentage !== undefined ? Number(b.body_fat_percentage) : null,
-          b.notes !== undefined ? b.notes : null,
-          b.source_module !== undefined ? b.source_module : null,
-          id, tenantId
-        );
+      const columns = new Set((db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]).map(c=>c.name));
+      const forbidden=new Set(['id','patient_id','tenant_id','professional_id','created_at','updated_at','calculation_version','calculation_metadata_json','anthropometric_sex_at_assessment','age_at_assessment']);
+      const edits:Record<string,any>={};
+      for(const [k,v] of Object.entries(b)) if(columns.has(k) && !forbidden.has(k) && k !== 'posture_json') edits[k]=v;
+      for(const [key,jsonKey] of [['strength_tests','strength_tests_json'],['muscular_endurance_tests','muscular_endurance_tests_json'],['flexibility_tests','flexibility_tests_json'],['raw_composition_data','raw_composition_data_json']]) if(b[key] !== undefined) edits[jsonKey]=JSON.stringify(b[key]);
+      for(const c of db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]) if(c.name in edits && ['REAL','INTEGER'].includes(c.type) && c.name!=='flexibility_wells_cm') edits[c.name]=numberOrNull(edits[c.name],['tav_value','body_fat_percentage'].includes(c.name));
+      for(const key of ['bmi','whr','whtr','fat_mass_kg','lean_mass_kg','vai_value','somatotype_endomorphy','somatotype_mesomorphy','somatotype_ectomorphy','somatochart_x','somatochart_y','skinfold_sum','skinfold_central_sum','skinfold_peripheral_sum']) delete edits[key];
+      const calculationInputs=['weight','height','protocol','skinfolds_protocol','composition_method','skinfold_measurements_json','waist_cm','hip_cm','triglycerides_mg_dl','hdl_mg_dl','muscle_mass_kg','body_fat_percentage'];
+      if(existing.calculation_version && (calculationInputs.some(k=>k in edits) || Object.keys(edits).some(k=>k.startsWith('fold_')))) {
+        const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(existing.patient_id,tenantId);
+        const merged={...existing,...edits};
+        if(!('bmr_kcal' in edits) && existing.bmr_method==='mifflin_st_jeor') merged.bmr_kcal=null;
+        Object.assign(edits,Object.fromEntries(Object.entries(calculateAssessment(merged,patient).values).filter(([k])=>columns.has(k))));
       }
+      if(!existing.calculation_version) for(const k of ['body_fat_percentage','fat_mass_kg','lean_mass_kg','muscle_mass_kg','bmr_kcal','bmi','whr','whtr']) if(edits[k]===null) delete edits[k];
+      if(Object.keys(edits).length) db.prepare(`UPDATE personal_assessments SET ${Object.keys(edits).map(k=>k+'=?').join(',')},updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(...Object.values(edits),id,tenantId);
 
       if (Array.isArray(b.photos)) {
-        db.prepare('DELETE FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').run(id, tenantId);
         
         const assessmentDate: string = typeof b.assessment_date === 'string'
           ? b.assessment_date
@@ -1555,7 +1496,7 @@ export class PersonalController {
       const tenantId = req.tenantId!;
       const { id, compareId } = req.params;
 
-      const current = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      let current = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       let previous = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(compareId, tenantId) as any;
 
       const postureMode = req.query.posture_baseline === '1';
@@ -1571,13 +1512,17 @@ export class PersonalController {
       const currentPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(id, tenantId);
       const previousPhotos = db.prepare('SELECT * FROM personal_assessment_photos WHERE assessment_id = ? AND tenant_id = ?').all(previous.id, tenantId);
 
+      const reportPatient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(current.patient_id,tenantId);
+      current=normalizeLegacyAssessmentForReport(current,reportPatient || {}).assessment;
+      previous=normalizeLegacyAssessmentForReport(previous,reportPatient || {}).assessment;
       const buildItem = (label: string, field: string, unit: string = 'cm') => {
         const curVal = current[field] !== null && current[field] !== undefined ? Number(current[field]) : null;
         const prevVal = previous[field] !== null && previous[field] !== undefined ? Number(previous[field]) : null;
         let diff: number | null = null;
         let pctVariation: number | null = null;
 
-        if (curVal !== null && prevVal !== null) {
+        const comparable=field!=='tav_value' || ['tav_equipment','tav_unit','tav_protocol_id'].every(k=>(current[k] ?? null)===(previous[k] ?? null));
+        if (comparable && curVal !== null && prevVal !== null) {
           diff = parseFloat((curVal - prevVal).toFixed(2));
           if (prevVal !== 0) {
             pctVariation = parseFloat(((diff / Math.abs(prevVal)) * 100).toFixed(2));
@@ -1607,6 +1552,8 @@ export class PersonalController {
         buildItem('Massa Muscular', 'muscle_mass_kg', 'kg'),
         buildItem('Água Corporal Total', 'body_water_liters', 'L'),
         buildItem('Taxa Metabólica Basal (TMB)', 'bmr_kcal', 'kcal'),
+        buildItem('VAI (índice indireto)', 'vai_value', ''),
+        buildItem('Somatório de dobras', 'skinfold_sum', 'mm'),
         buildItem('TAV (Tecido Adiposo Visceral)', 'tav_value', current.tav_unit || previous.tav_unit || 'nível'),
         // Circunferências
         buildItem('Pescoço', 'neck_cm', 'cm'),
@@ -1638,6 +1585,8 @@ export class PersonalController {
         buildItem('Dobra Peitoral', 'fold_chest', 'mm'),
         buildItem('Dobra Axilar Média', 'fold_axillary', 'mm'),
         buildItem('Dobra Suprailíaca', 'fold_suprailiac', 'mm'),
+        buildItem('Dobra da crista ilíaca', 'fold_iliac_crest', 'mm'),
+        buildItem('Dobra supraespinale', 'fold_supraspinale', 'mm'),
         buildItem('Dobra Abdominal', 'fold_abdominal', 'mm'),
         buildItem('Dobra da Coxa', 'fold_thigh', 'mm'),
         buildItem('Dobra da Panturrilha', 'fold_calf', 'mm'),
@@ -1688,25 +1637,8 @@ export class PersonalController {
       const tenantId = req.tenantId!;
       const { studentId } = req.params;
 
-      const history = db.prepare(`
-        SELECT id, assessment_date, weight, height, bmi, whr, whtr,
-               body_fat_percentage, fat_mass_kg, lean_mass_kg, muscle_mass_kg,
-               composition_method, body_water_liters, bmr_kcal,
-               waist_cm, abdomen_cm, hip_cm, chest_cm,
-               arm_right_relaxed, arm_left_relaxed, arm_right_flexed, arm_left_flexed,
-               forearm_right, forearm_left,
-               thigh_right_prox, thigh_left_prox, thigh_right_med, thigh_left_med, thigh_right_dist, thigh_left_dist,
-               calf_right, calf_left,
-               fold_subscapular, fold_triceps, fold_biceps, fold_chest, fold_axillary,
-               fold_suprailiac, fold_abdominal, fold_thigh, fold_calf,
-               tav_value, tav_unit, tav_method, tav_equipment, tav_classification, tav_notes,
-               resting_heart_rate_bpm, blood_pressure_systolic, blood_pressure_diastolic,
-               vo2_max, vo2_method_type, vo2_protocol,
-               flexibility_wells_cm
-        FROM personal_assessments
-        WHERE patient_id = ? AND tenant_id = ?
-        ORDER BY assessment_date ASC
-      `).all(studentId, tenantId) as any[];
+      const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(studentId,tenantId);
+      const history=db.prepare('SELECT * FROM personal_assessments WHERE patient_id=? AND tenant_id=? ORDER BY assessment_date,created_at,id').all(studentId,tenantId).map((a:any)=>normalizeLegacyAssessmentForReport(a,patient || {}).assessment);
 
       res.json({ history });
     } catch (err: any) {

@@ -38,3 +38,7 @@ ExerciseGymGifsDB/
 # Playwright reports contain only synthetic test artifacts and stay local.
 /playwright-report/
 /test-results/
+
+# Synthetic personal-assessment audit and print artifacts
+/tmp/personal-audit/
+/tmp/personal-report-tests/

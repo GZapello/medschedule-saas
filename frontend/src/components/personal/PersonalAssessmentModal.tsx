@@ -1,3 +1,4 @@
+import { PersonalTechnicalFields } from './PersonalTechnicalFields';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { Posture, readPosture, emptyPosture } from './posture';
 import React, { useState, useEffect, lazy, Suspense } from 'react';
@@ -113,6 +114,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
   // Tab 3: Dobras Cutâneas (mm)
   const [skinfoldsProtocol, setSkinfoldsProtocol] = useState<'pollock_7' | 'pollock_3' | 'petroski' | 'guedes'>('pollock_7');
+  const [technical, setTechnical] = useState<any>({});
+  const [calculationPreview, setCalculationPreview] = useState<any>(null);
   const [foldTriceps, setFoldTriceps] = useState<number | ''>('');
   const [foldSubscapular, setFoldSubscapular] = useState<number | ''>('');
   const [foldBiceps, setFoldBiceps] = useState<number | ''>('');
@@ -258,6 +261,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     bmrKcal,
     tavValue,
     skinfoldsProtocol,
+    technical,
     foldTriceps,
     foldSubscapular,
     foldBiceps,
@@ -310,6 +314,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     bmrKcal,
     tavValue,
     skinfoldsProtocol,
+    technical,
     foldTriceps,
     foldSubscapular,
     foldBiceps,
@@ -365,6 +370,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     if (data.bmrKcal !== undefined) setBmrKcal(data.bmrKcal);
     if (data.tavValue !== undefined) setTavValue(data.tavValue);
     if (data.skinfoldsProtocol !== undefined) setSkinfoldsProtocol(data.skinfoldsProtocol);
+    if (data.technical !== undefined) setTechnical(data.technical);
     if (data.foldTriceps !== undefined) setFoldTriceps(data.foldTriceps);
     if (data.foldSubscapular !== undefined) setFoldSubscapular(data.foldSubscapular);
     if (data.foldBiceps !== undefined) setFoldBiceps(data.foldBiceps);
@@ -414,6 +420,55 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   useEffect(() => {
     if (isOpen) { setPhotoFront('');setPhotoFrontFileId('');setPhotoBack('');setPhotoBackFileId('');setPhotoRight('');setPhotoRightFileId('');setPhotoLeft('');setPhotoLeftFileId(''); }
     if (assessmentToEdit && isOpen) {
+      setTechnical({...Object.fromEntries(['fold_iliac_crest','fold_supraspinale','humerus_breadth_cm','femur_breadth_cm','glucose_mg_dl','triglycerides_mg_dl','ldl_mg_dl','hdl_mg_dl','biochemical_source','biochemical_exam_date','muscle_mass_method','muscle_mass_notes'].map(k=>[k,assessmentToEdit[k] ?? null])), skinfold_measurements: (()=>{try{return JSON.parse(assessmentToEdit.skinfold_measurements_json || '{}')}catch{return {}}})(),technical_mode:!!assessmentToEdit.skinfold_measurements_json});
+      setNeckCm(assessmentToEdit.neck_cm ?? '');
+      setShoulderCm(assessmentToEdit.shoulder_cm ?? '');
+      setChestCm(assessmentToEdit.chest_cm ?? '');
+      setWaistCm(assessmentToEdit.waist_cm ?? '');
+      setAbdomenCm(assessmentToEdit.abdomen_cm ?? '');
+      setHipCm(assessmentToEdit.hip_cm ?? '');
+      setArmRightRelaxed(assessmentToEdit.arm_right_relaxed ?? '');
+      setArmLeftRelaxed(assessmentToEdit.arm_left_relaxed ?? '');
+      setArmRightFlexed(assessmentToEdit.arm_right_flexed ?? '');
+      setArmLeftFlexed(assessmentToEdit.arm_left_flexed ?? '');
+      setForearmRight(assessmentToEdit.forearm_right ?? '');
+      setForearmLeft(assessmentToEdit.forearm_left ?? '');
+      setWristRight(assessmentToEdit.wrist_right ?? '');
+      setWristLeft(assessmentToEdit.wrist_left ?? '');
+      setThighRightProx(assessmentToEdit.thigh_right_prox ?? '');
+      setThighLeftProx(assessmentToEdit.thigh_left_prox ?? '');
+      setThighRightMed(assessmentToEdit.thigh_right_med ?? '');
+      setThighLeftMed(assessmentToEdit.thigh_left_med ?? '');
+      setThighRightDist(assessmentToEdit.thigh_right_dist ?? '');
+      setThighLeftDist(assessmentToEdit.thigh_left_dist ?? '');
+      setCalfRight(assessmentToEdit.calf_right ?? '');
+      setCalfLeft(assessmentToEdit.calf_left ?? '');
+      setFoldTriceps(assessmentToEdit.fold_triceps ?? '');
+      setFoldSubscapular(assessmentToEdit.fold_subscapular ?? '');
+      setFoldBiceps(assessmentToEdit.fold_biceps ?? '');
+      setFoldChest(assessmentToEdit.fold_chest ?? '');
+      setFoldAxillary(assessmentToEdit.fold_axillary ?? '');
+      setFoldSuprailiac(assessmentToEdit.fold_suprailiac ?? '');
+      setFoldAbdominal(assessmentToEdit.fold_abdominal ?? '');
+      setFoldThigh(assessmentToEdit.fold_thigh ?? '');
+      setFoldCalf(assessmentToEdit.fold_calf ?? '');
+      setManualFatPct(assessmentToEdit.body_fat_percentage ?? '');
+      setManualMuscleMass(assessmentToEdit.muscle_mass_kg ?? '');
+      setBodyWaterLiters(assessmentToEdit.body_water_liters ?? '');
+      setBmrKcal(assessmentToEdit.bmr_kcal ?? '');
+      setTavValue(assessmentToEdit.tav_value ?? '');
+      setRestingHeartRate(assessmentToEdit.resting_heart_rate_bpm ?? '');
+      setBloodPressureSystolic(assessmentToEdit.blood_pressure_systolic ?? '');
+      setBloodPressureDiastolic(assessmentToEdit.blood_pressure_diastolic ?? '');
+      setVo2Max(assessmentToEdit.vo2_max ?? '');
+      setFlexibilityWellsCm(assessmentToEdit.flexibility_wells_cm ?? '');
+      setSkinfoldsProtocol(assessmentToEdit.skinfolds_protocol || assessmentToEdit.protocol || 'pollock_7');
+      setCompositionMethod(assessmentToEdit.composition_method || 'dobras');
+      setTavEquipment(assessmentToEdit.tav_equipment || '');
+      setTavUnit(assessmentToEdit.tav_unit || 'nível');
+      setTavMethod(assessmentToEdit.tav_method || '');
+      setTavProtocolId(assessmentToEdit.tav_protocol_id || '');
+      setTavNotes(assessmentToEdit.tav_notes || '');
       if (assessmentToEdit.patient_id) setSelectedStudentId(assessmentToEdit.patient_id);
       if (assessmentToEdit.assessment_date) setAssessmentDate(assessmentToEdit.assessment_date);
       if (assessmentToEdit.weight) setWeight(assessmentToEdit.weight);
@@ -460,108 +515,38 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     }
   };
 
+  useEffect(()=>{if(isOpen && !assessmentToEdit) setTechnical({});},[isOpen,selectedStudentId,assessmentToEdit?.id]);
   // Aluno Atual e Dados Demográficos
   const currentStudent = selectedStudent || studentsList?.find((s) => s.id === selectedStudentId) || student;
-  const isMale = (currentStudent?.gender || 'm').toLowerCase().startsWith('m');
-  const birthDate = currentStudent?.birth_date;
-  let age = 28;
-  if (birthDate) {
-    const diff = Date.now() - new Date(birthDate).getTime();
-    age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-  }
-
-  // Cálculos Automáticos de Índices
-  const w = Number(weight) || 0;
-  const h = Number(height) || 0;
-  const bmi = w > 0 && h > 0 ? parseFloat((w / ((h / 100) * (h / 100))).toFixed(2)) : 0;
-
-  let bmiClassification = '';
-  if (bmi > 0) {
-    if (bmi < 18.5) bmiClassification = 'Abaixo do peso';
-    else if (bmi < 25) bmiClassification = 'Peso saudável';
-    else if (bmi < 30) bmiClassification = 'Sobrepeso';
-    else if (bmi < 35) bmiClassification = 'Obesidade Grau I';
-    else bmiClassification = 'Obesidade Grau II+';
-  }
-
-  // RCQ (Relação Cintura / Quadril)
-  const waist = Number(waistCm) || 0;
-  const hip = Number(hipCm) || 0;
-  const whr = waist > 0 && hip > 0 ? parseFloat((waist / hip).toFixed(2)) : 0;
-  let whrRisk = '';
-  if (whr > 0) {
-    if (isMale) {
-      whrRisk = whr < 0.9 ? 'Risco Baixo' : whr < 1.0 ? 'Risco Moderado' : 'Risco Alto';
-    } else {
-      whrRisk = whr < 0.8 ? 'Risco Baixo' : whr < 0.85 ? 'Risco Moderado' : 'Risco Alto';
-    }
-  }
-
-  // RCE (Relação Cintura / Estatura)
-  const whtr = waist > 0 && h > 0 ? parseFloat((waist / h).toFixed(2)) : 0;
-  let whtrRisk = '';
-  if (whtr > 0) {
-    whtrRisk = whtr < 0.5 ? 'Normal (Baixo Risco)' : 'Elevado (Risco Aumentado)';
-  }
-
-  // Soma das Dobras Cutâneas
-  const sumSkinfolds =
-    (Number(foldTriceps) || 0) +
-    (Number(foldSubscapular) || 0) +
-    (Number(foldBiceps) || 0) +
-    (Number(foldChest) || 0) +
-    (Number(foldAxillary) || 0) +
-    (Number(foldSuprailiac) || 0) +
-    (Number(foldAbdominal) || 0) +
-    (Number(foldThigh) || 0) +
-    (Number(foldCalf) || 0);
-
-  // % de Gordura
-  let calculatedFatPct = 0;
-  if (compositionMethod === 'bioimpedancia' || compositionMethod === 'dxa' || compositionMethod === 'outro') {
-    calculatedFatPct = Number(manualFatPct) || 0;
-  } else {
-    // Cálculo por dobras
-    if (skinfoldsProtocol === 'pollock_7') {
-      const s7 =
-        (Number(foldSubscapular) || 0) +
-        (Number(foldTriceps) || 0) +
-        (Number(foldChest) || 0) +
-        (Number(foldAxillary) || 0) +
-        (Number(foldSuprailiac) || 0) +
-        (Number(foldAbdominal) || 0) +
-        (Number(foldThigh) || 0);
-
-      if (s7 > 0) {
-        let d = 0;
-        if (isMale) {
-          d = 1.112 - 0.00043499 * s7 + 0.00000055 * s7 * s7 - 0.00028826 * age;
-        } else {
-          d = 1.097 - 0.00046971 * s7 + 0.00000056 * s7 * s7 - 0.00012828 * age;
-        }
-        if (d > 0) calculatedFatPct = parseFloat((((4.95 / d) - 4.5) * 100).toFixed(2));
-      }
-    } else if (skinfoldsProtocol === 'pollock_3') {
-      if (isMale) {
-        const s3 = (Number(foldChest) || 0) + (Number(foldAbdominal) || 0) + (Number(foldThigh) || 0);
-        if (s3 > 0) {
-          const d = 1.10938 - 0.0008267 * s3 + 0.0000016 * s3 * s3 - 0.0002574 * age;
-          if (d > 0) calculatedFatPct = parseFloat((((4.95 / d) - 4.5) * 100).toFixed(2));
-        }
-      } else {
-        const s3 = (Number(foldTriceps) || 0) + (Number(foldSuprailiac) || 0) + (Number(foldThigh) || 0);
-        if (s3 > 0) {
-          const d = 1.0994921 - 0.0009929 * s3 + 0.0000023 * s3 * s3 - 0.0001392 * age;
-          if (d > 0) calculatedFatPct = parseFloat((((4.95 / d) - 4.5) * 100).toFixed(2));
-        }
-      }
-    }
-  }
-
-  calculatedFatPct = Math.max(0, Math.min(65, calculatedFatPct));
-  const fatMassKg = w > 0 && calculatedFatPct > 0 ? parseFloat(((w * calculatedFatPct) / 100).toFixed(2)) : 0;
-  const leanMassKg = w > 0 && fatMassKg > 0 ? parseFloat((w - fatMassKg).toFixed(2)) : 0;
-  const estimatedMuscleMass = manualMuscleMass !== '' ? Number(manualMuscleMass) : leanMassKg > 0 ? parseFloat((leanMassKg * 0.52).toFixed(2)) : 0;
+  const previewBody = {
+    ...(assessmentToEdit?.calculation_version ? {calculation_version:assessmentToEdit.calculation_version,anthropometric_sex_at_assessment:assessmentToEdit.anthropometric_sex_at_assessment,age_at_assessment:assessmentToEdit.age_at_assessment}:{}),
+    patient_id:selectedStudentId,assessment_date:assessmentDate,weight,height,waist_cm:waistCm,hip_cm:hipCm,
+    composition_method:compositionMethod,protocol:skinfoldsProtocol,skinfolds_protocol:skinfoldsProtocol,
+    body_fat_percentage:manualFatPct,muscle_mass_kg:manualMuscleMass,bmr_kcal:assessmentToEdit?.bmr_method==='mifflin_st_jeor'?null:bmrKcal,
+    fold_triceps:foldTriceps,fold_subscapular:foldSubscapular,fold_biceps:foldBiceps,fold_chest:foldChest,
+    fold_axillary:foldAxillary,fold_suprailiac:foldSuprailiac,fold_abdominal:foldAbdominal,fold_thigh:foldThigh,fold_calf:foldCalf,
+    arm_right_flexed:armRightFlexed,arm_left_flexed:armLeftFlexed,calf_right:calfRight,calf_left:calfLeft,
+    ...technical,skinfold_measurements_json:technical.technical_mode ? JSON.stringify(technical.skinfold_measurements || {}) : null
+  };
+  const previewKey=JSON.stringify(previewBody);
+  useEffect(()=>{
+    setCalculationPreview(null);
+    if(!isOpen || postureOnly || !selectedStudentId)return;
+    let active=true;
+    const timer=setTimeout(()=>{ApiClient.post<any>('/v1/personal/assessments/preview',JSON.parse(previewKey)).then(r=>{if(active)setCalculationPreview(r)}).catch(()=>{if(active)setCalculationPreview(null)});},250);
+    return ()=>{active=false;clearTimeout(timer)};
+  },[previewKey,isOpen,postureOnly,selectedStudentId]);
+  const w=Number(weight) || 0,h=Number(height) || 0;
+  const age=calculationPreview?.demographics?.age ?? null;
+  const isMale=calculationPreview?.demographics?.sex==='male';
+  const bmi=calculationPreview?.values?.bmi ?? null;
+  const bmiClassification=calculationPreview?.values?.bmi_classification || '';
+  const whr=calculationPreview?.values?.whr ?? null,whrRisk=calculationPreview?.values?.whr_classification || '';
+  const whtr=calculationPreview?.values?.whtr ?? null,whtrRisk=calculationPreview?.values?.whtr_classification || '';
+  const sumSkinfolds=calculationPreview?.values?.skinfold_sum ?? '—';
+  const calculatedFatPct=calculationPreview?.values?.body_fat_percentage ?? null;
+  const fatMassKg=calculationPreview?.values?.fat_mass_kg ?? null,leanMassKg=calculationPreview?.values?.lean_mass_kg ?? null;
+  const estimatedMuscleMass=manualMuscleMass !== '' ? Number(manualMuscleMass) : null;
 
   // Atualização em tempo real da classificação de TAV
   useEffect(() => {
@@ -581,7 +566,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           method: tavMethod,
           equipment: tavEquipment,
           value: Number(tavValue),
-          gender: currentStudent?.gender,
+          gender: calculationPreview?.demographics?.sex,
           age
         });
 
@@ -660,16 +645,18 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
       if (endurancePlankSeconds !== '') enduranceTests.push({ test_name: 'Prancha Isométrica', result_value: Number(endurancePlankSeconds), unit: 'segundos' });
 
       const payload = {
+        ...technical,
+        skinfold_measurements_json:technical.technical_mode ? JSON.stringify(technical.skinfold_measurements || {}) : null,
         patient_id: selectedStudentId,
         assessment_date: assessmentDate,
         protocol: skinfoldsProtocol,
         weight: w || undefined,
         height: h || undefined,
-        body_fat_percentage: calculatedFatPct,
+        body_fat_percentage: compositionMethod === 'dobras' ? null : manualFatPct === '' ? null : Number(manualFatPct),
         muscle_mass_kg: estimatedMuscleMass || null,
         composition_method: compositionMethod,
         body_water_liters: bodyWaterLiters !== '' ? Number(bodyWaterLiters) : null,
-        bmr_kcal: bmrKcal !== '' ? Number(bmrKcal) : null,
+        bmr_kcal: assessmentToEdit?.bmr_method==='mifflin_st_jeor' ? null : bmrKcal !== '' ? Number(bmrKcal) : null,
         raw_composition_data: {
           manualFatPct,
           manualMuscleMass,
@@ -833,7 +820,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             <div className="text-right">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">{effectiveTermLabel} / Idade</span>
               <strong className="text-xs text-slate-800">
-                {currentStudent?.name || (currentStudent as any)?.full_name || '—'} • {age} anos
+                {currentStudent?.name || (currentStudent as any)?.full_name || '—'} • {age !== null ? `${age} anos` : 'Idade não informada'}
               </strong>
             </div>
           </div>
@@ -1308,7 +1295,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       type="number"
                       step="0.1"
                       placeholder="Ex: 18.5"
-                      value={compositionMethod === 'dobras' ? calculatedFatPct : manualFatPct}
+                      value={compositionMethod === 'dobras' ? calculatedFatPct ?? '' : manualFatPct}
                       disabled={compositionMethod === 'dobras'}
                       onChange={(e) => setManualFatPct(e.target.value ? Number(e.target.value) : '')}
                       className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-bold text-amber-600 disabled:bg-slate-100"
@@ -1500,7 +1487,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     Protocolo de Dobras Cutâneas
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    Preencha as 9 dobras disponíveis. A fórmula calcula automaticamente com base no protocolo.
+                    Preencha as dobras exigidas pelo protocolo selecionado. A fórmula calcula automaticamente com base no protocolo.
                   </p>
                 </div>
 
@@ -1510,7 +1497,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     onChange={(e) => setSkinfoldsProtocol(e.target.value as any)}
                     className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-semibold text-slate-800"
                   >
-                    <option value="pollock_7">Jackson & Pollock 7 Dobras (Padrão Ouro)</option>
+                    <option value="pollock_7">Jackson & Pollock 7 Dobras</option>
                     <option value="pollock_3">Jackson & Pollock 3 Dobras</option>
                     <option value="petroski">Petroski 4 Dobras</option>
                     <option value="guedes">Guedes</option>
@@ -1637,6 +1624,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {/* ========================================================
               ABA 4: CARDIOVASCULAR & TESTES DE FORÇA 1RM / RESISTÊNCIA
              ======================================================== */}
+          {!postureOnly && ['skinfolds','composition','cardio_tests'].includes(activeTab) && <PersonalTechnicalFields value={technical} onChange={setTechnical} tab={activeTab} preview={calculationPreview}/>}
           {activeTab === 'cardio_tests' && (
             <div className="space-y-6 animate-fadeIn">
               {/* Avaliação Cardiovascular */}

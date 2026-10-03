@@ -647,6 +647,8 @@ api.post('/v1/personal/tav/classify', requireTenant, requireRole('clinic_admin',
 
 // Avaliações Físicas, Comparativo & Fotos
 api.get('/v1/personal/students/:studentId/assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listAssessments);
+api.post('/v1/personal/assessments/preview', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.previewAssessment);
+api.get('/v1/personal/assessments/:id/report-data', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.assessmentReportData);
 api.get('/v1/personal/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAssessment);
 api.get('/v1/personal/posture-ai/status', requireTenant, requireRole('clinic_admin', 'professional'), PersonalPostureAIController.status);
 api.post('/v1/personal/posture-ai/analyze', requireTenant, requireRole('clinic_admin', 'professional'), PersonalPostureAIController.analyze);

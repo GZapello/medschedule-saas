@@ -1,3 +1,4 @@
+import { AnthropometricSexField } from './PersonalTechnicalFields';
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   User,
@@ -90,6 +91,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
 
   // Modal de Edição de Aluno
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editBirth,setEditBirth]=useState('');
+  const [editSex,setEditSex]=useState('');
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editEmail, setEditEmail] = useState('');
@@ -190,6 +193,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
 
   const handleOpenEditStudent = () => {
     if (!student) return;
+    setEditBirth(student.birth_date || '');
+    setEditSex(student.anthropometric_sex || '');
     setEditName(student.name || '');
     setEditPhone(student.phone || '');
     setEditEmail(student.email || '');
@@ -213,6 +218,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
     try {
       setSavingStudent(true);
       await ApiClient.put(`/v1/personal/students/${studentId}`, {
+        birth_date:editBirth || null,
+        anthropometric_sex:editSex || null,
         name: editName.trim(),
         phone: editPhone.trim() || undefined,
         email: editEmail.trim() || undefined,
@@ -830,7 +837,7 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
 
                       <div className="text-xs text-slate-500 flex flex-wrap items-center gap-3">
                         <span>Peso: <strong className="text-slate-700">{a.weight} kg</strong></span>
-                        <span>IMC: <strong className="text-slate-700">{a.bmi}</strong></span>
+                        <span>IMC: <strong className="text-slate-700">{a.bmi ?? '—'}</strong></span>
                         <span>% Gordura: <strong className="text-amber-600 font-bold">{a.body_fat_percentage}%</strong></span>
                         <span>Massa Magra: <strong className="text-emerald-600">{a.lean_mass_kg} kg</strong></span>
                         <span>Massa Muscular: <strong className="text-cyan-700">{a.muscle_mass_kg} kg</strong></span>
@@ -1133,6 +1140,8 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
             </div>
 
             <form onSubmit={handleSaveStudent} className="space-y-3">
+              <div><label className="block text-xs font-semibold text-slate-700 mb-1">Data de nascimento</label><input type="date" value={editBirth} onChange={e=>setEditBirth(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"/></div><AnthropometricSexField value={editSex} onChange={setEditSex}/>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Nome Completo *</label>
                 <input

@@ -1,3 +1,4 @@
+import { AnthropometricSexField } from './PersonalTechnicalFields';
 import React, { useState, useEffect } from 'react';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import {
@@ -112,6 +113,8 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   const [isNewStudentModalOpen, setIsNewStudentModalOpen] = useState(false);
 
   // Form Novo Aluno Rápido
+  const [newStudentBirth,setNewStudentBirth]=useState('');
+  const [newStudentSex,setNewStudentSex]=useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentPhone, setNewStudentPhone] = useState('');
   const [newStudentEmail, setNewStudentEmail] = useState('');
@@ -217,6 +220,8 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         name: newStudentName.trim(),
         phone: newStudentPhone.trim(),
         email: newStudentEmail.trim(),
+        birth_date:newStudentBirth || null,
+        anthropometric_sex:newStudentSex || null,
         goal: newStudentGoal,
         experience_level: 'iniciante',
         weekly_frequency: 3
@@ -225,6 +230,8 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
       showToast('Aluno cadastrado com sucesso no ZemdaPersonal!', 'success');
       setIsNewStudentModalOpen(false);
       setNewStudentName('');
+      setNewStudentBirth('');
+      setNewStudentSex('');
       setNewStudentPhone('');
       setNewStudentEmail('');
       loadStudents();
@@ -701,6 +708,8 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
                 />
               </div>
 
+              <div><label className="block text-xs font-semibold text-slate-700 mb-1">Data de nascimento</label><input type="date" value={newStudentBirth} onChange={e=>setNewStudentBirth(e.target.value)} className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"/></div>
+              <AnthropometricSexField value={newStudentSex} onChange={setNewStudentSex}/>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Objetivo Principal</label>
                 <select

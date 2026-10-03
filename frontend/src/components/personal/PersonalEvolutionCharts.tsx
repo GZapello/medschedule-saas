@@ -1,3 +1,4 @@
+import {ReportTrend,evolutionMetrics,reportNumber} from './PersonalAssessmentReportCharts';
 import { ClinicalTrendChart } from '../clinical/ClinicalTrendChart';
 import React, { useState } from 'react';
 import {
@@ -40,9 +41,9 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
   const initial = sorted[0];
   const latest = sorted[sorted.length - 1];
 
-  const deltaWeight = (latest.weight || 0) - (initial.weight || 0);
-  const deltaFat = (latest.body_fat_percentage || 0) - (initial.body_fat_percentage || 0);
-  const deltaLean = (latest.lean_mass_kg || 0) - (initial.lean_mass_kg || 0);
+  const deltaWeight = latest.weight!=null && initial.weight!=null ? latest.weight-initial.weight : null;
+  const deltaFat = latest.body_fat_percentage!=null && initial.body_fat_percentage!=null ? latest.body_fat_percentage-initial.body_fat_percentage : null;
+  const deltaLean = latest.lean_mass_kg!=null && initial.lean_mass_kg!=null ? latest.lean_mass_kg-initial.lean_mass_kg : null;
 
   const renderSvgChart = (key: string, color: string, unit: string, title?: string, customTooltipVal?: (d: any) => string) => <ClinicalTrendChart history={sorted} metric={key} color={color} unit={unit} title={title} customTooltipVal={customTooltipVal} />;
 
@@ -69,8 +70,8 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
       diff,
       pctVariation,
       method: cur.tav_method || cur.composition_method || 'Bioimpedância',
-      equipment: cur.tav_equipment || 'InBody',
-      classification: cur.tav_classification || 'Normal',
+      equipment: cur.tav_equipment || 'Não informado',
+      classification: cur.tav_classification || 'Sem classificação',
       unit: cur.tav_unit || 'nível'
     };
   });
@@ -85,10 +86,10 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
             <span className="text-2xl font-bold text-slate-800">{latest.weight || '—'} kg</span>
             <span
               className={`text-xs font-bold px-2 py-0.5 rounded-md ${
-                deltaWeight < 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
+                (deltaWeight ?? 0) < 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
               }`}
             >
-              {deltaWeight > 0 ? `+${deltaWeight.toFixed(1)}` : deltaWeight.toFixed(1)} kg
+              {(deltaWeight ?? 0) > 0 ? `+${reportNumber(deltaWeight,1)}` : reportNumber(deltaWeight,1)} kg
             </span>
           </div>
           <div className="text-[10px] text-slate-400 mt-1">Iniciou com {initial.weight} kg</div>
@@ -102,10 +103,10 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
             </span>
             <span
               className={`text-xs font-bold px-2 py-0.5 rounded-md ${
-                deltaFat < 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                (deltaFat ?? 0) < 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
               }`}
             >
-              {deltaFat > 0 ? `+${deltaFat.toFixed(1)}` : deltaFat.toFixed(1)}%
+              {(deltaFat ?? 0) > 0 ? `+${reportNumber(deltaFat,1)}` : reportNumber(deltaFat,1)}%
             </span>
           </div>
           <div className="text-[10px] text-slate-400 mt-1">Iniciou com {initial.body_fat_percentage}%</div>
@@ -119,10 +120,10 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
             </span>
             <span
               className={`text-xs font-bold px-2 py-0.5 rounded-md ${
-                deltaLean > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                (deltaLean ?? 0) > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
               }`}
             >
-              {deltaLean > 0 ? `+${deltaLean.toFixed(1)}` : deltaLean.toFixed(1)} kg
+              {(deltaLean ?? 0) > 0 ? `+${reportNumber(deltaLean,1)}` : reportNumber(deltaLean,1)} kg
             </span>
           </div>
           <div className="text-[10px] text-slate-400 mt-1">Iniciou com {initial.lean_mass_kg} kg</div>
@@ -376,6 +377,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
           </table>
         </div>
       )}
+      <details className="text-xs text-slate-600"><summary className="font-semibold cursor-pointer">Todos os indicadores de evolução</summary><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">{evolutionMetrics.map(([key,label,unit])=><ReportTrend key={key} history={sorted} metric={key} title={label} unit={unit}/>)}</div></details>
     </div>
   );
 };

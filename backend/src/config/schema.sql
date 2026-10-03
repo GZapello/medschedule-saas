@@ -320,6 +320,7 @@ CREATE TABLE IF NOT EXISTS patients (
   full_name TEXT NOT NULL,
   social_name TEXT,
   birth_date TEXT,
+  anthropometric_sex TEXT,
   cpf TEXT,
   email TEXT,
   phone TEXT NOT NULL,

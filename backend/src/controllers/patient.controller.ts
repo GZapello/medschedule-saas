@@ -1,3 +1,4 @@
+import { referenceSex } from '../services/personal-assessment-calculation.service';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -31,7 +32,7 @@ export class PatientController {
       const { search, limit } = req.query;
       let query = `
         SELECT 
-          p.id, p.tenant_id, p.full_name, p.social_name, p.birth_date, p.cpf, p.gender,
+          p.id, p.tenant_id, p.full_name, p.social_name, p.birth_date, p.cpf, p.gender, p.anthropometric_sex,
           p.email, p.phone, p.whatsapp, p.city, p.state, p.is_child, p.active, p.created_at,
           (SELECT COUNT(*) FROM appointments WHERE patient_id = p.id) as total_appointments,
           (SELECT COUNT(*) FROM records WHERE patient_id = p.id) as total_records
@@ -84,7 +85,7 @@ export class PatientController {
 
       const stmt = db.prepare(`
         SELECT 
-          id, tenant_id, full_name, social_name, birth_date, cpf, gender, email, phone, whatsapp,
+          id, tenant_id, full_name, social_name, birth_date, cpf, gender, anthropometric_sex, email, phone, whatsapp,
           address, city, state, zip_code, photo_url, emergency_contact, emergency_phone,
           notes_admin, is_child, pet_metadata_json, active, allergies_status,
           health_insurance_provider, health_insurance_card, health_insurance_plan,
@@ -223,6 +224,7 @@ export class PatientController {
         petMetadata ? JSON.stringify(petMetadata) : null
       );
 
+      if(req.body.anthropometric_sex !== undefined) db.prepare('UPDATE patients SET anthropometric_sex=? WHERE id=? AND tenant_id=?').run(referenceSex({anthropometric_sex:req.body.anthropometric_sex}).sex,patientId,tenantId);
       // Cadastra responsáveis legais se fornecidos (para atendimento infantil)
       if (isChild && Array.isArray(guardians)) {
         const insertGrd = db.prepare(`
@@ -369,6 +371,7 @@ export class PatientController {
         tenantId
       );
 
+      if(req.body.anthropometric_sex !== undefined) db.prepare('UPDATE patients SET anthropometric_sex=? WHERE id=? AND tenant_id=?').run(referenceSex({anthropometric_sex:req.body.anthropometric_sex}).sex,id,tenantId);
       // Atualiza responsáveis se informados
       if (Array.isArray(guardians)) {
         // Os responsáveis são regravados; a autorização já registrada de um mesmo responsável

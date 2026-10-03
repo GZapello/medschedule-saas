@@ -1,3 +1,4 @@
+import { AnthropometricSexField } from '../personal/PersonalTechnicalFields';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -29,6 +30,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
   // Dados principais
   const [fullName, setFullName] = useState<string>('');
   const [socialName, setSocialName] = useState<string>('');
+  const [anthropometricSex,setAnthropometricSex]=useState('');
   const [birthDate, setBirthDate] = useState<string>('');
   const [cpf, setCpf] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
@@ -72,6 +74,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
       setFullName(patient.full_name || '');
       setSocialName(patient.social_name || '');
       setBirthDate(patient.birth_date || '');
+      setAnthropometricSex(patient.anthropometric_sex || '');
       setCpf(patient.cpf || '');
       setPhone(patient.phone || '');
       setWhatsapp(patient.whatsapp || patient.phone || '');
@@ -200,6 +203,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
       await ApiClient.put(`/v1/patients/${patientId}`, {
         fullName,
         socialName: socialName || null,
+        anthropometric_sex:anthropometricSex || null,
         birthDate: birthDate || null,
         cpf: cpf || null,
         phone,
@@ -383,6 +387,7 @@ export const EditPatientModal: React.FC<EditPatientModalProps> = ({
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
                 />
               </div>
+            <AnthropometricSexField value={anthropometricSex} onChange={setAnthropometricSex}/>
 
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">CPF</label>

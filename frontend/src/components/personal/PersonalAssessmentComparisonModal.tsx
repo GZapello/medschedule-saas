@@ -172,6 +172,8 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
         'muscle_mass_kg',
         'body_water_liters',
         'bmr_kcal',
+        'vai_value',
+        'skinfold_sum',
         'tav_value'
       ].includes(m.field);
     }
