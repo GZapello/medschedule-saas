@@ -1,5 +1,5 @@
 /** Central source of truth. Pure functions: no database writes, including legacy reads. */
-export const CALCULATION_VERSION = 'personal-calc-2026.2';
+export const CALCULATION_VERSION = 'personal-calc-2026.3';
 export const REFERENCES = {
   jpMale: 'Jackson & Pollock 1978; PMID 718832; DOI 10.1079/BJN19780152',
   jpFemale: 'Jackson, Pollock & Ward 1980; PMID 7402053',
@@ -44,7 +44,7 @@ export function repeatedFold(raw: any[]) {
 export function classifyTav(a: any, context?: any) {
   const value = numberOrNull(a.tav_value, true), eq = String(a.tav_equipment || '').toLowerCase();
   const area = ['cm²','cm2'].includes(a.tav_unit);
-  const level = ['nível','nivel','level'].includes(a.tav_unit || 'nível');
+  const level = ['nível','nivel','level'].includes(a.tav_unit || context?.unit);
   let classification: string | null = null, reference: string | null = null;
   if (value !== null && eq.includes('omron') && level) {
     reference = REFERENCES.omron;
@@ -56,10 +56,11 @@ export function classifyTav(a: any, context?: any) {
     reference = REFERENCES.inbody;
     classification = value <= (area ? 100 : 10) ? 'Dentro da referência selecionada' : 'Acima da referência selecionada';
   }
+  if(a.tav_method && !/bioimped|impedance/i.test(a.tav_method)) {classification=null;reference=null;}
   if (a.tav_protocol_id && context === undefined) { classification=null; reference=null; }
   if (context !== undefined) {
     classification=null; reference=context?.source_reference || null;
-    if(context && (!a.tav_unit || a.tav_unit===context.unit) && (!a.tav_equipment || !context.equipment || String(a.tav_equipment).toLowerCase().includes(String(context.equipment).toLowerCase()))) {
+    if(context && (!a.tav_method || !context.method || String(a.tav_method).toLowerCase()===String(context.method).toLowerCase()) && (!a.tav_unit || a.tav_unit===context.unit) && (!a.tav_equipment || !context.equipment || String(a.tav_equipment).toLowerCase().includes(String(context.equipment).toLowerCase()))) {
       const sex=referenceSex({anthropometric_sex:a.anthropometric_sex_at_assessment}).sex;
       const gender=sex==='male'?'m':sex==='female'?'f':'all', age=numberOrNull(a.age_at_assessment,true);
       const match=(context.ranges || []).find((r:any)=>(!r.gender || r.gender==='all' || r.gender===gender) &&
@@ -71,11 +72,42 @@ export function classifyTav(a: any, context?: any) {
   const status=value===null?'missing':classification?'classified':'unclassified';
   return { value, label:'TAV medido por equipamento',status,reason:status==='unclassified'?'Protocolo, unidade ou faixa sem referência compatível':null,
     protocol:context?.protocol_name || a.tav_protocol_id || null, protocolId:context?.id || a.tav_protocol_id || null,
-    classification: value===null?'Não informado':classification || 'Valor registrado — classificação não disponível para o protocolo selecionado.', reference, unit: a.tav_unit || context?.unit || 'nível', equipment: a.tav_equipment || context?.equipment || null,
+    classification: value===null?'Não informado':classification || 'Valor registrado — classificação não disponível para o protocolo selecionado.', reference, unit: a.tav_unit || context?.unit || null, equipment: a.tav_equipment || context?.equipment || null,
     sourceType: a.tav_source_type || 'equipment', isEstimate: Boolean(a.tav_is_estimate) };
 }
+export const PREDICTED_TAV_PROTOCOL = {
+  id:'cavalcanti-rbone-14-91-pending-v1', name:'Cavalcanti et al. — RBONE 14(91), 1259–1269',
+  reference:'https://www.rbone.com.br/index.php/rbone/article/view/1462',
+  verificationStatus:'pending_full_text', available:false,
+  // Do not enter coefficients, conversions or race categories from the abstract.
+  // Full PDF could not be retrieved: units, race coding and the female CP coefficient remain unverified.
+  unverified:['Unidades das variáveis e do resultado','Codificação original da variável raça','Coeficiente de CP na equação feminina','Metodologia, critérios e limitações do texto completo']
+} as const;
+export function normalizeMeasuredTavInput(input:any) {
+  const a={...input};
+  if(typeof a.glucose_is_fasting==='boolean') a.glucose_is_fasting=a.glucose_is_fasting?1:0;
+  for(const [modern,legacy] of Object.entries({tav_measured_value:'tav_value',tav_measured_unit:'tav_unit',tav_measured_method:'tav_method',tav_measured_equipment:'tav_equipment'})) {
+    if(Object.prototype.hasOwnProperty.call(input,modern) && (input[modern]!=null || input[legacy]==null)) a[legacy]=input[modern];
+    else if(Object.prototype.hasOwnProperty.call(input,legacy)) a[modern]=input[legacy];
+  }
+  return a;
+}
+export function calculatePredictedTav(a:any, demographics:{sex:string,age:number|null}, bmi:number|null) {
+  const {sex,age}=demographics;
+  const inputs={age,sex,weight:numberOrNull(a.weight),height_cm:numberOrNull(a.height),hip_cm:numberOrNull(a.hip_cm),neck_cm:numberOrNull(a.neck_cm),
+    triglycerides_mg_dl:numberOrNull(a.triglycerides_mg_dl),bmi,glucose_mg_dl:numberOrNull(a.glucose_mg_dl),glucose_is_fasting:a.glucose_is_fasting===true || a.glucose_is_fasting===1,
+    hba1c_pct:numberOrNull(a.hba1c_pct),uric_acid_mg_dl:numberOrNull(a.uric_acid_mg_dl),race_code:a.tav_protocol_race_code || null};
+  const required: [string,any][] = sex==='female' ? [['Idade',age],['Peso',inputs.weight],['Altura',inputs.height_cm],['Circunferência do quadril',inputs.hip_cm],['Circunferência do pescoço',inputs.neck_cm],['Triglicerídeos',inputs.triglycerides_mg_dl]] : sex==='male' ? [['Idade',age],['Altura',inputs.height_cm],['Circunferência do pescoço',inputs.neck_cm],['Glicemia de jejum',inputs.glucose_is_fasting?inputs.glucose_mg_dl:null],['HbA1c',inputs.hba1c_pct],['Ácido úrico',inputs.uric_acid_mg_dl],['Variável demográfica exigida pelo protocolo',inputs.race_code==='not_informed'?null:inputs.race_code]] : [['Sexo de referência antropométrica',null]];
+  const missingInputs=required.filter(([,value])=>value===null).map(([label])=>label);
+  const applicable=age!==null && age>=20 && age<=80 && ['male','female'].includes(sex);
+  const limitation=!['male','female'].includes(sex)?'Não calculado — o protocolo utiliza equações específicas por sexo.':age!==null && age<20?'Protocolo não aplicável — equação validada para adultos a partir de 20 anos.':age!==null && age>80?'Protocolo não aplicável — idade fora da amostra publicada de 20 a 80 anos.':'Protocolo indisponível — unidades, coeficientes e codificação demográfica aguardam conferência do artigo original completo.';
+  return {value:null,unit:null,sex,protocol:PREDICTED_TAV_PROTOCOL.id,protocolName:PREDICTED_TAV_PROTOCOL.name,reference:PREDICTED_TAV_PROTOCOL.reference,
+    label:'TAV estimado por equação preditiva',method:'Equação preditiva antropométrico-bioquímica',inputs,missingInputs,applicable,available:false,
+    limitation,equation:null,calculationVersion:CALCULATION_VERSION,verification:PREDICTED_TAV_PROTOCOL,status:'unavailable',classification:limitation,
+    reason:missingInputs.length?'Faltam: '+missingInputs.join(', '):null,tone:'slate'};
+}
 export function calculateAssessment(input: any, patient: any = {}, tavContext?: any) {
-  const a = { ...input }, sexInfo = referenceSex(patient);
+  const a = normalizeMeasuredTavInput(input), sexInfo = referenceSex(patient);
   const sex = a.anthropometric_sex_at_assessment ?? sexInfo.sex;
   const rawAge=a.calculation_version || a.age_at_assessment != null ? numberOrNull(a.age_at_assessment,true) : ageAtDate(patient.birth_date,a.assessment_date);
   const age=rawAge!==null && Number.isInteger(rawAge) && rawAge<=120?rawAge:null;
@@ -157,6 +189,10 @@ export function calculateAssessment(input: any, patient: any = {}, tavContext?: 
   values.tav_reference_source = tav.reference; values.tav_source_type = tav.sourceType; values.tav_is_estimate = tav.isEstimate ? 1 : 0;
   values.anthropometric_sex_at_assessment=sex; values.age_at_assessment=age; values.calculation_version=CALCULATION_VERSION;
   values.vai_reference=REFERENCES.vai; values.skinfold_measurements_json=JSON.stringify(raw); values.measurement_quality_json=JSON.stringify(quality);
+  const predictedTav=calculatePredictedTav(a,{sex,age},bmi);
+  Object.assign(values,{tav_estimated_value:predictedTav.value,tav_estimated_unit:predictedTav.unit,tav_estimation_protocol:predictedTav.protocol,tav_estimation_reference:predictedTav.reference,tav_estimation_classification:predictedTav.limitation,
+    tav_measured_value:tav.value,tav_measured_unit:tav.unit,tav_measured_equipment:tav.equipment,tav_measured_method:a.tav_method || null});
+  unavailable.push({metric:'tav_estimated_value',reason:predictedTav.reason,missingInputs:predictedTav.missingInputs});
   const ageReason=age===null?'Classificação não aplicada — idade não informada.':!adult?'Classificação não aplicável — referência para adultos.':null;
   const sexReason=!['male','female'].includes(sex)?'Classificação não aplicada — referência depende do sexo.':null;
   const item=(value:any,label:string,classification:string,reference:string,reason:string|null,status?:string)=>({value,label,classification:value===null?'Não calculado':reason || classification,reference,status:status || (value===null?'missing':reason?'unclassified':'classified'),reason:value===null?'Dados insuficientes':reason});
@@ -166,18 +202,19 @@ export function calculateAssessment(input: any, patient: any = {}, tavContext?: 
     whr:item(whr,'RCQ',values.whr_classification,REFERENCES.whr,sexReason || ageReason),
     whtr:item(whtr,'RCE',values.whtr_classification,REFERENCES.whtr,ageReason),
     tav,
+    predictedTav,
     vai:{value:values.vai_value,label:'VAI — Índice de Adiposidade Visceral',classification:values.vai_value===null?'VAI — aguardando dados':'VAI calculado — classificação não disponível para a referência configurada.',reference:REFERENCES.vai,status:values.vai_value===null?'missing':'unclassified',reason:values.vai_value===null?'Faltam: '+vaiMissing.join(', '):'Indicador indireto; não há cutoff populacional compatível configurado.',missing: vaiMissing}
   };
   for(const [key,field] of Object.entries({bmi:'bmi_classification',bodyFat:'body_fat_classification',whr:'whr_classification',whtr:'whtr_classification',vai:'vai_classification'})) values[field]=classifications[key].classification;
   for(const entry of Object.values(classifications) as any[]) {
     entry.tone=entry.status!=='classified'?'slate':/Muito alto|Obesidade|Acima|Excesso/.test(entry.classification)?'rose':/Alto|Sobrepeso|Abaixo do peso|Baixo/.test(entry.classification)?'amber':'teal';
   }
-  const metadata = {classifications,version:CALCULATION_VERSION,demographics:{sex,age,source:a.anthropometric_sex_at_assessment ? 'assessment_snapshot' : sexInfo.source},metrics,visceralAdiposity:{tav,vai:metrics.vai_value},quality,unavailable,references:REFERENCES};
+  const metadata = {classifications,version:CALCULATION_VERSION,demographics:{sex,age,source:a.anthropometric_sex_at_assessment ? 'assessment_snapshot' : sexInfo.source},metrics,visceralAdiposity:{predictedTav,measuredTav:tav,tav,vai:metrics.vai_value},quality,unavailable,references:REFERENCES};
   values.calculation_metadata_json=JSON.stringify(metadata);
   return { values, ...metadata, metadata };
 }
 export function normalizeLegacyAssessmentForReport(a: any, patient: any) {
-  const persisted={...a};
+  const persisted=normalizeMeasuredTavInput(a);
   if(!a.calculation_version) {
     // Old controllers stored zero for absent positive measurements. This changes display only.
     const positiveFields=['weight','height','bmi','whr','whtr','lean_mass_kg','muscle_mass_kg','bmr_kcal','neck_cm','shoulder_cm','chest_cm','waist_cm','abdomen_cm','hip_cm','resting_heart_rate_bpm','blood_pressure_systolic','blood_pressure_diastolic'];
@@ -196,14 +233,15 @@ export function normalizeLegacyAssessmentForReport(a: any, patient: any) {
   const assessment={...result.values,...Object.fromEntries(Object.entries(persisted).filter(([,v])=>v !== null && v !== undefined))};
   // Classification follows the numeric historical value, never a new profile formula.
   const saved=parsed(a.calculation_metadata_json);
-  for(const [key,field] of Object.entries({bmi:'bmi',bodyFat:'body_fat_percentage',whr:'whr',whtr:'whtr',tav:'tav_value',vai:'vai_value'})) {
+  for(const [key,field] of Object.entries({bmi:'bmi',bodyFat:'body_fat_percentage',whr:'whr',whtr:'whtr',tav:'tav_value',vai:'vai_value',predictedTav:'tav_estimated_value'})) {
     if(saved.classifications?.[key] && a.calculation_version) result.classifications[key]=saved.classifications[key];
     result.classifications[key].value=assessment[field] ?? null;
   }
   if(!saved.classifications && a.tav_classification && !/Sem classificação|não disponível|Fora da faixa/.test(a.tav_classification)) result.classifications.tav={...result.classifications.tav,classification:a.tav_classification,reference:a.tav_reference_source || result.classifications.tav.reference};
   if(assessment.vai_value!=null && result.classifications.vai.status==='missing') result.classifications.vai={...result.classifications.vai,status:'unclassified',classification:'VAI calculado — classificação não disponível para a referência configurada.',reason:'Valor histórico preservado; inputs ou referência demográfica não documentados.'};
   for(const [key,field] of Object.entries({bmi:'bmi_classification',bodyFat:'body_fat_classification',whr:'whr_classification',whtr:'whtr_classification',tav:'tav_classification',vai:'vai_classification'})) assessment[field]=result.classifications[key].classification;
-  assessment.calculation_metadata_json=JSON.stringify({...result.metadata,classifications:result.classifications});
+  if(saved.visceralAdiposity?.predictedTav && a.tav_estimated_value!=null) result.visceralAdiposity.predictedTav={...saved.visceralAdiposity.predictedTav,value:a.tav_estimated_value};
+  assessment.calculation_metadata_json=JSON.stringify({...result.metadata,visceralAdiposity:result.visceralAdiposity,classifications:result.classifications});
   if(!a.calculation_version) delete assessment.calculation_version;
   if(a.composition_method !== undefined) assessment.composition_method=a.composition_method;
   else delete assessment.composition_method;

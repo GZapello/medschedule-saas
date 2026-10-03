@@ -1,6 +1,24 @@
 import React from 'react';
 export const reportNumber=(v:any,digits=2):string=>v===null || v===undefined || v==='' || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('pt-BR',{maximumFractionDigits:digits});
 export const evolutionMetrics: [string,string,string][]=[['weight','Peso','kg'],['body_fat_percentage','Gordura','%'],['fat_mass_kg','Massa adiposa','kg'],['lean_mass_kg','Massa livre de gordura','kg'],['muscle_mass_kg','Massa muscular','kg'],['waist_cm','Cintura','cm'],['abdomen_cm','Abdômen','cm'],['hip_cm','Quadril','cm'],['whr','RCQ',''],['whtr','RCE',''],['vai_value','VAI (indireto)',''],['skinfold_sum','Somatório de dobras','mm']];
+// Series remain separate by origin, protocol, unit and measurement method.
+export function visceralSeriesKey(a:any,kind:'measured'|'predicted') {
+  const parts=kind==='predicted' ? [a.tav_estimation_protocol,a.tav_estimated_unit] : [a.tav_measured_method || a.tav_method,a.tav_measured_equipment || a.tav_equipment,a.tav_protocol_id,a.tav_measured_unit || a.tav_unit];
+  const unit=parts[parts.length-1];
+  return JSON.stringify([kind,...parts.map(v=>v || null),!unit || kind==='predicted' && !parts[0] ? a.id : null]);
+}
+export function visceralEvolutionSeries(history:any[]) {
+  const groups=new Map<string,{key:string,metric:string,title:string,unit:string,indicator:string,history:any[]}>();
+  for(const kind of ['predicted','measured'] as const) for(const a of history) {
+    const metric=kind==='predicted'?'tav_estimated_value':'tav_value';
+    if(a[metric]==null || !Number.isFinite(Number(a[metric])))continue;
+    const key=visceralSeriesKey(a,kind);
+    if(groups.has(key))continue;
+    const title=kind==='predicted'?'TAV estimado · '+(a.tav_estimation_protocol || 'Protocolo não informado'):'TAV medido · '+(a.tav_method || 'Método não informado')+' · '+(a.tav_equipment || 'Equipamento não informado');
+    groups.set(key,{key,metric,title,unit:(kind==='predicted'?a.tav_estimated_unit:a.tav_unit) || 'Unidade não informada',indicator:kind==='predicted'?'predictedTav':'tav',history:history.map(r=>({...r,[metric]:visceralSeriesKey(r,kind)===key?r[metric]:null}))});
+  }
+  return [...groups.values()];
+}
 export function ReportTrend({history,metric,title,unit}: {history:any[],metric:string,title:string,unit:string}) {
   const rows=history.map((a,i)=>({a,i,v:a[metric]})).filter(p=>p.v!==null && p.v!==undefined && p.v!=='' && Number.isFinite(Number(p.v)));
   if(!rows.length)return null;

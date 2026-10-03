@@ -114,6 +114,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
       'body_fat_percentage',
       'fat_mass_kg',
       'tav_value',
+      'tav_estimated_value',
       'waist_cm',
       'abdomen_cm',
       'resting_heart_rate_bpm',
@@ -175,7 +176,8 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
         'bmr_kcal',
         'vai_value',
         'skinfold_sum',
-        'tav_value'
+        'tav_value',
+        'tav_estimated_value'
       ].includes(m.field);
     }
     if (activeCategory === 'perimeters') {
@@ -383,7 +385,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                       <div>
                         <h4 className="text-sm font-bold text-white">Evolução do Tecido Adiposo Visceral (TAV)</h4>
                         <span className="text-[11px] text-purple-200">
-                          Equipamento: {comparison.tav_comparison.current.equipment || comparison.tav_comparison.previous.equipment || 'Bioimpedância'}
+                          Equipamento: {comparison.tav_comparison.current.equipment || comparison.tav_comparison.previous.equipment || 'Não informado'}
                         </span>
                       </div>
                     </div>
@@ -394,7 +396,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                       <span className="text-[10px] uppercase font-bold text-purple-200 block">Anterior</span>
                       <div className="text-xl font-black mt-0.5">
                         {comparison.tav_comparison.previous.value !== null && comparison.tav_comparison.previous.value !== undefined
-                          ? `${comparison.tav_comparison.previous.value} ${comparison.tav_comparison.previous.unit || 'nível'}`
+                          ? `${comparison.tav_comparison.previous.value} ${comparison.tav_comparison.previous.unit || 'Unidade não informada'}`
                           : '—'}
                       </div>
                       <div className="text-[11px] text-purple-300 mt-1">
@@ -406,7 +408,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                       <span className="text-[10px] uppercase font-bold text-purple-200 block">Atual</span>
                       <div className="text-xl font-black text-amber-300 mt-0.5">
                         {comparison.tav_comparison.current.value !== null && comparison.tav_comparison.current.value !== undefined
-                          ? `${comparison.tav_comparison.current.value} ${comparison.tav_comparison.current.unit || 'nível'}`
+                          ? `${comparison.tav_comparison.current.value} ${comparison.tav_comparison.current.unit || 'Unidade não informada'}`
                           : '—'}
                       </div>
                       <div className="text-[11px] text-emerald-300 font-bold mt-1">
@@ -416,7 +418,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
 
                     <div className="bg-white/10 rounded-2xl p-3 backdrop-blur-sm text-center">
                       <span className="text-[10px] uppercase font-bold text-purple-200 block">Variação Real</span>
-                      {comparison.tav_comparison.previous.value !== null &&
+                      {comparison.tav_comparison.comparable && comparison.tav_comparison.previous.value !== null &&
                       comparison.tav_comparison.current.value !== null &&
                       comparison.tav_comparison.previous.value !== undefined &&
                       comparison.tav_comparison.current.value !== undefined ? (
@@ -425,18 +427,18 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                             {comparison.tav_comparison.current.value - comparison.tav_comparison.previous.value > 0
                               ? `+${(comparison.tav_comparison.current.value - comparison.tav_comparison.previous.value).toFixed(1)}`
                               : (comparison.tav_comparison.current.value - comparison.tav_comparison.previous.value).toFixed(1)}{' '}
-                            {comparison.tav_comparison.current.unit || 'nível'}
+                            {comparison.tav_comparison.current.unit || 'Unidade não informada'}
                           </div>
                           <div className="text-[11px] text-purple-200 mt-1">
                             {comparison.tav_comparison.current.value < comparison.tav_comparison.previous.value
-                              ? 'Melhora clínica do risco metabólico'
+                              ? 'Redução do valor medido'
                               : comparison.tav_comparison.current.value > comparison.tav_comparison.previous.value
-                              ? 'Atenção: aumento no nível de gordura visceral'
+                              ? 'Aumento do valor medido'
                               : 'Estável'}
                           </div>
                         </>
                       ) : (
-                        <div className="text-sm mt-2 text-purple-300">Dados insuficientes</div>
+                        <div className="text-sm mt-2 text-purple-300">Dados insuficientes ou métodos/unidades incompatíveis</div>
                       )}
                     </div>
                   </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-export const indicatorKey:Record<string,string>={bmi:'bmi',body_fat_percentage:'bodyFat',whr:'whr',whtr:'whtr',tav_value:'tav',vai_value:'vai'};
+export const indicatorKey:Record<string,string>={bmi:'bmi',body_fat_percentage:'bodyFat',whr:'whr',whtr:'whtr',tav_value:'tav',tav_measured_value:'tav',tav_estimated_value:'predictedTav',vai_value:'vai'};
 export function assessmentIndicators(a:any) { try {return JSON.parse(a?.calculation_metadata_json || '{}').classifications || {};} catch {return {};} }
 export function IndicatorDetails({item}:{item:any}) {
   if(!item)return null;

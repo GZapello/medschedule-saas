@@ -104,8 +104,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
 
   // Módulo TAV (Tecido Adiposo Visceral)
   const [tavValue, setTavValue] = useState<number | ''>('');
-  const [tavUnit, setTavUnit] = useState<string>('nível');
-  const [tavMethod, setTavMethod] = useState<string>('Bioimpedância');
+  const [tavUnit, setTavUnit] = useState<string>('');
+  const [tavMethod, setTavMethod] = useState<string>('');
   const [tavEquipment, setTavEquipment] = useState<string>('InBody');
   const [tavProtocolId, setTavProtocolId] = useState<string>('');
   const [tavClassification, setTavClassification] = useState<string>('');
@@ -421,7 +421,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   useEffect(() => {
     if (isOpen) { setPhotoFront('');setPhotoFrontFileId('');setPhotoBack('');setPhotoBackFileId('');setPhotoRight('');setPhotoRightFileId('');setPhotoLeft('');setPhotoLeftFileId(''); }
     if (assessmentToEdit && isOpen) {
-      setTechnical({...Object.fromEntries(['fold_iliac_crest','fold_supraspinale','humerus_breadth_cm','femur_breadth_cm','glucose_mg_dl','triglycerides_mg_dl','ldl_mg_dl','hdl_mg_dl','biochemical_source','biochemical_exam_date','muscle_mass_method','muscle_mass_notes'].map(k=>[k,assessmentToEdit[k] ?? null])), skinfold_measurements: (()=>{try{return JSON.parse(assessmentToEdit.skinfold_measurements_json || '{}')}catch{return {}}})(),technical_mode:!!assessmentToEdit.skinfold_measurements_json});
+      setTechnical({...Object.fromEntries(['fold_iliac_crest','fold_supraspinale','humerus_breadth_cm','femur_breadth_cm','hba1c_pct','uric_acid_mg_dl','glucose_is_fasting','tav_protocol_race_code','glucose_mg_dl','triglycerides_mg_dl','ldl_mg_dl','hdl_mg_dl','biochemical_source','biochemical_exam_date','muscle_mass_method','muscle_mass_notes'].map(k=>[k,assessmentToEdit[k] ?? null])), skinfold_measurements: (()=>{try{return JSON.parse(assessmentToEdit.skinfold_measurements_json || '{}')}catch{return {}}})(),technical_mode:!!assessmentToEdit.skinfold_measurements_json});
       setNeckCm(assessmentToEdit.neck_cm ?? '');
       setShoulderCm(assessmentToEdit.shoulder_cm ?? '');
       setChestCm(assessmentToEdit.chest_cm ?? '');
@@ -466,7 +466,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
       setSkinfoldsProtocol(assessmentToEdit.skinfolds_protocol || assessmentToEdit.protocol || 'pollock_7');
       setCompositionMethod(assessmentToEdit.composition_method || 'dobras');
       setTavEquipment(assessmentToEdit.tav_equipment || '');
-      setTavUnit(assessmentToEdit.tav_unit || 'nível');
+      setTavUnit(assessmentToEdit.tav_measured_unit || assessmentToEdit.tav_unit || '');
       setTavMethod(assessmentToEdit.tav_method || '');
       setTavProtocolId(assessmentToEdit.tav_protocol_id || '');
       setTavNotes(assessmentToEdit.tav_notes || '');
@@ -503,13 +503,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
       const res = await ApiClient.get<{ protocols: TavProtocol[] }>('/v1/personal/tav/protocols');
       if (res && res.protocols) {
         setTavProtocolsList(res.protocols);
-        if (res.protocols.length > 0 && !tavProtocolId) {
-          const first = res.protocols[0];
-          setTavProtocolId(first.id);
-          setTavEquipment(first.equipment);
-          setTavMethod(first.method);
-          setTavUnit(first.unit || 'nível');
-        }
+
       }
     } catch (err) {
       console.warn('Erro ao carregar protocolos TAV:', err);
@@ -523,7 +517,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     ...(assessmentToEdit?.calculation_version ? {calculation_version:assessmentToEdit.calculation_version,anthropometric_sex_at_assessment:assessmentToEdit.anthropometric_sex_at_assessment,age_at_assessment:assessmentToEdit.age_at_assessment}:{}),
     anthropometric_sex:currentStudent?.anthropometric_sex ?? null,
     tav_value:tavValue,tav_equipment:tavEquipment,tav_unit:tavUnit,tav_protocol_id:tavProtocolId,tav_method:tavMethod,
-    patient_id:selectedStudentId,assessment_date:assessmentDate,weight,height,waist_cm:waistCm,hip_cm:hipCm,
+    patient_id:selectedStudentId,assessment_date:assessmentDate,weight,height,neck_cm:neckCm,waist_cm:waistCm,hip_cm:hipCm,
     composition_method:compositionMethod,protocol:skinfoldsProtocol,skinfolds_protocol:skinfoldsProtocol,
     body_fat_percentage:manualFatPct,muscle_mass_kg:manualMuscleMass,bmr_kcal:assessmentToEdit?.bmr_method==='mifflin_st_jeor'?null:bmrKcal,
     fold_triceps:foldTriceps,fold_subscapular:foldSubscapular,fold_biceps:foldBiceps,fold_chest:foldChest,
@@ -820,7 +814,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           </div>
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
           {tavValue!=='' && <div className="flex items-center gap-2">
-            <span className="text-purple-300 text-[11px]">TAV:</span>
+            <span className="text-purple-300 text-[11px]">TAV medido:</span>
             <strong className="text-cyan-300 font-bold">{`${tavValue} ${tavUnit}`}</strong>
             {tavClassification && (
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-cyan-200">
@@ -1322,30 +1316,35 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-800">
-                        Adiposidade Visceral
+                        Tecido Adiposo Visceral — TAV
                       </h4>
                       <p className="text-[11px] text-slate-500">
-                        Classificação rigorosa por equipamento, escala e tabela de referência oficial.
+                        Estimativa por protocolo científico, medição informada e índice indireto apresentados separadamente.
                       </p>
                     </div>
                   </div>
 
                   <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full border border-indigo-200">
-                    Escala preservada sem conversão automática
+                    Estimado ≠ medido ≠ VAI
                   </span>
                 </div>
 
+                <div className="space-y-2">
+                  <PersonalAssessmentIndicator item={calculationPreview?.classifications?.predictedTav}/>
+                  <p className="text-[11px] text-slate-500">Método: equação preditiva antropométrico-bioquímica · Cavalcanti et al., RBONE 14(91).</p>
+                </div>
                 <div className="space-y-2">
                   <PersonalAssessmentIndicator item={calculationPreview?.classifications?.vai}/>
                   <p className="text-[11px] text-slate-500">Indicador indireto de adiposidade visceral. Atualizado automaticamente conforme os dados da avaliação.</p>
                   <button type="button" onClick={()=>setActiveTab('cardio_tests')} className="text-xs font-semibold text-indigo-700 hover:underline">Preencher dados bioquímicos</button>
                 </div>
-                <h5 className="text-xs font-bold text-slate-700 border-t border-indigo-100 pt-4">TAV medido por equipamento</h5>
+                <details className="border-t border-indigo-100 pt-4 space-y-3"><summary className="text-xs font-semibold text-indigo-700 cursor-pointer">Informar TAV medido por equipamento</summary>
+                <div><label className="block text-xs font-semibold text-slate-700 mb-1">Método de medição (opcional)</label><input value={tavMethod} onChange={e=>setTavMethod(e.target.value)} placeholder="Tomografia, ressonância, DXA, bioimpedância…" className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white"/></div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   {/* Catálogo de Protocolos & Equipamentos */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Equipamento / Protocolo *
+                      Equipamento / Protocolo (opcional)
                     </label>
                     <select
                       value={tavProtocolId}
@@ -1356,7 +1355,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                         if (proto) {
                           setTavEquipment(proto.equipment);
                           setTavMethod(proto.method);
-                          setTavUnit(proto.unit || 'nível');
+                          setTavUnit(proto.unit || '');
                         }
                       }}
                       className="w-full px-3 py-2 text-xs bg-white border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-slate-800"
@@ -1387,24 +1386,24 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                   {/* Escala / Unidade */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Unidade / Escala *
+                      Unidade / Escala
                     </label>
                     <select
                       value={tavUnit}
                       onChange={(e) => {setTavUnit(e.target.value);setTavProtocolId('');}}
                       className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-semibold"
                     >
-                      <option value="nível">Nível / Grau (1 a 20, 1 a 59)</option>
+                      <option value="">Não informado</option><option value="mL">Volume em mL</option><option value="cm³">Volume em cm³</option><option value="nível">Nível / Grau (1 a 20, 1 a 59)</option>
                       <option value="cm²">Área em cm² (DXA / Tomografia)</option>
                       <option value="kg">Massa em kg</option>
                       <option value="escala_direta">Escala Direta</option>
                     </select>
                   </div>
 
-                  {/* Valor do TAV */}
+                  {/* Valor medido do TAV */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Valor do TAV *
+                      Valor medido do TAV
                     </label>
                     <input
                       type="number"
@@ -1455,6 +1454,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none"
                   />
                 </div>
+                </details>
               </div>
             </div>
           )}

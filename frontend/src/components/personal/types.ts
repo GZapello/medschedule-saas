@@ -187,6 +187,7 @@ export interface AssessmentComparison {
   current_photos: AssessmentPhoto[];
   metrics: ComparisonMetricItem[];
   tav_comparison: {
+    comparable?: boolean;
     previous: {
       value?: number;
       unit?: string;
@@ -256,6 +257,19 @@ export interface Assessment {
   body_water_liters?: number;
   bmr_kcal?: number;
   raw_composition_data_json?: string;
+  tav_estimated_value?: number | null;
+  tav_estimated_unit?: string | null;
+  tav_estimation_protocol?: string;
+  tav_estimation_reference?: string;
+  tav_estimation_classification?: string;
+  tav_measured_value?: number | null;
+  tav_measured_method?: string;
+  tav_measured_equipment?: string;
+  tav_measured_unit?: string;
+  hba1c_pct?: number;
+  uric_acid_mg_dl?: number;
+  glucose_is_fasting?: number;
+  tav_protocol_race_code?: string;
   tav_value?: number;
   tav_unit?: string;
   tav_method?: string;

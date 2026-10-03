@@ -1,5 +1,5 @@
 import {IndicatorDetails,assessmentIndicators} from './PersonalAssessmentIndicator';
-import {ReportTrend,evolutionMetrics,reportNumber} from './PersonalAssessmentReportCharts';
+import {ReportTrend,evolutionMetrics,reportNumber,visceralEvolutionSeries,visceralSeriesKey} from './PersonalAssessmentReportCharts';
 import { ClinicalTrendChart } from '../clinical/ClinicalTrendChart';
 import React, { useState } from 'react';
 import {
@@ -51,7 +51,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
   // Histórico Dedicado de TAV para Tabela
   const tavHistory = sorted.filter((d) => d.tav_value !== null && d.tav_value !== undefined);
   const tavRows = tavHistory.map((cur, idx) => {
-    const prev = idx > 0 ? tavHistory[idx - 1] : null;
+    const prev = tavHistory.slice(0,idx).reverse().find(row=>visceralSeriesKey(row,'measured')===visceralSeriesKey(cur,'measured')) || null;
     const prevVal = prev ? Number(prev.tav_value) : null;
     const curVal = Number(cur.tav_value);
     let diff: number | null = null;
@@ -70,10 +70,10 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
       curVal,
       diff,
       pctVariation,
-      method: cur.tav_method || cur.composition_method || 'Bioimpedância',
+      method: cur.tav_method || 'Não informado',
       equipment: cur.tav_equipment || 'Não informado',
       classification: cur.tav_classification || 'Valor registrado — classificação não disponível para o protocolo selecionado.',
-      unit: cur.tav_unit || 'nível'
+      unit: cur.tav_unit || 'Unidade não informada'
     };
   });
 
@@ -133,13 +133,13 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
           <span className="text-[11px] font-bold text-indigo-700 uppercase flex items-center gap-1">
             <Flame className="w-3.5 h-3.5" />
-            <span>TAV Mais Recente</span>
+            <span>TAV medido mais recente</span>
           </span>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-2xl font-black text-indigo-900">
               {latest.tav_value !== null && latest.tav_value !== undefined ? latest.tav_value : '—'}
             </span>
-            <span className="text-xs text-indigo-600 font-bold">{latest.tav_unit || 'nível'}</span>
+            <span className="text-xs text-indigo-600 font-bold">{latest.tav_unit || 'Unidade não informada'}</span>
           </div>
           <div className="text-[10px] text-indigo-700 mt-1 font-semibold truncate">
             {latest.tav_classification || 'Sem classificação'}
@@ -246,10 +246,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
         {selectedMetric === 'body_fat' && renderSvgChart('body_fat_percentage', '#f59e0b', '%', undefined, d=>assessmentIndicators(d).bodyFat?.classification || '')}
         {selectedMetric === 'lean_mass' && renderSvgChart('lean_mass_kg', '#10b981', 'kg')}
         {selectedMetric === 'perimeters' && renderSvgChart('waist_cm', '#0ea5e9', 'cm')}
-        {selectedMetric === 'tav' &&
-          renderSvgChart('tav_value', '#6366f1', latest.tav_unit || 'nível', 'TAV', (d) =>
-            d.tav_classification ? d.tav_classification : ''
-          )}
+        {selectedMetric === 'tav' && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{visceralEvolutionSeries(sorted).map(group=><ReportTrend key={group.key} history={group.history} metric={group.metric} title={group.title} unit={group.unit}/>)}<ReportTrend history={sorted} metric="vai_value" title="VAI — indicador indireto" unit=""/></div>}
         {selectedMetric === 'cardio' && renderSvgChart('resting_heart_rate_bpm', '#e11d48', 'bpm')}
         {selectedMetric === 'vo2' && renderSvgChart('vo2_max', '#059669', 'ml/kg/min')}
         {selectedMetric === 'flexibility' && renderSvgChart('flexibility_wells_cm', '#d97706', 'cm')}
@@ -369,7 +366,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
                   {['bmi','whr','whtr','vai'].map(key=><td key={key} className="py-2.5 px-3 text-slate-700">{reportNumber(assessmentIndicators(item)[key]?.value)}<IndicatorDetails item={assessmentIndicators(item)[key]}/></td>)}
                   <td className="py-2.5 px-3 text-emerald-600 font-semibold">{item.lean_mass_kg || '—'} kg</td>
                   <td className="py-2.5 px-3 text-indigo-700 font-bold">
-                    {item.tav_value !== null && item.tav_value !== undefined ? `${item.tav_value} ${item.tav_unit || 'nível'}` : '—'}<IndicatorDetails item={assessmentIndicators(item).tav}/>
+                    {item.tav_value !== null && item.tav_value !== undefined ? `${item.tav_value} ${item.tav_unit || 'Unidade não informada'}` : '—'}<IndicatorDetails item={assessmentIndicators(item).tav}/>
                   </td>
                   <td className="py-2.5 px-3 text-slate-600">{item.waist_cm ? `${item.waist_cm} cm` : '—'}</td>
                   <td className="py-2.5 px-3 text-slate-600">{item.hip_cm ? `${item.hip_cm} cm` : '—'}</td>

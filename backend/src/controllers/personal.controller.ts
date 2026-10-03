@@ -1,4 +1,4 @@
-import { classifyTav as classifyMeasuredTav, calculateAssessment, normalizeLegacyAssessmentForReport, referenceSex, numberOrNull } from '../services/personal-assessment-calculation.service';
+import { normalizeMeasuredTavInput, classifyTav as classifyMeasuredTav, calculateAssessment, normalizeLegacyAssessmentForReport, referenceSex, numberOrNull } from '../services/personal-assessment-calculation.service';
 import { ASSESSMENT_COLUMNS } from '../config/personal-assessment.migration';
 import { exerciseAnimation, getExerciseMaxCompletedLoad } from '../services/exercise-media';
 import { validatePosture, postureSummary, validatePosturePhotoAccess } from '../services/personal-posture.service';
@@ -1140,7 +1140,7 @@ export class PersonalController {
       }
       const tenantId = req.tenantId!;
       const professionalId = getProfessionalId(req);
-      const b = req.body;
+      const b = normalizeMeasuredTavInput(req.body);
       const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
 
       const patient = db.prepare('SELECT id, birth_date, gender, anthropometric_sex FROM patients WHERE id = ? AND tenant_id = ?').get(b.patient_id, tenantId) as any;
@@ -1160,7 +1160,7 @@ export class PersonalController {
       const tavVal=numberOrNull(b.tav_value,true);
       let tavProtocolId=b.tav_protocol_id || null, tavUnit=calculation.classifications.tav.unit, tavClassification=cv.tav_classification;
       const numericColumns=(db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]).filter(c=>['REAL','INTEGER'].includes(c.type)).map(c=>c.name);
-      for(const key of numericColumns) if(key in b && key!=='flexibility_wells_cm') b[key]=numberOrNull(b[key],['tav_value','body_fat_percentage','flexibility_wells_cm'].includes(key));
+      for(const key of numericColumns) if(key in b && key!=='flexibility_wells_cm') b[key]=numberOrNull(b[key],['tav_value','tav_measured_value','glucose_is_fasting','body_fat_percentage','flexibility_wells_cm'].includes(key));
       // JSON stringified fields
       const strengthTestsJson = Array.isArray(b.strength_tests) ? JSON.stringify(b.strength_tests) : (b.strength_tests_json || null);
       const muscularEnduranceTestsJson = Array.isArray(b.muscular_endurance_tests) ? JSON.stringify(b.muscular_endurance_tests) : (b.muscular_endurance_tests_json || null);
@@ -1341,7 +1341,7 @@ export class PersonalController {
       }
       const tenantId = req.tenantId!;
       const { id } = req.params;
-      const b = req.body;
+      const b = normalizeMeasuredTavInput(req.body);
       const postureJson = b.posture === undefined ? undefined : validatePosture(b.posture);
 
       const existing = db.prepare('SELECT * FROM personal_assessments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
@@ -1353,18 +1353,27 @@ export class PersonalController {
       validatePosturePhotoAccess(db, tenantId, existing.patient_id, postureJson, b.photos);
 
       const columns = new Set((db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]).map(c=>c.name));
-      const forbidden=new Set(['id','patient_id','tenant_id','professional_id','created_at','updated_at','calculation_version','calculation_metadata_json','anthropometric_sex_at_assessment','age_at_assessment']);
+      const forbidden=new Set(['id','patient_id','tenant_id','professional_id','created_at','updated_at','calculation_version','calculation_metadata_json','anthropometric_sex_at_assessment','age_at_assessment','tav_estimated_value','tav_estimated_unit','tav_estimation_protocol','tav_estimation_reference','tav_estimation_classification']);
       const edits:Record<string,any>={};
       for(const [k,v] of Object.entries(b)) if(columns.has(k) && !forbidden.has(k) && k !== 'posture_json') edits[k]=v;
       for(const [key,jsonKey] of [['strength_tests','strength_tests_json'],['muscular_endurance_tests','muscular_endurance_tests_json'],['flexibility_tests','flexibility_tests_json'],['raw_composition_data','raw_composition_data_json']]) if(b[key] !== undefined) edits[jsonKey]=JSON.stringify(b[key]);
-      for(const c of db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]) if(c.name in edits && ['REAL','INTEGER'].includes(c.type) && c.name!=='flexibility_wells_cm') edits[c.name]=numberOrNull(edits[c.name],['tav_value','body_fat_percentage'].includes(c.name));
+      for(const c of db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]) if(c.name in edits && ['REAL','INTEGER'].includes(c.type) && c.name!=='flexibility_wells_cm') edits[c.name]=numberOrNull(edits[c.name],['tav_value','tav_measured_value','glucose_is_fasting','body_fat_percentage'].includes(c.name));
       for(const key of ['bmi','whr','whtr','fat_mass_kg','lean_mass_kg','vai_value','somatotype_endomorphy','somatotype_mesomorphy','somatotype_ectomorphy','somatochart_x','somatochart_y','skinfold_sum','skinfold_central_sum','skinfold_peripheral_sum']) delete edits[key];
-      const calculationInputs=['weight','height','protocol','skinfolds_protocol','composition_method','skinfold_measurements_json','waist_cm','hip_cm','triglycerides_mg_dl','hdl_mg_dl','muscle_mass_kg','body_fat_percentage'];
+      const calculationInputs=['neck_cm','hba1c_pct','uric_acid_mg_dl','glucose_mg_dl','glucose_is_fasting','tav_protocol_race_code','tav_value','tav_unit','tav_method','tav_equipment','tav_protocol_id','weight','height','protocol','skinfolds_protocol','composition_method','skinfold_measurements_json','waist_cm','hip_cm','triglycerides_mg_dl','hdl_mg_dl','muscle_mass_kg','body_fat_percentage'];
       if(existing.calculation_version && (calculationInputs.some(k=>k in edits) || Object.keys(edits).some(k=>k.startsWith('fold_')))) {
         const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(existing.patient_id,tenantId);
         const merged={...existing,...edits};
         if(!('bmr_kcal' in edits) && existing.bmr_method==='mifflin_st_jeor') merged.bmr_kcal=null;
-        Object.assign(edits,Object.fromEntries(Object.entries(calculateAssessment(merged,patient,assessmentTavContext(merged,tenantId)).values).filter(([k])=>columns.has(k))));
+        const calculated=calculateAssessment(merged,patient,assessmentTavContext(merged,tenantId));
+        // A disabled protocol must never erase an existing historical prediction.
+        if(existing.tav_estimated_value!=null && !calculated.visceralAdiposity.predictedTav.available) {
+          for(const key of ['tav_estimated_value','tav_estimated_unit','tav_estimation_protocol','tav_estimation_reference','tav_estimation_classification']) calculated.values[key]=existing[key];
+          let saved:any={};try {saved=JSON.parse(existing.calculation_metadata_json || '{}');}catch {}
+          if(saved.visceralAdiposity?.predictedTav) calculated.visceralAdiposity.predictedTav=saved.visceralAdiposity.predictedTav;
+          if(saved.classifications?.predictedTav) calculated.classifications.predictedTav=saved.classifications.predictedTav;
+          calculated.values.calculation_metadata_json=JSON.stringify({...calculated.metadata,classifications:calculated.classifications,visceralAdiposity:calculated.visceralAdiposity});
+        }
+        Object.assign(edits,Object.fromEntries(Object.entries(calculated.values).filter(([k])=>columns.has(k))));
       }
       if(!existing.calculation_version) for(const k of ['body_fat_percentage','fat_mass_kg','lean_mass_kg','muscle_mass_kg','bmr_kcal','bmi','whr','whtr']) if(edits[k]===null) delete edits[k];
       if(Object.keys(edits).length) db.prepare(`UPDATE personal_assessments SET ${Object.keys(edits).map(k=>k+'=?').join(',')},updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(...Object.values(edits),id,tenantId);
@@ -1483,7 +1492,7 @@ export class PersonalController {
         let diff: number | null = null;
         let pctVariation: number | null = null;
 
-        const comparable=field!=='tav_value' || ['tav_equipment','tav_unit','tav_protocol_id'].every(k=>(current[k] ?? null)===(previous[k] ?? null));
+        const comparable=field==='tav_value' ? !!current.tav_unit && ['tav_method','tav_equipment','tav_unit','tav_protocol_id'].every(k=>(current[k] ?? null)===(previous[k] ?? null)) : field==='tav_estimated_value' ? !!current.tav_estimated_unit && !!current.tav_estimation_protocol && ['tav_estimated_unit','tav_estimation_protocol'].every(k=>current[k]===previous[k]) : true;
         if (comparable && curVal !== null && prevVal !== null) {
           diff = parseFloat((curVal - prevVal).toFixed(2));
           if (prevVal !== 0) {
@@ -1498,6 +1507,7 @@ export class PersonalController {
           previous: prevVal,
           current: curVal,
           diff,
+          comparable,
           pct_variation: pctVariation
         };
       };
@@ -1516,7 +1526,8 @@ export class PersonalController {
         buildItem('Taxa Metabólica Basal (TMB)', 'bmr_kcal', 'kcal'),
         buildItem('VAI (índice indireto)', 'vai_value', ''),
         buildItem('Somatório de dobras', 'skinfold_sum', 'mm'),
-        buildItem('TAV (Tecido Adiposo Visceral)', 'tav_value', current.tav_unit || previous.tav_unit || 'nível'),
+        buildItem('TAV medido', 'tav_value', current.tav_unit || previous.tav_unit || ''),
+        buildItem('TAV estimado por equação preditiva', 'tav_estimated_value', current.tav_estimated_unit || previous.tav_estimated_unit || ''),
         // Circunferências
         buildItem('Pescoço', 'neck_cm', 'cm'),
         buildItem('Ombro', 'shoulder_cm', 'cm'),
@@ -1568,6 +1579,7 @@ export class PersonalController {
         metrics,
         posture_history: postureMode ? history.map(postureSummary) : undefined,
         tav_comparison: {
+          comparable: metrics.find(m=>m.field==='tav_value')?.comparable,
           previous: {
             value: previous.tav_value,
             unit: previous.tav_unit,
