@@ -1,10 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import { REFERENCES } from '../services/personal-assessment-calculation.service';
 export const ASSESSMENT_COLUMNS: Record<string,string> = {
+  tav_estimated_value:'REAL',tav_estimated_unit:'TEXT',tav_estimation_protocol:'TEXT',tav_estimation_reference:'TEXT',tav_estimation_classification:'TEXT',
+  tav_measured_value:'REAL',tav_measured_method:'TEXT',tav_measured_equipment:'TEXT',tav_measured_unit:'TEXT',
+  hba1c_pct:'REAL',uric_acid_mg_dl:'REAL',glucose_is_fasting:'INTEGER',tav_protocol_race_code:'TEXT',
   bmi_classification:'TEXT',skinfold_sum:'REAL',skinfold_central_sum:'REAL',skinfold_peripheral_sum:'REAL',
   anthropometric_sex_at_assessment:'TEXT', age_at_assessment:'INTEGER', calculation_version:'TEXT', calculation_metadata_json:'TEXT',
   body_fat_classification:'TEXT',body_fat_reference:'TEXT',whr_classification:'TEXT',whtr_classification:'TEXT',bmr_method:'TEXT',
-  vai_value:'REAL',vai_reference:'TEXT',humerus_breadth_cm:'REAL',femur_breadth_cm:'REAL',fold_iliac_crest:'REAL',fold_supraspinale:'REAL',
+  vai_classification:'TEXT',vai_value:'REAL',vai_reference:'TEXT',humerus_breadth_cm:'REAL',femur_breadth_cm:'REAL',fold_iliac_crest:'REAL',fold_supraspinale:'REAL',
   skinfold_measurements_json:'TEXT',measurement_quality_json:'TEXT',glucose_mg_dl:'REAL',triglycerides_mg_dl:'REAL',ldl_mg_dl:'REAL',hdl_mg_dl:'REAL',
   somatotype_endomorphy:'REAL',somatotype_mesomorphy:'REAL',somatotype_ectomorphy:'REAL',somatochart_x:'REAL',somatochart_y:'REAL',
   tav_source_type:'TEXT',tav_reference_source:'TEXT',tav_is_estimate:'INTEGER DEFAULT 0',muscle_mass_method:'TEXT',muscle_mass_notes:'TEXT',

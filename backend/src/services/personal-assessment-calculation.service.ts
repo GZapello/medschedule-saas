@@ -1,5 +1,5 @@
 /** Central source of truth. Pure functions: no database writes, including legacy reads. */
-export const CALCULATION_VERSION = 'personal-calc-2026.3';
+export const CALCULATION_VERSION = 'personal-calc-2026.4';
 export const REFERENCES = {
   jpMale: 'Jackson & Pollock 1978; PMID 718832; DOI 10.1079/BJN19780152',
   jpFemale: 'Jackson, Pollock & Ward 1980; PMID 7402053',
@@ -76,12 +76,13 @@ export function classifyTav(a: any, context?: any) {
     sourceType: a.tav_source_type || 'equipment', isEstimate: Boolean(a.tav_is_estimate) };
 }
 export const PREDICTED_TAV_PROTOCOL = {
-  id:'cavalcanti-rbone-14-91-pending-v1', name:'Cavalcanti et al. — RBONE 14(91), 1259–1269',
-  reference:'https://www.rbone.com.br/index.php/rbone/article/view/1462',
-  verificationStatus:'pending_full_text', available:false,
-  // Do not enter coefficients, conversions or race categories from the abstract.
-  // Full PDF could not be retrieved: units, race coding and the female CP coefficient remain unverified.
-  unverified:['Unidades das variáveis e do resultado','Codificação original da variável raça','Coeficiente de CP na equação feminina','Metodologia, critérios e limitações do texto completo']
+  id:'bonora-1995-evat-v1', name:'Bonora et al. (1995) — área visceral estimada',
+  reference:'https://pubmed.ncbi.nlm.nih.gov/8786733/',
+  coefficientSource:'https://www.frontiersin.org/journals/endocrinology/articles/10.3389/fendo.2022.916124/full#T4',
+  available:true,
+  // WC in cm, age in years, predicted cross-sectional VAT area in cm².
+  // The female coefficient is 4.04 (not the 4.4 transcription in some later papers).
+  limitation:'Estimativa antropométrica de área, com precisão limitada; não equivale a medição por imagem. Bonora relata SEE de aproximadamente 40% (homens) e 37% (mulheres) e grande erro na validação cruzada. Sem classificação clínica universal configurada.'
 } as const;
 export function normalizeMeasuredTavInput(input:any) {
   const a={...input};
@@ -92,19 +93,26 @@ export function normalizeMeasuredTavInput(input:any) {
   }
   return a;
 }
-export function calculatePredictedTav(a:any, demographics:{sex:string,age:number|null}, bmi:number|null) {
-  const {sex,age}=demographics;
-  const inputs={age,sex,weight:numberOrNull(a.weight),height_cm:numberOrNull(a.height),hip_cm:numberOrNull(a.hip_cm),neck_cm:numberOrNull(a.neck_cm),
-    triglycerides_mg_dl:numberOrNull(a.triglycerides_mg_dl),bmi,glucose_mg_dl:numberOrNull(a.glucose_mg_dl),glucose_is_fasting:a.glucose_is_fasting===true || a.glucose_is_fasting===1,
-    hba1c_pct:numberOrNull(a.hba1c_pct),uric_acid_mg_dl:numberOrNull(a.uric_acid_mg_dl),race_code:a.tav_protocol_race_code || null};
-  const required: [string,any][] = sex==='female' ? [['Idade',age],['Peso',inputs.weight],['Altura',inputs.height_cm],['Circunferência do quadril',inputs.hip_cm],['Circunferência do pescoço',inputs.neck_cm],['Triglicerídeos',inputs.triglycerides_mg_dl]] : sex==='male' ? [['Idade',age],['Altura',inputs.height_cm],['Circunferência do pescoço',inputs.neck_cm],['Glicemia de jejum',inputs.glucose_is_fasting?inputs.glucose_mg_dl:null],['HbA1c',inputs.hba1c_pct],['Ácido úrico',inputs.uric_acid_mg_dl],['Variável demográfica exigida pelo protocolo',inputs.race_code==='not_informed'?null:inputs.race_code]] : [['Sexo de referência antropométrica',null]];
-  const missingInputs=required.filter(([,value])=>value===null).map(([label])=>label);
-  const applicable=age!==null && age>=20 && age<=80 && ['male','female'].includes(sex);
-  const limitation=!['male','female'].includes(sex)?'Não calculado — o protocolo utiliza equações específicas por sexo.':age!==null && age<20?'Protocolo não aplicável — equação validada para adultos a partir de 20 anos.':age!==null && age>80?'Protocolo não aplicável — idade fora da amostra publicada de 20 a 80 anos.':'Protocolo indisponível — unidades, coeficientes e codificação demográfica aguardam conferência do artigo original completo.';
-  return {value:null,unit:null,sex,protocol:PREDICTED_TAV_PROTOCOL.id,protocolName:PREDICTED_TAV_PROTOCOL.name,reference:PREDICTED_TAV_PROTOCOL.reference,
-    label:'TAV estimado por equação preditiva',method:'Equação preditiva antropométrico-bioquímica',inputs,missingInputs,applicable,available:false,
-    limitation,equation:null,calculationVersion:CALCULATION_VERSION,verification:PREDICTED_TAV_PROTOCOL,status:'unavailable',classification:limitation,
-    reason:missingInputs.length?'Faltam: '+missingInputs.join(', '):null,tone:'slate'};
+export function calculatePredictedTav(a:any, demographics:{sex:string,age:number|null}) {
+  const {sex,age}=demographics, waist=numberOrNull(a.waist_cm);
+  const inputs={age,sex,waist_cm:waist};
+  const knownSex=['male','female'].includes(sex);
+  const missingInputs=[...(!knownSex?['Sexo de referência antropométrica']:[]),...(age===null?['Idade']:[]),...(waist===null?['Cintura']:[])];
+  // Clinical adult guard; do not misrepresent the old Cavalcanti sample as Bonora's age range.
+  const applicable=knownSex && age!==null && age>=20;
+  const equation=sex==='male'?'6.37 * waist_cm - 453.7':sex==='female'?'2.62 * age + 4.04 * waist_cm - 370.5':null;
+  const historical=!!a.__historical || !!a.calculation_version && a.calculation_version!==CALCULATION_VERSION;
+  const raw=!historical && applicable && waist!==null ? sex==='male'?6.37*waist-453.7:2.62*age!+4.04*waist-370.5 : null;
+  // Do not turn impossible extrapolations into a fabricated zero.
+  const rounded=raw!==null && Number.isFinite(raw)?Math.round(raw*10000)/10000:null;
+  const value=rounded!==null && rounded>0?rounded:null;
+  const status=historical?'historical':missingInputs.length?'missing':!applicable?'not_applicable':value===null?'out_of_domain':'unclassified';
+  const reason=historical?'Estimativa não registrada nesta avaliação.':missingInputs.length?'Preencha as medidas necessárias para calcular o TAV.':!applicable?'Protocolo não aplicável a menores de 20 anos.':value===null?'Não calculado — medidas fora do domínio da equação.':null;
+  return {value,unit:historical?a.tav_estimated_unit || null:'cm²',sex,protocol:historical?a.tav_estimation_protocol || null:PREDICTED_TAV_PROTOCOL.id,
+    protocolName:historical?null:PREDICTED_TAV_PROTOCOL.name,reference:historical?a.tav_estimation_reference || null:PREDICTED_TAV_PROTOCOL.reference,
+    label:'TAV estimado',method:'Equação preditiva',inputs,missingInputs,applicable,available:!historical,
+    limitation:historical?null:PREDICTED_TAV_PROTOCOL.limitation,equation:historical?null:equation,calculationVersion:CALCULATION_VERSION,verification:historical?null:PREDICTED_TAV_PROTOCOL,
+    status,classification:value===null?'Não calculado':'Classificação não disponível para esta estimativa.',classificationAvailable:false,reason,tone:'slate'};
 }
 export function calculateAssessment(input: any, patient: any = {}, tavContext?: any) {
   const a = normalizeMeasuredTavInput(input), sexInfo = referenceSex(patient);
@@ -189,10 +197,10 @@ export function calculateAssessment(input: any, patient: any = {}, tavContext?: 
   values.tav_reference_source = tav.reference; values.tav_source_type = tav.sourceType; values.tav_is_estimate = tav.isEstimate ? 1 : 0;
   values.anthropometric_sex_at_assessment=sex; values.age_at_assessment=age; values.calculation_version=CALCULATION_VERSION;
   values.vai_reference=REFERENCES.vai; values.skinfold_measurements_json=JSON.stringify(raw); values.measurement_quality_json=JSON.stringify(quality);
-  const predictedTav=calculatePredictedTav(a,{sex,age},bmi);
-  Object.assign(values,{tav_estimated_value:predictedTav.value,tav_estimated_unit:predictedTav.unit,tav_estimation_protocol:predictedTav.protocol,tav_estimation_reference:predictedTav.reference,tav_estimation_classification:predictedTav.limitation,
+  const predictedTav=calculatePredictedTav(a,{sex,age});
+  Object.assign(values,{tav_estimated_value:predictedTav.value,tav_estimated_unit:predictedTav.unit,tav_estimation_protocol:predictedTav.protocol,tav_estimation_reference:predictedTav.reference,tav_estimation_classification:predictedTav.classification,
     tav_measured_value:tav.value,tav_measured_unit:tav.unit,tav_measured_equipment:tav.equipment,tav_measured_method:a.tav_method || null});
-  unavailable.push({metric:'tav_estimated_value',reason:predictedTav.reason,missingInputs:predictedTav.missingInputs});
+  if(predictedTav.value===null) unavailable.push({metric:'tav_estimated_value',reason:predictedTav.reason,missingInputs:predictedTav.missingInputs});
   const ageReason=age===null?'Classificação não aplicada — idade não informada.':!adult?'Classificação não aplicável — referência para adultos.':null;
   const sexReason=!['male','female'].includes(sex)?'Classificação não aplicada — referência depende do sexo.':null;
   const item=(value:any,label:string,classification:string,reference:string,reason:string|null,status?:string)=>({value,label,classification:value===null?'Não calculado':reason || classification,reference,status:status || (value===null?'missing':reason?'unclassified':'classified'),reason:value===null?'Dados insuficientes':reason});

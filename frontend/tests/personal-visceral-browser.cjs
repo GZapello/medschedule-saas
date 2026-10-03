@@ -1,0 +1,25 @@
+const {chromium}=require('playwright'),esbuild=require('esbuild'),http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const {calculateAssessment}=require('../../backend/dist/services/personal-assessment-calculation.service');
+const out=path.resolve(__dirname,'../../tmp/personal-report-tests');fs.mkdirSync(out,{recursive:true});
+esbuild.buildSync({entryPoints:[path.join(__dirname,'personal-visceral.tsx')],bundle:true,format:'iife',platform:'browser',outfile:path.join(out,'visceral.js'),define:{'import.meta.env':'{}'},jsx:'automatic'});
+const requests=[];
+const server=http.createServer((req,res)=>{if(req.url==='/preview'){let raw='';req.on('data',d=>raw+=d);req.on('end',()=>{const body=JSON.parse(raw);requests.push(body);res.setHeader('Content-Type','application/json');res.end(JSON.stringify(calculateAssessment(body,{birth_date:'1996-01-01',anthropometric_sex:'female'})));});return;}res.end('<html><meta charset="utf-8"><div id="root"></div><script>'+fs.readFileSync(path.join(out,'visceral.js'),'utf8')+'</script></html>');});
+(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true});try{
+const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
+const fill=async(label,value)=>{const field=page.locator('label').filter({hasText:label}).first().locator('..').locator('input').first();await field.fill(value);};
+await fill('Peso Corporal','70');await fill('Estatura','165');await fill('Cintura','80');await fill('Quadril','100');
+await page.getByRole('button',{name:/2. Composição/}).click();
+const prediction=page.getByText('TAV estimado',{exact:true}).locator('..');await page.waitForFunction(()=>document.body.textContent.includes('31,3'));
+assert.match(await prediction.innerText(),/31,3.*cm²/s);assert.match(await prediction.innerText(),/Método: Equação preditiva/);assert.ok(!/Faltam:|HbA1c|úrico|raça|Cavalcanti|Referência:|Classificação/.test(await prediction.innerText()));
+await page.getByRole('button',{name:/1. Antropometria/}).click();await fill('Cintura','90');await page.getByRole('button',{name:/2. Composição/}).click();await page.waitForFunction(()=>document.body.textContent.includes('71,7'));assert.match(await prediction.innerText(),/71,7.*cm²/s);
+await page.getByRole('button',{name:/1. Antropometria/}).click();await fill('Cintura','');await page.getByRole('button',{name:/2. Composição/}).click();await page.waitForFunction(()=>document.body.textContent.includes('Preencha as medidas necessárias para calcular o TAV.'));assert.match(await prediction.innerText(),/Não calculado/);
+await page.getByRole('button',{name:/1. Antropometria/}).click();await fill('Cintura','80');await page.getByRole('button',{name:/2. Composição/}).click();await page.getByRole('button',{name:'Preencher dados bioquímicos'}).click();assert.equal(await page.locator('label').filter({hasText:/HbA1c|Ácido úrico|Glicemia coletada em jejum|Variável demográfica/}).count(),0);
+await fill('Triglicerídeos','110');await fill('HDL-C','55');await page.getByRole('button',{name:/2. Composição/}).click();
+await page.waitForFunction(()=>document.body.textContent.includes('VAI calculado — classificação não disponível'));
+assert.ok(requests.at(-1).triglycerides_mg_dl===110 && requests.at(-1).hdl_mg_dl===55);assert.equal(requests.at(-1).weight,70);
+assert.ok(await page.getByText('TAV estimado',{exact:true}).isVisible());assert.equal(await page.locator('details').filter({hasText:'Informar TAV medido por equipamento'}).getAttribute('open'),null);await page.getByText('Informar TAV medido por equipamento',{exact:true}).click();await page.locator('label').filter({hasText:'Unidade / Escala'}).locator('..').locator('select').selectOption('nível');await fill('Equipamento Utilizado','InBody');await fill('Valor medido do TAV','6');await page.waitForFunction(()=>document.body.textContent.includes('Dentro da referência selecionada'));
+await fill('Equipamento Utilizado','Omron');await fill('Valor medido do TAV','15');await page.waitForFunction(()=>document.body.textContent.includes('Muito alto'));
+await fill('Equipamento Utilizado','Tanita');await fill('Valor medido do TAV','18');await page.waitForFunction(()=>document.body.textContent.includes('Excesso'));
+const unit=page.locator('label').filter({hasText:'Unidade / Escala'}).locator('..').locator('select');await unit.selectOption('kg');await page.waitForFunction(()=>document.body.textContent.includes('Valor registrado — classificação não disponível'));
+assert.deepEqual(errors,[]);assert.ok(!/NaN|Infinity|#DIV/.test(await page.locator('body').innerText()));console.log('PASS live VAI, single biochemical fields, InBody/Omron/Tanita typing without blur, equipment/unit changes, safe output');
+}finally{await browser.close();server.close();}})().catch(e=>{console.error(e);server.close();process.exit(1)});

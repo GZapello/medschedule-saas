@@ -1330,8 +1330,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 </div>
 
                 <div className="space-y-2">
-                  <PersonalAssessmentIndicator item={calculationPreview?.classifications?.predictedTav}/>
-                  <p className="text-[11px] text-slate-500">Método: equação preditiva antropométrico-bioquímica · Cavalcanti et al., RBONE 14(91).</p>
+                  <PersonalAssessmentIndicator compact unit={calculationPreview?.classifications?.predictedTav?.unit || ''} item={calculationPreview?.classifications?.predictedTav}/>
                 </div>
                 <div className="space-y-2">
                   <PersonalAssessmentIndicator item={calculationPreview?.classifications?.vai}/>
