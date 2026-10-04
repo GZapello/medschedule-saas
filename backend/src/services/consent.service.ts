@@ -293,7 +293,9 @@ export class ConsentService {
     const initial=this.token(raw);
     if (!Array.isArray(req.body.declarations) || req.body.declarations.length!==3 || !req.body.declarations.every((v: unknown)=>v===true)) consentError('Aceite as três declarações antes de assinar.');
     if (req.body.documentHash!==initial.row.document_hash) consentError('Documento não corresponde à versão apresentada.',409);
-    if (req.body.photoDataUrl && (!(JSON.parse(initial.row.professional_snapshot_json).photoRequested ?? initial.row.auth_level==='reinforced') || req.body.photoAccepted!==true)) consentError('A foto é opcional e exige aceite específico da finalidade.');
+    const photoRequested=JSON.parse(initial.row.professional_snapshot_json).photoRequested ?? initial.row.auth_level==='reinforced';
+    if(photoRequested && (!req.body.photoDataUrl || req.body.photoAccepted!==true)) consentError('Registre e confirme a foto do assinante para concluir esta assinatura.');
+    if (req.body.photoDataUrl && (!photoRequested || req.body.photoAccepted!==true)) consentError('A foto exige solicitação do profissional e confirmação do assinante.');
     const signature=await this.image(req.body.signatureDataUrl);
     const photo=req.body.photoDataUrl?await this.image(req.body.photoDataUrl,true):null;
     return db.transaction(() => {

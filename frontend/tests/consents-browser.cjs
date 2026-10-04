@@ -106,6 +106,8 @@ let checks=0;
   await pen.send('Input.dispatchMouseEvent',{type:'mousePressed',x:penBox.x+20,y:penBox.y+80,button:'left',buttons:1,clickCount:1,pointerType:'pen'});
   for(let i=0;i<22;i++)await pen.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:penBox.x+20+i*10,y:penBox.y+80+Math.sin(i)*20,buttons:1,pointerType:'pen'});
   await pen.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:penBox.x+230,y:penBox.y+80,button:'left',buttons:0,clickCount:1,pointerType:'pen'});await pen.detach();
+  await photoPage.getByRole('button',{name:'Remover foto'}).click();assert.equal(await photoPage.getByRole('button',{name:'Confirmar assinatura'}).isDisabled(),true);checks++;
+  await photoPage.getByRole('button',{name:'Tirar foto'}).click();await photoPage.waitForFunction(()=>document.querySelector('video')?.videoWidth>0);await photoPage.getByRole('button',{name:'Capturar foto'}).click();assert.equal(await photoPage.getByRole('button',{name:'Confirmar assinatura'}).isDisabled(),true);checks++;await photoPage.getByRole('button',{name:'Confirmar foto'}).click();
   await photoPage.getByRole('button',{name:'Confirmar assinatura'}).click();await photoPage.getByRole('heading',{name:'Termo assinado com sucesso'}).waitFor();checks++;
   assert.ok(db.prepare('SELECT photo_data_url FROM consent_signatures WHERE consent_id=?').get(photoRequest.id).photo_data_url);checks++;
   const cameraPdf=await fetch(base+'/api/v1/consents/'+photoRequest.id+'/pdf',{headers});assert.equal(cameraPdf.status,200);fs.writeFileSync(path.join(out,'camera-signed.pdf'),Buffer.from(await cameraPdf.arrayBuffer()));checks++;
