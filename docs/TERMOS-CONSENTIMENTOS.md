@@ -1,6 +1,6 @@
 # Termos & Consentimentos
 
-Serviço universal da clínica, integrado à aba **Termos & Consentimentos** do prontuário. Reutiliza `patient_consents`, o banco SQLite, JWT/tenant, os vínculos clínicos, os contatos de responsáveis e os provedores de e-mail e WhatsApp existentes. Os registros anteriores continuam disponíveis para consulta e revogação.
+Serviço universal da clínica, integrado à aba **Termos & Consentimentos** do prontuário. Reutiliza `patient_consents`, o banco SQLite, JWT/tenant, os vínculos clínicos, os contatos de responsáveis e o provedor de e-mail existente. Os registros anteriores continuam disponíveis para consulta e revogação.
 
 ## Arquivos criados
 
@@ -75,7 +75,7 @@ Prefixo `/api/v1/consents` (o servidor mantém também a compatibilidade `/v1/..
 | GET | `/patients/:patientId/pending?serviceId=...` | Pendências obrigatórias aplicáveis a módulo/serviço |
 | POST | `/patients/:patientId/request` | Emitir documento congelado e link temporário |
 | POST | `/:id/link` | Renovar link de documento pendente e revogar o anterior |
-| POST | `/:id/send` | Enviar novo link por e-mail ou WhatsApp |
+| POST | `/:id/send` | Enviar novo link por e-mail |
 | POST | `/:id/cancel` | Cancelar/invalidar com motivo, preservando evidências |
 | GET | `/:id/document` | Conteúdo e evidências assinadas para equipe autorizada |
 | GET | `/:id/pdf` | Download de PDF com assinatura, foto se utilizada e QR Code |
@@ -86,7 +86,7 @@ Configuração: `{authLevel: "basic" | "recommended" | "reinforced", linkHours: 
 
 Solicitação: `{templateId, signerEmail?: string, guardian?: {name, cpf, relationship, phone, email}}`. Para menores, o responsável é obrigatório, com CPF validado. Identidades de paciente e assinante são armazenadas separadamente. O prontuário preenche os dados do responsável já cadastrado quando disponíveis.
 
-Envio: `{channel: "email" | "whatsapp"}`. Usa os contatos registrados no documento, sem aceitar troca de destinatário pela página pública. Cancelamento: `{reason}`, mínimo de cinco caracteres.
+Envio: `{channel: "email"}` (campo opcional; padrão e-mail). Usa os contatos registrados no documento, sem aceitar troca de destinatário pela página pública. Cancelamento: `{reason}`, mínimo de cinco caracteres.
 
 ## Endpoints públicos
 
@@ -95,7 +95,7 @@ Prefixo `/api/v1/public/consents`, sem login e com rate limiting. Tokens de assi
 | Método | Caminho | Corpo/finalidade |
 | --- | --- | --- |
 | POST | `/read` | `{token}`: documento da versão emitida |
-| POST | `/otp/request` | `{token, channel}`: envia OTP ao contato registrado |
+| POST | `/otp/request` | `{token, channel: "email"}`: envia OTP ao e-mail do assinante |
 | POST | `/otp/verify` | `{token, code}`: confirma OTP de seis dígitos |
 | POST | `/sign` | `{token, documentHash, declarations: [true,true,true], signatureDataUrl, photoDataUrl?, photoAccepted?}` |
 | GET | `/verify/:code` | Verificação pública mínima |
@@ -111,8 +111,8 @@ A foto é uma configuração independente do nível e permanece opcional. A câm
 1. Instalar dependências do backend com `npm ci`, executar `npm run build` e iniciar/reiniciar o backend para aplicar a migration. Compilar o frontend com `npm run build`.
 2. Como usuário clínico autorizado, abrir um paciente e a aba **Termos & Consentimentos**. Para profissionais, utilizar paciente com atendimento, encaminhamento ou registro de assistência vinculado; responsáveis administrativos sem acesso clínico não recebem as assinaturas.
 3. Abrir a biblioteca, duplicar um modelo ou criar termo próprio. Relacionar módulo/serviço/procedimento e marcar obrigatório. Conferir alerta no prontuário e no detalhe de um agendamento aplicável.
-4. Como gerenciador, escolher nível de confirmação e validade. Para básico, não é necessário provedor de mensagens. Para recomendado/reforçado, cadastrar contato do assinante e configurar o Resend já usado pelo Zemda ou o WhatsApp Infobip existente.
-5. Solicitar assinatura e escolher este dispositivo, envio de link ou QR Code. Para menores, conferir os dados do responsável legal.
+4. Como gerenciador, escolher nível de confirmação e validade. Para básico, não é necessário provedor de mensagens. Para recomendado/reforçado, cadastrar contato do assinante e configurar o Resend já usado pelo Zemda .
+5. Solicitar assinatura e escolher este dispositivo, envio por e-mail, copiar link ou QR Code. Para menores, conferir os dados do responsável legal.
 6. Abrir o link sem conta do Zemda. Ler o texto, aceitar as três declarações, confirmar OTP se exigido, desenhar assinatura e confirmar. No reforçado, testar com e sem foto opcional.
 7. Retornar ao prontuário: os dados são atualizados ao recuperar o foco, ou pelo botão **Atualizar**. Baixar o PDF, imprimir pelo leitor de PDF e abrir seu QR Code. Conferir que a verificação não revela dados do paciente.
 8. Editar o modelo: aparece nova versão e necessidade de nova assinatura. O PDF anterior mantém exatamente o conteúdo original. Depois de assinar a versão atual, a anterior continua no histórico sem alerta de nova assinatura.
@@ -160,3 +160,20 @@ Sem commit, push, deploy ou mensagens reais.
 13. OTP: hash e salt apagados ao validar, reutilização rejeitada, reenvio limpa validação anterior; logs adicionais OTP_REQUESTED/OTP_RESENT/OTP_SENT/OTP_INVALID/OTP_VALIDATED/OTP_EXPIRED/OTP_TOO_MANY_ATTEMPTS incluem destino mascarado e identificação da verificação.
 14. Testes locais: builds de backend e frontend, test-consents.cjs e consents-browser.cjs; regressões test-clinical-module-resolution.cjs e test-patient-data-rights.cjs. Provedores simulados, câmera virtual Chromium e eventos de toque/caneta pelo CDP; não houve envio real ou validação em câmera física. Não há script de lint configurado; TypeScript faz parte dos builds.
 15. Variáveis existentes: APP_URL, RESEND_API_KEY, EMAIL_FROM, EMAIL_REPLY_TO; WhatsApp opcional INFOBIP_API_KEY, INFOBIP_BASE_URL, INFOBIP_WHATSAPP_SENDER. Nenhuma variável nova. Sem commit, push ou deploy.
+
+
+## Correções da Agenda de Hoje, foto e cancelamento — 04/10/2026
+
+- Arquivos: backend/src/services/consent.service.ts, backend/src/services/consent-pdf.service.ts, backend/test-consents.cjs; frontend/src/components/dashboard/DashboardView.tsx, frontend/src/components/calendar/CalendarView.tsx, frontend/src/components/consents/PatientConsentsPanel.tsx, PublicConsentPage.tsx, ConsentPendingAlert.tsx; frontend/tests/consents-browser.cjs; este guia. Nenhuma tabela, migration ou serviço paralelo foi criado nesta rodada.
+- Cancelamento: POST /api/v1/consents/:id/cancel mantém o documento, registra motivo/ator/data em consent_invalidations e auditoria. Agora apaga hash/salt/validação/validade do OTP ativo e revoga tokens. Cancelamento de pendente e invalidação de assinado têm ações distintas na auditoria; a assinatura e suas evidências permanecem imutáveis. UI exige motivo com pelo menos cinco caracteres, mostra erro e atualiza localmente o status sem depender do carregamento da biblioteca inteira.
+- Foto: checkbox Solicitar foto no momento da assinatura nas configurações da clínica e no formulário de cada solicitação, disponível também pela agenda. O parâmetro photoRequested da emissão pode substituir o padrão da clínica e é congelado no snapshot da solicitação. Páginas de links emitidos anteriormente mantêm sua configuração original; mudar o padrão não altera documentos já emitidos.
+- Página pública: quando habilitada, mostra REGISTRO FOTOGRÁFICO e Tirar foto diretamente após o canvas. Câmera frontal quando disponível, captura, prévia, refazer, confirmar e remover; opcional em todos os níveis, sem biometria/reconhecimento facial. Confirmar foto autoriza seu uso como evidência; foto não confirmada não é enviada.
+- Armazenamento: consent_signatures.photo_data_url no banco privado, normalizado e selado com a assinatura na mesma transação. Ver evidências usa o endpoint autenticado /:id/document e permite visualizar a fotografia persistida. Nenhuma URL pública da foto é criada.
+- PDF: inclui Registro fotográfico realizado no momento da assinatura e a imagem, quando houver foto. Sem foto, a seção é omitida.
+- Agenda: DashboardView, nas ações da Agenda de Hoje, tem Termos ao lado das ações do atendimento. CalendarView também abre o mesmo painel diretamente. PatientConsentsDialog é apenas o contêiner do PatientConsentsPanel já existente e carrega paciente/responsáveis, com carregamento, erro, retry e voltar. O prontuário continua usando o mesmo painel. ConsentPendingAlert em modo compacto mostra Termo pendente ou Termos OK após resposta válida; falhas de consulta não geram indicação falsa de OK.
+- WhatsApp: retirado dos seletores e ações de consentimentos, da lista de canais públicos e dos caminhos de entrega/OTP do ConsentService; requisições manuais tentando whatsapp são rejeitadas. Botões gerais de WhatsApp da agenda e o Infobip dos demais recursos permanecem intactos. Evidências históricas de autenticação por WhatsApp continuam identificadas corretamente. Link pode ser copiado e compartilhado manualmente.
+- E-mail: continua usando EmailService/Resend e layout institucional existente. Envio e OTP usam exclusivamente e-mail do paciente adulto ou do responsável. Na solicitação, ausência do contato abre o campo de adição e mantém a seleção do termo para continuar.
+- Segurança: biblioteca, emissão, documento, PDF e evidências mantêm proteção por tenant, vínculo clínico e profissão/módulo, incluindo termos universais. O painel da agenda não contorna os endpoints protegidos.
+- Validação: builds TypeScript/backend/Vite e testes test-consents.cjs e consents-browser.cjs, com provedores simulados, Chromium/câmera virtual e eventos de toque/caneta. Nenhuma mensagem real foi enviada; câmera física não foi testada. Sem commit, push ou deploy.
+
+Resultado desta rodada: 93 verificações de backend e 31 cenários no navegador, além de 30 verificações de direitos dos pacientes e 17 de resolução de módulo clínico. Builds passaram. PDF com fotografia renderizado para revisão visual; provedores e câmera foram simulados.

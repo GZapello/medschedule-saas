@@ -1,5 +1,5 @@
 import { ConsentPendingAlert } from '../consents/ConsentPendingAlert';
-import { PatientProfileModal } from '../patients/PatientProfileModal';
+import { PatientConsentsDialog } from '../consents/PatientConsentsPanel';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
@@ -1095,7 +1095,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               </button>
             </div>
 
-            <ConsentPendingAlert patientId={selectedAppt.patient_id} serviceId={selectedAppt.service_id} onOpen={() => { setConsentPatientId(selectedAppt.patient_id); setSelectedAppt(null); setIsRescheduling(false); }} />
+            <div className="flex gap-2 items-center p-3">{['clinic_admin','professional'].includes(auth.currentUser?.role||'')&&<button className="consent-secondary" onClick={()=>{setConsentPatientId(selectedAppt.patient_id);setSelectedAppt(null);setIsRescheduling(false);}}>Termos</button>}<ConsentPendingAlert compact patientId={selectedAppt.patient_id} serviceId={selectedAppt.service_id} onOpen={() => { setConsentPatientId(selectedAppt.patient_id); setSelectedAppt(null); setIsRescheduling(false); }} /></div>
 
             {!isRescheduling ? (
               <div className="space-y-4">
@@ -1556,7 +1556,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         </div>,
         document.body
       )}
-      {consentPatientId && <PatientProfileModal patientId={consentPatientId} initialTab="consents" onClose={() => setConsentPatientId(null)} />}
+      {consentPatientId && <PatientConsentsDialog patientId={consentPatientId} onClose={() => setConsentPatientId(null)} />}
     </div>
   );
 };

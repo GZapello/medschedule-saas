@@ -5,7 +5,7 @@ import { Request } from 'express';
 import { db } from '../config/database';
 import { hasConsentAccess, hasConsentDocumentAccess } from '../utils/consent-access';
 import { EmailService } from './email.service';
-import { InfobipService } from './infobip.service';
+
 import { resolveClinicalModule } from '../utils/clinical-module';
 import { buildZemdaEmailLayout, buildZemdaOtpBox } from './email-template.service';
 import { CapabilityService } from './capability.service';
@@ -132,7 +132,7 @@ export class ConsentService {
     }
     if (this.minor(patient) && signer.kind!=='guardian') consentError('Paciente menor de idade: informe o responsável legal.');
     const settings=this.settings(req);
-    requester.photoRequested=!!settings.photo_requested;
+    requester.photoRequested=typeof req.body.photoRequested==='boolean'?req.body.photoRequested:!!settings.photo_requested;
     const consentId=id();
     const created=now();
     const expires=new Date(Date.now()+settings.link_hours*3600000).toISOString();
@@ -197,24 +197,24 @@ export class ConsentService {
     return {title:row.title,content:row.content_text,version:row.version,documentHash:row.document_hash,
       clinic:JSON.parse(row.clinic_snapshot_json),patient:{name:JSON.parse(row.patient_snapshot_json).name},
       signer:{name:signer.name,kind:signer.kind,relationship:signer.relationship},authLevel:row.auth_level,expiresAt:token.expires_at,
-      destinations:{email:signer.email?maskedContact(signer.email,'email'):null,whatsapp:signer.phone?maskedContact(signer.phone,'whatsapp'):null},
+      destinations:{email:signer.email?maskedContact(signer.email,'email'):null},
       photoRequested:JSON.parse(row.professional_snapshot_json).photoRequested ?? row.auth_level==='reinforced',
       declarations:consentDeclarations,otpVerified:!!token.otp_verified_at && Date.parse(token.otp_expires_at)>Date.now(),
-      channels:[...(signer.email?['email']:[]),...(signer.phone && InfobipService.isConfigured()?['whatsapp']:[])]};
+      channels:signer.email?['email']:[]};
   }
 
   static async deliver(channel: string, signer: any, subject: string, message: string, html?: string): Promise<boolean> {
     if (channel==='email' && signer.email) return EmailService.sendCustomEmail(signer.email,subject,html || buildZemdaEmailLayout({title:subject,headline:subject,contentHtml:`<p>${escapeHtml(message)}</p>`}));
-    if (channel==='whatsapp' && signer.phone && InfobipService.isConfigured()) return (await InfobipService.sendTextMessage(signer.phone,message)).success;
+
     consentError('Canal indisponível. Atualize os contatos antes de solicitar o termo.');
   }
   static async sendLink(req: Request, consentId: string): Promise<any> {
     const row=this.document(req,consentId);
     const signer=JSON.parse(row.signer_json);
-    const channel=req.body.channel;
+    const channel=req.body.channel||'email';
     if(channel==='email'&&!signer.email) consentError(signer.kind==='guardian'?'O responsável legal não possui e-mail cadastrado para validação da assinatura.':'Este paciente não possui e-mail cadastrado para validação da assinatura.');
-    if (!['email','whatsapp'].includes(channel)) consentError('Escolha e-mail ou WhatsApp.');
-    if((channel==='email'&&!signer.email)||(channel==='whatsapp'&&(!signer.phone||!InfobipService.isConfigured()))) consentError('Canal indisponível. Atualize os contatos ou use assinatura neste dispositivo.');
+    if (channel!=='email') consentError('Somente envio por e-mail está disponível para termos.');
+    if(!signer.email) consentError('Canal indisponível. Atualize os contatos ou use assinatura neste dispositivo.');
     const link=this.newLink(req,consentId);
     const clinicName=escapeHtml(JSON.parse(row.clinic_snapshot_json).name);
     const ok=await this.deliver(channel,signer,'Assinatura de termo — Zemda',`Você recebeu um termo de ${JSON.parse(row.clinic_snapshot_json).name}. Acesse ${link.url} para ler e assinar. O link expira em ${link.expiresAt}.`,buildZemdaEmailLayout({title:'Assinatura de termo — Zemda',headline:'Revise e assine seu documento',badge:'Termos & Consentimentos',contentHtml:`<p>Olá, ${escapeHtml(signer.name)}.</p><p>${clinicName} enviou um documento para sua revisão e assinatura.</p><p>O link é temporário e não exige cadastro no Zemda.</p>`,ctaText:'Revisar e assinar documento',ctaUrl:escapeHtml(link.url),footerNote:'Não compartilhe este link. Caso tenha dúvidas, entre em contato com a clínica.'}));
@@ -229,7 +229,7 @@ export class ConsentService {
     const signer=JSON.parse(row.signer_json);
     const channel=req.body.channel;
     if(channel==='email'&&!signer.email) consentError(signer.kind==='guardian'?'O responsável legal não possui e-mail cadastrado para validação da assinatura.':'Este paciente não possui e-mail cadastrado para validação da assinatura.');
-    if (!['email','whatsapp'].includes(channel) || (channel==='email' && !signer.email) || (channel==='whatsapp' && (!signer.phone || !InfobipService.isConfigured()))) consentError('Canal de autenticação indisponível.');
+    if (channel!=='email' || !signer.email) consentError('Canal de autenticação indisponível.');
     if (token.otp_sent_at && Date.now()-Date.parse(token.otp_sent_at)<60000) consentError('Aguarde 60 segundos para reenviar.',429);
     if (db.prepare("SELECT count(*) AS n FROM consent_audit_logs WHERE consent_id=? AND action='otp_requested' AND created_at>?").get(row.id,new Date(Date.now()-3600000).toISOString()).n>=5) consentError('Limite de códigos atingido. Tente em uma hora.',429);
     const code=String(crypto.randomInt(0,1000000)).padStart(6,'0');
@@ -333,8 +333,8 @@ export class ConsentService {
     if (this.invalidated(consentId)) consentError('Termo já cancelado.',409);
     db.transaction(() => {
       db.prepare('INSERT INTO consent_invalidations(id,consent_id,reason,actor_id,created_at) VALUES(?,?,?,?,?)').run(id(),consentId,reason,req.user!.userId,now());
-      db.prepare('UPDATE consent_access_tokens SET revoked_at=? WHERE consent_id=? AND revoked_at IS NULL').run(now(),consentId);
-      this.audit(req,row.tenant_id,row.id,'invalidated',{reason});
+      db.prepare('UPDATE consent_access_tokens SET revoked_at=?,otp_hash=NULL,otp_salt=NULL,otp_verified_at=NULL,otp_expires_at=NULL WHERE consent_id=? AND revoked_at IS NULL').run(now(),consentId);
+      this.audit(req,row.tenant_id,row.id,row.status==='pending'?'cancelled':'invalidated',{reason});
     })();
     return {success:true};
   }

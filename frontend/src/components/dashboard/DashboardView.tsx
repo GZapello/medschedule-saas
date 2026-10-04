@@ -1,3 +1,5 @@
+import { PatientConsentsDialog } from '../consents/PatientConsentsPanel';
+import { ConsentPendingAlert } from '../consents/ConsentPendingAlert';
 import { TodayWorklist } from './TodayWorklist';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
@@ -50,6 +52,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [activeConsultationModule, setActiveConsultationModule] = useState<string | undefined>(undefined);
   const [filterTab, setFilterTab] = useState<'all' | 'scheduled' | 'in_progress' | 'completed' | 'no_show' | 'cancelled'>('all');
   const [printDoc, setPrintDoc] = useState<{ type: 'certificate' | 'prescription' | 'exam_request'; id: string } | null>(null);
+  const [consentPatientId,setConsentPatientId]=useState<string|null>(null);
   const [viewPatientId, setViewPatientId] = useState<string | null>(null);
   const [whatsappReminderAppt, setWhatsappReminderAppt] = useState<any | null>(null);
 
@@ -482,6 +485,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
 
                     {/* Quick Status Action Buttons */}
+                    {['clinic_admin','professional'].includes(auth.currentUser?.role||'')&&appt.patient_id&&<div className="flex gap-2 items-center"><button type="button" className="text-xs font-semibold px-2 py-1 rounded-lg bg-teal-50 text-teal-800" onClick={()=>setConsentPatientId(appt.patient_id)}>Termos</button><ConsentPendingAlert compact patientId={appt.patient_id} serviceId={appt.service_id} onOpen={()=>setConsentPatientId(appt.patient_id)}/></div>}
                     <div className="flex items-center gap-1.5 flex-wrap sm:flex-wrap">
                       {appt.status !== 'completed' && appt.status !== 'cancelled' && (
                         <button
@@ -665,6 +669,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )}
 
       {/* Modal de Prontuário e Perfil do Paciente */}
+      {consentPatientId&&<PatientConsentsDialog patientId={consentPatientId} onClose={()=>setConsentPatientId(null)}/>}
       {viewPatientId && (
         <PatientProfileModal
           patientId={viewPatientId}
