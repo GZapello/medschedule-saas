@@ -813,8 +813,14 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             <strong className="text-emerald-300 font-bold">{leanMassKg > 0 ? `${leanMassKg} kg` : '—'}</strong>
           </div>
           <div className="h-4 w-px bg-white/20 hidden sm:block" />
+          {calculationPreview?.values?.tav_estimated_value!=null && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-purple-300 text-[11px]">eVAT (Bonora):</span>
+              <strong className="text-cyan-300 font-bold">{`${Number(calculationPreview.values.tav_estimated_value).toLocaleString('pt-BR',{maximumFractionDigits:2})} cm²`}</strong>
+            </div>
+          )}
           {tavValue!=='' && <div className="flex items-center gap-2">
-            <span className="text-purple-300 text-[11px]">TAV medido:</span>
+            <span className="text-purple-300 text-[11px]">{tavUnit==='cm²'?'Área medida:':tavUnit==='nível'?'Nível BIA:':'Medição:'}</span>
             <strong className="text-cyan-300 font-bold">{`${tavValue} ${tavUnit}`}</strong>
             {tavClassification && (
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/10 text-cyan-200">
@@ -822,7 +828,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
               </span>
             )}
           </div>}
-          {calculationPreview?.values?.vai_value!=null && <div className="text-xs"><span className="text-purple-300">VAI: </span><strong>{Number(calculationPreview.values.vai_value).toLocaleString('pt-BR',{maximumFractionDigits:2})}</strong><span className="text-[10px] text-slate-300"> · Indicador indireto</span></div>}
+          {calculationPreview?.values?.vai_value!=null && <div className="text-xs"><span className="text-purple-300">VAI: </span><strong>{Number(calculationPreview.values.vai_value).toLocaleString('pt-BR',{maximumFractionDigits:2})}</strong><span className="text-[10px] text-slate-300"> · Adimensional</span></div>}
         </div>
 
         {/* Barra de Navegação das 5 Abas */}
@@ -1316,16 +1322,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     </div>
                     <div>
                       <h4 className="text-sm font-bold text-slate-800">
-                        Tecido Adiposo Visceral — TAV
+                        Adiposidade Visceral — Estimativa (eVAT), Medição e VAI
                       </h4>
                       <p className="text-[11px] text-slate-500">
-                        Estimativa por protocolo científico, medição informada e índice indireto apresentados separadamente.
+                        Área visceral estimada (Bonora), medição real por exame/equipamento e índice indireto apresentados separadamente.
                       </p>
                     </div>
                   </div>
 
                   <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full border border-indigo-200">
-                    Estimado ≠ medido ≠ VAI
+                    eVAT (Bonora) ≠ Medição / Nível ≠ VAI
                   </span>
                 </div>
 
@@ -1334,10 +1340,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 </div>
                 <div className="space-y-2">
                   <PersonalAssessmentIndicator item={calculationPreview?.classifications?.vai}/>
-                  <p className="text-[11px] text-slate-500">Indicador indireto de adiposidade visceral. Atualizado automaticamente conforme os dados da avaliação.</p>
+                  <p className="text-[11px] text-slate-500">Índice adimensional de adiposidade visceral indireta. Atualizado automaticamente a partir de cintura, IMC, triglicerídeos e HDL.</p>
                   <button type="button" onClick={()=>setActiveTab('cardio_tests')} className="text-xs font-semibold text-indigo-700 hover:underline">Preencher dados bioquímicos</button>
                 </div>
-                <details className="border-t border-indigo-100 pt-4 space-y-3"><summary className="text-xs font-semibold text-indigo-700 cursor-pointer">Informar TAV medido por equipamento</summary>
+                <details className="border-t border-indigo-100 pt-4 space-y-3"><summary className="text-xs font-semibold text-indigo-700 cursor-pointer">Informar medição de área (cm²) ou nível de bioimpedância</summary>
+                <div className="text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200 leading-relaxed">
+                  <strong>Atenção às unidades:</strong> Selecione <strong>Área em cm²</strong> para tomografia, ressonância, DXA ou InBody VFA. Selecione <strong>Nível / Grau</strong> para escalas proprietárias de bioimpedância (Omron 1–30, Tanita 1–59, InBody nível 1–20). O nível <em>não</em> é uma área em cm².
+                </div>
                 <div><label className="block text-xs font-semibold text-slate-700 mb-1">Método de medição (opcional)</label><input value={tavMethod} onChange={e=>setTavMethod(e.target.value)} placeholder="Tomografia, ressonância, DXA, bioimpedância…" className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white"/></div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   {/* Catálogo de Protocolos & Equipamentos */}

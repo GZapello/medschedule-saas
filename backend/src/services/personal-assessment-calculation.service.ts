@@ -70,10 +70,11 @@ export function classifyTav(a: any, context?: any) {
     }
   }
   const status=value===null?'missing':classification?'classified':'unclassified';
-  return { value, label:'TAV medido por equipamento',status,reason:status==='unclassified'?'Protocolo, unidade ou faixa sem referência compatível':null,
+  const label = area ? 'Área visceral medida' : level ? 'Nível de gordura visceral (bioimpedância)' : 'Medição de adiposidade visceral';
+  return { value, label, status, reason:status==='unclassified'?'Protocolo, unidade ou faixa sem referência compatível':null,
     protocol:context?.protocol_name || a.tav_protocol_id || null, protocolId:context?.id || a.tav_protocol_id || null,
     classification: value===null?'Não informado':classification || 'Valor registrado — classificação não disponível para o protocolo selecionado.', reference, unit: a.tav_unit || context?.unit || null, equipment: a.tav_equipment || context?.equipment || null,
-    sourceType: a.tav_source_type || 'equipment', isEstimate: Boolean(a.tav_is_estimate) };
+    sourceType: a.tav_source_type || 'equipment', isEstimate: Boolean(a.tav_is_estimate), isArea: area, isLevel: level };
 }
 export const PREDICTED_TAV_PROTOCOL = {
   id:'bonora-1995-evat-v1', name:'Bonora et al. (1995) — área visceral estimada',
@@ -82,7 +83,7 @@ export const PREDICTED_TAV_PROTOCOL = {
   available:true,
   // WC in cm, age in years, predicted cross-sectional VAT area in cm².
   // The female coefficient is 4.04 (not the 4.4 transcription in some later papers).
-  limitation:'Estimativa antropométrica de área, com precisão limitada; não equivale a medição por imagem. Bonora relata SEE de aproximadamente 40% (homens) e 37% (mulheres) e grande erro na validação cruzada. Sem classificação clínica universal configurada.'
+  limitation:'Estimativa antropométrica de precisão limitada; não equivale à mensuração por imagem.'
 } as const;
 export function normalizeMeasuredTavInput(input:any) {
   const a={...input};
@@ -105,14 +106,15 @@ export function calculatePredictedTav(a:any, demographics:{sex:string,age:number
   const raw=!historical && applicable && waist!==null ? sex==='male'?6.37*waist-453.7:2.62*age!+4.04*waist-370.5 : null;
   // Do not turn impossible extrapolations into a fabricated zero.
   const rounded=raw!==null && Number.isFinite(raw)?Math.round(raw*10000)/10000:null;
+  const isOutOfDomain=rounded!==null && rounded<=0;
   const value=rounded!==null && rounded>0?rounded:null;
-  const status=historical?'historical':missingInputs.length?'missing':!applicable?'not_applicable':value===null?'out_of_domain':'unclassified';
-  const reason=historical?'Estimativa não registrada nesta avaliação.':missingInputs.length?'Preencha as medidas necessárias para calcular o TAV.':!applicable?'Protocolo não aplicável a menores de 20 anos.':value===null?'Não calculado — medidas fora do domínio da equação.':null;
+  const status=historical?'historical':missingInputs.length?'missing':!applicable?'not_applicable':isOutOfDomain?'out_of_domain':'unclassified';
+  const reason=historical?'Estimativa não registrada nesta avaliação.':missingInputs.length?'Preencha as medidas necessárias para calcular a área visceral estimada.':!applicable?'Protocolo não aplicável a menores de 20 anos.':isOutOfDomain?'Estimativa não interpretável pela equação.':null;
   return {value,unit:historical?a.tav_estimated_unit || null:'cm²',sex,protocol:historical?a.tav_estimation_protocol || null:PREDICTED_TAV_PROTOCOL.id,
     protocolName:historical?null:PREDICTED_TAV_PROTOCOL.name,reference:historical?a.tav_estimation_reference || null:PREDICTED_TAV_PROTOCOL.reference,
-    label:'TAV estimado',method:'Equação preditiva',inputs,missingInputs,applicable,available:!historical,
+    label:'Área visceral estimada (eVAT — Bonora)',method:'Equação preditiva',inputs,missingInputs,applicable,available:!historical,
     limitation:historical?null:PREDICTED_TAV_PROTOCOL.limitation,equation:historical?null:equation,calculationVersion:CALCULATION_VERSION,verification:historical?null:PREDICTED_TAV_PROTOCOL,
-    status,classification:value===null?'Não calculado':'Classificação não disponível para esta estimativa.',classificationAvailable:false,reason,tone:'slate'};
+    status,classification:value===null?(isOutOfDomain?'Estimativa não interpretável pela equação.':'Não calculado'):'Classificação não disponível para esta estimativa.',classificationAvailable:false,reason,tone:'slate'};
 }
 export function calculateAssessment(input: any, patient: any = {}, tavContext?: any) {
   const a = normalizeMeasuredTavInput(input), sexInfo = referenceSex(patient);

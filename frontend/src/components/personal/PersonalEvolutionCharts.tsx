@@ -147,23 +147,34 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
           <span className="text-[11px] font-bold text-indigo-700 uppercase flex items-center gap-1">
             <Flame className="w-3.5 h-3.5" />
-            <span>TAV ESTIMADO MAIS RECENTE</span>
+            <span>ÁREA VISCERAL ESTIMADA (eVAT — BONORA)</span>
           </span>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-2xl font-black text-indigo-900">
               {reportNumber(latestEstimated?.tav_estimated_value)}
             </span>
-            <span className="text-xs text-indigo-600 font-bold">{latestEstimated?.tav_estimated_unit || (latestEstimated?'Unidade não informada':'')}</span>
+            <span className="text-xs text-indigo-600 font-bold">{latestEstimated?.tav_estimated_unit || (latestEstimated?'cm²':'')}</span>
           </div>
-          <div className="text-[10px] text-indigo-700 mt-1 font-semibold truncate">
-            {latestEstimated?.tav_estimation_classification || 'Sem classificação'}
-          </div>
-          {latestEstimated?.tav_estimation_protocol && <p className="text-[10px] text-indigo-700 mt-1 break-words">Protocolo: {latestEstimated.tav_estimation_protocol}</p>}
+          <p className="text-[10px] text-amber-800 bg-amber-50/80 border border-amber-200/60 rounded px-1.5 py-1 mt-1 italic">
+            Estimativa antropométrica de precisão limitada; não equivale à mensuração por imagem.
+          </p>
         </div>
         {hasMeasured && <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-          <span className="text-[11px] font-bold text-indigo-700 uppercase flex items-center gap-1"><Flame className="w-3.5 h-3.5"/>TAV MEDIDO</span>
-          <div className="mt-1 flex items-baseline gap-2"><span className="text-2xl font-black text-indigo-900">{reportNumber(latestMeasured.tav_value)}</span><span className="text-xs text-indigo-600 font-bold">{latestMeasured.tav_unit || 'Unidade não informada'}</span></div>
-          <p className="text-[10px] text-indigo-700 mt-1">{latestMeasured.tav_equipment || 'Equipamento não informado'} · {latestMeasured.tav_classification || 'Sem classificação'}</p>
+          <span className="text-[11px] font-bold text-indigo-700 uppercase flex items-center gap-1">
+            <Flame className="w-3.5 h-3.5"/>
+            <span>{latestMeasured.tav_unit === 'cm²' ? 'ÁREA VISCERAL MEDIDA' : 'NÍVEL DE GORDURA VISCERAL (BIOIMPEDÂNCIA)'}</span>
+          </span>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-indigo-900">{reportNumber(latestMeasured.tav_value)}</span>
+            <span className="text-xs text-indigo-600 font-bold">{latestMeasured.tav_unit || 'Unidade não informada'}</span>
+          </div>
+          <p className="text-[10px] text-indigo-700 mt-1">
+            {latestMeasured.tav_equipment || 'Equipamento não informado'}
+            {latestMeasured.tav_classification ? ` · ${latestMeasured.tav_classification}` : ''}
+          </p>
+          {latestMeasured.tav_unit === 'nível' && (
+            <p className="text-[9px] text-slate-500 mt-0.5 italic">Escore/nível do fabricante (não é cm²)</p>
+          )}
         </div>}
       </div>
 
@@ -215,7 +226,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
             }`}
           >
             <Flame className="w-3.5 h-3.5" />
-            TAV (Gordura Visceral)
+            Adiposidade Visceral
           </button>
           <button
             onClick={() => setSelectedMetric('perimeters')}
@@ -266,7 +277,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
         {selectedMetric === 'body_fat' && renderSvgChart('body_fat_percentage', '#f59e0b', '%', undefined, d=>assessmentIndicators(d).bodyFat?.classification || '')}
         {selectedMetric === 'lean_mass' && renderSvgChart('lean_mass_kg', '#10b981', 'kg')}
         {selectedMetric === 'perimeters' && renderSvgChart('waist_cm', '#0ea5e9', 'cm')}
-        {selectedMetric === 'tav' && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{tavSeries.map(group=><ReportTrend key={group.key} history={group.history} metric={group.metric} title={group.title} unit={group.unit}/>)}<ReportTrend history={sorted} metric="vai_value" title="VAI — indicador indireto" unit=""/></div>}
+        {selectedMetric === 'tav' && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{tavSeries.map(group=><ReportTrend key={group.key} history={group.history} metric={group.metric} title={group.title} unit={group.unit}/>)}<ReportTrend history={sorted} metric="vai_value" title="VAI — índice adimensional" unit=""/></div>}
         {selectedMetric === 'cardio' && renderSvgChart('resting_heart_rate_bpm', '#e11d48', 'bpm')}
         {selectedMetric === 'vo2' && renderSvgChart('vo2_max', '#059669', 'ml/kg/min')}
         {selectedMetric === 'flexibility' && renderSvgChart('flexibility_wells_cm', '#d97706', 'cm')}
@@ -278,7 +289,7 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-indigo-600" />
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Histórico Detalhado do TAV Medido
+              Histórico Detalhado da Medição Visceral (Área / Nível)
             </h4>
           </div>
 
@@ -367,8 +378,8 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
                 <th className="py-2.5 px-3">Peso</th>
                 <th className="py-2.5 px-3">% Gordura</th>{['IMC','RCQ','RCE'].map(label=><th key={label} className="py-2.5 px-3">{label}</th>)}
                 <th className="py-2.5 px-3">Massa Magra</th>
-                <th className="py-2.5 px-3">TAV estimado</th>
-                {hasMeasured && <th className="py-2.5 px-3">TAV medido</th>}
+                <th className="py-2.5 px-3">Área visceral estimada (eVAT)</th>
+                {hasMeasured && <th className="py-2.5 px-3">Medição visceral (Área / Nível)</th>}
                 {hasVai && <th className="py-2.5 px-3">VAI</th>}
                 <th className="py-2.5 px-3">Cintura</th>
                 <th className="py-2.5 px-3">Quadril</th>
@@ -388,10 +399,9 @@ export const PersonalEvolutionCharts: React.FC<PersonalEvolutionChartsProps> = (
                   {['bmi','whr','whtr'].map(key=><td key={key} className="py-2.5 px-3 text-slate-700">{reportNumber(assessmentIndicators(item)[key]?.value)}<IndicatorDetails item={assessmentIndicators(item)[key]}/></td>)}
                   <td className="py-2.5 px-3 text-emerald-600 font-semibold">{item.lean_mass_kg || '—'} kg</td>
                   <td className="py-2.5 px-3 text-indigo-700 font-bold">
-                    {hasValue(item.tav_estimated_value)?`${reportNumber(item.tav_estimated_value)} ${item.tav_estimated_unit || 'Unidade não informada'}`:'—'}
-                    {hasValue(item.tav_estimated_value) && <p className="text-[10px] font-normal">{item.tav_estimation_classification || 'Sem classificação'}{item.tav_estimation_protocol && ` · ${item.tav_estimation_protocol}`}</p>}
+                    {hasValue(item.tav_estimated_value)?`${reportNumber(item.tav_estimated_value)} ${item.tav_estimated_unit || 'cm²'}`:'—'}
                   </td>
-                  {hasMeasured && <td className="py-2.5 px-3 text-indigo-700 font-bold">{hasValue(item.tav_value)?`${reportNumber(item.tav_value)} ${item.tav_unit || 'Unidade não informada'}`:'—'}<IndicatorDetails item={assessmentIndicators(item).tav}/></td>}
+                  {hasMeasured && <td className="py-2.5 px-3 text-indigo-700 font-bold">{hasValue(item.tav_value)?`${reportNumber(item.tav_value)} ${item.tav_unit || ''}`:'—'}<IndicatorDetails item={assessmentIndicators(item).tav}/></td>}
                   {hasVai && <td className="py-2.5 px-3 text-slate-700">{reportNumber(item.vai_value)}<IndicatorDetails item={assessmentIndicators(item).vai}/></td>}
                   <td className="py-2.5 px-3 text-slate-600">{item.waist_cm ? `${item.waist_cm} cm` : '—'}</td>
                   <td className="py-2.5 px-3 text-slate-600">{item.hip_cm ? `${item.hip_cm} cm` : '—'}</td>

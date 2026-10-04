@@ -7,5 +7,30 @@ export function IndicatorDetails({item}:{item:any}) {
 }
 export function PersonalAssessmentIndicator({item,unit='',compact=false}:{item:any,unit?:string,compact?:boolean}) {
   if(!item)return <p className="text-xs text-slate-500">Atualizando resultados…</p>;
-  return <div className="bg-white border border-slate-200 rounded-xl p-3"><div className="text-xs font-semibold text-slate-700">{item.label}</div><strong className="text-sm text-slate-800">{item.value!=null && Number.isFinite(Number(item.value))?Number(item.value).toLocaleString('pt-BR',{maximumFractionDigits:2}):'Não calculado'} {item.value!=null?unit:''}</strong>{compact?<div className="text-xs text-slate-500 mt-2 space-y-1">{item.value==null && item.reason && <p>{item.reason}</p>}{item.status==='classified' && <p>Classificação: {item.classification}</p>}<p>Método: Equação preditiva</p></div>:<IndicatorDetails item={item}/>}</div>;
+  const isOutOfDomain = item.status === 'out_of_domain';
+  const valText = item.value!=null && Number.isFinite(Number(item.value))
+    ? `${Number(item.value).toLocaleString('pt-BR',{maximumFractionDigits:2})} ${unit}`.trim()
+    : isOutOfDomain
+    ? (item.reason || 'Estimativa não interpretável pela equação.')
+    : 'Não calculado';
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-3">
+      <div className="text-xs font-semibold text-slate-700">{item.label}</div>
+      <strong className={`text-sm ${isOutOfDomain ? 'text-amber-700 font-medium' : 'text-slate-800'}`}>{valText}</strong>
+      {item.limitation && (
+        <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 p-2 rounded-lg mt-2 font-medium leading-relaxed">
+          {item.limitation}
+        </p>
+      )}
+      {compact ? (
+        <div className="text-xs text-slate-500 mt-2 space-y-1">
+          {item.value==null && !isOutOfDomain && item.reason && <p>{item.reason}</p>}
+          {item.classificationAvailable !== false && item.status==='classified' && <p>Classificação: {item.classification}</p>}
+          {item.method && <p>Método: {item.method}</p>}
+        </div>
+      ) : (
+        <IndicatorDetails item={item}/>
+      )}
+    </div>
+  );
 }

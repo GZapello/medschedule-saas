@@ -811,10 +811,16 @@ export const PersonalStudentProfile: React.FC<PersonalStudentProfileProps> = ({
                         <span className="text-[10px] uppercase font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
                           {a.protocol || 'Pollock 7'}
                         </span>
+                        {a.tav_estimated_value !== null && a.tav_estimated_value !== undefined && (
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md flex items-center gap-1" title="Área visceral estimada (eVAT — Bonora)">
+                            <Flame className="w-3 h-3 text-indigo-600" />
+                            eVAT: {a.tav_estimated_value} {a.tav_estimated_unit || 'cm²'}
+                          </span>
+                        )}
                         {a.tav_value !== null && a.tav_value !== undefined && (
                           <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                             <Flame className="w-3 h-3 text-indigo-600" />
-                            TAV: {a.tav_value} {a.tav_unit || 'nível'}
+                            {a.tav_unit === 'cm²' ? 'Área med.:' : 'Nível BIA:'} {a.tav_value} {a.tav_unit || ''}
                             {a.tav_classification && ` (${a.tav_classification})`}
                           </span>
                         )}

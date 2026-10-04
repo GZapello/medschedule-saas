@@ -1,6 +1,6 @@
 import React from 'react';
 export const reportNumber=(v:any,digits=2):string=>v===null || v===undefined || v==='' || !Number.isFinite(Number(v)) ? '—' : Number(v).toLocaleString('pt-BR',{maximumFractionDigits:digits});
-export const evolutionMetrics: [string,string,string][]=[['weight','Peso','kg'],['body_fat_percentage','Gordura','%'],['fat_mass_kg','Massa adiposa','kg'],['lean_mass_kg','Massa livre de gordura','kg'],['muscle_mass_kg','Massa muscular','kg'],['waist_cm','Cintura','cm'],['abdomen_cm','Abdômen','cm'],['hip_cm','Quadril','cm'],['whr','RCQ',''],['whtr','RCE',''],['vai_value','VAI (indireto)',''],['skinfold_sum','Somatório de dobras','mm']];
+export const evolutionMetrics: [string,string,string][]=[['weight','Peso','kg'],['body_fat_percentage','Gordura','%'],['fat_mass_kg','Massa adiposa','kg'],['lean_mass_kg','Massa livre de gordura','kg'],['muscle_mass_kg','Massa muscular','kg'],['waist_cm','Cintura','cm'],['abdomen_cm','Abdômen','cm'],['hip_cm','Quadril','cm'],['whr','RCQ',''],['whtr','RCE',''],['vai_value','VAI (adimensional)',''],['skinfold_sum','Somatório de dobras','mm']];
 // Series remain separate by origin, protocol, unit and measurement method.
 export function visceralSeriesKey(a:any,kind:'measured'|'predicted') {
   const parts=kind==='predicted' ? [a.tav_estimation_protocol,a.tav_estimated_unit] : [a.tav_measured_method || a.tav_method,a.tav_measured_equipment || a.tav_equipment,a.tav_protocol_id,a.tav_measured_unit || a.tav_unit];
@@ -14,8 +14,11 @@ export function visceralEvolutionSeries(history:any[]) {
     if(a[metric]==null || !Number.isFinite(Number(a[metric])))continue;
     const key=visceralSeriesKey(a,kind);
     if(groups.has(key))continue;
-    const title=kind==='predicted'?'TAV estimado · '+(a.tav_estimation_protocol || 'Protocolo não informado'):'TAV medido · '+(a.tav_method || 'Método não informado')+' · '+(a.tav_equipment || 'Equipamento não informado');
-    groups.set(key,{key,metric,title,unit:(kind==='predicted'?a.tav_estimated_unit:a.tav_unit) || 'Unidade não informada',indicator:kind==='predicted'?'predictedTav':'tav',history:history.map(r=>({...r,[metric]:visceralSeriesKey(r,kind)===key?r[metric]:null}))});
+    const isLevel = kind==='measured' && (a.tav_unit==='nível' || a.tav_measured_unit==='nível');
+    const title=kind==='predicted'
+      ? 'Área visceral estimada (eVAT — Bonora)'
+      : (isLevel ? 'Nível visceral (BIA)' : 'Área visceral medida')+' · '+(a.tav_method || a.tav_measured_method || 'Método não informado')+' · '+(a.tav_equipment || a.tav_measured_equipment || 'Equipamento não informado');
+    groups.set(key,{key,metric,title,unit:(kind==='predicted'?(a.tav_estimated_unit || 'cm²'):a.tav_unit) || 'Unidade não informada',indicator:kind==='predicted'?'predictedTav':'tav',history:history.map(r=>({...r,[metric]:visceralSeriesKey(r,kind)===key?r[metric]:null}))});
   }
   return [...groups.values()];
 }
