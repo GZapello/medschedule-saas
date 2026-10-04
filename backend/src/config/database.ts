@@ -1,3 +1,4 @@
+import { migrateConsents } from './consents.migration';
 import { migratePersonalAssessment, seedPersonalTav } from './personal-assessment.migration';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
@@ -2869,6 +2870,7 @@ export function initializeDatabase(): void {
   migrateBilling(rawDb);
   migrateLongitudinalClinical(rawDb);
   migratePersonalStudentLinks(rawDb);
+  migrateConsents(rawDb);
   seedExerciseLibrary(rawDb);
   seedNutritionFoodDatabase(rawDb);
   migrateClinicBooking(rawDb);

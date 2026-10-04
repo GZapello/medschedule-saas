@@ -90,6 +90,7 @@ export function registerPublicSite(app: express.Express, frontendDist?: string):
     const indexPath = path.join(frontendDist, 'index.html');
     if (fs.existsSync(indexPath)) {
       try {
+        if (/^\/(?:assinar-termo|verificar)\//.test(req.path)) res.setHeader('Referrer-Policy', 'no-referrer');
         const rawHtml = fs.readFileSync(indexPath, 'utf-8');
         const normPath = normalizePath(req.path);
         const isPublic = isPublicRoute(normPath);

@@ -1,3 +1,5 @@
+import { PatientConsentsPanel } from '../consents/PatientConsentsPanel';
+import { ConsentPendingAlert } from '../consents/ConsentPendingAlert';
 import React, { useState, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -43,12 +45,14 @@ import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizon
 
 interface PatientProfileModalProps {
   patientId: string;
+  initialTab?: 'consents';
   onClose: () => void;
   onUpdated?: () => void;
 }
 
 export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   patientId,
+  initialTab,
   onClose,
   onUpdated
 }) => {
@@ -69,7 +73,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<
     'overview' | 'timeline' | 'allergies_meds' | 'records' | 'physiotherapy' | 'dentistry' | 'nutrition' | 'occupational_therapy' | 'speech_therapy' | 'anamnesis' | 'exams' | 'insurances' | 'consents'
-  >('overview');
+  >(initialTab || 'overview');
 
   const tabScroll = useHorizontalTabScroll(activeTab);
   const { tabScrollProps } = tabScroll;
@@ -208,51 +212,6 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     }
   };
 
-  const getTelehealthConsentText = (prof: string, mod: string, patientName: string) => {
-    const normMod =
-      mod === 'teleconsulta_sincrona' ? 'Teleconsulta Síncrona (videoconferência em tempo real)' :
-      mod === 'telemonitoramento' ? 'Telemonitoramento e acompanhamento clínico contínuo' :
-      mod === 'teleinterconsulta' ? 'Teleinterconsulta entre profissionais de saúde' :
-      'Atendimento Híbrido (sessões presenciais e remotas combinadas)';
-
-    const councilReference =
-      prof === 'Fonoaudiologia' ? 'Conselho Federal de Fonoaudiologia (Resoluções CFFa nº 427/2013 e 467/2015)' :
-      prof === 'Fisioterapia' ? 'Conselho Federal de Fisioterapia e Terapia Ocupacional (Resolução COFFITO nº 516/2020)' :
-      prof === 'Terapia Ocupacional' ? 'Conselho Federal de Fisioterapia e Terapia Ocupacional (Resolução COFFITO nº 516/2020)' :
-      prof === 'Nutrição' ? 'Conselho Federal de Nutricionistas (Resolução CFN nº 666/2020)' :
-      prof === 'Odontologia' ? 'Conselho Federal de Odontologia (Resolução CFO nº 226/2020)' :
-      prof === 'Psicologia' ? 'Conselho Federal de Psicologia (Resolução CFP nº 11/2018)' :
-      prof === 'Medicina' ? 'Conselho Federal de Medicina (Resolução CFM nº 2.314/2022)' :
-      'normativas federais de telessaúde e Lei Federal nº 14.510/2022';
-
-    return `Eu, ${patientName || 'Paciente / Responsável Legal'}, declaro que fui devidamente informado(a) e concordo de forma livre, esclarecida e inequívoca com a prestação de serviços de saúde na área de ${prof}, através da modalidade de ${normMod}.
-
-1. REGULAMENTAÇÃO PROFISSIONAL: O presente atendimento é realizado em estrita conformidade com as diretrizes do ${councilReference}, assegurando que a assistência remota preencha os mesmos padrões éticos, técnicos e de qualidade do atendimento presencial.
-
-2. ESCLARECIMENTO SOBRE LIMITAÇÕES TÉCNICAS: Fui esclarecido(a) de que a modalidade remota possui limitações inerentes à ausência de exame físico presencial direto. O profissional responsável possui total autonomia para recomendar a interrupção da teleconsulta e encaminhamento para atendimento presencial imediato, caso julgue clinicamente necessário.
-
-3. PROTEÇÃO DE DADOS PESSOAIS E LGPD: Autorizo o tratamento e o arquivamento seguro dos meus dados pessoais e dados sensíveis de saúde em prontuário eletrônico certificado, em conformidade com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 - LGPD), sendo vedada qualquer divulgação, gravação desautorizada ou compartilhamento com terceiros não autorizados.
-
-4. VALIDADE E ACEITE ELETRÔNICO: Reconheço a autenticidade e a validade deste aceite eletrônico, que é selado com carimbo de tempo, endereço IP, identificação do profissional e hash criptográfico de integridade inalterável.`;
-  };
-
-  const [consents, setConsents] = useState<any[]>([]);
-  const [showNewConsent, setShowNewConsent] = useState<boolean>(false);
-  const [consentProfession, setConsentProfession] = useState<string>(() => {
-    if (isSpeechTherapist || isZemdaFono) return 'Fonoaudiologia';
-    if (isPhysiotherapist || isZemdaFisio) return 'Fisioterapia';
-    if (isDentist || isZemdaOdonto) return 'Odontologia';
-    if (isNutritionist || isZemdaNutri) return 'Nutrição';
-    if (isOccupationalTherapist || isZemdaTO) return 'Terapia Ocupacional';
-    return 'Geral / Multidisciplinar';
-  });
-  const [consentModality, setConsentModality] = useState<string>('teleconsulta_sincrona');
-  const [consentForm, setConsentForm] = useState({
-    title: 'Termo de Consentimento Livre e Esclarecido (TCLE) para Telessaúde',
-    consentType: 'telehealth',
-    content: ''
-  });
-
   const loadPatientBase = async () => {
     try {
       setLoading(true);
@@ -389,15 +348,6 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     }
   };
 
-  const loadConsents = async () => {
-    try {
-      const data = await ApiClient.get<any[]>(`/v1/patients/${patientId}/consents`);
-      setConsents(data || []);
-    } catch (err: any) {
-      console.error(err);
-    }
-  };
-
   useEffect(() => {
     loadPatientBase();
     loadAllergiesAndMeds();
@@ -415,7 +365,6 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
     if (activeTab === 'anamnesis') loadAnamnesis();
     if (activeTab === 'exams') loadExams();
     if (activeTab === 'insurances') loadInsurances();
-    if (activeTab === 'consents') loadConsents();
   }, [activeTab, timelineFilter, timelineSearch]);
 
   // Alergias Handlers
@@ -584,26 +533,6 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   };
 
   // Consent Handlers
-  const handleCreateConsent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const patientName = patientData?.patient?.full_name || 'Paciente';
-      const textToSave = consentForm.content.trim() || getTelehealthConsentText(consentProfession, consentModality, patientName);
-
-      await ApiClient.post(`/v1/patients/${patientId}/consents`, {
-        ...consentForm,
-        content: textToSave,
-        professionName: consentProfession,
-        modality: consentModality,
-        signedByName: patientName
-      });
-      showToast('Termo de consentimento de telessaúde registrado!', 'success');
-      setShowNewConsent(false);
-      loadConsents();
-    } catch (err: any) {
-      showToast('Erro ao registrar consentimento', 'error');
-    }
-  };
 
   // Export DOCX
   const handleExportDocx = () => {
@@ -718,6 +647,8 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
           </div>
         </div>
 
+        <ConsentPendingAlert patientId={patientId} onOpen={() => setActiveTab('consents')} />
+
         {/* Navigation Tabs */}
         <div className="bg-slate-50 border-b border-slate-200 shrink-0">
           <HorizontalTabNav scroll={tabScroll} bgTheme="slate-50">
@@ -745,7 +676,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                 { id: 'anamnesis', label: 'Anamneses', icon: Activity },
                 { id: 'exams', label: 'Exames & Laudos IA', icon: FileUp },
                 { id: 'insurances', label: 'Convênios', icon: CreditCard },
-                { id: 'consents', label: 'Consentimentos', icon: ShieldCheck }
+                { id: 'consents', label: 'Termos & Consentimentos', icon: ShieldCheck }
               ].map(tab => {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;
@@ -905,7 +836,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                     { id: 'prescription', label: 'Receitas' },
                     { id: 'exam_request', label: 'Pedidos Exames' },
                     { id: 'exam_file', label: 'Laudos/Arquivos' },
-                    { id: 'consent', label: 'Consentimentos' }
+                    { id: 'consent', label: 'Termos & Consentimentos' }
                   ].map(f => (
                     <button
                       key={f.id}
@@ -1948,203 +1879,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
           )}
 
           {/* TAB 8: CONSENTIMENTOS DE TELESSAÚDE POR PROFISSÃO */}
-          {activeTab === 'consents' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                    Consentimento de Telessaúde & Proteção de Dados (LGPD)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Termos de consentimento livre e esclarecido (TCLE) vinculados por profissão com modalidade de atendimento e assinatura digital inalterável.
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    const patientName = patientData?.patient?.full_name || 'Paciente';
-                    const defaultText = getTelehealthConsentText(consentProfession, consentModality, patientName);
-                    setConsentForm(prev => ({
-                      ...prev,
-                      content: prev.content || defaultText
-                    }));
-                    setShowNewConsent(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Registrar Consentimento
-                </button>
-              </div>
-
-              {showNewConsent && (
-                <form onSubmit={handleCreateConsent} className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-sm space-y-4 text-xs">
-                  <div className="flex items-center justify-between pb-2 border-b border-indigo-100">
-                    <h4 className="font-bold text-slate-900 text-sm">Novo Termo de Consentimento de Telessaúde</h4>
-                    <span className="text-[11px] text-indigo-600 font-semibold">Assinatura com Carimbo de Tempo & Hash SHA-256</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-700 font-bold mb-1">Profissão Regulamentada</label>
-                      <select
-                        value={consentProfession}
-                        onChange={e => {
-                          const newProf = e.target.value;
-                          setConsentProfession(newProf);
-                          const patientName = patientData?.patient?.full_name || 'Paciente';
-                          setConsentForm(prev => ({
-                            ...prev,
-                            content: getTelehealthConsentText(newProf, consentModality, patientName)
-                          }));
-                        }}
-                        className="w-full px-3 py-2 border rounded-xl bg-white font-semibold text-slate-800"
-                      >
-                        <option value="Fonoaudiologia">Fonoaudiologia (CFFa)</option>
-                        <option value="Fisioterapia">Fisioterapia (COFFITO)</option>
-                        <option value="Terapia Ocupacional">Terapia Ocupacional (COFFITO)</option>
-                        <option value="Nutrição">Nutrição (CFN)</option>
-                        <option value="Odontologia">Odontologia (CFO)</option>
-                        <option value="Psicologia">Psicologia (CFP)</option>
-                        <option value="Medicina">Medicina (CFM)</option>
-                        <option value="Geral / Multidisciplinar">Geral / Multidisciplinar</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-700 font-bold mb-1">Modalidade do Atendimento</label>
-                      <select
-                        value={consentModality}
-                        onChange={e => {
-                          const newMod = e.target.value;
-                          setConsentModality(newMod);
-                          const patientName = patientData?.patient?.full_name || 'Paciente';
-                          setConsentForm(prev => ({
-                            ...prev,
-                            content: getTelehealthConsentText(consentProfession, newMod, patientName)
-                          }));
-                        }}
-                        className="w-full px-3 py-2 border rounded-xl bg-white font-semibold text-slate-800"
-                      >
-                        <option value="teleconsulta_sincrona">Teleconsulta Síncrona (Videoconferência em Tempo Real)</option>
-                        <option value="telemonitoramento">Telemonitoramento / Acompanhamento Remoto</option>
-                        <option value="teleinterconsulta">Teleinterconsulta entre Profissionais</option>
-                        <option value="hibrido">Atendimento Híbrido (Presencial e Remoto)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">Título do Termo</label>
-                    <input
-                      type="text"
-                      required
-                      value={consentForm.title}
-                      onChange={e => setConsentForm({ ...consentForm, title: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-slate-700 font-bold">Conteúdo Legal do Consentimento (TCLE)</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const patientName = patientData?.patient?.full_name || 'Paciente';
-                          setConsentForm(prev => ({
-                            ...prev,
-                            content: getTelehealthConsentText(consentProfession, consentModality, patientName)
-                          }));
-                          showToast('Texto padrão do conselho profissional recarregado', 'info');
-                        }}
-                        className="text-[11px] text-indigo-600 font-bold hover:underline cursor-pointer"
-                      >
-                        Recarregar Texto Padrão do Conselho
-                      </button>
-                    </div>
-                    <textarea
-                      rows={6}
-                      value={consentForm.content}
-                      onChange={e => setConsentForm({ ...consentForm, content: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl font-mono text-xs text-slate-700 bg-slate-50 focus:bg-white"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowNewConsent(false)}
-                      className="px-3 py-1.5 rounded-lg border text-slate-600 hover:bg-slate-100 cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-1.5 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 shadow-xs cursor-pointer"
-                    >
-                      Registrar Aceite e Gerar Hash
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {consents.length === 0 ? (
-                <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-400 text-xs">
-                  Nenhum termo de consentimento registrado até o momento.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {consents.map(cs => {
-                    const normModLabel =
-                      cs.modality === 'teleconsulta_sincrona' ? 'Teleconsulta Síncrona' :
-                      cs.modality === 'telemonitoramento' ? 'Telemonitoramento' :
-                      cs.modality === 'teleinterconsulta' ? 'Teleinterconsulta' :
-                      cs.modality === 'hibrido' ? 'Atendimento Híbrido' :
-                      (cs.modality || 'Telessaúde');
-
-                    return (
-                      <div key={cs.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2 text-xs">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-2 gap-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <strong className="text-slate-900 text-sm">{cs.title}</strong>
-                            {cs.profession_name && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                {cs.profession_name}
-                              </span>
-                            )}
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200">
-                              {normModLabel}
-                            </span>
-                          </div>
-                          <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md self-start sm:self-auto">
-                            Assinado em {cs.signed_at ? new Date(cs.signed_at).toLocaleString('pt-BR') : '—'}
-                          </span>
-                        </div>
-
-                        <p className="text-slate-600 font-mono text-xs whitespace-pre-line bg-slate-50 p-3 rounded-xl border border-slate-100 max-h-40 overflow-y-auto">
-                          {cs.content}
-                        </p>
-
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500 pt-1 border-t border-slate-100">
-                          <div>
-                            Assinante: <strong className="text-slate-700">{cs.signed_by_name}</strong>
-                            {cs.professional_name && <span> • Profissional: <strong className="text-slate-700">{cs.professional_name}</strong></span>}
-                          </div>
-
-                          {cs.signature_hash && (
-                            <div className="flex items-center gap-1 font-mono text-[10px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200" title={`Assinatura Digital SHA-256: ${cs.signature_hash}`}>
-                              <ShieldCheck className="w-3 h-3 text-indigo-600 shrink-0" />
-                              <span>SHA-256: {cs.signature_hash.slice(0, 16)}...</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          {activeTab === 'consents' && <PatientConsentsPanel patientId={patientId} patient={patientData?.patient || patientData} guardians={patientData?.guardians || []} />}
 
           {/* TAB: ZEMDAFISIO (FISIOTERAPIA) */}
           {activeTab === 'physiotherapy' && (

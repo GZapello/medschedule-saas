@@ -1,0 +1,22 @@
+import { buildApiUrl, getApiBaseUrl } from '../../api/client';
+
+export const CONSENT_MODULES=['general','ZemdaFono','ZemdaTO','ZemdaNutri','ZemdaPsico','ZemdaPP','ZemdaPersonal','ZemdaFisio','ZemdaOdonto','Zemda360','ZemdaEstetic','ZemdaMed','ZemdaBody'];
+export const consentDate=(value?:string|null)=>value?new Date(value.includes('T')?value:value.replace(' ','T')+'Z').toLocaleString('pt-BR'):'—';
+export async function publicConsentApi<T>(path:string,body?:object):Promise<T> {
+  const response=await fetch(buildApiUrl(getApiBaseUrl(),`/v1/public/consents/${path}`),{
+    method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,
+    credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer'
+  });
+  const data=await response.json();
+  if(!response.ok) throw new Error(data.error||'Não foi possível carregar o termo.');
+  return data;
+}
+export async function downloadConsentPdf(id:string):Promise<void> {
+  const response=await fetch(buildApiUrl(getApiBaseUrl(),`/v1/consents/${id}/pdf`),{
+    headers:{Authorization:`Bearer ${localStorage.getItem('auth_token')||''}`,'X-Tenant-ID':localStorage.getItem('active_tenant_id')||''},cache:'no-store'
+  });
+  if(!response.ok) { const data=await response.json(); throw new Error(data.error||'Erro ao gerar PDF.'); }
+  const url=URL.createObjectURL(await response.blob());
+  const anchor=document.createElement('a');anchor.href=url;anchor.download=`termo-${id}.pdf`;anchor.click();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}

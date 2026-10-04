@@ -1,3 +1,5 @@
+import { ConsentPendingAlert } from '../consents/ConsentPendingAlert';
+import { PatientProfileModal } from '../patients/PatientProfileModal';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiClient } from '../../api/client';
@@ -32,6 +34,7 @@ interface CalendarViewProps {
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment }) => {
+  const [consentPatientId, setConsentPatientId] = useState<string | null>(null);
   const auth = useAuth();
   const { currentTenant, clientTermLabel } = auth;
   const { showToast } = useToast();
@@ -1092,6 +1095,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               </button>
             </div>
 
+            <ConsentPendingAlert patientId={selectedAppt.patient_id} serviceId={selectedAppt.service_id} onOpen={() => { setConsentPatientId(selectedAppt.patient_id); setSelectedAppt(null); setIsRescheduling(false); }} />
+
             {!isRescheduling ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -1551,6 +1556,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         </div>,
         document.body
       )}
+      {consentPatientId && <PatientProfileModal patientId={consentPatientId} initialTab="consents" onClose={() => setConsentPatientId(null)} />}
     </div>
   );
 };

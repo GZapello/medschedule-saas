@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
+import { hasConsentAccess } from '../utils/consent-access';
 
 export class PatientClinicalController {
   // 1. LINHA DO TEMPO CRONOLÓGICA 360° DO PACIENTE
@@ -211,19 +212,22 @@ export class PatientClinicalController {
       // H. Termos de Consentimento
       const consentsStmt = db.prepare(`
         SELECT 
-          cs.id, cs.title, cs.consent_type, cs.accepted_at as date, (cs.revoked_at IS NOT NULL) as is_revoked,
+          cs.id, cs.title, cs.consent_type, cs.accepted_at as signed_at,
+          CASE WHEN cs.template_version_id IS NOT NULL THEN COALESCE(cs.accepted_at,cs.created_at) ELSE cs.accepted_at END as date,
+          (cs.revoked_at IS NOT NULL OR ci.id IS NOT NULL) as is_revoked,
           p.name as professional_name, p.id as professional_id
         FROM patient_consents cs
         LEFT JOIN professionals p ON p.id = cs.professional_id
-        WHERE cs.patient_id = ? AND cs.tenant_id = ?
+        LEFT JOIN consent_invalidations ci ON ci.consent_id=cs.id
+        WHERE cs.patient_id = ? AND cs.tenant_id = ? AND (?=1 OR cs.template_version_id IS NULL)
       `);
-      const consents = consentsStmt.all(patientId, tenantId) as any[];
+      const consents = consentsStmt.all(patientId, tenantId,hasConsentAccess(req,patientId)?1:0) as any[];
       for (const cs of consents) {
         timeline.push({
           id: cs.id,
           type: 'consent',
           title: `Consentimento: ${cs.title}`,
-          description: `Assinado em ${cs.date ? new Date(cs.date).toLocaleDateString('pt-BR') : 'Data n/d'} ${cs.is_revoked ? '(Revogado)' : '(Vigente)'}`,
+          description: cs.is_revoked ? 'Cancelado/invalidado — histórico preservado' : cs.signed_at ? `Assinado em ${new Date(cs.signed_at).toLocaleDateString('pt-BR')}` : 'Aguardando assinatura',
           details: cs,
           professionalName: cs.professional_name || 'Clínica',
           professionalId: cs.professional_id,
@@ -742,6 +746,10 @@ export class PatientClinicalController {
       const { id: patientId } = req.params;
       const tenantId = req.tenantId;
 
+      if (!hasConsentAccess(req, String(patientId))) {
+        res.status(403).json({ error: 'Sem vínculo clínico autorizado com este paciente.' }); return;
+      }
+
       // Aliases mantêm o contrato que o front-end já consome (cs.content, cs.signed_by_name,
       // cs.signed_at, cs.is_revoked) apesar dos nomes reais das colunas serem outros
       // (content_text/accepted_by_name/accepted_at/revoked_at — ver migração em database.ts).
@@ -766,6 +774,9 @@ export class PatientClinicalController {
     try {
       const { id: patientId } = req.params;
       const tenantId = req.tenantId;
+      if (!hasConsentAccess(req, String(patientId))) {
+        res.status(403).json({ error: 'Sem vínculo clínico autorizado com este paciente.' }); return;
+      }
       const {
         title,
         consentType,
@@ -887,7 +898,7 @@ export class PatientClinicalController {
       }
 
       const consent = db.prepare(
-        'SELECT id, revoked_at FROM patient_consents WHERE id = ? AND patient_id = ? AND tenant_id = ?'
+        'SELECT id, revoked_at, template_version_id FROM patient_consents WHERE id = ? AND patient_id = ? AND tenant_id = ?'
       ).get(consentId, patientId, tenantId) as any;
 
       if (!consent) {
@@ -898,6 +909,10 @@ export class PatientClinicalController {
       if (consent.revoked_at) {
         res.status(409).json({ error: 'Este termo de consentimento já foi revogado anteriormente' });
         return;
+      }
+
+      if (consent.template_version_id) {
+        res.status(409).json({ error: 'Use o cancelamento em Termos & Consentimentos. As evidências deste documento são imutáveis.' }); return;
       }
 
       const revokedBy = req.user?.userId || null;
@@ -1015,11 +1030,14 @@ export class PatientClinicalController {
       const consents = db.prepare(`
         SELECT pc.id, pc.title, pc.consent_type, pc.version, pc.content_text, pc.status,
                pc.accepted_by_name, pc.accepted_at, pc.revoked_at, pc.revoked_by, pc.modality,
-               pc.profession_name, pc.signature_hash, pc.created_at, p.name as professional_name
+               pc.profession_name, pc.signature_hash, pc.created_at, p.name as professional_name,
+               cs.id as consent_signature_id,cs.evidence_hash,cs.evidence_json,ci.reason as invalidation_reason,ci.created_at as invalidated_at
         FROM patient_consents pc
         LEFT JOIN professionals p ON p.id = pc.professional_id
-        WHERE pc.patient_id = ? AND pc.tenant_id = ?
-      `).all(patientId, tenantId);
+        LEFT JOIN consent_signatures cs ON cs.consent_id=pc.id
+        LEFT JOIN consent_invalidations ci ON ci.consent_id=pc.id
+        WHERE pc.patient_id = ? AND pc.tenant_id = ? AND (?=1 OR pc.template_version_id IS NULL)
+      `).all(patientId, tenantId,hasConsentAccess(req,patientId)?1:0);
 
       const payments = db.prepare(
         'SELECT * FROM payments WHERE patient_id = ? AND tenant_id = ?'

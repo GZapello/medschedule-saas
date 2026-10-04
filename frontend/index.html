@@ -13,7 +13,13 @@
     <!-- Google Consent Mode v2 & Google Analytics 4 (GA4) -->
     <script>
       window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
+      var isConsentPage = /^\/(?:assinar-termo|verificar)\//.test(window.location.pathname);
+      function gtag(){if (!isConsentPage) dataLayer.push(arguments);}
+      if (isConsentPage) {
+        var privateReferrer = document.createElement('meta');
+        privateReferrer.name = 'referrer'; privateReferrer.content = 'no-referrer';
+        document.head.appendChild(privateReferrer);
+      }
 
       // Padrão de privacidade: todas as categorias não essenciais desativadas (denied)
       gtag('consent', 'default', {
@@ -39,7 +45,14 @@
         }
       } catch (e) {}
     </script>
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-QFFJ7Y25ML"></script>
+    <script>
+      if (!isConsentPage) {
+        var gaScript = document.createElement('script');
+        gaScript.async = true;
+        gaScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-QFFJ7Y25ML';
+        document.head.appendChild(gaScript);
+      }
+    </script>
     <script>
       gtag('js', new Date());
       // send_page_view: false — a própria aplicação envia page_view manualmente com o caminho

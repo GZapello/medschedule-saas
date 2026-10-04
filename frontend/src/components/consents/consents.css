@@ -1,0 +1,10 @@
+.consent-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:12px; background:#0f766e; color:white; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer }
+.consent-primary:hover { background:#115e59 }
+.consent-secondary { display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid #cbd5e1; border-radius:10px; background:white; color:#334155; padding:8px 12px; font-size:13px; cursor:pointer }
+.consent-primary:disabled,.consent-secondary:disabled { opacity:.5; cursor:default }
+.consent-field { width:100%; border:1px solid #cbd5e1; border-radius:10px; background:white; padding:10px 12px; font-size:14px; color:#0f172a }
+.consent-field:focus { outline:2px solid #0d9488; outline-offset:1px }
+.consent-primary:focus-visible,.consent-secondary:focus-visible { outline:2px solid #0d9488; outline-offset:3px }
+.consent-public { min-height:100dvh; background:linear-gradient(135deg,#f0fdfa,#f8fafc); padding:24px 16px; color:#0f172a }
+.consent-public-card { max-width:800px; margin:auto; background:white; border:1px solid #e2e8f0; border-radius:20px; padding:clamp(20px,4vw,36px); box-shadow:0 4px 24px #0f766e08 }
+@media print { .consent-no-print { display:none!important } .consent-public { background:white; padding:0 } .consent-public-card { border:0; box-shadow:none; padding:0 } }

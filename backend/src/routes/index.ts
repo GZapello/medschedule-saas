@@ -1,3 +1,4 @@
+import { mountConsentRoutes, mountPublicConsentRoutes } from './consents.routes';
 import { SystemIntegrityController } from '../controllers/system-integrity.controller';
 import { PersonalPostureAIController } from '../controllers/personal-posture-ai.controller';
 import { Router } from 'express';
@@ -170,6 +171,8 @@ api.get('/v1/public/download-android', (req, res) => {
 // ==========================================
 // 2. ROTAS AUTENTICADAS (COM JWT + TENANT)
 // ==========================================
+mountPublicConsentRoutes(api);
+
 api.use(authMiddleware);
 api.use(tenantMiddleware);
 
@@ -181,6 +184,7 @@ api.put('/v1/auth/profile/email', AuthController.updateProfileEmail);
 
 api.use(onboardingGate);
 api.use(subscriptionGate);
+mountConsentRoutes(api);
 
 // Tenants & Configurações da Clínica
 api.get('/v1/tenants/current', requireTenant, TenantController.getCurrent);

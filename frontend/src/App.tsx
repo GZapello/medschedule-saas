@@ -1,3 +1,4 @@
+import { PublicConsentPage } from './components/consents/PublicConsentPage';
 import { parseBookingRoute, BookingRoute } from './utils/publicBooking';
 import { updatePublicSeo, clearPublicSeo } from './utils/publicSeo';
 import { getRouteByPath } from './data/seoPagesData';
@@ -1782,6 +1783,14 @@ const PrivateOverlays: React.FC = () => {
 };
 
 export const App: React.FC = () => {
+  const [entryPath, setEntryPath] = useState(window.location.pathname);
+  useEffect(() => {
+    const sync = () => setEntryPath(window.location.pathname);
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
+  const consentRoute = entryPath.match(/^\/(assinar-termo|verificar)\/([A-Za-z0-9_-]+)\/?$/);
+  if (consentRoute) return <PublicConsentPage key={entryPath} token={consentRoute[1] === 'assinar-termo' ? consentRoute[2] : undefined} verificationCode={consentRoute[1] === 'verificar' ? consentRoute[2] : undefined} />;
   return (
     <AuthProvider>
       <ToastProvider>
