@@ -54,11 +54,26 @@ export function migrateConsents(db: DatabaseSync): void {
     sent_at: 'TEXT', expires_at: 'TEXT'
   })) if (!columns.has(name)) db.exec(`ALTER TABLE patient_consents ADD COLUMN ${name} ${type}`);
   // Version rows are append-only, even before a first signature.
+  ensureConsentTriggers(db);
+  const modules = ['general','ZemdaFono','ZemdaTO','ZemdaNutri','ZemdaPsico','ZemdaPP','ZemdaPersonal','ZemdaFisio','ZemdaOdonto','Zemda360','ZemdaEstetic','ZemdaMed','ZemdaBody'];
+  for (const module of modules) {
+    const id = `consent-standard-${module}`;
+    const title = `Consentimento para atendimento — ${module === 'general' ? 'Multidisciplinar' : module}`;
+    const content = `CONSENTIMENTO PARA ATENDIMENTO\n\nÁrea: ${module === 'general' ? 'Multidisciplinar' : module}.\n\nDeclaro que recebi informações do profissional sobre a finalidade do atendimento, as atividades propostas, os benefícios esperados, os riscos e limitações pertinentes ao meu caso e as alternativas disponíveis.\n\nTive oportunidade de fazer perguntas e solicitar esclarecimentos. Estou ciente de que posso comunicar minha decisão de não prosseguir com o atendimento e discutir as consequências e alternativas com o profissional.\n\nAutorizo o registro das informações necessárias ao atendimento no prontuário, com acesso restrito à equipe autorizada.\n\nEste modelo deve ser adaptado pela clínica ao atendimento e ao procedimento concreto antes de ser enviado. O profissional deve apresentar e esclarecer as informações específicas do caso.`;
+    const hash = createHash('sha256').update(JSON.stringify({title, content})).digest('hex');
+    db.prepare('INSERT OR IGNORE INTO consent_templates(id,module,created_at) VALUES(?,?,?)').run(id,module,new Date().toISOString());
+    db.prepare('INSERT OR IGNORE INTO consent_template_versions(id,template_id,version,title,content,content_hash,created_at) VALUES(?,?,1,?,?,?,?)').run(`${id}-v1`,id,title,content,hash,new Date().toISOString());
+  }
+}
+
+export function ensureConsentTriggers(db: DatabaseSync): void {
   for (const table of ['consent_template_versions', 'consent_signatures', 'consent_audit_logs', 'consent_invalidations']) {
-    for (const operation of ['UPDATE', 'DELETE']) db.exec(`
-      CREATE TRIGGER IF NOT EXISTS immutable_${table}_${operation.toLowerCase()}
-      BEFORE ${operation} ON ${table} BEGIN SELECT RAISE(ABORT, 'CONSENT_IMMUTABLE'); END;
-    `);
+    for (const operation of ['UPDATE', 'DELETE']) {
+      db.exec(`
+        CREATE TRIGGER IF NOT EXISTS immutable_${table}_${operation.toLowerCase()}
+        BEFORE ${operation} ON ${table} BEGIN SELECT RAISE(ABORT, 'CONSENT_IMMUTABLE'); END;
+      `);
+    }
   }
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS consent_document_frozen_update BEFORE UPDATE ON patient_consents
@@ -76,13 +91,4 @@ export function migrateConsents(db: DatabaseSync): void {
     WHEN OLD.template_version_id IS NOT NULL
     BEGIN SELECT RAISE(ABORT, 'CONSENT_IMMUTABLE'); END;
   `);
-  const modules = ['general','ZemdaFono','ZemdaTO','ZemdaNutri','ZemdaPsico','ZemdaPP','ZemdaPersonal','ZemdaFisio','ZemdaOdonto','Zemda360','ZemdaEstetic','ZemdaMed','ZemdaBody'];
-  for (const module of modules) {
-    const id = `consent-standard-${module}`;
-    const title = `Consentimento para atendimento — ${module === 'general' ? 'Multidisciplinar' : module}`;
-    const content = `CONSENTIMENTO PARA ATENDIMENTO\n\nÁrea: ${module === 'general' ? 'Multidisciplinar' : module}.\n\nDeclaro que recebi informações do profissional sobre a finalidade do atendimento, as atividades propostas, os benefícios esperados, os riscos e limitações pertinentes ao meu caso e as alternativas disponíveis.\n\nTive oportunidade de fazer perguntas e solicitar esclarecimentos. Estou ciente de que posso comunicar minha decisão de não prosseguir com o atendimento e discutir as consequências e alternativas com o profissional.\n\nAutorizo o registro das informações necessárias ao atendimento no prontuário, com acesso restrito à equipe autorizada.\n\nEste modelo deve ser adaptado pela clínica ao atendimento e ao procedimento concreto antes de ser enviado. O profissional deve apresentar e esclarecer as informações específicas do caso.`;
-    const hash = createHash('sha256').update(JSON.stringify({title, content})).digest('hex');
-    db.prepare('INSERT OR IGNORE INTO consent_templates(id,module,created_at) VALUES(?,?,?)').run(id,module,new Date().toISOString());
-    db.prepare('INSERT OR IGNORE INTO consent_template_versions(id,template_id,version,title,content,content_hash,created_at) VALUES(?,?,1,?,?,?,?)').run(`${id}-v1`,id,title,content,hash,new Date().toISOString());
-  }
 }

@@ -851,9 +851,14 @@ export class TenantController {
     } catch (err: any) {
       if (respondBillingError(res, err)) return;
       console.error('[TenantController.adminDeletePermanently] Erro sanitizado:', err?.message || err);
-      const safeMessage = err?.message && !err.message.includes('SQLITE') && !err.message.includes('SELECT') && !err.message.includes('PRAGMA') && !err.message.includes('sqlite_') && !err.message.includes('database is locked')
-        ? err.message
-        : 'Exclusão não concluída. Ocorreu uma falha durante o processo de limpeza.';
+      let safeMessage = 'Exclusão não concluída. Ocorreu uma falha durante o processo de limpeza.';
+      if (err?.message) {
+        const msg = String(err.message).trim();
+        const isInternalCode = /^[A-Z0-9_]+$/.test(msg) || msg.includes('IMMUTABLE') || msg.includes('SQLITE') || msg.includes('SELECT') || msg.includes('PRAGMA') || msg.includes('sqlite_') || msg.includes('database is locked') || msg.includes('RAISE(');
+        if (!isInternalCode) {
+          safeMessage = msg;
+        }
+      }
       res.status(500).json({ error: safeMessage });
     }
   }
