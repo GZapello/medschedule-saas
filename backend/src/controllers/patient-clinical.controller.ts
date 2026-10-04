@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { hasClinicalAccess } from './clinical.controller';
-import { hasConsentAccess } from '../utils/consent-access';
+import { hasConsentAccess, hasConsentDocumentAccess } from '../utils/consent-access';
 
 export class PatientClinicalController {
   // 1. LINHA DO TEMPO CRONOLÓGICA 360° DO PACIENTE
@@ -222,7 +222,7 @@ export class PatientClinicalController {
         WHERE cs.patient_id = ? AND cs.tenant_id = ? AND (?=1 OR cs.template_version_id IS NULL)
       `);
       const consents = consentsStmt.all(patientId, tenantId,hasConsentAccess(req,patientId)?1:0) as any[];
-      for (const cs of consents) {
+      for (const cs of consents.filter(cs=>hasConsentDocumentAccess(req,cs.id))) {
         timeline.push({
           id: cs.id,
           type: 'consent',
@@ -763,7 +763,7 @@ export class PatientClinicalController {
         ORDER BY pc.accepted_at DESC
       `).all(patientId, tenantId);
 
-      res.json(consents);
+      res.json(consents.filter(c=>hasConsentDocumentAccess(req,c.id)));
     } catch (err: any) {
       console.error('[PatientClinicalController.listConsents] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar termos de consentimento' });
@@ -1037,7 +1037,7 @@ export class PatientClinicalController {
         LEFT JOIN consent_signatures cs ON cs.consent_id=pc.id
         LEFT JOIN consent_invalidations ci ON ci.consent_id=pc.id
         WHERE pc.patient_id = ? AND pc.tenant_id = ? AND (?=1 OR pc.template_version_id IS NULL)
-      `).all(patientId, tenantId,hasConsentAccess(req,patientId)?1:0);
+      `).all(patientId, tenantId,hasConsentAccess(req,patientId)?1:0).filter(c=>hasConsentDocumentAccess(req,c.id));
 
       const payments = db.prepare(
         'SELECT * FROM payments WHERE patient_id = ? AND tenant_id = ?'

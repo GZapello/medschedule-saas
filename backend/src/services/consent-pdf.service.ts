@@ -41,7 +41,8 @@ export async function writeConsentPdf(data: any, res: Response): Promise<void> {
   doc.y+=110;
   if(signature.photo_data_url) {
     if(doc.y>600) doc.addPage();
-    doc.text('Registro fotográfico opcional da sessão (sem reconhecimento facial):');
+    doc.text('REGISTRO FOTOGRÁFICO DA ASSINATURA');
+    doc.fontSize(9).text('Registro opcional da sessão, sem reconhecimento facial.');
     doc.image(Buffer.from(signature.photo_data_url.split(',')[1],'base64'),48,doc.y+8,{fit:[90,90]});
     doc.y+=110;
   }

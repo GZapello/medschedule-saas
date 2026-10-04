@@ -45,6 +45,8 @@ export function migrateConsents(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_consent_audit_document ON consent_audit_logs(tenant_id, consent_id, created_at);
   `);
   const columns = new Set((db.prepare('PRAGMA table_info(patient_consents)').all() as any[]).map(c => c.name));
+  if(!(db.prepare('PRAGMA table_info(consent_settings)').all() as any[]).some(c=>c.name==='photo_requested')) db.exec("ALTER TABLE consent_settings ADD COLUMN photo_requested INTEGER NOT NULL DEFAULT 0; UPDATE consent_settings SET photo_requested=1 WHERE auth_level='reinforced'");
+  if(!(db.prepare('PRAGMA table_info(consent_templates)').all() as any[]).some(c=>c.name==='profession_id')) db.exec('ALTER TABLE consent_templates ADD COLUMN profession_id TEXT');
   for (const [name, type] of Object.entries({
     template_id: 'TEXT REFERENCES consent_templates(id)', template_version_id: 'TEXT REFERENCES consent_template_versions(id)',
     document_hash: 'TEXT', required: 'INTEGER NOT NULL DEFAULT 0', auth_level: 'TEXT',

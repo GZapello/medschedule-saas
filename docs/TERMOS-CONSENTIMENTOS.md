@@ -57,8 +57,8 @@ Há 13 modelos iniciais: Multidisciplinar, ZemdaFono, ZemdaTO, ZemdaNutri, Zemda
 
 ## Páginas
 
-- `/assinar-termo/:token`: leitura integral, três declarações, confirmação, assinatura manuscrita e foto opcional no nível reforçado.
-- `/verificar/:codigo`: autenticidade, integridade, data, clínica, título, identificador e fragmento de hash. Não expõe paciente, responsável, conteúdo ou imagens.
+- `/assinar-termo/:token`: leitura integral, três declarações, confirmação, assinatura manuscrita e foto opcional quando habilitada na configuração.
+- `/verificar/:codigo`: autenticidade, integridade, data, clínica, título, versão, identificador e fragmento de hash. Não expõe paciente, responsável, conteúdo ou imagens.
 
 ## Endpoints internos
 
@@ -80,11 +80,11 @@ Prefixo `/api/v1/consents` (o servidor mantém também a compatibilidade `/v1/..
 | GET | `/:id/document` | Conteúdo e evidências assinadas para equipe autorizada |
 | GET | `/:id/pdf` | Download de PDF com assinatura, foto se utilizada e QR Code |
 
-Criação de modelo: `{title, content, module, serviceId?, procedureName?, required}`.
+Criação de modelo: `{title, content, module, professionId?, serviceId?, procedureName?, required}`.
 
-Configuração: `{authLevel: "basic" | "recommended" | "reinforced", linkHours: 1..720}`. Padrão: recomendado, 168 horas.
+Configuração: `{authLevel: "basic" | "recommended" | "reinforced", linkHours: 1..720, photoRequested: boolean}`. Padrão: recomendado, 168 horas.
 
-Solicitação: `{templateId, guardian?: {name, cpf, relationship, phone, email}}`. Para menores, o responsável é obrigatório, com CPF validado. Identidades de paciente e assinante são armazenadas separadamente. O prontuário preenche os dados do responsável já cadastrado quando disponíveis.
+Solicitação: `{templateId, signerEmail?: string, guardian?: {name, cpf, relationship, phone, email}}`. Para menores, o responsável é obrigatório, com CPF validado. Identidades de paciente e assinante são armazenadas separadamente. O prontuário preenche os dados do responsável já cadastrado quando disponíveis.
 
 Envio: `{channel: "email" | "whatsapp"}`. Usa os contatos registrados no documento, sem aceitar troca de destinatário pela página pública. Cancelamento: `{reason}`, mínimo de cinco caracteres.
 
@@ -104,7 +104,7 @@ Tokens aleatórios de 256 bits, armazenados somente como SHA-256, são temporár
 
 OTP usa scrypt com salt aleatório, vence em dez minutos, permite até cinco tentativas e tem intervalo mínimo de 60 segundos entre envios e limite de cinco códigos por documento/hora. Falhas são auditadas sem registrar o código. Provedores não configurados retornam erro; nenhum envio fictício é apresentado como real.
 
-No nível reforçado a foto permanece opcional. A câmera é aberta por ação explícita do assinante; a finalidade precisa ser aceita antes da inclusão. Não há reconhecimento facial.
+A foto é uma configuração independente do nível e permanece opcional. A câmera é aberta por ação explícita do assinante; a finalidade precisa ser aceita antes da inclusão. Não há reconhecimento facial.
 
 ## Testar o fluxo completo
 
@@ -134,10 +134,29 @@ O teste de navegador usa Playwright/Chromium, disponível no ambiente de desenvo
 ## Validação realizada
 
 - Builds TypeScript/Vite e backend passaram.
-- 70 verificações do novo backend: permissões, isolamento, imutabilidade, concorrência, menores, OTP, expiração, cancelamento, PDF e verificação pública.
-- 15 cenários de navegador: biblioteca, obrigatoriedade, assinatura básica e com OTP, desktop/mobile, PDF, versionamento e ausência de trackers nas páginas públicas.
+- 87 verificações do backend atualizado: permissões, isolamento, imutabilidade, concorrência, menores, OTP, expiração, cancelamento, PDF e verificação pública.
+- 20 cenários de navegador: biblioteca, obrigatoriedade, assinatura básica e com OTP, desktop/mobile, PDF, versionamento e ausência de trackers nas páginas públicas.
 - Regressões de módulo clínico, consultas, permissões e exportação/revogação histórica passaram.
 - PDF renderizado e revisado visualmente, incluindo versão com responsável legal e foto opcional.
 - `test-guardian-authorization.cjs` tem uma falha preexistente no agendamento público: retorna 404 “Agendamento online indisponível” onde o teste espera 201. A mesma falha foi reproduzida carregando os arquivos anteriores do HEAD em um banco temporário; não foi modificada nesta tarefa.
 
 Sem commit, push, deploy ou mensagens reais.
+
+
+## Auditoria das correções — 04/10/2026
+
+1. Arquivos alterados: `backend/src/config/consents.migration.ts`, `backend/src/controllers/patient-clinical.controller.ts`, `backend/src/utils/consent-access.ts`, `backend/src/services/consent.service.ts`, `backend/src/services/consent-pdf.service.ts`, `backend/src/services/email-template.service.ts`, `backend/src/services/email.service.ts`, `backend/test-consents.cjs`, `frontend/src/components/consents/PatientConsentsPanel.tsx`, `PublicConsentPage.tsx`, `consent-api.ts`, `consents.css`, `frontend/src/components/personal/PersonalTechnicalFields.tsx`, `frontend/tests/consents-browser.cjs` e este guia.
+2. Nenhum componente, serviço ou tabela paralela foi criado nesta correção.
+3. Migrations adicionais: `consent_settings.photo_requested`, inteira, padrão 0, e `consent_templates.profession_id` para associação opcional à profissão. A decisão é congelada no snapshot imutável de cada nova solicitação. Solicitações antigas preservam o comportamento anterior. Clínicas anteriormente no nível reforçado mantêm a foto habilitada na migração; omitir o novo campo em clientes anteriores preserva a configuração atual.
+4. Endpoints: mantidos os existentes. Settings aceita `photoRequested`; emissão aceita `signerEmail` para salvar o contato do paciente antes de congelar o documento. Read retorna destinos mascarados e configuração de foto; verificação retorna versão.
+5. Componentes: quatro ações de solicitação, assinatura na mesma tela com voltar, recuperação de erro e timeout, OTP em seis posições com autofill, cooldown, câmera com prévia/refazer/confirmar, lista ampliada e visualização do PDF para impressão.
+6. Serviço de e-mail: `EmailService.sendCustomEmail`, com Resend já existente. WhatsApp continua no `InfobipService`.
+7. Template OTP: `buildZemdaEmailLayout` e `buildZemdaOtpBox`, este último compartilhado com o OTP de cadastro. Saudação e contexto da clínica, sem texto clínico.
+8. Template de solicitação: mesmo layout institucional, botão Revisar e assinar documento, rodapé institucional; não contém o conteúdo do termo.
+9. Destinatário: `ConsentService.issue` congela paciente.email no adulto ou guardian.email no responsável; `requestOtp` utiliza exclusivamente esse contato. Sem fallback para clínica ou profissional.
+10. Adulto/responsável: is_child ou idade inferior a 18 exige responsável; formulário preenche o responsável existente. E-mail corrigido de responsável cadastrado é salvo por paciente/tenant/CPF antes de concluir a emissão. E-mail adicionado de adulto é salvo no paciente sem reiniciar a seleção do termo.
+11. Filtro backend: `allowedModule` reutiliza `CapabilityService.computeUserCapabilities`; biblioteca, criação/edição, emissão, consulta e PDFs respeitam módulo canônico e termos general. Histórico novo usa módulo congelado; documentos anteriores usam a associação existente. Frontend recebe somente biblioteca autorizada e limita opções de módulo aos retornados.
+12. Foto: checkbox independente nas configurações; página pública recebe a decisão da solicitação, captura com aceite, prévia, refazer e confirmação. Imagem normalizada em armazenamento privado existente e PDF com REGISTRO FOTOGRÁFICO DA ASSINATURA. Pode assinar sem foto.
+13. OTP: hash e salt apagados ao validar, reutilização rejeitada, reenvio limpa validação anterior; logs adicionais OTP_REQUESTED/OTP_RESENT/OTP_SENT/OTP_INVALID/OTP_VALIDATED/OTP_EXPIRED/OTP_TOO_MANY_ATTEMPTS incluem destino mascarado e identificação da verificação.
+14. Testes locais: builds de backend e frontend, test-consents.cjs e consents-browser.cjs; regressões test-clinical-module-resolution.cjs e test-patient-data-rights.cjs. Provedores simulados, câmera virtual Chromium e eventos de toque/caneta pelo CDP; não houve envio real ou validação em câmera física. Não há script de lint configurado; TypeScript faz parte dos builds.
+15. Variáveis existentes: APP_URL, RESEND_API_KEY, EMAIL_FROM, EMAIL_REPLY_TO; WhatsApp opcional INFOBIP_API_KEY, INFOBIP_BASE_URL, INFOBIP_WHATSAPP_SENDER. Nenhuma variável nova. Sem commit, push ou deploy.

@@ -4,6 +4,10 @@
 .consent-primary:disabled,.consent-secondary:disabled { opacity:.5; cursor:default }
 .consent-field { width:100%; border:1px solid #cbd5e1; border-radius:10px; background:white; padding:10px 12px; font-size:14px; color:#0f172a }
 .consent-field:focus { outline:2px solid #0d9488; outline-offset:1px }
+.consent-otp { position:relative; display:grid; grid-template-columns:repeat(6,1fr); gap:6px; width:248px; max-width:100%; border-radius:8px }
+.consent-otp input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:text }
+.consent-otp span { pointer-events:none; border:1px solid #cbd5e1; background:white; border-radius:8px; padding:9px 0; text-align:center; font-size:22px; color:#0f172a }
+.consent-otp:focus-within { outline:2px solid #0d9488; outline-offset:3px }
 .consent-primary:focus-visible,.consent-secondary:focus-visible { outline:2px solid #0d9488; outline-offset:3px }
 .consent-public { min-height:100dvh; background:linear-gradient(135deg,#f0fdfa,#f8fafc); padding:24px 16px; color:#0f172a }
 .consent-public-card { max-width:800px; margin:auto; background:white; border:1px solid #e2e8f0; border-radius:20px; padding:clamp(20px,4vw,36px); box-shadow:0 4px 24px #0f766e08 }

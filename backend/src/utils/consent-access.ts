@@ -1,6 +1,18 @@
 import { Request } from 'express';
 import { db } from '../config/database';
 import { hasClinicalAccess } from '../controllers/clinical.controller';
+import { CapabilityService } from '../services/capability.service';
+
+/** Applies the same professional scope to legacy read/export entry points. */
+export function hasConsentDocumentAccess(req: Request, consentId: string): boolean {
+  const row=db.prepare('SELECT p.template_version_id,p.professional_snapshot_json,t.module FROM patient_consents p LEFT JOIN consent_templates t ON t.id=p.template_id WHERE p.id=? AND p.tenant_id=?').get(consentId,req.tenantId);
+  if(!row) return false;
+  if(!row.template_version_id) return true;
+  const snapshot=JSON.parse(row.professional_snapshot_json||'{}');
+  const module=snapshot.consentModule||row.module||'general';
+  if(snapshot.consentProfession && snapshot.consentProfession!==CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).professionId) return false;
+  return module==='general'||module===CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).commercialModule;
+}
 
 /** Consent evidence is patient-scoped, without the general chart's clinic-wide professional fallback. */
 export function hasConsentAccess(req: Request, patientId: string): boolean {

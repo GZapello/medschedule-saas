@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Resend } from 'resend';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database';
-import { buildZemdaEmailLayout } from './email-template.service';
+import { buildZemdaEmailLayout, buildZemdaOtpBox } from './email-template.service';
 
 export interface EmailVerificationRecord {
   id: string;
@@ -105,15 +105,7 @@ export class EmailService {
         ${leadText}
       </p>
 
-      <!-- OTP Display Box -->
-      <div style="background-color: #f0fdfa; border: 1.5px dashed #0d9488; border-radius: 14px; padding: 20px; text-align: center; margin: 0 0 24px;">
-        <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #0f766e; text-indent: 8px;">
-          ${formattedCode}
-        </div>
-        <div style="font-size: 12px; font-weight: 600; color: #0d9488; margin-top: 8px;">
-          Válido por 10 minutos
-        </div>
-      </div>
+      ${buildZemdaOtpBox(formattedCode)}
 
       ${existingAccountNotice}
     `;

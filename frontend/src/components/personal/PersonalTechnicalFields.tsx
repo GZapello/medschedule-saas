@@ -2,10 +2,10 @@ import {PersonalAssessmentIndicator} from './PersonalAssessmentIndicator';
 import React from 'react';
 export const foldLabels: Record<string,string> = {triceps:'Tríceps',subscapular:'Subescapular',biceps:'Bíceps',chest:'Peitoral',axillary:'Axilar média',suprailiac:'Suprailíaca',iliac_crest:'Crista ilíaca',supraspinale:'Supraespinale',abdominal:'Abdominal',thigh:'Coxa',calf:'Panturrilha'};
 export const AnthropometricSexField = ({value,onChange}: {value:string,onChange:(v:string)=>void}) => <div>
-  <label className="block text-xs font-semibold text-slate-700 mb-1">Sexo de referência para cálculos antropométricos</label>
+  <label className="block text-xs font-semibold text-slate-700 mb-1">Gênero</label>
   <select className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white" value={value} onChange={e=>onChange(e.target.value)}>
     <option value="">Não informado</option><option value="male">Homem</option><option value="female">Mulher</option><option value="not_informed">Prefere não informar</option>
-  </select><p className="text-[10px] text-slate-500 mt-1">Usado somente quando o protocolo possui fórmulas de referência diferentes por sexo.</p>
+  </select>
 </div>;
 export function PersonalTechnicalFields({value,onChange,tab,preview}: {value:any,onChange:(v:any)=>void,tab:string,preview:any}) {
   const change=(k:string,v:any)=>onChange({...value,[k]:v});

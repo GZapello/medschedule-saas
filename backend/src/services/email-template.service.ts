@@ -9,6 +9,15 @@ export interface ZemdaEmailTemplateOptions {
   footerNote?: string;
 }
 
+/** Shared OTP presentation for registration and document signatures. */
+export function buildZemdaOtpBox(displayCode: string): string {
+  if(!/^(\d{6}|\d{3} \d{3})$/.test(displayCode)) throw new Error('Invalid OTP display');
+  return `<div style="background-color: #f0fdfa; border: 1.5px dashed #0d9488; border-radius: 14px; padding: 20px; text-align: center; margin: 0 0 24px;">
+    <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 34px; font-weight: 900; letter-spacing: 8px; color: #0f766e; text-indent: 8px;">${displayCode}</div>
+    <div style="font-size: 12px; font-weight: 600; color: #0d9488; margin-top: 8px;">Válido por 10 minutos</div>
+  </div>`;
+}
+
 /**
  * Construtor universal de e-mails responsivos nos padrões visuais do Zemda.
  * Compatível com Gmail, Outlook Desktop/Web, Apple Mail e clientes mobile.
