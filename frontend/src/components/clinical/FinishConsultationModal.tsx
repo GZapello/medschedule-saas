@@ -2,6 +2,7 @@ import { useClinicalReview } from './useClinicalReview';
 import React, { useState } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   X,
   CheckCircle2,
@@ -19,6 +20,89 @@ import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { PrintableDocumentModal } from './PrintableDocumentModal';
 import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
 import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
+
+export type CanonicalProfessionCategory = 'doctor' | 'dentist' | 'psychologist' | 'other';
+
+export function resolveCanonicalProfessionCategory(
+  currentUser?: any,
+  canonicalProfessionId?: string | null,
+  canonicalProfessionName?: string | null
+): CanonicalProfessionCategory {
+  const pId = (canonicalProfessionId || currentUser?.canonicalProfessionId || currentUser?.professionId || '').toLowerCase();
+  const pName = (canonicalProfessionName || currentUser?.canonicalProfessionName || currentUser?.professionName || '').toLowerCase();
+  const pSlug = (currentUser?.professionSlug || '').toLowerCase();
+  const regType = (currentUser?.registrationType || '').toUpperCase();
+
+  const combined = `${pId} ${pName} ${pSlug}`.toLowerCase();
+
+  // 1. Cirurgião-Dentista / Odontologia (CRO)
+  if (
+    pId === 'prof-dentista' ||
+    pId === 'prof-cirurgiao-dentista' ||
+    pId === 'prof-odontologia' ||
+    pSlug === 'dentista' ||
+    pSlug === 'cirurgiao-dentista' ||
+    pSlug === 'odontologia' ||
+    regType === 'CRO' ||
+    combined.includes('dentis') ||
+    combined.includes('odonto') ||
+    combined.includes('cirurgião-dentista') ||
+    combined.includes('cirurgiao-dentista')
+  ) {
+    return 'dentist';
+  }
+
+  // 2. Psicólogo (CRP) - garantir que psicopedagogo não caia em psicologia
+  if (!combined.includes('psicopedag')) {
+    if (
+      pId === 'prof-psicologo' ||
+      pId === 'prof-psicologia' ||
+      pSlug === 'psicologo' ||
+      pSlug === 'psicologia' ||
+      regType === 'CRP' ||
+      combined.includes('psicólog') ||
+      combined.includes('psicolog') ||
+      combined.includes('neuropsic') ||
+      combined.includes('psicanal') ||
+      combined.includes('psicoterap')
+    ) {
+      return 'psychologist';
+    }
+  }
+
+  // 3. Médico (CRM) - não colidir com biomedicina
+  if (!combined.includes('biomedic') && !combined.includes('biomédic')) {
+    if (
+      pId === 'prof-medico' ||
+      pId === 'prof-medicina' ||
+      pSlug === 'medico' ||
+      pSlug === 'medicina' ||
+      regType === 'CRM' ||
+      combined.includes('médic') ||
+      combined.includes('medic') ||
+      combined.includes('cardiolog') ||
+      combined.includes('dermatolog') ||
+      combined.includes('psiquiatr') ||
+      combined.includes('neurolog') ||
+      combined.includes('pediatr') ||
+      combined.includes('geriatr') ||
+      combined.includes('endocrin') ||
+      combined.includes('ortoped') ||
+      combined.includes('reumatolog') ||
+      combined.includes('ginecolog') ||
+      combined.includes('obstetr') ||
+      combined.includes('oftalmolog') ||
+      combined.includes('otorrino') ||
+      combined.includes('urolog') ||
+      combined.includes('clinico geral') ||
+      combined.includes('clínico geral')
+    ) {
+      return 'doctor';
+    }
+  }
+
+  return 'other';
+}
 
 interface FinishConsultationModalProps {
   appointment: {
@@ -53,6 +137,67 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   onFinished
 }) => {
   const { showToast } = useToast();
+  const { currentUser, canonicalProfessionId, canonicalProfessionName, hasCapability } = useAuth();
+
+  const profCategory = resolveCanonicalProfessionCategory(
+    currentUser,
+    canonicalProfessionId,
+    canonicalProfessionName
+  );
+
+  const canEvolution = true;
+  const canDocuments = hasCapability('CORE_DOCUMENTS');
+  const canPrescriptions = hasCapability('CORE_PRESCRIPTIONS');
+  const canExamRequest = hasCapability('CORE_EXAM_REQUEST');
+  const canReturn = true;
+  const canReferral = hasCapability('CORE_REFERRALS');
+
+  const docLabels = {
+    doctor: {
+      checkbox: 'Atestado Médico',
+      sectionTitle: 'Atestado Médico',
+      summaryTitle: 'Atestado médico emitido'
+    },
+    dentist: {
+      checkbox: 'Atestado Odontológico',
+      sectionTitle: 'Atestado Odontológico',
+      summaryTitle: 'Atestado odontológico emitido'
+    },
+    psychologist: {
+      checkbox: 'Atestado / Documento Psicológico',
+      sectionTitle: 'Atestado / Documento Psicológico',
+      summaryTitle: 'Documento psicológico emitido'
+    },
+    other: {
+      checkbox: 'Relatório / Declaração',
+      sectionTitle: 'Relatório / Declaração',
+      summaryTitle: 'Relatório / Declaração emitido'
+    }
+  }[profCategory];
+
+  const prescLabels = {
+    doctor: {
+      checkbox: 'Receituário Médico',
+      sectionTitle: 'Receituário Médico',
+      summaryTitle: 'Receituário médico gerado'
+    },
+    dentist: {
+      checkbox: 'Receituário Odontológico',
+      sectionTitle: 'Receituário Odontológico',
+      summaryTitle: 'Receituário odontológico gerado'
+    },
+    psychologist: {
+      checkbox: 'Prescrição',
+      sectionTitle: 'Prescrição',
+      summaryTitle: 'Prescrição gerada'
+    },
+    other: {
+      checkbox: 'Prescrição',
+      sectionTitle: 'Prescrição',
+      summaryTitle: 'Prescrição gerada'
+    }
+  }[profCategory];
+
   const [receipt, setReceipt] = useState<any>(null);
   React.useEffect(() => {
     ApiClient.get<any>(`/v1/appointments/${appointment.id}/completion`).then(result => {
@@ -138,16 +283,16 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         if (parsed.returnAppt) setReturnAppt(parsed.returnAppt);
         if (parsed.referral) setReferral(parsed.referral);
         if (parsed.includeEvolution !== undefined) setIncludeEvolution(parsed.includeEvolution);
-        if (parsed.includeCertificate !== undefined) setIncludeCertificate(parsed.includeCertificate);
-        if (parsed.includePrescription !== undefined) setIncludePrescription(parsed.includePrescription);
-        if (parsed.includeExamRequest !== undefined) setIncludeExamRequest(parsed.includeExamRequest);
-        if (parsed.includeReturn !== undefined) setIncludeReturn(parsed.includeReturn);
-        if (parsed.includeReferral !== undefined) setIncludeReferral(parsed.includeReferral);
+        if (canDocuments && parsed.includeCertificate !== undefined) setIncludeCertificate(parsed.includeCertificate);
+        if (canPrescriptions && parsed.includePrescription !== undefined) setIncludePrescription(parsed.includePrescription);
+        if (canExamRequest && parsed.includeExamRequest !== undefined) setIncludeExamRequest(parsed.includeExamRequest);
+        if (canReturn && parsed.includeReturn !== undefined) setIncludeReturn(parsed.includeReturn);
+        if (canReferral && parsed.includeReferral !== undefined) setIncludeReferral(parsed.includeReferral);
       }
     } catch (e) {
       console.warn('Erro ao restaurar rascunho:', e);
     }
-  }, [appointment.id]);
+  }, [appointment.id, canDocuments, canPrescriptions, canExamRequest, canReturn, canReferral]);
 
   // 2. Autosave automático e silencioso a cada alteração
   React.useEffect(() => {
@@ -160,17 +305,17 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         returnAppt,
         referral,
         includeEvolution,
-        includeCertificate,
-        includePrescription,
-        includeExamRequest,
-        includeReturn,
-        includeReferral
+        includeCertificate: canDocuments ? includeCertificate : false,
+        includePrescription: canPrescriptions ? includePrescription : false,
+        includeExamRequest: canExamRequest ? includeExamRequest : false,
+        includeReturn: canReturn ? includeReturn : false,
+        includeReferral: canReferral ? includeReferral : false
       };
       localStorage.setItem(DRAFT_KEY, JSON.stringify(stateToSave));
     } catch (e) {
       // Ignora erro de quota de localStorage
     }
-  }, [evolution, certificate, prescription, examRequest, returnAppt, referral, includeEvolution, includeCertificate, includePrescription, includeExamRequest, includeReturn, includeReferral, DRAFT_KEY]);
+  }, [evolution, certificate, prescription, examRequest, returnAppt, referral, includeEvolution, includeCertificate, includePrescription, includeExamRequest, includeReturn, includeReferral, canDocuments, canPrescriptions, canExamRequest, canReturn, canReferral, DRAFT_KEY]);
 
   const review = useClinicalReview(appointment.patient_id + ':' + appointment.id);
   const handleFinish = async (e: React.FormEvent) => {
@@ -214,7 +359,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         }
       }
 
-      if (includeCertificate) {
+      if (canDocuments && includeCertificate) {
         payload.certificate = {
           patientId: appointment.patient_id,
           appointmentId: appointment.id,
@@ -223,7 +368,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         };
       }
 
-      if (includePrescription && prescription.content.trim()) {
+      if (canPrescriptions && includePrescription && prescription.content.trim()) {
         payload.prescription = {
           patientId: appointment.patient_id,
           appointmentId: appointment.id,
@@ -232,7 +377,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         };
       }
 
-      if (includeExamRequest && examRequest.examsList.trim()) {
+      if (canExamRequest && includeExamRequest && examRequest.examsList.trim()) {
         payload.examRequest = {
           patientId: appointment.patient_id,
           appointmentId: appointment.id,
@@ -241,7 +386,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         };
       }
 
-      if (includeReturn && returnAppt.date && returnAppt.time) {
+      if (canReturn && includeReturn && returnAppt.date && returnAppt.time) {
         payload.returnAppointment = {
           startTime: `${returnAppt.date} ${returnAppt.time}:00`,
           endTime: `${returnAppt.date} ${returnAppt.time.split(':')[0]}:45:00`,
@@ -249,7 +394,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         };
       }
 
-      if (includeReferral && referral.referralReason) {
+      if (canReferral && includeReferral && referral.referralReason) {
         payload.referral = referral;
       }
 
@@ -269,11 +414,11 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
       setCompletionSummary({
         hasEvolution: !!res?.generatedDocs?.recordId,
-        hasCertificate: !!res?.generatedDocs?.certificateId,
-        hasPrescription: !!res?.generatedDocs?.prescriptionId,
-        hasExamRequest: !!res?.generatedDocs?.examRequestId,
-        hasReturn: !!res?.generatedDocs?.returnAppointmentId,
-        hasReferral: includeReferral,
+        hasCertificate: canDocuments && !!res?.generatedDocs?.certificateId,
+        hasPrescription: canPrescriptions && !!res?.generatedDocs?.prescriptionId,
+        hasExamRequest: canExamRequest && !!res?.generatedDocs?.examRequestId,
+        hasReturn: canReturn && !!res?.generatedDocs?.returnAppointmentId,
+        hasReferral: canReferral && includeReferral,
         generatedDocs: res?.generatedDocs
       });
       showToast('Atendimento finalizado com sucesso!', 'success');
@@ -295,9 +440,12 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
       localStorage.removeItem(`zemda_quick_consult_${appointment.id}`);
       setReceipt(null);
       setCompletionSummary({
-        hasEvolution: !!receipt.generatedDocs?.recordId, hasCertificate: !!receipt.generatedDocs?.certificateId,
-        hasPrescription: !!receipt.generatedDocs?.prescriptionId, hasExamRequest: !!receipt.generatedDocs?.examRequestId,
-        hasReturn: !!receipt.generatedDocs?.returnAppointmentId, hasReferral: includeReferral,
+        hasEvolution: !!receipt.generatedDocs?.recordId,
+        hasCertificate: canDocuments && !!receipt.generatedDocs?.certificateId,
+        hasPrescription: canPrescriptions && !!receipt.generatedDocs?.prescriptionId,
+        hasExamRequest: canExamRequest && !!receipt.generatedDocs?.examRequestId,
+        hasReturn: canReturn && !!receipt.generatedDocs?.returnAppointmentId,
+        hasReferral: canReferral && includeReferral,
         generatedDocs: result.generatedDocs || receipt.generatedDocs
       });
       showToast('Atendimento finalizado e recebimento registrado.', 'success');
@@ -335,7 +483,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-emerald-700 font-medium">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Atestado médico emitido</span>
+                    <span>{docLabels.summaryTitle}</span>
                   </span>
                   {completionSummary.generatedDocs?.certificateId && (
                     <button
@@ -352,7 +500,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-emerald-700 font-medium">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Receituário gerado</span>
+                    <span>{prescLabels.summaryTitle}</span>
                   </span>
                   {completionSummary.generatedDocs?.prescriptionId && (
                     <button
@@ -496,82 +644,94 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
                 Selecione as ações complementares desta consulta:
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-                <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                  includeEvolution ? 'border-teal-500 bg-teal-50/40 text-teal-900 font-bold' : 'border-slate-200 text-slate-600'
-                }`}>
-                  <input
-                    type="checkbox"
-                    checked={includeEvolution}
-                    onChange={e => setIncludeEvolution(e.target.checked)}
-                    className="rounded text-teal-600"
-                  />
-                  <span>Evolução Clínica</span>
-                </label>
+                {canEvolution && (
+                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    includeEvolution ? 'border-teal-500 bg-teal-50/40 text-teal-900 font-bold' : 'border-slate-200 text-slate-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={includeEvolution}
+                      onChange={e => setIncludeEvolution(e.target.checked)}
+                      className="rounded text-teal-600"
+                    />
+                    <span>Evolução Clínica</span>
+                  </label>
+                )}
 
-                <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                  includeCertificate ? 'border-indigo-500 bg-indigo-50/40 text-indigo-900 font-bold' : 'border-slate-200 text-slate-600'
-                }`}>
-                  <input
-                    type="checkbox"
-                    checked={includeCertificate}
-                    onChange={e => setIncludeCertificate(e.target.checked)}
-                    className="rounded text-indigo-600"
-                  />
-                  <span>Atestado Médico</span>
-                </label>
+                {canDocuments && (
+                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    includeCertificate ? 'border-indigo-500 bg-indigo-50/40 text-indigo-900 font-bold' : 'border-slate-200 text-slate-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={includeCertificate}
+                      onChange={e => setIncludeCertificate(e.target.checked)}
+                      className="rounded text-indigo-600"
+                    />
+                    <span>{docLabels.checkbox}</span>
+                  </label>
+                )}
 
-                <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                  includePrescription ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900 font-bold' : 'border-slate-200 text-slate-600'
-                }`}>
-                  <input
-                    type="checkbox"
-                    checked={includePrescription}
-                    onChange={e => setIncludePrescription(e.target.checked)}
-                    className="rounded text-emerald-600"
-                  />
-                  <span>Receituário</span>
-                </label>
+                {canPrescriptions && (
+                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    includePrescription ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900 font-bold' : 'border-slate-200 text-slate-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={includePrescription}
+                      onChange={e => setIncludePrescription(e.target.checked)}
+                      className="rounded text-emerald-600"
+                    />
+                    <span>{prescLabels.checkbox}</span>
+                  </label>
+                )}
 
-                <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                  includeExamRequest ? 'border-blue-500 bg-blue-50/40 text-blue-900 font-bold' : 'border-slate-200 text-slate-600'
-                }`}>
-                  <input
-                    type="checkbox"
-                    checked={includeExamRequest}
-                    onChange={e => setIncludeExamRequest(e.target.checked)}
-                    className="rounded text-blue-600"
-                  />
-                  <span>Pedido de Exames</span>
-                </label>
+                {canExamRequest && (
+                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    includeExamRequest ? 'border-blue-500 bg-blue-50/40 text-blue-900 font-bold' : 'border-slate-200 text-slate-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={includeExamRequest}
+                      onChange={e => setIncludeExamRequest(e.target.checked)}
+                      className="rounded text-blue-600"
+                    />
+                    <span>Pedido de Exames</span>
+                  </label>
+                )}
 
-                <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                  includeReturn ? 'border-amber-500 bg-amber-50/40 text-amber-900 font-bold' : 'border-slate-200 text-slate-600'
-                }`}>
-                  <input
-                    type="checkbox"
-                    checked={includeReturn}
-                    onChange={e => setIncludeReturn(e.target.checked)}
-                    className="rounded text-amber-600"
-                  />
-                  <span>Agendar Retorno</span>
-                </label>
+                {canReturn && (
+                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    includeReturn ? 'border-amber-500 bg-amber-50/40 text-amber-900 font-bold' : 'border-slate-200 text-slate-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={includeReturn}
+                      onChange={e => setIncludeReturn(e.target.checked)}
+                      className="rounded text-amber-600"
+                    />
+                    <span>Agendar Retorno</span>
+                  </label>
+                )}
 
-                <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
-                  includeReferral ? 'border-purple-500 bg-purple-50/40 text-purple-900 font-bold' : 'border-slate-200 text-slate-600'
-                }`}>
-                  <input
-                    type="checkbox"
-                    checked={includeReferral}
-                    onChange={e => setIncludeReferral(e.target.checked)}
-                    className="rounded text-purple-600"
-                  />
-                  <span>Encaminhamento</span>
-                </label>
+                {canReferral && (
+                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    includeReferral ? 'border-purple-500 bg-purple-50/40 text-purple-900 font-bold' : 'border-slate-200 text-slate-600'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={includeReferral}
+                      onChange={e => setIncludeReferral(e.target.checked)}
+                      className="rounded text-purple-600"
+                    />
+                    <span>Encaminhamento</span>
+                  </label>
+                )}
               </div>
             </div>
 
             {/* SEÇÃO 1: EVOLUÇÃO */}
-            {includeEvolution && (
+            {canEvolution && includeEvolution && (
               <div className="bg-white p-5 rounded-2xl border border-teal-200 shadow-xs space-y-3 text-xs animate-in fade-in">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <FileText className="w-4 h-4 text-teal-600" /> Evolução no Prontuário
@@ -611,10 +771,10 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             )}
 
             {/* SEÇÃO 2: ATESTADO */}
-            {includeCertificate && (
+            {canDocuments && includeCertificate && (
               <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-xs space-y-3 text-xs animate-in fade-in">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-indigo-600" /> Atestado Médico
+                  <FileSpreadsheet className="w-4 h-4 text-indigo-600" /> {docLabels.sectionTitle}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
@@ -654,11 +814,11 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             )}
 
             {/* SEÇÃO 3: RECEITUÁRIO */}
-            {includePrescription && (
+            {canPrescriptions && includePrescription && (
               <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-xs space-y-3 text-xs animate-in fade-in">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                    <Pill className="w-4 h-4 text-emerald-600" /> Receituário Médico
+                    <Pill className="w-4 h-4 text-emerald-600" /> {prescLabels.sectionTitle}
                   </h3>
                   <select
                     value={prescription.prescriptionType}
@@ -683,7 +843,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             )}
 
             {/* SEÇÃO 4: PEDIDO DE EXAMES */}
-            {includeExamRequest && (
+            {canExamRequest && includeExamRequest && (
               <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-xs space-y-3 text-xs animate-in fade-in">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <Clock className="w-4 h-4 text-blue-600" /> Solicitação de Exames
@@ -724,7 +884,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             )}
 
             {/* SEÇÃO 5: RETORNO */}
-            {includeReturn && (
+            {canReturn && includeReturn && (
               <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-xs space-y-3 text-xs animate-in fade-in">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-amber-600" /> Consulta de Retorno
@@ -753,7 +913,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
             )}
 
             {/* SEÇÃO 6: ENCAMINHAMENTO */}
-            {includeReferral && (
+            {canReferral && includeReferral && (
               <div className="bg-white p-5 rounded-2xl border border-purple-200 shadow-xs space-y-3 text-xs animate-in fade-in">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <Share2 className="w-4 h-4 text-purple-600" /> Encaminhamento
