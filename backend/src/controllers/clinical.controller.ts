@@ -876,7 +876,7 @@ export class ClinicalController {
         return;
       }
 
-      const { patientId, moduleType, professionalId: providedProfId, serviceId: providedServiceId } = req.body;
+      const { patientId, moduleType, professionalId: providedProfId, serviceId: providedServiceId, walkIn } = req.body;
       if (!patientId) {
         res.status(400).json({ error: 'patientId é obrigatório para iniciar atendimento' });
         return;
@@ -890,6 +890,14 @@ export class ClinicalController {
 
       // Identifica o profissional autenticado ou selecionado
       let profId: string | null = providedProfId || null;
+      if (walkIn === true) {
+        const ownProfessional = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').get(req.user?.userId, tenantId) as any;
+        if (!ownProfessional) {
+          res.status(400).json({ error: 'Seu usuário precisa estar vinculado a um profissional ativo para atender sem agendamento.' });
+          return;
+        }
+        profId = ownProfessional.id;
+      }
       if (!profId && req.user?.role === 'professional') {
         const prof = db.prepare('SELECT id, name FROM professionals WHERE user_id = ? AND tenant_id = ? AND active = 1').get(req.user.userId, tenantId) as any;
         if (prof) {
@@ -927,8 +935,10 @@ export class ClinicalController {
         LEFT JOIN services s ON s.id = a.service_id
         LEFT JOIN patients pat ON pat.id = a.patient_id
         WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status = 'in_progress'
+          AND a.professional_id = ?
+          AND (a.clinical_module = ? OR a.clinical_module IS NULL OR a.clinical_module = 'general')
         ORDER BY a.start_time DESC LIMIT 1
-      `).get(tenantId, patientId) as any;
+      `).get(tenantId, patientId, profId, effectiveModule || 'general') as any;
 
       if (existingInProgress) {
         if (effectiveModule && (!existingInProgress.clinical_module || existingInProgress.clinical_module === 'general')) {
@@ -952,9 +962,11 @@ export class ClinicalController {
         LEFT JOIN services s ON s.id = a.service_id
         LEFT JOIN patients pat ON pat.id = a.patient_id
         WHERE a.tenant_id = ? AND a.patient_id = ? AND a.status IN ('scheduled', 'confirmed')
+          AND a.professional_id = ?
+          AND (a.clinical_module = ? OR a.clinical_module IS NULL OR a.clinical_module = 'general')
           AND date(a.start_time) = ?
         ORDER BY a.start_time ASC LIMIT 1
-      `).get(tenantId, patientId, today) as any;
+      `).get(tenantId, patientId, profId, effectiveModule || 'general', today) as any;
 
       if (todayAppt) {
         const targetModule = (todayAppt.clinical_module && isPrimaryClinicalModule(todayAppt.clinical_module))
@@ -984,7 +996,11 @@ export class ClinicalController {
       let serviceId = providedServiceId || null;
       if (!serviceId) {
         const firstService = db.prepare('SELECT id FROM services WHERE tenant_id = ? AND active = 1 LIMIT 1').get(tenantId) as any;
-        serviceId = firstService?.id || 'serv-default';
+        serviceId = firstService?.id;
+      }
+      if (!serviceId || !db.prepare('SELECT id FROM services WHERE id = ? AND tenant_id = ? AND active = 1').get(serviceId, tenantId)) {
+        res.status(400).json({ error: 'Cadastre um serviço ativo na clínica antes de iniciar o atendimento.' });
+        return;
       }
 
       const now = new Date();

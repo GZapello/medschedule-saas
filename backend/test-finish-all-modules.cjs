@@ -51,4 +51,17 @@ let server;
     assert.equal(reopened.data.alreadyCompleted,true,key+' reopen');
     console.log('PASS',moduleType,'record persistence, completed, direct-status guard, duplicate and reopen');
   }
+  const body={patientId:'patient',moduleType:'ZemdaEstetic',walkIn:true};
+  const started=await call('clinical/consultations/start',body);
+  assert.equal(started.status,201,JSON.stringify(started));
+  assert.equal(started.data.appointment.professional_id,'professional');
+  const resumed=await call('clinical/consultations/start',body);
+  assert.equal(resumed.data.appointmentId,started.data.appointmentId);
+  assert.equal(resumed.data.created,false);
+  const finished=await call(`appointments/${started.data.appointmentId}/finish`,{evolution:{moduleType:'ZemdaEstetic',clinicalEvolution:'Sem horário marcado',moduleData:{assessmentForm:{observations:'Dados preservados'}}}});
+  assert.equal(finished.status,200,JSON.stringify(finished));
+  const saved=db.prepare('SELECT * FROM records WHERE appointment_id=?').get(started.data.appointmentId);
+  assert.equal(saved.clinical_evolution,'Sem horário marcado');
+  assert.ok(saved.module_data_json.includes('Dados preservados'));
+  console.log('PASS walk-in creation, authenticated professional, reuse and clinical persistence');
 })().catch(error => {console.error(error); process.exitCode=1;}).finally(()=>server?.close());

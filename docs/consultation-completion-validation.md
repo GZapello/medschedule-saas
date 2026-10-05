@@ -2,6 +2,14 @@
 
 Branch: `codex/finalizar-atendimento`.
 
+## Atualização: atendimento sem horário marcado no Estetic
+
+A pedido do usuário, a regra anterior de ocultar a finalização na sidebar foi alterada **para o Estetic**. Ao selecionar um paciente, Finalizar Atendimento aparece no cabeçalho e após Histórico Completo. O clique chama a rota existente de início de consulta e depois abre o modal universal com o ID retornado.
+
+O início identifica o profissional ativo vinculado ao usuário, retoma um atendimento compatível desse profissional/paciente ou cria um agendamento real. Não usa outro profissional como fallback nesse fluxo. Um serviço ativo cadastrado é obrigatório; não se usa ID fictício. A criação do contexto não troca a chave do formulário e não apaga campos preenchidos. Cancelar o modal mantém o atendimento em andamento para retomada.
+
+Validação adicional: criação e reutilização pela API real, profissional vinculado ao usuário, persistência da evolução e dos dados estruturados; navegador: sidebar → paciente → Finalizar Atendimento → revisão → conclusão. Builds frontend e backend aprovados. Os resultados abaixo sobre ausência do botão na sidebar representam a regra anterior; os demais módulos continuam com essa regra.
+
 ## Correções
 
 - Personal recebe o ID real do agendamento e o callback do orquestrador. O cabeçalho abre o modal universal; o aluno permanece fixado ao atendimento.

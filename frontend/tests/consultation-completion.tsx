@@ -50,6 +50,10 @@ ApiClient.get=async (url:string):Promise<any>=>{
 };
 ApiClient.post=async(url:string,body:any):Promise<any>=>{
   state.calls.push({method:'POST',url,body});
+  if(url==='/v1/clinical/consultations/start') {
+    appointment.status='in_progress';
+    return {appointmentId:appointment.id,appointment:{...appointment},created:true};
+  }
   if(url.endsWith('/finish')||url.endsWith('/finish-consultation')){
     if(state.fail)throw new Error('Falha simulada; dados preservados.');
     if(appointment.status==='completed')return {alreadyCompleted:true};

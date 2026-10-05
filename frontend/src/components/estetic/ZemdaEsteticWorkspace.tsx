@@ -246,14 +246,29 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
   });
   useEffect(() => { setFinishAppointment(null); }, [selectedPatientId, initialAppointmentId]);
   const [appointmentCompleted, setAppointmentCompleted] = useState(false);
-  useEffect(() => { setAppointmentCompleted(false); }, [initialAppointmentId]);
+  const openingFinish = useRef(false);
+  const directAppointmentId = useRef<string>();
+  useEffect(() => { setAppointmentCompleted(false); directAppointmentId.current = undefined; }, [initialAppointmentId, selectedPatientId]);
   const requestFinish = async () => {
-    if (!initialAppointmentId || appointmentCompleted) return;
+    if (!selectedPatientId || appointmentCompleted || openingFinish.current) return;
+    openingFinish.current = true;
     try {
-      const { appointment } = await ApiClient.get<any>(`/v1/appointments/${initialAppointmentId}`);
+      let appointmentId = initialAppointmentId || directAppointmentId.current;
+      if (!appointmentId) {
+        const started = await ApiClient.post<any>('/v1/clinical/consultations/start', {
+          patientId: selectedPatientId, moduleType: 'ZemdaEstetic', walkIn: true
+        });
+        appointmentId = started.appointmentId;
+        if (!isCurrentClinicalContext()) return;
+        directAppointmentId.current = appointmentId;
+        window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+      }
+      const { appointment } = await ApiClient.get<any>(`/v1/appointments/${appointmentId}`);
+      if (!isCurrentClinicalContext()) return;
       if (appointment.status === 'completed') { setAppointmentCompleted(true); showToast('Este atendimento já foi finalizado.', 'info'); return; }
       if (isCurrentClinicalContext() && appointment.patient_id === selectedPatientId) setFinishAppointment(appointment);
     } catch (error: any) { showToast(error.message || 'Erro ao abrir finalização.', 'error'); }
+    finally { openingFinish.current = false; }
   };
 
   // Carrega configurações do ZemdaEstetic
@@ -669,7 +684,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       >
         <div className="flex items-center gap-2 flex-wrap">
           {selectedPatientId && <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />}
-          {initialAppointmentId && !appointmentCompleted && (
+          {selectedPatientId && !appointmentCompleted && (
             <button
               type="button"
               data-tour="clinical-finish"
@@ -836,7 +851,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
                 { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
                 { id: 'history', label: 'Histórico Completo', icon: RefreshCw },
-                ...(initialAppointmentId && !appointmentCompleted
+                ...(selectedPatientId && !appointmentCompleted
                   ? [{ id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }]
                   : [])
               ].map(tab => {

@@ -13,8 +13,10 @@ let browser;
  const finish=()=>page.getByRole('button',{name:/finalizar atendimento/i}).first();
  for(const module of process.env.FLOWS_ONLY?[]:['ZemdaMed','ZemdaOdonto','ZemdaNutri','ZemdaTO','ZemdaFono','ZemdaPsico','ZemdaPP','ZemdaFisio','ZemdaEstetic','ZemdaPersonal','general']){
   await open(`module=${module}`);assert.ok(await finish().isVisible(),module+' active');
-  await open(`module=${module}&sidebar`);assert.equal(await page.getByRole('button',{name:/finalizar atendimento|concluir atendimento/i}).count(),0,module+' sidebar');
-  console.log('PASS',module,'active button without callback; no sidebar finish');
+  await open(`module=${module}&sidebar`);
+  if(module==='ZemdaEstetic') assert.ok(await page.locator('[data-tour="tab-finish"]').count());
+  else assert.equal(await page.getByRole('button',{name:/finalizar atendimento|concluir atendimento/i}).count(),0,module+' sidebar');
+  console.log('PASS',module,'active button and sidebar rule');
  }
  for(const module of ['ZemdaEstetic','ZemdaPersonal']) for(const source of ['dashboard','agenda']) {
   await open(`module=${module}&source=${source}`);
@@ -39,6 +41,19 @@ let browser;
   assert.deepEqual(errors,[]);
   console.log('PASS',module,source,'finish, refresh event, close, single POST');
  }
+ await open('module=ZemdaEstetic&sidebar&callback');
+ await page.locator('[data-tour="tab-finish"]').click();
+ await page.getByPlaceholder('Descreva a evolução deste atendimento, exame físico, hipóteses e orientações...').fill('Atendimento sem horário marcado');
+ await page.getByRole('button',{name:'Concluir Atendimento',exact:true}).click();
+ await page.getByRole('button',{name:'Finalizar atendimento',exact:true}).last().click();
+ await page.getByText('Atendimento Finalizado com Sucesso!',{exact:true}).waitFor();
+ const walkInCalls=await page.evaluate(()=>window.__completion.calls);
+ assert.equal(walkInCalls.filter(c=>c.url==='/v1/clinical/consultations/start').length,1);
+ assert.equal(walkInCalls.find(c=>c.url==='/v1/clinical/consultations/start').body.walkIn,true);
+ assert.equal(walkInCalls.find(c=>c.method==='POST'&&c.url.endsWith('/finish')).body.evolution.clinicalEvolution,'Atendimento sem horário marcado');
+ await page.getByRole('button',{name:'Fechar',exact:true}).click();
+ assert.equal(await page.locator('[data-tour="tab-finish"]').count(),0);
+ console.log('PASS Estetic sidebar walk-in creates real appointment context and completes');
  await open('module=ZemdaPersonal&callback');
  await finish().click();
  const evolution=page.getByPlaceholder('Descreva a evolução deste atendimento, exame físico, hipóteses e orientações...');
