@@ -467,6 +467,11 @@ export class PsychopedagogyController {
         return;
       }
 
+      if (appointmentId) {
+        const appointment = db.prepare('SELECT status FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId) as any;
+        if (!appointment) { res.status(400).json({ error: 'Agendamento não pertence ao paciente.' }); return; }
+        if (appointment.status === 'completed') { res.status(409).json({ error: 'Este atendimento já foi finalizado.' }); return; }
+      }
       let resolvedProfessionalId: string | null = null;
       let signerName = req.user?.name || 'Psicopedagogo(a) Responsável';
       let signerReg = 'CBO 2394-25';

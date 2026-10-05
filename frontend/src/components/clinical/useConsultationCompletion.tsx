@@ -1,5 +1,5 @@
 import { useClinicalReview } from './useClinicalReview';
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
@@ -8,6 +8,9 @@ import { CheckCircle2, FileText, Printer, X, Eye } from 'lucide-react';
 
 export function useConsultationCompletion(onFinished?: () => void, contextKey?: string) {
   const review = useClinicalReview(contextKey);
+  const inFlight = useRef(false);
+  const completed = useRef(false);
+  useEffect(() => { completed.current = false; }, [contextKey]);
   const [receipt, setReceipt] = useState<any>(null);
   const [lastPayload, setLastPayload] = useState<any>(null);
 
@@ -17,40 +20,27 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
   const [showRecordsModal, setShowRecordsModal] = useState<boolean>(false);
 
   const save = async (endpoint: string, payload: any) => {
-    if (!await review.confirm(payload)) return false;
-    setLastPayload(payload);
-    let appointmentId = payload.appointmentId;
+    if (!payload.appointmentId || inFlight.current || completed.current) return false;
+    inFlight.current = true;
+    try {
+      if (!await review.confirm(payload)) return false;
+      setLastPayload(payload);
+      const appointmentId = payload.appointmentId;
 
-    if (!appointmentId) {
-      try {
-        const startRes = await ApiClient.post<any>('/v1/clinical/consultations/start', {
-          patientId: payload.patientId,
-          professionalId: payload.professionalId,
-          serviceName: payload.serviceName || 'Atendimento Especializado',
-          moduleType: payload.moduleType || 'general'
-        });
-        appointmentId = startRes.appointmentId;
-      } catch (e: any) {
-        // Fallback: busca agendamento em andamento existente
-        const appointments = await ApiClient.get<any[]>('/v1/appointments');
-        const active = appointments.filter(a => a.patient_id === payload.patientId && a.status === 'in_progress');
-        if (active.length > 0) {
-          appointmentId = active[0].id;
-        } else {
-          throw new Error(e.message || 'Não foi possível vincular o atendimento clínico.');
-        }
+      const result = await ApiClient.post<any>(endpoint, { ...payload, appointmentId });
+      if (result.alreadyCompleted) {
+        throw new Error('Este atendimento já foi finalizado. Abra o prontuário para consultar o histórico.');
       }
+      completed.current = true;
+      setReceipt({ ...result, appointmentId });
+      setShowPostConsultationModal(true);
+      window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: 'completed' } }));
+      window.dispatchEvent(new Event('refresh-appointments'));
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+      return true;
+    } finally {
+      inFlight.current = false;
     }
-
-    const result = await ApiClient.post<any>(endpoint, { ...payload, appointmentId });
-    if (result.alreadyCompleted) {
-      throw new Error('Este atendimento já foi finalizado. Abra o prontuário para consultar o histórico.');
-    }
-    setReceipt({ ...result, appointmentId });
-    setShowPostConsultationModal(true);
-    window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: 'completed' } }));
-    window.dispatchEvent(new Event('refresh-appointments'));
-    return true;
   };
 
   const handleFinishAll = () => {

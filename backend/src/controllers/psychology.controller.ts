@@ -1118,6 +1118,12 @@ export class PsychologyController {
         return;
       }
 
+      if (appointmentId) {
+        const appointment = db.prepare('SELECT status FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId) as any;
+        if (!appointment) { res.status(400).json({ error: 'Agendamento não pertence ao paciente.' }); return; }
+        if (appointment.status === 'completed') { res.status(409).json({ error: 'Este atendimento já foi finalizado.' }); return; }
+      }
+
       let resolvedProfId: string | null = null;
       let signerName = req.user?.name || 'Psicólogo(a) Responsável';
       let signerReg = 'CRP Não informado';

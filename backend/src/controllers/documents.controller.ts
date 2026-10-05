@@ -14,6 +14,7 @@ import { hasPsychopedagogyAccess } from './psychopedagogy.controller';
 import { hasPsychologyAccess } from './psychology.controller';
 import { isMedicalProfessionalOrClinicManager } from './medical.controller';
 import { isUserPersonalTrainer } from './personal.controller';
+import { getEsteticAccess } from './estetic.controller';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 
 export class DocumentsController {
@@ -566,6 +567,7 @@ export class DocumentsController {
       }
 
       const moduleAccess: Record<string, (request: Request) => boolean> = {
+        ZemdaEstetic: (request: Request) => getEsteticAccess(request).allowed,
         ZemdaNutri: isNutritionistOrClinicManager,
         ZemdaTO: isOccupationalTherapistOrClinicManager,
         ZemdaFono: isSpeechTherapistOrClinicManager,

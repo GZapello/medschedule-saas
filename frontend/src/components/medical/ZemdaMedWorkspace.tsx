@@ -866,6 +866,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   // Finalizar Consulta Médica (Registrando no Prontuário Geral Selado)
   const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
   const handleFinishConsultation = async () => {
+    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para registrar o atendimento.', 'info');
       return;
@@ -1051,6 +1052,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             onViewPreviousRecords={() => setActiveTab('history')}
             onFinishConsultation={() => setActiveTab('conduct')}
             finishLabel="Finalizar Atendimento"
+            showFinish={!!initialAppointmentId}
             isSubmitting={isFinishing}
             toolsVariant="teal"
           />
@@ -1895,7 +1897,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                     </p>
                   </div>
 
-                  <button
+                  {initialAppointmentId && (<button
                     type="button"
                     onClick={handleFinishConsultation}
                     disabled={isFinishing || !selectedPatientId}
@@ -1903,7 +1905,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                   >
                     <CheckCircle2 className="w-5 h-5 stroke-[2.5]" />
                     <span>{isFinishing ? 'Finalizando e Selando...' : 'Finalizar Consulta e Registrar no Prontuário'}</span>
-                  </button>
+                  </button>)}
                 </div>
               </div>
             )}

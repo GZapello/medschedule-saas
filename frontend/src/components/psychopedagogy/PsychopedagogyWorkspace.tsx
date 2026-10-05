@@ -728,6 +728,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
   // 9. Finalizar Atendimento Oficial (Grava evolução, sela e abre opções pós-consulta)
   const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
   const handleFinishConsultation = async () => {
+    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um aprendente para finalizar.', 'info');
       return;
@@ -853,6 +854,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
             onFinishConsultation={() => setActiveTab('finish')}
             finishLabel="Finalizar Atendimento"
+            showFinish={!!initialAppointmentId}
             isSubmitting={saving}
             tools={[
               {
@@ -890,7 +892,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
               { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
               { id: 'family_school', label: '6. Família & Escola', icon: School },
               { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
-              { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
+              ...(initialAppointmentId ? [{ id: 'finish', label: '8. Finalização', icon: CheckCircle2 }] : [])
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -2569,7 +2571,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
                 {/* Botão de Finalização Principal */}
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
-                  <button
+                  {initialAppointmentId && (<button
                     type="button"
                     onClick={handleFinishConsultation}
                     disabled={saving}
@@ -2577,7 +2579,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
                   >
                     <CheckCircle2 className="w-5 h-5" />
                     <span>{saving ? 'Finalizando e Selando...' : 'Finalizar Atendimento Psicopedagógico'}</span>
-                  </button>
+                  </button>)}
                 </div>
               </div>
             )}

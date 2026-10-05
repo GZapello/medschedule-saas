@@ -1,3 +1,4 @@
+import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AnthropometricSexField } from './PersonalTechnicalFields';
 import React, { useState, useEffect } from 'react';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
@@ -32,16 +33,35 @@ import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
 
 interface ZemdaPersonalViewProps {
   initialStudentId?: string | null;
+  initialAppointmentId?: string;
+  onFinishConsultation?: () => void;
   onSelectStudent?: (studentId: string | null) => void;
   lockStudentContext?: boolean;
 }
 
 export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   initialStudentId,
+  initialAppointmentId,
+  onFinishConsultation,
   onSelectStudent,
   lockStudentContext = false
 }) => {
   const { showToast } = useToast();
+  const [finishAppointment, setFinishAppointment] = useState<any>(null);
+  const [openingFinish, setOpeningFinish] = useState(false);
+  const [appointmentCompleted, setAppointmentCompleted] = useState(false);
+  useEffect(() => { setFinishAppointment(null); setAppointmentCompleted(false); }, [initialAppointmentId, initialStudentId]);
+  const requestFinish = async () => {
+    if (!initialAppointmentId || openingFinish || appointmentCompleted) return;
+    setOpeningFinish(true);
+    try {
+      const { appointment } = await ApiClient.get<any>('/v1/appointments/' + initialAppointmentId);
+      if (appointment.patient_id !== initialStudentId) throw new Error('O agendamento pertence a outro aluno.');
+      if (appointment.status === 'completed') { setAppointmentCompleted(true); showToast('Este atendimento já foi finalizado.', 'info'); return; }
+      setFinishAppointment(appointment);
+    } catch (error: any) { showToast(error.message || 'Não foi possível abrir a finalização.', 'error'); }
+    finally { setOpeningFinish(false); }
+  };
 
   // Abas principais
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'students' | 'exercises' | 'templates' | 'calendar'>('dashboard');
@@ -59,7 +79,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   }, [initialStudentId]);
 
   const handleSelectStudent = (id: string | null) => {
-    if (lockStudentContext && id !== initialStudentId) {
+    if ((lockStudentContext || initialAppointmentId) && id !== initialStudentId) {
       showToast('O contexto está fixado no aluno deste atendimento.', 'info');
       return;
     }
@@ -260,6 +280,11 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {/* CABEÇALHO DO MÓDULO ZEMDAPERSONAL */}
+      {finishAppointment && <FinishConsultationModal appointment={finishAppointment}
+        clinicalData={{ moduleType: 'ZemdaPersonal', moduleData: { studentId: initialStudentId } }}
+        onClose={() => setFinishAppointment(null)}
+        onCompleted={() => { setAppointmentCompleted(true); }}
+        onFinished={() => { setFinishAppointment(null); onFinishConsultation?.(); }} />}
       <ProfessionalModuleHeader
         icon={Dumbbell}
         iconGradient="from-emerald-600 to-teal-700"
@@ -269,6 +294,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
         description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
       >
+      {initialAppointmentId && !appointmentCompleted && <button type="button" data-tour="clinical-finish" disabled={openingFinish} onClick={requestFinish} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"><CheckCircle2 className="w-4 h-4" />Finalizar Atendimento</button>}
         {/* Barra de Busca Rápida Global */}
         <div className="relative flex-1 min-w-[220px] max-w-xs md:max-w-sm">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />

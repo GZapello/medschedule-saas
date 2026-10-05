@@ -469,6 +469,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
 
   // Finalizar Atendimento de TO de Forma Atômica
   const handleFinishConsultation = async () => {
+    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para finalizar o atendimento', 'info');
       return;
@@ -634,6 +635,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
             onFinishConsultation={() => setActiveTab('finish')}
             finishLabel="Finalizar Atendimento"
+            showFinish={!!initialAppointmentId}
             isSubmitting={saving}
             tools={toQuickTools}
             toolsVariant="teal"
@@ -657,7 +659,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
               { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
               { id: 'treatment_plans', label: 'Plano Singular', icon: Layers },
               { id: 'assistive_tech', label: 'Tecnologia Assistiva', icon: Wrench },
-              { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
+              ...(initialAppointmentId ? [{ id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }] : [])
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1277,7 +1279,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                     <span>Gerar Orientações Domiciliares (PDF)</span>
                   </button>
 
-                  <button
+                  {initialAppointmentId && (<button
                     type="button"
                     disabled={saving}
                     onClick={handleFinishConsultation}
@@ -1285,7 +1287,7 @@ export const OccupationalTherapyWorkspace: React.FC<OccupationalTherapyWorkspace
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>{saving ? 'Finalizando...' : 'Finalizar Atendimento e Gravar Prontuário'}</span>
-                  </button>
+                  </button>)}
                 </div>
               </div>
             )}

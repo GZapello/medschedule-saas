@@ -1,0 +1,74 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http=require('node:http');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const esbuild=require('esbuild'),out=fs.mkdtempSync(path.join(os.tmpdir(),'zemda-completion-ui-'));
+esbuild.buildSync({entryPoints:[path.join(__dirname,'consultation-completion.tsx')],bundle:true,format:'iife',platform:'browser',outfile:path.join(out,'test.js'),define:{'import.meta.env':'{}'},jsx:'automatic'});
+const assets=path.resolve(__dirname,'../dist/assets'),css=fs.readdirSync(assets).find(f=>/^index-.*\.css$/.test(f));
+const html=`<!doctype html><html><head><meta charset="utf-8"><style>${fs.readFileSync(path.join(assets,css),'utf8')}</style></head><body><div id="root"></div><script>${fs.readFileSync(path.join(out,'test.js'),'utf8')}</script></body></html>`;
+const server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end(html)});
+let browser;
+(async()=>{
+ await new Promise(r=>server.listen(0,'127.0.0.1',r)); browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});
+ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[]; page.on('pageerror',e=>errors.push(e.message));
+ const open=async(query)=>{errors.length=0;await page.goto(`http://127.0.0.1:${server.address().port}/?${query}`);await page.waitForTimeout(600);assert.deepEqual(errors,[],query)};
+ const finish=()=>page.getByRole('button',{name:/finalizar atendimento/i}).first();
+ for(const module of process.env.FLOWS_ONLY?[]:['ZemdaMed','ZemdaOdonto','ZemdaNutri','ZemdaTO','ZemdaFono','ZemdaPsico','ZemdaPP','ZemdaFisio','ZemdaEstetic','ZemdaPersonal','general']){
+  await open(`module=${module}`);assert.ok(await finish().isVisible(),module+' active');
+  await open(`module=${module}&sidebar`);assert.equal(await page.getByRole('button',{name:/finalizar atendimento|concluir atendimento/i}).count(),0,module+' sidebar');
+  console.log('PASS',module,'active button without callback; no sidebar finish');
+ }
+ for(const module of ['ZemdaEstetic','ZemdaPersonal']) for(const source of ['dashboard','agenda']) {
+  await open(`module=${module}&source=${source}`);
+  if(source==='dashboard') await page.getByRole('button',{name:'Atender',exact:true}).first().click();
+  else {await page.getByText('Paciente teste',{exact:true}).first().click();await page.getByRole('button',{name:/^Iniciar$/}).click();}
+  await page.getByRole('button',{name:'Abrir '+module,exact:true}).first().click();
+  await finish().click();
+  const refreshCount=await page.evaluate(source=>window.__completion.calls.filter(c=>c.method==='GET'&&(source==='dashboard'?c.url.startsWith('/v1/dashboard/metrics'):c.url==='/v1/appointments')).length,source);
+  await page.getByRole('button',{name:'Concluir Atendimento',exact:true}).click();
+  await page.getByRole('button',{name:'Finalizar atendimento',exact:true}).last().click();
+  await page.getByText('Atendimento Finalizado com Sucesso!',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.__completion.appointment.status),'completed');
+  assert.ok(await page.evaluate(()=>window.__completion.events)>0);
+  await page.getByRole('button',{name:'Fechar',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Concluir Atendimento',exact:true}).count(),0);
+  assert.equal(await page.evaluate(()=>window.__completion.calls.filter(c=>c.method==='POST'&&c.url.endsWith('/finish')).length),1);
+  assert.ok(await page.evaluate(source=>window.__completion.calls.filter(c=>c.method==='GET'&&(source==='dashboard'?c.url.startsWith('/v1/dashboard/metrics'):c.url==='/v1/appointments')).length,source)>refreshCount);
+  assert.deepEqual(errors,[]);
+  console.log('PASS',module,source,'finish, refresh event, close, single POST');
+ }
+ await open('module=ZemdaPersonal&callback');
+ await finish().click();
+ const evolution=page.getByPlaceholder('Descreva a evolução deste atendimento, exame físico, hipóteses e orientações...');
+ await evolution.fill('Evolução preservada após falha');
+ await page.evaluate(()=>window.__completion.fail=true);
+ await page.getByRole('button',{name:'Concluir Atendimento',exact:true}).click();
+ await page.getByRole('button',{name:'Finalizar atendimento',exact:true}).last().click();
+ await page.getByText('Falha simulada; dados preservados.',{exact:true}).waitFor();
+ assert.equal(await evolution.inputValue(),'Evolução preservada após falha');
+ assert.ok((await page.evaluate(()=>localStorage.getItem('zemda_draft_appt_appointment'))).includes('Evolução preservada'));
+ await page.evaluate(()=>window.__completion.fail=false);
+ await page.getByRole('button',{name:'Concluir Atendimento',exact:true}).click();
+ await page.getByRole('button',{name:'Voltar e editar',exact:true}).click();
+ assert.equal(await evolution.inputValue(),'Evolução preservada após falha');
+ await page.getByRole('button',{name:'Concluir Atendimento',exact:true}).click();
+ await page.getByRole('button',{name:'Finalizar atendimento',exact:true}).last().click();
+ await page.getByText('Atendimento Finalizado com Sucesso!',{exact:true}).waitFor();
+ assert.equal(await page.evaluate(()=>localStorage.getItem('zemda_draft_appt_appointment')),null);
+ await page.getByRole('button',{name:'Fechar',exact:true}).click();
+ assert.equal(await finish().count(),0);
+ assert.equal(await page.evaluate(()=>window.__completion.finished),1);
+ console.log('PASS failure and cancelled review retain clinical data/draft; success clears draft and calls callback');
+ await open('module=general&callback');
+ await page.getByPlaceholder('Descreva detalhadamente o estado atual do paciente, intervenções executadas, resposta ao tratamento e observações clínicas relevantes...').fill('Evolução geral preservada');
+ await finish().click();
+ await page.getByRole('button',{name:'Concluir Atendimento',exact:true}).click();
+ await page.getByRole('button',{name:'Finalizar atendimento',exact:true}).last().click();
+ await page.getByText('Atendimento Finalizado com Sucesso!',{exact:true}).waitFor();
+ const posts=await page.evaluate(()=>window.__completion.calls.filter(c=>c.method==='POST'&&c.url.endsWith('/finish')));
+ assert.equal(posts.length,1); assert.equal(posts[0].body.evolution.moduleData.clinicalEvolution,'Evolução geral preservada');
+ assert.equal(await page.evaluate(()=>window.__completion.calls.filter(c=>c.method==='POST'&&c.url==='/v1/clinical-records').length),0);
+ console.log('PASS general appointment envelope, full form snapshot and one finish write');
+ await open('module=ZemdaPersonal&source=orchestrator&completed');
+ assert.ok(await page.getByRole('dialog',{name:'Atendimento concluído'}).isVisible());
+ assert.equal(await finish().count(),0);
+ console.log('PASS completed appointment cannot reopen a finish form');
+})().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await browser?.close();server.close()});

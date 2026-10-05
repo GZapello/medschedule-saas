@@ -111,6 +111,8 @@ export function AppointmentConsultation({
     );
   }
 
+  if (status.alreadyCompleted) return <div role="dialog" aria-label="Atendimento concluído" className="fixed inset-0 z-50 bg-white p-8"><p>Este atendimento já foi finalizado. Consulte o prontuário para ver os registros.</p><button onClick={onFinished}>Voltar à agenda</button></div>;
+
   if (status.awaitingPayment) {
     return (
       <ConsultationPaymentModal
@@ -240,6 +242,8 @@ export function AppointmentConsultation({
             <ZemdaPersonalView
               key={appointment.id}
               initialStudentId={appointment.patient_id}
+              initialAppointmentId={appointment.id}
+              onFinishConsultation={onFinished}
               lockStudentContext={true}
             />
           </div>

@@ -264,6 +264,10 @@ export class MedicalController {
       if (req.body.professionalId && !db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ?').get(req.body.professionalId, tenantId)) {
         res.status(400).json({ error: 'Profissional inválido' }); return;
       }
+      if (appointmentId && db.prepare('SELECT status FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)?.status === 'completed') {
+        res.status(409).json({ error: 'Este atendimento já foi finalizado.' });
+        return;
+      }
       let profId: string | null = null;
       if (req.user.role === 'professional') {
         const prof = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenantId) as any;

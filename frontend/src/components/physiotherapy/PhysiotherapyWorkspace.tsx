@@ -503,6 +503,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
   // 14. Finalização Canônica do Atendimento Fisioterapêutico
   const handleFinishConsultation = async () => {
+    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para finalizar o atendimento', 'info');
       return;
@@ -605,6 +606,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
             onFinishConsultation={() => setActiveTab('finish')}
             finishLabel="Finalizar Atendimento"
+            showFinish={!!initialAppointmentId}
             isSubmitting={saving}
             tools={[
               {
@@ -647,7 +649,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               { id: 'goals', label: '11. Metas', icon: Target },
               { id: 'external_tests', label: '12. Testes Externos', icon: FileText },
               { id: 'home_exercises', label: '13. Exercícios em Casa', icon: Dumbbell },
-              { id: 'finish', label: '14. Finalização', icon: CheckCircle2 }
+              ...(initialAppointmentId ? [{ id: 'finish', label: '14. Finalização', icon: CheckCircle2 }] : [])
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1791,7 +1793,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                     <span>Gerar Acompanhamento para o Paciente</span>
                   </button>
 
-                  <button
+                  {initialAppointmentId && (<button
                     type="button"
                     disabled={saving || !clinicalEvolution.trim()}
                     onClick={handleFinishConsultation}
@@ -1799,7 +1801,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>{saving ? 'Gravando no Prontuário...' : 'Finalizar Atendimento'}</span>
-                  </button>
+                  </button>)}
                 </div>
               </div>
             )}

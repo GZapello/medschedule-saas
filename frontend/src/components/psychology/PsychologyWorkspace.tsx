@@ -862,6 +862,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   // FLUXO OBRIGATÓRIO: CONCLUIR E SELAR ATENDIMENTO (Selamento Criptográfico SHA-256)
   const handleQuickFinishClick = async () => {
+    if (!initialAppointmentId) return;
     if (!selectedPatientId) return;
     if (isDirty) {
       await performSaveDraft();
@@ -871,6 +872,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
   const confirmAndFinishConsultation = async () => {
+    if (!initialAppointmentId) return;
     if (!selectedPatientId) return;
 
     if (!currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()) {
@@ -1048,7 +1050,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
           Emitir Documento CFP
         </button>
 
-        <button
+        {initialAppointmentId && (<button
           type="button"
           data-tour="clinical-finish"
           onClick={handleQuickFinishClick}
@@ -1058,7 +1060,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         >
           <CheckCircle2 className="w-4 h-4 text-emerald-200" />
           Finalizar Atendimento
-        </button>
+        </button>)}
       </ProfessionalModuleHeader>
 
       {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
@@ -1373,14 +1375,14 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       <span>Ao concluir, a evolução será selada com SHA-256 e protegida contra alterações.</span>
                     </div>
 
-                    <button
+                    {initialAppointmentId && <button
                       type="submit"
                       disabled={saving || !currentSession.clinicalEvolution.trim()}
                       className="px-6 py-3 bg-gradient-to-r from-teal-700 to-slate-900 hover:from-teal-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       {saving ? 'Concluindo e Selando...' : 'Concluir Atendimento'}
-                    </button>
+                    </button>}
                   </div>
                 </form>
 

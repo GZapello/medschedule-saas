@@ -127,6 +127,8 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
 
   // Modais auxiliares
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [appointmentCompleted, setAppointmentCompleted] = useState(false);
+  useEffect(() => { setAppointmentCompleted(false); setShowFinishModal(false); }, [initialAppointmentId]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showBodyMapModal, setShowBodyMapModal] = useState(false);
   const [savingRecord, setSavingRecord] = useState(false);
@@ -149,9 +151,9 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
         setLoading(true);
         if (initialAppointmentId) {
           const apptRes = await ApiClient.get<any>(`/v1/appointments/${initialAppointmentId}`);
-          setAppointment(apptRes);
-          if (apptRes?.patient_id) {
-            const patRes = await ApiClient.get<any>(`/v1/patients/${apptRes.patient_id}`);
+          setAppointment(apptRes.appointment);
+          if (apptRes.appointment?.patient_id) {
+            const patRes = await ApiClient.get<any>(`/v1/patients/${apptRes.appointment.patient_id}`);
             setPatient(patRes);
           }
         } else if (initialPatientId) {
@@ -270,11 +272,16 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
 
   // Salvar registro oficial no prontuário
   const handleSaveRecord = async (isFinish: boolean = false) => {
+    if (isFinish && (!initialAppointmentId || appointmentCompleted)) return;
     if (!clinicalEvolution.trim() && !chiefComplaint.trim()) {
       showToast('Preencha a queixa ou a evolução antes de salvar o prontuário.', 'error');
       return;
     }
 
+    if (isFinish) {
+      setShowFinishModal(true);
+      return;
+    }
     try {
       setSavingRecord(true);
       const sessionDate = appointment?.start_time
@@ -354,9 +361,6 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
       showToast('Registro clínico gravado com sucesso no prontuário oficial!', 'success');
       clearDraft();
 
-      if (isFinish) {
-        setShowFinishModal(true);
-      }
     } catch (err: any) {
       console.error('Erro ao salvar prontuário clínico:', err);
       showToast(err.message || 'Erro ao gravar evolução no prontuário.', 'error');
@@ -437,14 +441,14 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
               <Save className="w-4 h-4" /> Salvar Evolução
             </button>
 
-            <button
+            {initialAppointmentId && !appointmentCompleted && (<button
               type="button"
               disabled={savingRecord}
               onClick={() => handleSaveRecord(true)}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition-all shadow-xs hover:shadow-md cursor-pointer disabled:opacity-50"
             >
               <CheckCircle2 className="w-4 h-4" /> Finalizar Atendimento
-            </button>
+            </button>)}
           </div>
         </div>
       </header>
@@ -1195,12 +1199,13 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
             title: chiefComplaint.trim() || 'Atendimento Clínico',
             clinicalEvolution: clinicalEvolution.trim(),
             technicalNotes: technicalNotes.trim() || undefined,
-            moduleType: 'general'
+            moduleType: 'general',
+            moduleData: formData
           }}
           onClose={() => {
             setShowFinishModal(false);
-            if (onFinishConsultation) onFinishConsultation();
           }}
+          onCompleted={() => { setAppointmentCompleted(true); void clearDraft(); }}
           onFinished={() => {
             setShowFinishModal(false);
             if (onFinishConsultation) onFinishConsultation();

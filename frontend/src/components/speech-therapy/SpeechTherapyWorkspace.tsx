@@ -643,6 +643,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
   // Finalizar Consulta de Fono de Forma Atômica
   const handleFinishConsultation = async () => {
+    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para finalizar o atendimento', 'info');
       return;
@@ -788,6 +789,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
               onFinishConsultation={() => setActiveTab('finish')}
               finishLabel="Finalizar Atendimento"
+            showFinish={!!initialAppointmentId}
               isSubmitting={saving}
               tools={fonoQuickTools}
               toolsVariant="sky"
@@ -813,7 +815,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
               { id: 'treatment_plans', label: 'Plano Terapêutico', icon: Target },
               { id: 'complementary', label: 'Testes Complementares', icon: FileText },
-              { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
+              ...(initialAppointmentId ? [{ id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }] : [])
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === (tab.id as any);
@@ -1783,7 +1785,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                     <span>Gerar Orientações do Paciente (PDF)</span>
                   </button>
 
-                  <button
+                  {initialAppointmentId && (<button
                     type="button"
                     disabled={saving}
                     onClick={handleFinishConsultation}
@@ -1791,7 +1793,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>{saving ? 'Finalizando...' : 'Finalizar Atendimento e Gravar Prontuário'}</span>
-                  </button>
+                  </button>)}
                 </div>
               </div>
             )}

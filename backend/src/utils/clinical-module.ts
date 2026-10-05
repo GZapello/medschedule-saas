@@ -51,7 +51,7 @@ export function resolveProfessionalCanonicalModule(professionalId: string | null
     // 2. Consulta complementar na tabela clinic_users se user_id estiver disponível
     if (prof.user_id) {
       const cu = db.prepare(`
-        SELECT profession_id, profession_name, canonical_profession_name, commercial_module,
+        SELECT profession_id, profession_name,
                zemda_odonto_enabled, zemda_fisio_enabled, zemda_nutri_enabled, zemda_to_enabled,
                zemda_fono_enabled, zemda_pp_enabled, zemda_psico_enabled, zemda_personal_enabled,
                zemda_med_enabled, zemda_estetic_enabled
@@ -61,13 +61,10 @@ export function resolveProfessionalCanonicalModule(professionalId: string | null
       `).get(prof.user_id, tenantId) as any;
 
       if (cu) {
-        if (cu.commercial_module && isPrimaryClinicalModule(cu.commercial_module)) {
-          return cu.commercial_module;
-        }
-        if (cu.profession_id || cu.profession_name || cu.canonical_profession_name) {
+        if (cu.profession_id || cu.profession_name) {
           const cuCanonical = resolveCanonicalProfession({
             id: cu.profession_id,
-            name: cu.canonical_profession_name || cu.profession_name
+            name: cu.profession_name
           });
           if (cuCanonical.commercialModule && isPrimaryClinicalModule(cuCanonical.commercialModule)) {
             return cuCanonical.commercialModule;

@@ -855,6 +855,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
   // 10. Finalização Canônica do Atendimento
   const handleFinishConsultation = async () => {
+    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para finalizar o atendimento', 'info');
       return;
@@ -952,6 +953,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
             onFinishConsultation={() => setActiveTab('finish')}
             finishLabel="Finalizar Atendimento"
+            showFinish={!!initialAppointmentId}
             isSubmitting={saving}
             tools={[
               {
@@ -981,7 +983,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
               { id: 'meal_plans', label: '7. Plano Alimentar Builder', icon: Utensils },
               { id: 'goals', label: '8. Metas', icon: Target },
               { id: 'tests', label: '9. Testes Externos', icon: FileText },
-              { id: 'finish', label: '10. Finalização', icon: CheckCircle2 }
+              ...(initialAppointmentId ? [{ id: 'finish', label: '10. Finalização', icon: CheckCircle2 }] : [])
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -2242,7 +2244,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                     <span>Gerar Acompanhamento para o Paciente</span>
                   </button>
 
-                  <button
+                  {initialAppointmentId && (<button
                     type="button"
                     disabled={saving || !consultationEvolution.trim()}
                     onClick={handleFinishConsultation}
@@ -2250,7 +2252,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                   >
                     <CheckCircle2 className="w-4 h-4" />
                     <span>{saving ? 'Gravando no Prontuário...' : 'Finalizar Atendimento'}</span>
-                  </button>
+                  </button>)}
                 </div>
               </div>
             )}

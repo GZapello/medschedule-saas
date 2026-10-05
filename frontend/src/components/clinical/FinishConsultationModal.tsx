@@ -1,5 +1,5 @@
 import { useClinicalReview } from './useClinicalReview';
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ApiClient } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -128,15 +128,19 @@ interface FinishConsultationModalProps {
   };
   onClose: () => void;
   onFinished: () => void;
+  onCompleted?: () => void;
 }
 
 export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = ({
   appointment,
   clinicalData,
   onClose,
-  onFinished
+  onFinished,
+  onCompleted
 }) => {
   const { showToast } = useToast();
+  const finishingRef = useRef(false);
+  const completedRef = useRef(false);
   const { currentUser, canonicalProfessionId, canonicalProfessionName, hasCapability } = useAuth();
 
   const profCategory = resolveCanonicalProfessionCategory(
@@ -320,7 +324,8 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
   const review = useClinicalReview(appointment.patient_id + ':' + appointment.id);
   const handleFinish = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting) return; // Prevenção rigorosa de duplo clique
+    if (finishingRef.current || completedRef.current) return;
+    finishingRef.current = true;
 
     try {
       const payload: any = {};
@@ -404,13 +409,17 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
       }
 
       setSubmitting(true);
-      const res = await ApiClient.post<any>(`/v1/appointments/${appointment.id}/finish`, payload);
+      const res = await ApiClient.post<any>('/v1/appointments/' + appointment.id + '/finish', payload);
+      if (res.alreadyCompleted) throw new Error('Este atendimento já foi finalizado. Consulte o prontuário.');
+      completedRef.current = true;
+      onCompleted?.();
 
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(`zemda_quick_consult_${appointment.id}`);
 
       window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId: appointment.id, status: 'completed' } }));
       window.dispatchEvent(new Event('refresh-appointments'));
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
 
       setCompletionSummary({
         hasEvolution: !!res?.generatedDocs?.recordId,
@@ -430,6 +439,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
         'error'
       );
     } finally {
+      finishingRef.current = false;
       setSubmitting(false);
     }
   };

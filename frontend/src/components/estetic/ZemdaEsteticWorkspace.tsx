@@ -245,9 +245,13 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     }
   });
   useEffect(() => { setFinishAppointment(null); }, [selectedPatientId, initialAppointmentId]);
+  const [appointmentCompleted, setAppointmentCompleted] = useState(false);
+  useEffect(() => { setAppointmentCompleted(false); }, [initialAppointmentId]);
   const requestFinish = async () => {
+    if (!initialAppointmentId || appointmentCompleted) return;
     try {
       const { appointment } = await ApiClient.get<any>(`/v1/appointments/${initialAppointmentId}`);
+      if (appointment.status === 'completed') { setAppointmentCompleted(true); showToast('Este atendimento já foi finalizado.', 'info'); return; }
       if (isCurrentClinicalContext() && appointment.patient_id === selectedPatientId) setFinishAppointment(appointment);
     } catch (error: any) { showToast(error.message || 'Erro ao abrir finalização.', 'error'); }
   };
@@ -644,7 +648,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         clinicalData={{ moduleType: 'ZemdaEstetic', moduleData: clinicalPayload,
           clinicalEvolution: evolutionForm.biological_response, technicalNotes: assessmentForm.observations }}
         onClose={() => setFinishAppointment(null)}
-        onFinished={() => { void autosave.clearDraft(); setFinishAppointment(null); onFinishConsultation?.(); }} />}
+        onCompleted={() => { setAppointmentCompleted(true); void autosave.clearDraft(); }}
+        onFinished={() => { setFinishAppointment(null); onFinishConsultation?.(); }} />}
       {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E AÇÕES RÁPIDAS */}
       <ProfessionalModuleHeader
         icon={Sparkles}
@@ -664,7 +669,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       >
         <div className="flex items-center gap-2 flex-wrap">
           {selectedPatientId && <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />}
-          {onFinishConsultation && initialAppointmentId && (
+          {initialAppointmentId && !appointmentCompleted && (
             <button
               type="button"
               data-tour="clinical-finish"
