@@ -295,9 +295,15 @@ export class AppointmentController {
       json(value: any) { body = value; return pendingResponse; }
     } as unknown as Response;
     try {
+      // Billing expiry opens its own transaction. Run it before the atomic booking
+      // transaction; subscription eligibility is still checked inside createInternal.
+      BillingService.expireGrace();
       db.transaction(() => AppointmentController.createInternal(req, pendingResponse))();
       res.status(status).json(body);
-    } catch { res.status(500).json({ error: 'Não foi possível concluir o agendamento. Tente novamente.' }); }
+    } catch (err) {
+      console.error('[AppointmentController.createPublic] Erro:', err);
+      res.status(500).json({ error: 'Não foi possível concluir o agendamento. Tente novamente.' });
+    }
   }
 
   private static createInternal(req: Request, res: Response): void {
@@ -351,7 +357,7 @@ export class AppointmentController {
       if (!db.prepare("SELECT 1 FROM tenants WHERE id = ? AND status = 'active'").get(tenantId)) {
         res.status(403).json({ error: 'O acesso a esta clínica está bloqueado.' }); return;
       }
-      BillingService.expireGrace();
+      if (!isPublic) BillingService.expireGrace();
       if (!canOperate(tenantId)) { res.status(isPublic ? 404 : 402).json(isPublic ? {error:'Agendamento online indisponível.'} : {code:'SUBSCRIPTION_REQUIRED',error:'Agendamento indisponível. A clínica precisa regularizar sua assinatura.'}); return; }
       // Resolve ou cria o paciente
       let resolvedPatientId = patientId;

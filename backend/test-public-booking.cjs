@@ -2,7 +2,8 @@
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'zemda-booking-'));process.env.DATABASE_PATH=path.join(temp,'test.db');process.env.NODE_ENV='test';process.env.JWT_SECRET='public-booking-test-only-secret-2026';process.env.RESEND_API_KEY='';process.env.GEMINI_API_KEY='';
 const {db,initializeDatabase}=require('./dist/config/database');initializeDatabase();
-const billing=require('./dist/services/billing.service');billing.canOperate=()=>true;billing.BillingService.expireGrace=()=>{};
+// Keep the real billing expiry transaction: stubbing it hid nested transaction failures.
+const billing=require('./dist/services/billing.service');billing.canOperate=()=>true;
 const {TenantController}=require('./dist/controllers/tenant.controller'),{ProfessionalController}=require('./dist/controllers/professional.controller'),{AppointmentController}=require('./dist/controllers/appointment.controller'),{SlotController}=require('./dist/controllers/slot.controller');
 const {migrateClinicBooking,migrateProfessionalSlugs}=require('./dist/config/slug-migration');
 for(let n=1;n<=3;n++)db.prepare("INSERT INTO tenants(id,slug,name,email,status,city,state,logo_url) VALUES(?,?,?,'private@test.invalid','active','São Paulo','SP','/brand/zemda-logo.png')").run('booking-clinic-'+n,'legacy-clinic-'+n,'Clínica Psicom');
