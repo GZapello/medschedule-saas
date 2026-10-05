@@ -1095,7 +1095,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
               </button>
             </div>
 
-            <div className="flex gap-2 items-center p-3">{['clinic_admin','professional'].includes(auth.currentUser?.role||'')&&<button className="consent-secondary" onClick={()=>{setConsentPatientId(selectedAppt.patient_id);setSelectedAppt(null);setIsRescheduling(false);}}>Termos</button>}<ConsentPendingAlert compact patientId={selectedAppt.patient_id} serviceId={selectedAppt.service_id} onOpen={() => { setConsentPatientId(selectedAppt.patient_id); setSelectedAppt(null); setIsRescheduling(false); }} /></div>
+            {auth.canAccessConsents && selectedAppt.patient_id && (
+              <div className="flex gap-2 items-center p-3 border-b border-slate-100 bg-slate-50/50">
+                <ConsentPendingAlert
+                  compact
+                  patientId={selectedAppt.patient_id}
+                  serviceId={selectedAppt.service_id}
+                  onOpen={() => {
+                    setConsentPatientId(selectedAppt.patient_id);
+                    setSelectedAppt(null);
+                    setIsRescheduling(false);
+                  }}
+                />
+              </div>
+            )}
 
             {!isRescheduling ? (
               <div className="space-y-4">

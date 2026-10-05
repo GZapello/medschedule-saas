@@ -17,6 +17,7 @@ interface AuthContextType {
   isClinicAdmin: boolean;
   isProfessional: boolean;
   isReceptionist: boolean;
+  canAccessConsents: boolean;
   isPatient: boolean;
   isPhysiotherapist: boolean;
   isZemdaFisio: boolean;
@@ -286,6 +287,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isClinicAdmin = currentUser?.role === 'clinic_admin' || isSuperAdmin;
   const isProfessional = currentUser?.role === 'professional';
   const isReceptionist = currentUser?.role === 'receptionist';
+  const canAccessConsents = Boolean(isClinicAdmin || isProfessional || isReceptionist);
   const isPatient = currentUser?.role === 'patient';
   const isEligibleStaff = !isPatient && !isSuperAdmin && (isClinicAdmin || isProfessional);
 
@@ -564,6 +566,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isClinicAdmin,
         isProfessional,
         isReceptionist,
+        canAccessConsents,
         isPatient,
         isPhysiotherapist,
         isZemdaFisio,

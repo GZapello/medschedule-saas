@@ -750,7 +750,7 @@ api.post('/v1/patients/:id/exams', requireTenant, requireRole('clinic_admin', 'p
 api.put('/v1/patients/:id/exams/:examId/review', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.reviewExam);
 api.delete('/v1/patients/:id/exams/:examId', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.deleteExam);
 
-api.get('/v1/patients/:id/consents', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.listConsents);
+api.get('/v1/patients/:id/consents', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), PatientClinicalController.listConsents);
 api.post('/v1/patients/:id/consents', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.createConsent);
 api.post('/v1/patients/:patientId/consents/:consentId/revoke', requireTenant, requireRole('clinic_admin', 'professional'), PatientClinicalController.revokeConsent);
 

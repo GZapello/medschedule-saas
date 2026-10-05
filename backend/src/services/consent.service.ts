@@ -28,16 +28,17 @@ export function consentAuthenticationLabel(method: string): string {
 
 export class ConsentService {
   static allowedModule(req: Request, module: string): boolean {
+    if (req.user?.role === 'receptionist') return true;
     return module==='general' || module===CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).commercialModule;
   }
   static documentModule(row: any): string {
     return JSON.parse(row.professional_snapshot_json || '{}').consentModule || db.prepare('SELECT module FROM consent_templates WHERE id=?').get(row.template_id)?.module || 'general';
   }
   static access(req: Request, patientId?: string): void {
-    if (!req.tenantId || !req.user || !['clinic_admin', 'professional'].includes(req.user.role)) consentError('Acesso clínico restrito.', 403);
+    if (!req.tenantId || !req.user || !['clinic_admin', 'professional', 'receptionist'].includes(req.user.role)) consentError('Acesso restrito.', 403);
     if (patientId) {
       if (!db.prepare('SELECT id FROM patients WHERE id=? AND tenant_id=?').get(patientId, req.tenantId)) consentError('Paciente não encontrado.', 404);
-      if (!hasConsentAccess(req, patientId)) consentError('Sem vínculo clínico autorizado com este paciente.', 403);
+      if (!hasConsentAccess(req, patientId)) consentError('Sem vínculo autorizado com este paciente.', 403);
     }
   }
 
@@ -48,23 +49,27 @@ export class ConsentService {
 
   static templates(req: Request): any[] {
     this.access(req);
+    const isReceptionist = req.user?.role === 'receptionist';
+    const userCaps = !isReceptionist ? CapabilityService.computeUserCapabilities(req.user!.userId, req.tenantId!) : null;
     return db.prepare(`SELECT t.*,v.id AS version_id,v.title,v.content,v.content_hash,v.created_at AS version_created_at
       FROM consent_templates t JOIN consent_template_versions v ON v.template_id=t.id AND v.version=t.current_version
-      WHERE (t.tenant_id=? OR t.tenant_id IS NULL) AND t.active=1 ORDER BY t.tenant_id DESC,t.module,v.title`).all(req.tenantId).filter(t=>this.allowedModule(req,t.module)&&(!t.profession_id||t.profession_id===CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).professionId));
+      WHERE (t.tenant_id=? OR t.tenant_id IS NULL) AND t.active=1 ORDER BY t.tenant_id DESC,t.module,v.title`).all(req.tenantId)
+      .filter(t => isReceptionist || (this.allowedModule(req, t.module) && (!t.profession_id || t.profession_id === userCaps?.professionId)));
   }
 
   static saveTemplate(req: Request, templateId?: string): any {
     this.access(req);
+    if (req.user?.role === 'receptionist') consentError('Recepcionistas não possuem permissão para criar ou editar modelos de termos.', 403);
     const b = req.body;
     if(!this.allowedModule(req,text(b.module,100)||'general')) consentError('Módulo não autorizado para sua profissão.',403);
-    const professionId=CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).professionId;
-    if(b.professionId && b.professionId!==professionId) consentError('Profissão não autorizada.',403);
+    const professionId = CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).professionId;
+    if(b.professionId && b.professionId!==professionId && req.user?.role !== 'clinic_admin') consentError('Profissão não autorizada.',403);
     if (typeof b.title !== 'string' || b.title.trim().length < 3 || b.title.length > 180 || typeof b.content !== 'string' || b.content.trim().length < 20 || b.content.length > 60000) consentError('Informe título (3–180 caracteres) e conteúdo (20–60.000 caracteres).');
     if (b.serviceId && !db.prepare('SELECT id FROM services WHERE id=? AND tenant_id=?').get(b.serviceId,req.tenantId)) consentError('Serviço inválido.');
     const existing = templateId ? db.prepare('SELECT * FROM consent_templates WHERE id=? AND tenant_id=?').get(templateId,req.tenantId) : null;
     if (templateId && !existing) consentError('Duplique o modelo padrão para editar na sua clínica.',404);
     if(existing && !this.allowedModule(req,existing.module)) consentError('Modelo de outra área profissional.',403);
-    if(existing?.profession_id && existing.profession_id!==professionId) consentError('Modelo de outra profissão.',403);
+    if(existing?.profession_id && professionId && existing.profession_id!==professionId && req.user?.role !== 'clinic_admin') consentError('Modelo de outra profissão.',403);
     if(existing && (text(b.module,100)||'general')!==existing.module && db.prepare('SELECT professional_snapshot_json FROM patient_consents WHERE template_id=? AND template_version_id IS NOT NULL').all(existing.id).some(r=>!JSON.parse(r.professional_snapshot_json||'{}').consentModule)) consentError('Este modelo possui documentos anteriores. Duplique-o para alterar a área sem modificar o acesso ao histórico.',409);
     const template = templateId || id();
     const versionId = id();
@@ -84,8 +89,12 @@ export class ConsentService {
 
   static settings(req: Request): any {
     this.access(req);
-    const professionId=CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).professionId;
-    return {...(db.prepare('SELECT auth_level,link_hours,photo_requested FROM consent_settings WHERE tenant_id=?').get(req.tenantId) || {auth_level:'recommended',link_hours:168,photo_requested:0}),profession_id:professionId,profession_name:db.prepare('SELECT name FROM professions WHERE id=?').get(professionId)?.name||professionId};
+    const professionId = req.user?.role === 'receptionist' ? null : CapabilityService.computeUserCapabilities(req.user!.userId,req.tenantId!).professionId;
+    return {
+      ...(db.prepare('SELECT auth_level,link_hours,photo_requested FROM consent_settings WHERE tenant_id=?').get(req.tenantId) || {auth_level:'recommended',link_hours:168,photo_requested:0}),
+      profession_id: professionId || '',
+      profession_name: (professionId && db.prepare('SELECT name FROM professions WHERE id=?').get(professionId)?.name) || professionId || ''
+    };
   }
   static saveSettings(req: Request): any {
     this.access(req);
@@ -330,6 +339,9 @@ export class ConsentService {
 
   static cancel(req: Request, consentId: string): any {
     const row=this.document(req,consentId);
+    if (req.user?.role === 'receptionist' && (row.accepted_at || row.signed_at)) {
+      consentError('Apenas profissionais clínicos ou administradores podem invalidar termos assinados.', 403);
+    }
     const reason=text(req.body.reason,1000);
     if (reason.length<5) consentError('Informe o motivo do cancelamento (mínimo 5 caracteres).');
     if (this.invalidated(consentId)) consentError('Termo já cancelado.',409);
@@ -360,16 +372,91 @@ export class ConsentService {
   }
 
   static pending(req: Request, patientId: string, serviceId?: string): any {
-    this.access(req,patientId);
-    if (serviceId && !db.prepare('SELECT id FROM services WHERE id=? AND tenant_id=?').get(serviceId,req.tenantId)) consentError('Serviço inválido.');
-    const templates=this.templates(req).filter(t => t.tenant_id===req.tenantId && t.required && (!serviceId || !t.service_id || t.service_id===serviceId));
-    const rows=this.list(req,patientId);
-    const appointments=db.prepare(`SELECT * FROM appointments WHERE tenant_id=? AND patient_id=?${serviceId?' AND service_id=?':''}`).all(...(serviceId?[req.tenantId,patientId,serviceId]:[req.tenantId,patientId]));
-    const modules=new Set(appointments.map(a=>resolveClinicalModule(a,req.tenantId)));
-    for(const record of db.prepare('SELECT DISTINCT module_type FROM records WHERE tenant_id=? AND patient_id=?').all(req.tenantId,patientId)) modules.add(record.module_type);
-    const relevant=templates.filter(t=>t.module==='general' || (serviceId && t.service_id===serviceId) || modules.has(t.module) || rows.some((r:any)=>r.templateId===t.id));
-    const pending=relevant.filter(t=>!rows.some((r:any)=>r.templateId===t.id && Number(r.version)===t.current_version && r.status==='signed'));
-    return {count:pending.length,terms:pending.map(t=>({id:t.id,title:t.title,version:t.current_version,module:t.module,serviceId:t.service_id}))};
+    this.access(req, patientId);
+    if (serviceId && !db.prepare('SELECT id FROM services WHERE id=? AND tenant_id=?').get(serviceId, req.tenantId)) consentError('Serviço inválido.');
+
+    const allTemplates = this.templates(req);
+    const requiredTemplates = allTemplates.filter(t => t.tenant_id === req.tenantId && t.required && (!serviceId || !t.service_id || t.service_id === serviceId));
+    const rows = this.list(req, patientId);
+
+    const appointments = db.prepare(`SELECT * FROM appointments WHERE tenant_id=? AND patient_id=?${serviceId ? ' AND service_id=?' : ''}`).all(...(serviceId ? [req.tenantId, patientId, serviceId] : [req.tenantId, patientId]));
+    const modules = new Set(appointments.map(a => resolveClinicalModule(a, req.tenantId)));
+    for (const record of db.prepare('SELECT DISTINCT module_type FROM records WHERE tenant_id=? AND patient_id=?').all(req.tenantId, patientId)) {
+      modules.add(record.module_type);
+    }
+
+    const relevantMandatory = requiredTemplates.filter(t =>
+      t.module === 'general' ||
+      (serviceId && t.service_id === serviceId) ||
+      modules.has(t.module) ||
+      rows.some((r: any) => r.templateId === t.id)
+    );
+
+    // 1. Modelos obrigatórios que nunca foram solicitados
+    const missingTemplates = relevantMandatory.filter(t => !rows.some((r: any) => r.templateId === t.id));
+
+    // 2. Solicitações ativas pendentes de assinatura
+    const pendingRequests = rows.filter((r: any) =>
+      r.status === 'pending' &&
+      (!r.expiresAt || Date.parse(r.expiresAt) > Date.now()) &&
+      !r.invalidated_at &&
+      !r.revoked_at
+    );
+
+    // 3. Modelos obrigatórios com termo cancelado, expirado ou invalidado (sem versão assinada válida)
+    const invalidMandatoryTemplates = relevantMandatory.filter(t => {
+      const isSignedCurrent = rows.some((r: any) => r.templateId === t.id && Number(r.version) === t.current_version && r.status === 'signed');
+      if (isSignedCurrent) return false;
+      const hasActivePending = rows.some((r: any) => r.templateId === t.id && r.status === 'pending' && (!r.expiresAt || Date.parse(r.expiresAt) > Date.now()));
+      if (hasActivePending) return false;
+      return rows.some((r: any) =>
+        r.templateId === t.id && (
+          r.status === 'cancelled' ||
+          r.status === 'needs_signature' ||
+          (r.expiresAt && Date.parse(r.expiresAt) <= Date.now())
+        )
+      );
+    });
+
+    // 4. Aplicação estrita da prioridade de status (Seções 1 e 2 do Requisito):
+    // 1. Faltam termos
+    // 2. Aguardando assinatura
+    // 3. Termo inválido / nova assinatura necessária
+    // 4. Termos OK
+    // Padrão: Termos (se nenhum obrigatório configurado/pendente)
+    let status: 'missing_terms' | 'waiting_signature' | 'invalid_term' | 'ok' | 'default' = 'default';
+    let label = 'Termos';
+
+    if (missingTemplates.length > 0) {
+      status = 'missing_terms';
+      label = '⚠ Faltam termos';
+    } else if (pendingRequests.length > 0) {
+      status = 'waiting_signature';
+      label = '⏳ Aguardando assinatura';
+    } else if (invalidMandatoryTemplates.length > 0) {
+      status = 'invalid_term';
+      label = '✕ Termo inválido';
+    } else if (relevantMandatory.length > 0 && relevantMandatory.every(t => rows.some((r: any) => r.templateId === t.id && Number(r.version) === t.current_version && r.status === 'signed'))) {
+      status = 'ok';
+      label = '✓ Termos OK';
+    } else {
+      status = 'default';
+      label = 'Termos';
+    }
+
+    const pendingTerms = relevantMandatory.filter(t => !rows.some((r: any) => r.templateId === t.id && Number(r.version) === t.current_version && r.status === 'signed'));
+
+    return {
+      status,
+      label,
+      count: pendingTerms.length,
+      missingCount: missingTemplates.length,
+      waitingCount: pendingRequests.length,
+      invalidCount: invalidMandatoryTemplates.length,
+      signedCount: relevantMandatory.filter(t => rows.some((r: any) => r.templateId === t.id && Number(r.version) === t.current_version && r.status === 'signed')).length,
+      requiredCount: relevantMandatory.length,
+      terms: pendingTerms.map(t => ({ id: t.id, title: t.title, version: t.current_version, module: t.module, serviceId: t.service_id }))
+    };
   }
 
   static signedDocument(req: Request, consentId: string): any {

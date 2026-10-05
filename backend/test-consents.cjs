@@ -51,9 +51,10 @@ const server=app.listen(0,'127.0.0.1');
  check((await request('/v1/consents/templates','PUT',{...spec,serviceId:'other-service'})).status===404,'Unregistered endpoint cannot mutate templates');
  check((await request('/v1/consents/templates','POST',{...spec,serviceId:'other-service'})).status===400,'Cross-clinic service association rejected');
  check((await request('/v1/consents/templates/'+lib.body[0].id,'PUT',spec)).status===404,'Global standard cannot be overwritten');
- for(const actor of ['unrelated','reception','super','other']) {
+ for(const actor of ['unrelated','super','other']) {
   const r=await request('/v1/consents/patients/patient','GET',undefined,actor);check([403,404].includes(r.status),`${actor} cannot access protected patient consents (${r.status}: ${JSON.stringify(r.body)})`);
  }
+ check((await request('/v1/consents/patients/patient','GET',undefined,'reception')).status===200,'Receptionist has consent access to patient in same clinic');
  check((await request('/v1/consents/patients/patient','GET',undefined,'professional')).status===200,'Linked professional has shared consent access');
  check((await request('/v1/consents/settings','PUT',{authLevel:'basic',linkHours:24},'professional')).status===403,'Professional cannot change clinic security settings');
  check((await request('/v1/consents/settings','PUT',{authLevel:'basic',linkHours:24})).status===200,'Clinic manager configures basic confirmation');

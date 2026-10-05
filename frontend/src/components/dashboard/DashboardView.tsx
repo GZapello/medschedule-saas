@@ -493,8 +493,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
 
                     {/* Quick Status Action Buttons */}
-                    {['clinic_admin','professional'].includes(auth.currentUser?.role||'')&&appt.patient_id&&<div className="flex gap-2 items-center"><button type="button" className="text-xs font-semibold px-2 py-1 rounded-lg bg-teal-50 text-teal-800" onClick={()=>setConsentPatientId(appt.patient_id)}>Termos</button><ConsentPendingAlert compact patientId={appt.patient_id} serviceId={appt.service_id} onOpen={()=>setConsentPatientId(appt.patient_id)}/></div>}
                     <div className="flex items-center gap-1.5 flex-wrap sm:flex-wrap">
+                      {auth.canAccessConsents && appt.patient_id && (
+                        <ConsentPendingAlert
+                          compact
+                          patientId={appt.patient_id}
+                          serviceId={appt.service_id}
+                          onOpen={() => setConsentPatientId(appt.patient_id)}
+                        />
+                      )}
                       {appt.status !== 'completed' && appt.status !== 'cancelled' && (
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'in_progress')}
