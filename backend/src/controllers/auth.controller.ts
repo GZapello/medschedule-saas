@@ -1406,69 +1406,84 @@ export class AuthController {
       const hashedPassword = await hashPassword(password);
       const userId = 'usr-' + uuidv4().slice(0, 8);
 
-      // Mapeamento de cargo
-      let userRole = inviteData.role || 'professional';
-      if (userRole === 'superadmin') {
+      // Mapeamento de cargo com base estrita no convite
+      const inviteRole = inviteData.role || 'professional';
+      if (inviteRole === 'superadmin') {
         res.status(403).json({ error: 'Convites de clínica não podem conceder administração global.' }); return;
       }
-      const profLower = (professionName || '').toLowerCase();
-      if (profLower.includes('médic') || profLower.includes('psic') || profLower.includes('fono') ||
-          profLower.includes('fisio') || profLower.includes('terap') || profLower.includes('nutri') ||
-          profLower.includes('dent') || profLower.includes('enferm') || profLower.includes('biomed') ||
-          profLower.includes('farmac') || profLower.includes('saúde')) {
-        userRole = 'professional';
-      } else if (['receptionist', 'secretary', 'financial', 'assistant'].includes(userRole)) {
-        // mantém role
-      }
+
+      const isAdministrative = ['receptionist', 'secretary', 'financial', 'assistant'].includes(inviteRole);
+      const userRole = inviteRole;
 
       // Permissões padrão
       const defaultPerms = JSON.stringify([
         'view_schedule', 'create_appointment', 'create_patient'
       ]);
 
-      // Monta nome com prefixo de sexo / tratamento se informado (Dr., Dra., etc.)
+      // Monta nome com prefixo de sexo / tratamento se informado (Dr., Dra., etc.) - somente se NÃO for administrativo
       let finalName = name.trim();
-      if (prefix && !finalName.startsWith('Dr.') && !finalName.startsWith('Dra.')) {
-        if (prefix === 'Dra.') finalName = `Dra. ${finalName}`;
-        else if (prefix === 'Dr.') finalName = `Dr. ${finalName}`;
-      }
-
-      // Resolução Canônica de Profissão e Módulo
-      const professionResolution = resolveCanonicalProfession({
-        id: professionId,
-        name: professionName,
-        registrationType: registrationType
-      });
-      const canonicalProfessionId = professionResolution.canonicalId;
-      const canonicalProfessionName = professionResolution.canonicalName;
-      const modFlags = professionResolution.flags;
-
-      // Monta string de áreas para campos legados de texto e lista de IDs para user_practice_areas
+      let canonicalProfessionId: string | null = null;
+      let canonicalProfessionName: string | null = null;
       let areasStr: string | null = null;
       let targetAreaIds: string[] = [];
-      if (Array.isArray(practiceAreaIds) && practiceAreaIds.length > 0) {
-        targetAreaIds = practiceAreaIds.map(String).map(s => s.trim()).filter(Boolean);
-      }
-      if (typeof practiceAreas === 'string' && practiceAreas.trim()) {
-        areasStr = practiceAreas.trim();
-        if (targetAreaIds.length === 0) {
-          const names = areasStr.split(',').map(s => s.trim()).filter(Boolean);
-          for (const nm of names) {
-            const row = db.prepare('SELECT id FROM practice_areas WHERE name = ? OR slug = ? COLLATE NOCASE').get(nm, nm) as any;
-            if (row?.id && !targetAreaIds.includes(row.id)) targetAreaIds.push(row.id);
-          }
-        }
-      } else if (targetAreaIds.length > 0) {
-        const ph = targetAreaIds.map(() => '?').join(',');
-        const rows = db.prepare(`SELECT name FROM practice_areas WHERE id IN (${ph})`).all(...targetAreaIds) as any[];
-        areasStr = rows.map(r => r.name).join(', ');
-      }
+      let finalRegistrationType: string | null = null;
+      let finalRegistrationNumber: string | null = null;
+      let modFlags: any = {
+        zemda_fisio_enabled: 0,
+        zemda_odonto_enabled: 0,
+        zemda_nutri_enabled: 0,
+        zemda_to_enabled: 0,
+        zemda_fono_enabled: 0,
+        zemda_pp_enabled: 0,
+        zemda_psico_enabled: 0,
+        zemda_personal_enabled: 0,
+        zemda_med_enabled: 0
+      };
+      let professionResolution: any = null;
 
-      if (professionResolution.inferredAreaId && !targetAreaIds.includes(professionResolution.inferredAreaId)) {
-        targetAreaIds.push(professionResolution.inferredAreaId);
-      }
-      if (professionResolution.automaticPracticeAreaId && !targetAreaIds.includes(professionResolution.automaticPracticeAreaId)) {
-        targetAreaIds.push(professionResolution.automaticPracticeAreaId);
+      if (!isAdministrative) {
+        if (prefix && !finalName.startsWith('Dr.') && !finalName.startsWith('Dra.')) {
+          if (prefix === 'Dra.') finalName = `Dra. ${finalName}`;
+          else if (prefix === 'Dr.') finalName = `Dr. ${finalName}`;
+        }
+
+        // Resolução Canônica de Profissão e Módulo
+        professionResolution = resolveCanonicalProfession({
+          id: professionId,
+          name: professionName,
+          registrationType: registrationType
+        });
+        canonicalProfessionId = professionResolution.canonicalId;
+        canonicalProfessionName = professionResolution.canonicalName;
+        modFlags = professionResolution.flags;
+        finalRegistrationType = registrationType || professionResolution.boardLabel || null;
+        finalRegistrationNumber = registrationNumber ? String(registrationNumber).trim() || null : null;
+
+        // Monta string de áreas para campos legados de texto e lista de IDs para user_practice_areas
+        if (Array.isArray(practiceAreaIds) && practiceAreaIds.length > 0) {
+          targetAreaIds = practiceAreaIds.map(String).map(s => s.trim()).filter(Boolean);
+        }
+        if (typeof practiceAreas === 'string' && practiceAreas.trim()) {
+          areasStr = practiceAreas.trim();
+          if (targetAreaIds.length === 0) {
+            const names = areasStr.split(',').map(s => s.trim()).filter(Boolean);
+            for (const nm of names) {
+              const row = db.prepare('SELECT id FROM practice_areas WHERE name = ? OR slug = ? COLLATE NOCASE').get(nm, nm) as any;
+              if (row?.id && !targetAreaIds.includes(row.id)) targetAreaIds.push(row.id);
+            }
+          }
+        } else if (targetAreaIds.length > 0) {
+          const ph = targetAreaIds.map(() => '?').join(',');
+          const rows = db.prepare(`SELECT name FROM practice_areas WHERE id IN (${ph})`).all(...targetAreaIds) as any[];
+          areasStr = rows.map(r => r.name).join(', ');
+        }
+
+        if (professionResolution.inferredAreaId && !targetAreaIds.includes(professionResolution.inferredAreaId)) {
+          targetAreaIds.push(professionResolution.inferredAreaId);
+        }
+        if (professionResolution.automaticPracticeAreaId && !targetAreaIds.includes(professionResolution.automaticPracticeAreaId)) {
+          targetAreaIds.push(professionResolution.automaticPracticeAreaId);
+        }
       }
 
       let createdProfessionalId: string | null = null;
@@ -1491,8 +1506,8 @@ export class AuthController {
         `).run(
           userId, tenantId, finalName, cleanEmail, hashedPassword, userRole, phone || null,
           canonicalProfessionId, canonicalProfessionName, areasStr || null,
-          registrationType || professionResolution.boardLabel || null,
-          registrationNumber || null,
+          finalRegistrationType,
+          finalRegistrationNumber,
           modFlags.zemda_fisio_enabled,
           modFlags.zemda_odonto_enabled,
           modFlags.zemda_nutri_enabled,
@@ -1536,8 +1551,8 @@ export class AuthController {
           inviteData.created_by || 'invite'
         );
 
-        // 3. professionals (se for professional ou tiver área de saúde ou profissão selecionada)
-        if (userRole === 'professional' || professionName || professionId) {
+        // 3. professionals (SOMENTE quando o cargo real do convite for profissional clínico)
+        if (!isAdministrative && userRole === 'professional') {
           const profId = 'pro-' + uuidv4().slice(0, 8);
           createdProfessionalId = profId;
           const finalSlug = generateProfessionalSlug(finalName, tenantId, profId);
@@ -1556,8 +1571,8 @@ export class AuthController {
             tenantId,
             userId,
             finalName,
-            registrationType || professionResolution.boardLabel || 'Registro',
-            registrationNumber || null,
+            finalRegistrationType || 'Registro',
+            finalRegistrationNumber || null,
             areasStr || null,
             areasStr || null,
             finalSlug,
@@ -1577,8 +1592,8 @@ export class AuthController {
           createDefaultSchedules(db, tenantId, profId);
         }
 
-        // 4. Inserir áreas em user_practice_areas
-        if (targetAreaIds.length > 0) {
+        // 4. Inserir áreas em user_practice_areas (somente para profissionais clínicos)
+        if (!isAdministrative && targetAreaIds.length > 0) {
           CapabilityService.setUserPracticeAreas(userId, tenantId, targetAreaIds);
         }
 
@@ -1648,9 +1663,9 @@ export class AuthController {
           professionId: canonicalProfessionId,
           canonicalProfessionId,
           professionName: canonicalProfessionName,
-          registrationType: registrationType || professionResolution.boardLabel || null,
-          registrationNumber: registrationNumber || null,
-          commercialModule: professionResolution.commercialModule,
+          registrationType: finalRegistrationType,
+          registrationNumber: finalRegistrationNumber,
+          commercialModule: professionResolution?.commercialModule || null,
           capabilities: computedCaps?.activeCapabilities || [],
           practiceAreaIds: computedCaps?.practiceAreaIds || [],
           selectedOptionalCapabilities: computedCaps?.selectedOptionalCapabilities || [],

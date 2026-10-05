@@ -55,6 +55,8 @@ interface PracticeArea {
 
 type InviteStep = 'initial_data' | 'profession' | 'security' | 'verify_email';
 
+export const ADMINISTRATIVE_ROLES = ['receptionist', 'secretary', 'financial', 'assistant'];
+
 function maskEmail(emailStr: string): string {
   if (!emailStr || !emailStr.includes('@')) return emailStr;
   const [user, domain] = emailStr.split('@');
@@ -161,8 +163,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
       const res = await ApiClient.get<ValidInviteData>('/v1/public/invites/' + token);
       if (res && res.valid) {
         setInviteData(res);
-        if (res.role === 'receptionist' || res.role === 'secretary') {
-          setSelectedProfessionId('prof-recepcionista');
+        if (ADMINISTRATIVE_ROLES.includes(res.role)) {
           setPrefix('');
         }
       } else {
@@ -262,8 +263,9 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
     }
   };
 
+  const isAdministrativeInvite = Boolean(inviteData?.role && ADMINISTRATIVE_ROLES.includes(inviteData.role));
   const selectedOption = professionOptions.find(p => p.id === selectedProfessionId);
-  const isAdministrative = selectedOption?.administrative ||
+  const isAdministrative = isAdministrativeInvite || selectedOption?.administrative ||
     selectedProfessionId.includes('recepcionista') ||
     selectedProfessionId.includes('secretaria') ||
     selectedProfessionId.includes('administrativo');
@@ -291,7 +293,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
     setPhone(formatted);
   };
 
-  // Navegação: Etapa 1 -> Etapa 2
+  // Navegação: Etapa 1 -> Etapa 2 (ou Etapa 3/Segurança se for convite administrativo)
   const handleNextFromInitialData = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -302,7 +304,11 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
       showToast('Informe um e-mail válido para receber o código de confirmação', 'error');
       return;
     }
-    setStep('profession');
+    if (isAdministrativeInvite) {
+      setStep('security');
+    } else {
+      setStep('profession');
+    }
   };
 
   // Navegação: Etapa 2 -> Etapa 3
@@ -481,10 +487,10 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
           email: email.trim().toLowerCase(),
           password,
           phone: phone.trim() || undefined,
-          professionId: selectedOption?.id || selectedProfessionId,
-          professionName: finalProfessionName,
-          practiceAreas: combinedAreasText || undefined,
-          practiceAreaIds: selectedPracticeAreaIds,
+          professionId: !isAdministrative ? (selectedOption?.id || selectedProfessionId) : undefined,
+          professionName: !isAdministrative ? finalProfessionName : undefined,
+          practiceAreas: !isAdministrative ? (combinedAreasText || undefined) : undefined,
+          practiceAreaIds: !isAdministrative ? selectedPracticeAreaIds : undefined,
           registrationType: !isAdministrative ? registrationType || selectedOption?.boardLabel || undefined : undefined,
           registrationNumber: !isAdministrative ? registrationNumber.trim() || undefined : undefined
         }
@@ -611,14 +617,29 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
   }
 
   // Determina número e título da etapa atual
-  const stepNumber = step === 'initial_data' ? 1 : step === 'profession' ? 2 : step === 'security' ? 3 : 4;
-  const stepPercentage = stepNumber === 1 ? '25%' : stepNumber === 2 ? '50%' : stepNumber === 3 ? '75%' : '100%';
-  const stepTitles = [
-    'Dados Pessoais',
-    'Profissão & Atuação',
-    'Segurança da Conta',
-    'Confirmação de E-mail'
-  ];
+  const totalSteps = isAdministrativeInvite ? 3 : 4;
+  const stepNumber = isAdministrativeInvite
+    ? (step === 'initial_data' ? 1 : step === 'security' ? 2 : 3)
+    : (step === 'initial_data' ? 1 : step === 'profession' ? 2 : step === 'security' ? 3 : 4);
+
+  const stepPercentage = isAdministrativeInvite
+    ? (stepNumber === 1 ? '33%' : stepNumber === 2 ? '66%' : '100%')
+    : (stepNumber === 1 ? '25%' : stepNumber === 2 ? '50%' : stepNumber === 3 ? '75%' : '100%');
+
+  const stepTitles = isAdministrativeInvite
+    ? [
+        'Dados Pessoais',
+        'Segurança da Conta',
+        'Confirmação de E-mail'
+      ]
+    : [
+        'Dados Pessoais',
+        'Profissão & Atuação',
+        'Segurança da Conta',
+        'Confirmação de E-mail'
+      ];
+
+  const currentStepTitle = stepTitles[stepNumber - 1];
 
   return (
     <div className="min-h-screen bg-[#fafbfc] text-slate-800 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
@@ -686,15 +707,15 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
             </div>
           </div>
 
-          {/* Barra de Progresso das 4 Etapas */}
+          {/* Barra de Progresso */}
           <div className="px-5 pt-4 pb-3 sm:px-6 border-b border-slate-100 bg-slate-50/70">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-black bg-teal-700 text-white shadow-xs">
-                  {stepNumber} de 4
+                  {stepNumber} de {totalSteps}
                 </span>
                 <span className="text-xs sm:text-sm font-bold text-slate-800">
-                  {stepTitles[stepNumber - 1]}
+                  {currentStepTitle}
                 </span>
               </div>
               <div className="text-[11px] font-semibold text-slate-500">
@@ -716,7 +737,9 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
             {step === 'initial_data' && (
               <form onSubmit={handleNextFromInitialData} className="space-y-5">
                 <div className="space-y-1">
-                  <h4 className="text-base font-bold text-slate-900">Identificação do Profissional</h4>
+                  <h4 className="text-base font-bold text-slate-900">
+                    {isAdministrativeInvite ? 'Identificação do Colaborador' : 'Identificação do Profissional'}
+                  </h4>
                   <p className="text-xs text-slate-500">
                     Preencha suas informações de contato para receber comunicações e notificações da clínica.
                   </p>
@@ -798,7 +821,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                     type="submit"
                     className="min-h-[46px] px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-teal-700/20 cursor-pointer flex items-center gap-2 transition-all"
                   >
-                    <span>Próximo: Profissão & Registro</span>
+                    <span>{isAdministrativeInvite ? 'Próximo: Segurança' : 'Próximo: Profissão & Registro'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -806,7 +829,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
             )}
 
             {/* ETAPA 2: PROFISSÃO & REGISTRO */}
-            {step === 'profession' && (
+            {!isAdministrativeInvite && step === 'profession' && (
               <form onSubmit={handleNextFromProfession} className="space-y-5">
                 <div className="space-y-1">
                   <h4 className="text-base font-bold text-slate-900">Profissão & Áreas de Atuação</h4>
@@ -1040,7 +1063,7 @@ export const InviteRegisterView: React.FC<InviteRegisterViewProps> = ({
                 <div className="pt-3 flex items-center justify-between">
                   <button
                     type="button"
-                    onClick={() => setStep('profession')}
+                    onClick={() => setStep(isAdministrativeInvite ? 'initial_data' : 'profession')}
                     className="min-h-[46px] px-4 py-2.5 border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
                   >
                     <ArrowLeft className="w-4 h-4" />
