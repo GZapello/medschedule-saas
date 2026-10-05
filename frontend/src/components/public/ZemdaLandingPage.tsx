@@ -15,6 +15,28 @@ interface ZemdaLandingPageProps {
   onOpenPublicBooking?: () => void;
   onNavigateSeoPage?: (slug: string) => void;
 }
+const results: { impact: string; title: string; description: string; icon: LucideIcon }[] = [
+  { impact: '+80%', title: 'Mais organização da rotina', description: 'Agenda, pacientes e informações reunidos em um só lugar.', icon: CalendarDays },
+  { impact: '+70%', title: 'Mais produtividade', description: 'Menos tempo procurando informações e alternando entre processos.', icon: Activity },
+  { impact: '-60%', title: 'Menos tarefas manuais', description: 'Centralização e automação para reduzir retrabalho.', icon: Layers3 },
+  { impact: '+75%', title: 'Mais controle financeiro', description: 'Mais visibilidade sobre receitas, despesas, orçamentos e pendências.', icon: DollarSign },
+  { impact: '-40%', title: 'Menos esquecimentos', description: 'Agenda, confirmações e acompanhamento mais organizados.', icon: CheckCheck },
+  { impact: '+65%', title: 'Mais agilidade nos prontuários', description: 'Registros e evoluções concentrados em um único fluxo.', icon: FileText },
+  { impact: '+70%', title: 'Mais organização da equipe', description: 'Agenda, profissionais e processos centralizados.', icon: Users },
+  { impact: '+80%', title: 'Mais controle da jornada do paciente', description: 'Informações e histórico acompanhados em um único ambiente.', icon: Heart }
+];
+const ResultsCarousel = () => (
+  <div className="zl-results-viewport" tabIndex={0} role="region" aria-label="Potencial de impacto na rotina">
+    <div className="zl-results-track">
+      {[false, true].map(copy => <div key={String(copy)} className="zl-results-group" aria-hidden={copy || undefined}>
+        {results.map(({ impact, title, description, icon: Icon }) => <article key={title} className="zl-result-card">
+          <div className="zl-result-top"><strong className="zl-result-impact">{impact}</strong><span className="zl-result-icon"><Icon size={16} strokeWidth={1.7} aria-hidden="true" /></span></div>
+          <h3>{title}</h3><p>{description}</p>
+        </article>)}
+      </div>)}
+    </div>
+  </div>
+);
 const moduleIcons: Record<string, LucideIcon> = {
   med: Stethoscope,
   estetic: Sparkles,
@@ -94,6 +116,13 @@ export const ZemdaLandingPage: React.FC<ZemdaLandingPageProps> = ({ onLogin, onR
         <RevealItem distancePx={16} durationMs={550}><Heading label="Como o Zemda funciona" title="Comece individualmente ou com sua equipe." /></RevealItem>
         <div className="zl-steps">{LANDING_STEPS.map((step, index) => <RevealItem key={step.title} distancePx={18} delayMs={index * 80} durationMs={600}><article><span className="zl-step-number">0{index + 1}</span><h3>{step.title}</h3><p>{step.description}</p></article></RevealItem>)}</div>
         <RevealItem distancePx={16} delayMs={120} durationMs={550}><div className="zl-rule"><Users size={22} /><p><strong>Escolha o plano pelo número de acessos que você precisa.</strong><br />A profissão define quais ferramentas clínicas cada profissional acessa, respeitando suas permissões.</p></div></RevealItem>
+      </div></RevealSection>
+
+      <RevealSection id="resultados" className="zl-section zl-results"><div className="zl-container">
+        <RevealItem distancePx={16} durationMs={550}>
+          <Heading label="Potencial de impacto na rotina" title="Resultados que o Zemda ajuda você a conquistar">Transforme sua rotina com mais organização, agilidade e controle em um só lugar.</Heading>
+        </RevealItem>
+        <ResultsCarousel />
       </div></RevealSection>
 
       <RevealSection id="profissoes" className="zl-section zl-tinted"><div className="zl-container">
