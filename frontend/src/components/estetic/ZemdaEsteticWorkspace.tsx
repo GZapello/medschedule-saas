@@ -835,7 +835,10 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 { id: 'evolutions', label: `Evoluções (${evolutions.length})`, icon: CheckCircle2 },
                 { id: 'returns', label: `Retornos (${returnsList.length})`, icon: Clock },
                 { id: 'before_after', label: 'Antes × Depois', icon: ArrowLeftRight },
-                { id: 'history', label: 'Histórico Completo', icon: RefreshCw }
+                { id: 'history', label: 'Histórico Completo', icon: RefreshCw },
+                ...(initialAppointmentId && !appointmentCompleted
+                  ? [{ id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }]
+                  : [])
               ].map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -845,7 +848,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     type="button"
                     data-active={isActive ? 'true' : 'false'}
                     data-tour={`tab-${tab.id}`}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => tab.id === 'finish' ? void requestFinish() : setActiveTab(tab.id as any)}
                     className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                       isActive
                         ? areaTheme.activeTab

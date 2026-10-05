@@ -6,6 +6,7 @@ Branch: `codex/finalizar-atendimento`.
 
 - Personal recebe o ID real do agendamento e o callback do orquestrador. O cabeçalho abre o modal universal; o aluno permanece fixado ao atendimento.
 - Estetic usa a presença do agendamento, independentemente do callback, para mostrar a ação. A rota universal reutiliza `getEsteticAccess`, o mesmo verificador do módulo.
+- Estetic também oferece a ação na barra horizontal, imediatamente após Histórico Completo. Os testes de Dashboard e Agenda finalizam por esse acesso. A rota direta `/zemda-estetic/pacientes/:id` fornece apenas o paciente; continua sem ação de conclusão quando não há agendamento vinculado.
 - Todos os 11 módulos escondem as ações de finalização sem agendamento. Os formulários e endpoints específicos foram preservados.
 - Geral lê o envelope `{ appointment }` da API. Finalizar abre a revisão e grava pelo fluxo universal, sem criar um registro antecipado a cada tentativa. O formulário completo acompanha a evolução em `moduleData`; cancelar mantém o atendimento aberto.
 - Modal universal e hook compartilhado bloqueiam submissões repetidas e emitem o evento `zemda-appointment-updated`, ouvido pelo Dashboard e pela Agenda. Rascunhos são limpos após sucesso; falhas mantêm os campos.

@@ -21,7 +21,11 @@ let browser;
   if(source==='dashboard') await page.getByRole('button',{name:'Atender',exact:true}).first().click();
   else {await page.getByText('Paciente teste',{exact:true}).first().click();await page.getByRole('button',{name:/^Iniciar$/}).click();}
   await page.getByRole('button',{name:'Abrir '+module,exact:true}).first().click();
-  await finish().click();
+  if(module==='ZemdaEstetic') {
+   const tab=page.locator('[data-tour="tab-finish"]');
+   assert.equal(await tab.evaluate(el=>el.previousElementSibling?.getAttribute('data-tour')),'tab-history');
+   await tab.click();
+  } else await finish().click();
   const refreshCount=await page.evaluate(source=>window.__completion.calls.filter(c=>c.method==='GET'&&(source==='dashboard'?c.url.startsWith('/v1/dashboard/metrics'):c.url==='/v1/appointments')).length,source);
   await page.getByRole('button',{name:'Concluir Atendimento',exact:true}).click();
   await page.getByRole('button',{name:'Finalizar atendimento',exact:true}).last().click();
