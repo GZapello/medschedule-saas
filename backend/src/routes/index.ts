@@ -823,17 +823,17 @@ api.post('/v1/pending-exams', requireTenant, requireRole('clinic_admin', 'profes
 api.put('/v1/pending-exams/:id', requireTenant, requireRole('clinic_admin', 'professional', 'receptionist'), PendingExamController.update);
 api.delete('/v1/pending-exams/:id', requireTenant, requireRole('clinic_admin'), PendingExamController.delete);
 
-// Estoque de Insumos e Produtos (Exclusivo Gerenciador da Clínica)
-api.get('/v1/inventory', requireTenant, requireRole('clinic_admin'), InventoryController.list);
-api.get('/v1/inventory/items', requireTenant, requireRole('clinic_admin'), InventoryController.list);
-api.post('/v1/inventory', requireTenant, requireRole('clinic_admin'), InventoryController.createItem);
-api.post('/v1/inventory/items', requireTenant, requireRole('clinic_admin'), InventoryController.createItem);
-api.put('/v1/inventory/:id', requireTenant, requireRole('clinic_admin'), InventoryController.updateItem);
-api.put('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin'), InventoryController.updateItem);
-api.delete('/v1/inventory/:id', requireTenant, requireRole('clinic_admin'), InventoryController.deleteItem);
-api.delete('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin'), InventoryController.deleteItem);
-api.post('/v1/inventory/movements', requireTenant, requireRole('clinic_admin'), InventoryController.recordMovement);
-api.get('/v1/inventory/movements', requireTenant, requireRole('clinic_admin'), InventoryController.listMovements);
+// Estoque de Insumos e Produtos (Gerenciador da Clínica e Recepção)
+api.get('/v1/inventory', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.list);
+api.get('/v1/inventory/items', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.list);
+api.post('/v1/inventory', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.createItem);
+api.post('/v1/inventory/items', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.createItem);
+api.put('/v1/inventory/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.updateItem);
+api.put('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.updateItem);
+api.delete('/v1/inventory/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.deleteItem);
+api.delete('/v1/inventory/items/:id', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.deleteItem);
+api.post('/v1/inventory/movements', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.recordMovement);
+api.get('/v1/inventory/movements', requireTenant, requireRole('clinic_admin', 'receptionist'), InventoryController.listMovements);
 
 // Orçamentos (Pacientes e Insumos/Fornecedores)
 api.get('/v1/budgets', requireTenant, BudgetController.list);

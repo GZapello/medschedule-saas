@@ -11,6 +11,7 @@ import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
+import { getDefaultPermissionsForRole, DEFAULT_RECEPTIONIST_PERMISSIONS, DEFAULT_PROFESSIONAL_PERMISSIONS } from '../utils/role-permissions';
 
 /**
  * Purga com segurança colaboradores desativados há mais de 30 dias (Item 3).
@@ -94,6 +95,13 @@ export class StaffController {
         } catch {
           s.permissions = [];
         }
+        if (s.role === 'receptionist' || s.role === 'secretary') {
+          s.permissions = Array.from(new Set([...s.permissions, ...DEFAULT_RECEPTIONIST_PERMISSIONS]));
+        } else if (s.role === 'professional') {
+          s.permissions = Array.from(new Set([...s.permissions, ...DEFAULT_PROFESSIONAL_PERMISSIONS]));
+        } else if (s.permissions.length === 0) {
+          s.permissions = getDefaultPermissionsForRole(s.role);
+        }
       }
 
       // 2. Busca convites pendentes
@@ -151,19 +159,26 @@ export class StaffController {
       }
 
       requireCapacity(tenantId!, 1, String(id));
+      const cu = db.prepare("SELECT role, permissions_json, profession_custom, practice_areas FROM clinic_users WHERE user_id = ? AND tenant_id = ?").get(id, tenantId) as any;
+      let existingPerms: string[] = [];
+      try { existingPerms = cu?.permissions_json ? JSON.parse(cu.permissions_json) : []; } catch {}
+      const targetRole = cu?.role || user.role;
+      const defaultRolePerms = getDefaultPermissionsForRole(targetRole);
+      const mergedPerms = Array.from(new Set([...existingPerms, ...defaultRolePerms]));
+
       db.prepare("UPDATE users SET status = 'active', updated_at = datetime('now') WHERE id = ?").run(id);
       db.prepare(`
         UPDATE clinic_users SET
           status = 'active',
+          permissions_json = ?,
           approved_by = ?,
           approved_at = datetime('now')
         WHERE user_id = ? AND tenant_id = ?
-      `).run(req.user?.userId || null, id, tenantId);
+      `).run(JSON.stringify(mergedPerms), req.user?.userId || null, id, tenantId);
 
       // Ativa registro profissional caso exista ou vincula se houver profissional com mesmo nome
       const profUpdated = db.prepare("UPDATE professionals SET active = 1 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
       if (profUpdated.changes === 0) {
-        const cu = db.prepare("SELECT role, profession_custom, practice_areas FROM clinic_users WHERE user_id = ? AND tenant_id = ?").get(id, tenantId) as any;
         if (user.role === 'professional' || cu?.role === 'professional') {
           const unlinked = db.prepare("SELECT id FROM professionals WHERE tenant_id = ? AND (user_id IS NULL OR user_id = '') AND LOWER(name) = LOWER(?) LIMIT 1").get(tenantId, user.name) as any;
           if (unlinked) {
@@ -284,39 +299,51 @@ export class StaffController {
       `).run(newRole, canonicalProfId, finalProfName, practiceAreas || null, id);
 
       // Atualiza clinic_users
+      const cuRow = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      let currentPerms: string[] = [];
+      try { currentPerms = cuRow?.permissions_json ? JSON.parse(cuRow.permissions_json) : []; } catch {}
+      const roleDefaults = getDefaultPermissionsForRole(newRole);
+      const updatedPerms = Array.from(new Set([...currentPerms, ...roleDefaults]));
+
       db.prepare(`
         UPDATE clinic_users SET
           role = ?,
           is_manager = ?,
+          permissions_json = ?,
           profession_id = ?,
           profession_name = ?,
           profession_custom = ?,
           practice_areas = ?
         WHERE user_id = ? AND tenant_id = ?
-      `).run(newRole, isManager, canonicalProfId, finalProfName, finalProfName, practiceAreas || null, id, tenantId);
+      `).run(newRole, isManager, JSON.stringify(updatedPerms), canonicalProfId, finalProfName, finalProfName, practiceAreas || null, id, tenantId);
 
       // Sincroniza tabela professionals e taxonomia se usuário tem perfil clínico ou é 'professional'
+      const isAdministrative = ['receptionist', 'secretary', 'financial', 'assistant'].includes(newRole);
       const existingProf = db.prepare('SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (existingProf) {
-        db.prepare(`
-          UPDATE professionals SET
-            profession_id = COALESCE(?, profession_id),
-            profession_name = COALESCE(?, profession_name),
-            practice_areas = ?,
-            active = 1
-          WHERE user_id = ? AND tenant_id = ?
-        `).run(canonicalProfId, finalProfName, practiceAreas || null, id, tenantId);
+        if (isAdministrative) {
+          db.prepare("UPDATE professionals SET active = 0 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
+        } else {
+          db.prepare(`
+            UPDATE professionals SET
+              profession_id = COALESCE(?, profession_id),
+              profession_name = COALESCE(?, profession_name),
+              practice_areas = ?,
+              active = 1
+            WHERE user_id = ? AND tenant_id = ?
+          `).run(canonicalProfId, finalProfName, practiceAreas || null, id, tenantId);
 
-        if (canonicalProfId) {
-          ProfessionTaxonomyService.updateProfessionalTaxonomy({
-            tenantId,
-            professionalId: existingProf.id,
-            newProfessionId: canonicalProfId,
-            newProfessionName: finalProfName || undefined,
-            practiceAreas
-          });
+          if (canonicalProfId) {
+            ProfessionTaxonomyService.updateProfessionalTaxonomy({
+              tenantId,
+              professionalId: existingProf.id,
+              newProfessionId: canonicalProfId,
+              newProfessionName: finalProfName || undefined,
+              practiceAreas
+            });
+          }
         }
-      } else if (canonicalProfId || newRole === 'professional') {
+      } else if (!isAdministrative && (canonicalProfId || newRole === 'professional')) {
         const profId = 'pro-' + uuidv4().slice(0, 8);
         db.prepare(`
           INSERT INTO professionals (id, tenant_id, user_id, name, profession_id, profession_name, registration_type, practice_areas, active)

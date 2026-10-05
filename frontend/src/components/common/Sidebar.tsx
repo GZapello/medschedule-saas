@@ -209,7 +209,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'budgets',
           label: 'Orçamentos',
           icon: FileSpreadsheet,
-          visible: isClinicAdmin || hasPermission('view_budgets') || hasPermission('manage_budgets')
+          visible: isClinicAdmin || isProfessional || hasPermission('view_budgets') || hasPermission('manage_budgets')
         },
         {
           id: 'reports',

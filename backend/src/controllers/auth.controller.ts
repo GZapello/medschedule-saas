@@ -20,6 +20,7 @@ import { REGISTRATION_PROFESSIONS } from '../types/professions';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
 import { ensureDefaultClinicService } from '../services/default-service.service';
 import { MedicalTreeService } from '../services/medical-tree.service';
+import { getDefaultPermissionsForRole, DEFAULT_RECEPTIONIST_PERMISSIONS, DEFAULT_PROFESSIONAL_PERMISSIONS } from '../utils/role-permissions';
 
 function parseIsoDate(d: string | null | undefined): Date | null {
   if (!d) return null;
@@ -254,6 +255,14 @@ export class AuthController {
         }
       }
 
+      if ((user.role as string) === 'receptionist' || (user.role as string) === 'secretary') {
+        userPermissions = Array.from(new Set([...userPermissions, ...DEFAULT_RECEPTIONIST_PERMISSIONS]));
+      } else if (user.role === 'professional') {
+        userPermissions = Array.from(new Set([...userPermissions, ...DEFAULT_PROFESSIONAL_PERMISSIONS]));
+      } else if (userPermissions.length === 0) {
+        userPermissions = getDefaultPermissionsForRole(user.role);
+      }
+
       if (user.role === 'professional' || user.role === 'clinic_admin') {
         profDetails = completeProfessionalProfile(user.id, user.tenant_id, profDetails);
       }
@@ -448,6 +457,14 @@ export class AuthController {
       if (cuRow?.permissions_json) {
         try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
       }
+    }
+
+    if ((user.role as string) === 'receptionist' || (user.role as string) === 'secretary') {
+      userPermissions = Array.from(new Set([...userPermissions, ...DEFAULT_RECEPTIONIST_PERMISSIONS]));
+    } else if (user.role === 'professional') {
+      userPermissions = Array.from(new Set([...userPermissions, ...DEFAULT_PROFESSIONAL_PERMISSIONS]));
+    } else if (userPermissions.length === 0) {
+      userPermissions = getDefaultPermissionsForRole(user.role);
     }
 
     if (user.role === 'professional' || user.role === 'clinic_admin') {
@@ -661,6 +678,14 @@ export class AuthController {
         if (cuRow?.permissions_json) {
           try { userPermissions = JSON.parse(cuRow.permissions_json); } catch {}
         }
+      }
+
+      if ((user.role as string) === 'receptionist' || (user.role as string) === 'secretary') {
+        userPermissions = Array.from(new Set([...userPermissions, ...DEFAULT_RECEPTIONIST_PERMISSIONS]));
+      } else if (user.role === 'professional') {
+        userPermissions = Array.from(new Set([...userPermissions, ...DEFAULT_PROFESSIONAL_PERMISSIONS]));
+      } else if (userPermissions.length === 0) {
+        userPermissions = getDefaultPermissionsForRole(user.role);
       }
       const userOnboardingStatus = user.onboarding_status || 'active';
       const isOnboardingPending = userOnboardingStatus !== 'active';
@@ -926,9 +951,7 @@ export class AuthController {
         userRole = role;
       }
 
-      const defaultPerms = JSON.stringify([
-        'view_schedule', 'create_appointment', 'create_patient'
-      ]);
+      const defaultPerms = JSON.stringify(getDefaultPermissionsForRole(userRole));
 
       // Insere na tabela users como PENDENTE de aprovação pelo gestor
       const insertStmt = db.prepare(`
@@ -1416,9 +1439,7 @@ export class AuthController {
       const userRole = inviteRole;
 
       // Permissões padrão
-      const defaultPerms = JSON.stringify([
-        'view_schedule', 'create_appointment', 'create_patient'
-      ]);
+      const defaultPerms = JSON.stringify(getDefaultPermissionsForRole(userRole));
 
       // Monta nome com prefixo de sexo / tratamento se informado (Dr., Dra., etc.) - somente se NÃO for administrativo
       let finalName = name.trim();

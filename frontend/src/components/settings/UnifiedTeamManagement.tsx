@@ -33,7 +33,9 @@ import {
   Key,
   Palmtree,
   Coffee,
-  AlertTriangle
+  AlertTriangle,
+  Package,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface Shift {
@@ -67,6 +69,10 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'view_financial', label: 'Visualizar movimentações financeiras', group: 'financial' },
   { id: 'issue_receipt', label: 'Emitir recibos oficiais', group: 'financial' },
   { id: 'view_receipts', label: 'Visualizar recibos emitidos', group: 'financial' },
+  { id: 'view_budgets', label: 'Visualizar orçamentos', group: 'budgets' },
+  { id: 'manage_budgets', label: 'Criar e gerenciar orçamentos', group: 'budgets' },
+  { id: 'view_inventory', label: 'Visualizar estoque de insumos', group: 'inventory' },
+  { id: 'manage_inventory', label: 'Movimentar e cadastrar itens no estoque', group: 'inventory' },
   { id: 'manage_professionals', label: 'Gerenciar profissionais', group: 'admin' },
   { id: 'manage_staff', label: 'Gerenciar equipe e funcionários', group: 'admin' },
   { id: 'manage_services', label: 'Gerenciar catálogo de serviços e salas', group: 'admin' },
@@ -78,20 +84,55 @@ const PERMISSION_PRESETS = [
   {
     id: 'receptionist',
     label: 'Recepcionista',
-    desc: 'Agenda completa, cadastro de pacientes, pagamentos e emissão de recibos',
-    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'view_exams', 'view_financial', 'issue_receipt', 'view_receipts']
+    desc: 'Agenda, pacientes, exames, financeiro, recibos, orçamentos e estoque de insumos',
+    perms: [
+      'view_schedule',
+      'create_appointment',
+      'edit_appointment',
+      'cancel_appointment',
+      'create_patient',
+      'edit_patient',
+      'view_exams',
+      'view_financial',
+      'issue_receipt',
+      'view_receipts',
+      'view_budgets',
+      'manage_budgets',
+      'view_inventory',
+      'manage_inventory'
+    ]
   },
   {
     id: 'professional',
     label: 'Profissional de Saúde',
-    desc: 'Agenda própria e gestão direta de pacientes',
-    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'view_exams']
+    desc: 'Agenda própria, gestão direta de pacientes e orçamentos',
+    perms: [
+      'view_schedule',
+      'create_appointment',
+      'edit_appointment',
+      'cancel_appointment',
+      'create_patient',
+      'edit_patient',
+      'view_exams',
+      'view_budgets',
+      'manage_budgets'
+    ]
   },
   {
     id: 'dentist',
     label: 'Cirurgião-Dentista',
-    desc: 'Agenda própria, prontuário e gestão de pacientes',
-    perms: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'view_exams']
+    desc: 'Agenda própria, prontuário, gestão de pacientes e orçamentos',
+    perms: [
+      'view_schedule',
+      'create_appointment',
+      'edit_appointment',
+      'cancel_appointment',
+      'create_patient',
+      'edit_patient',
+      'view_exams',
+      'view_budgets',
+      'manage_budgets'
+    ]
   },
   {
     id: 'clinic_admin',
@@ -282,7 +323,7 @@ export const UnifiedTeamManagement: React.FC = () => {
         professionalRecord: p,
         effectiveProfession: p.profession_name || 'Profissional',
         effectiveRegistration: p.registration_number ? `${p.registration_type || 'Registro'}: ${p.registration_number}` : null,
-        permissions: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient'],
+        permissions: ['view_schedule', 'create_appointment', 'edit_appointment', 'cancel_appointment', 'create_patient', 'edit_patient', 'view_exams', 'view_budgets', 'manage_budgets'],
         schedules: (p as any).schedules || [],
         blockedTimes: (p as any).blockedTimes || []
       });
@@ -1444,6 +1485,56 @@ export const UnifiedTeamManagement: React.FC = () => {
                           Financeiro & Recibos
                         </h5>
                         {AVAILABLE_PERMISSIONS.filter(p => p.group === 'financial').map(perm => (
+                          <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded-lg">
+                            <input
+                              type="checkbox"
+                              checked={sheetPermissions.includes(perm.id)}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSheetPermissions(prev => [...prev, perm.id]);
+                                } else {
+                                  setSheetPermissions(prev => prev.filter(p => p !== perm.id));
+                                }
+                              }}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="text-slate-700 text-xs">{perm.label}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      {/* Grupo Orçamentos */}
+                      <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-2.5">
+                        <h5 className="font-bold text-slate-800 text-xs border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                          Orçamentos
+                        </h5>
+                        {AVAILABLE_PERMISSIONS.filter(p => p.group === 'budgets').map(perm => (
+                          <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded-lg">
+                            <input
+                              type="checkbox"
+                              checked={sheetPermissions.includes(perm.id)}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSheetPermissions(prev => [...prev, perm.id]);
+                                } else {
+                                  setSheetPermissions(prev => prev.filter(p => p !== perm.id));
+                                }
+                              }}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className="text-slate-700 text-xs">{perm.label}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      {/* Grupo Estoque de Insumos */}
+                      <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-2.5">
+                        <h5 className="font-bold text-slate-800 text-xs border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-indigo-600" />
+                          Estoque de Insumos
+                        </h5>
+                        {AVAILABLE_PERMISSIONS.filter(p => p.group === 'inventory').map(perm => (
                           <label key={perm.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded-lg">
                             <input
                               type="checkbox"
