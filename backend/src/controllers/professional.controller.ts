@@ -223,6 +223,11 @@ export class ProfessionalController {
       const markChangeUsed = isChangingProfession ? 1 : 0;
       const nowIso = new Date().toISOString();
 
+      const hasRegType = registrationType !== undefined ? 1 : 0;
+      const cleanRegType = registrationType !== undefined ? (registrationType ? String(registrationType).trim() : null) : null;
+      const hasRegNumber = registrationNumber !== undefined ? 1 : 0;
+      const cleanRegNumber = registrationNumber !== undefined ? (registrationNumber ? String(registrationNumber).trim() : null) : null;
+
       const updateStmt = db.prepare(`
         UPDATE professionals SET
           name = COALESCE(?, name),
@@ -231,8 +236,8 @@ export class ProfessionalController {
           profession_id = COALESCE(?, profession_id),
           specialty_id = COALESCE(?, specialty_id),
           specialty_custom = COALESCE(?, specialty_custom),
-          registration_type = COALESCE(?, registration_type),
-          registration_number = COALESCE(?, registration_number),
+          registration_type = CASE WHEN ? = 1 THEN ? ELSE registration_type END,
+          registration_number = CASE WHEN ? = 1 THEN ? ELSE registration_number END,
           bio = COALESCE(?, bio),
           practice_areas = COALESCE(?, practice_areas),
           buffer_minutes = COALESCE(?, buffer_minutes),
@@ -256,8 +261,10 @@ export class ProfessionalController {
         professionId || null,
         specialtyId || null,
         customSpec,
-        registrationType || null,
-        registrationNumber || null,
+        hasRegType,
+        cleanRegType,
+        hasRegNumber,
+        cleanRegNumber,
         bio || null,
         practiceAreas || null,
         bufferMinutes !== undefined ? Number(bufferMinutes) : null,
@@ -274,6 +281,23 @@ export class ProfessionalController {
         id,
         tenantId
       );
+
+      // Sincroniza registration_type e registration_number com a tabela users
+      if (currentProf.user_id && (registrationType !== undefined || registrationNumber !== undefined)) {
+        db.prepare(`
+          UPDATE users SET
+            registration_type = CASE WHEN ? = 1 THEN ? ELSE registration_type END,
+            registration_number = CASE WHEN ? = 1 THEN ? ELSE registration_number END,
+            updated_at = datetime('now')
+          WHERE id = ?
+        `).run(
+          hasRegType,
+          cleanRegType,
+          hasRegNumber,
+          cleanRegNumber,
+          currentProf.user_id
+        );
+      }
 
       // 3. Atualização automática do módulo profissional correspondente à nova profissão escolhida
       if (isChangingProfession && tenantId) {

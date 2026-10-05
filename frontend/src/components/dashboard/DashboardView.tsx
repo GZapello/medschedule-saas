@@ -268,7 +268,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI Cards Grid (Compact & Informative) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+      <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${metrics?.permissions?.finance ? 'lg:grid-cols-5' : 'lg:grid-cols-3'} gap-2`}>
         {/* Atendimentos Hoje */}
         <div className="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-0.5">
@@ -394,7 +394,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               )}
             </div>
           ) : (
-            <div className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto overflow-x-hidden pr-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
+            <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto overflow-x-hidden pr-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
               {todayList.map((appt: any) => {
                 const startTime = appt.start_time?.split('T')[1]?.slice(0, 5) || '00:00';
                 const endTime = appt.end_time?.split('T')[1]?.slice(0, 5) || '00:00';
@@ -587,20 +587,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Monthly Trend & Quick Stats (1/3 width) */}
         <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-xs flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-slate-900 text-sm mb-0.5">Evolução Mensal</h3>
-            <p className="text-xs text-slate-500 mb-3">Volume de atendimentos nos últimos meses.</p>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-bold text-slate-900 text-sm">
+                {auth.currentUser?.role === 'professional' ? 'Minha Produtividade' : 'Evolução Mensal'}
+              </h3>
+              <span className="text-[11px] font-semibold text-slate-400">Últimos meses</span>
+            </div>
+            <p className="text-xs text-slate-500 mb-2.5">
+              {auth.currentUser?.role === 'professional' ? 'Volume de atendimentos realizados' : 'Volume de atendimentos na clínica'}
+            </p>
 
             {/* Visual Bar Chart */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {(metrics?.chart || []).map((item: any, idx: number) => {
                 const max = Math.max(...(metrics?.chart || []).map((c: any) => c.appointments), 10);
                 const percent = Math.min(100, Math.round((item.appointments / max) * 100));
 
                 return (
-                  <div key={idx} className="space-y-1">
+                  <div key={idx} className="space-y-0.5">
                     <div className="flex justify-between text-xs font-semibold text-slate-700">
                       <span className="capitalize">{item.month}</span>
-                      <span>{item.appointments} atendimentos</span>
+                      <span className="text-slate-500 font-medium">{item.appointments} atend.</span>
                     </div>
                     <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                       <div
@@ -614,37 +621,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          <div className="mt-2 pt-2 border-t border-slate-100 bg-slate-50 p-3 rounded-lg">
-            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">Resumo Operacional</h4>
-            <div className="space-y-1 text-xs text-slate-600">
+          <div className="mt-3 pt-2.5 border-t border-slate-100">
+            <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Resumo Operacional</h4>
+            <div className="grid grid-cols-3 gap-1.5 text-center">
               {auth.currentUser?.role === 'professional' ? (
                 <>
-                  <div className="flex justify-between">
-                    <span>Meus Atendimentos (mês):</span>
-                    <span className="font-bold text-slate-900">{metrics?.monthly?.totalAppointments || 0}</span>
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-1.5">
+                    <span className="block text-[10px] text-slate-500 font-semibold truncate">Atendimentos</span>
+                    <span className="text-xs sm:text-sm font-bold text-slate-900">{metrics?.monthly?.totalAppointments || 0}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Finalizados (mês):</span>
-                    <span className="font-bold text-slate-900">{metrics?.monthly?.completed || 0}</span>
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-1.5">
+                    <span className="block text-[10px] text-slate-500 font-semibold truncate">Finalizados</span>
+                    <span className="text-xs sm:text-sm font-bold text-emerald-700">{metrics?.monthly?.completed || 0}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Novos {clientTermLabel}s (mês):</span>
-                    <span className="font-bold text-indigo-600">+{metrics?.monthly?.newPatients || 0}</span>
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-1.5">
+                    <span className="block text-[10px] text-slate-500 font-semibold truncate">Novos {clientTermLabel}s</span>
+                    <span className="text-xs sm:text-sm font-bold text-indigo-600">+{metrics?.monthly?.newPatients || 0}</span>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="flex justify-between">
-                    <span>Profissionais Ativos:</span>
-                    <span className="font-bold text-slate-900">{metrics?.totals?.active_professionals || 0}</span>
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-1.5">
+                    <span className="block text-[10px] text-slate-500 font-semibold truncate">Equipe Ativa</span>
+                    <span className="text-xs sm:text-sm font-bold text-slate-900">{metrics?.totals?.active_professionals || 0}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Serviços Configurados:</span>
-                    <span className="font-bold text-slate-900">{metrics?.totals?.active_services || 0}</span>
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-1.5">
+                    <span className="block text-[10px] text-slate-500 font-semibold truncate">Serviços</span>
+                    <span className="text-xs sm:text-sm font-bold text-slate-900">{metrics?.totals?.active_services || 0}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Novos {clientTermLabel}s (mês):</span>
-                    <span className="font-bold text-indigo-600">+{metrics?.monthly?.newPatients || 0}</span>
+                  <div className="bg-slate-50 border border-slate-100 rounded-lg p-1.5">
+                    <span className="block text-[10px] text-slate-500 font-semibold truncate">Novos {clientTermLabel}s</span>
+                    <span className="text-xs sm:text-sm font-bold text-indigo-600">+{metrics?.monthly?.newPatients || 0}</span>
                   </div>
                 </>
               )}
