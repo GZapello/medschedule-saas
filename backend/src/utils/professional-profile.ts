@@ -17,7 +17,7 @@ export function completeProfessionalProfile(userId: string, tenantId: string | n
 
   // Se o usuário possui vínculo ativo na clínica como professional ou clinic_admin, sincroniza status ativo
   if (member.membership_role === 'professional' || member.membership_role === 'clinic_admin') {
-    let profRow = db.prepare('SELECT id, active, profession_id, practice_areas FROM professionals WHERE user_id = ? AND tenant_id = ? ORDER BY active DESC, id LIMIT 1').get(userId, tenantId) as any;
+    let profRow = db.prepare('SELECT id, active, profession_id, practice_areas, profession_change_used, profession_changed_at FROM professionals WHERE user_id = ? AND tenant_id = ? ORDER BY active DESC, id LIMIT 1').get(userId, tenantId) as any;
 
     if (profRow && profRow.active !== 1 && member.membership_status === 'active') {
       db.prepare('UPDATE professionals SET active = 1 WHERE id = ?').run(profRow.id);
@@ -30,7 +30,9 @@ export function completeProfessionalProfile(userId: string, tenantId: string | n
         professional_id: profRow.id,
         professional_active: profRow.active,
         profession_id: prof?.profession_id || profRow.profession_id,
-        practice_areas: prof?.practice_areas || profRow.practice_areas
+        practice_areas: prof?.practice_areas || profRow.practice_areas,
+        profession_change_used: profRow.profession_change_used ?? 0,
+        profession_changed_at: profRow.profession_changed_at || null
       };
     }
   }

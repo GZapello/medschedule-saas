@@ -381,7 +381,6 @@ export const UnifiedTeamManagement: React.FC = () => {
           gender: sheetGender,
           email: sheetEmail,
           phone: sheetPhone,
-          professionId: sheetProfessionId,
           specialtyId: sheetSpecialtyId,
           registrationType: sheetRegistrationType,
           registrationNumber: sheetRegistrationNumber,
@@ -1035,22 +1034,22 @@ export const UnifiedTeamManagement: React.FC = () => {
 
                     <div>
                       <label className="block font-semibold text-slate-700 mb-1">Profissão</label>
-                      <select
-                        value={sheetProfessionId}
-                        onChange={e => {
-                          setSheetProfessionId(e.target.value);
-                          const sel = professions.find(p => p.id === e.target.value);
-                          if (sel) {
-                            setSheetRegistrationType(getCouncilForProfession(sel.name));
-                          }
-                        }}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 focus:bg-white"
-                      >
-                        <option value="">Selecione a profissão...</option>
-                        {professions.map(p => (
-                          <option key={p.id} value={p.id}>{p.label || p.name}</option>
-                        ))}
-                      </select>
+                      <input
+                        type="text"
+                        readOnly
+                        disabled
+                        value={
+                          professions.find(p => p.id === sheetProfessionId)?.label ||
+                          professions.find(p => p.id === sheetProfessionId)?.name ||
+                          selectedMember?.professionName ||
+                          sheetProfessionId ||
+                          'Não informada'
+                        }
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed font-medium"
+                      />
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        A profissão é definida pelo próprio profissional e não pode ser alterada pelo gestor.
+                      </p>
                     </div>
 
                     <div>

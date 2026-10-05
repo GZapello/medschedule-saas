@@ -1,6 +1,7 @@
 import type { Request } from 'express';
 import { db } from '../config/database';
 import { validateModuleAccess } from '../controllers/clinical-draft.controller';
+import { CapabilityService } from './capability.service';
 
 export function dashboardWorklist(req: Request, today: string) {
   const tenant = req.tenantId!;
@@ -16,11 +17,31 @@ export function dashboardWorklist(req: Request, today: string) {
     FROM clinical_drafts a JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
     WHERE a.tenant_id = ? ${filter} ORDER BY a.updated_at DESC LIMIT 50`).all(...params) as any[])
     .filter(row => validateModuleAccess(req, row.module_type, row.patient_id)).slice(0, 10) : [];
+
+  let canViewExams = role === 'clinic_admin';
+  if (!canViewExams && req.user?.userId && tenant) {
+    const hasExamCap = CapabilityService.hasCapability(req.user.userId, tenant, 'CORE_EXAMS_RECEIVED') ||
+                       CapabilityService.hasCapability(req.user.userId, tenant, 'CORE_EXAM_REQUEST');
+    if (hasExamCap) {
+      canViewExams = true;
+    } else {
+      const cu = db.prepare('SELECT permissions_json FROM clinic_users WHERE user_id = ? AND tenant_id = ?').get(req.user.userId, tenant) as any;
+      if (cu?.permissions_json) {
+        try {
+          const perms = JSON.parse(cu.permissions_json);
+          if (Array.isArray(perms) && perms.includes('view_exams')) {
+            canViewExams = true;
+          }
+        } catch {}
+      }
+    }
+  }
+
   const examWhere = `a.tenant_id = ? ${filter} AND a.status IN ('waiting', 'delayed')`;
-  const exams = clinical ? db.prepare(`SELECT a.id, a.patient_id, p.full_name AS patient_name, a.exam_name, a.expected_date, a.status
+  const exams = canViewExams ? db.prepare(`SELECT a.id, a.patient_id, p.full_name AS patient_name, a.exam_name, a.expected_date, a.status
     FROM pending_exams a JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
     WHERE ${examWhere} ORDER BY a.expected_date IS NULL, a.expected_date LIMIT 10`).all(...params) : [];
-  const examCount = clinical ? (db.prepare(`SELECT COUNT(*) AS count FROM pending_exams a WHERE ${examWhere}`).get(...params) as any).count : 0;
+  const examCount = canViewExams ? (db.prepare(`SELECT COUNT(*) AS count FROM pending_exams a WHERE ${examWhere}`).get(...params) as any).count : 0;
   const returns = db.prepare(`SELECT a.id, a.patient_id, p.full_name AS patient_name, a.start_time, a.status
     FROM appointments a JOIN patients p ON p.id = a.patient_id AND p.tenant_id = a.tenant_id
     WHERE a.tenant_id = ? ${filter} AND a.patient_notes = 'Consulta de Retorno' AND a.status IN ('scheduled', 'confirmed')

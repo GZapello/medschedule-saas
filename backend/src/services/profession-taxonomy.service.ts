@@ -52,6 +52,7 @@ export class ProfessionTaxonomyService {
       throw new Error('Profissional não encontrado');
     }
 
+    const isNewProfession = Boolean(newProfessionId && newProfessionId !== currentProf.profession_id);
     const targetProfId = (newProfessionId || currentProf.profession_id || '').trim();
     const targetProfName = (newProfessionName || (newProfessionId ? '' : currentProf.profession_name) || '').trim();
 
@@ -59,12 +60,12 @@ export class ProfessionTaxonomyService {
     const resolution = resolveCanonicalProfession({
       id: targetProfId,
       name: targetProfName,
-      registrationType: registrationType || currentProf.registration_type
+      registrationType: isNewProfession ? (registrationType || '') : (registrationType || currentProf.registration_type)
     });
 
     const commercialModule = resolution.commercialModule;
     const flags = resolution.flags;
-    const boardLabel = resolution.boardLabel || registrationType || currentProf.registration_type || 'Conselho';
+    const boardLabel = resolution.boardLabel || registrationType || (isNewProfession ? '' : currentProf.registration_type) || 'Conselho';
 
     // 3. Sanitização de Áreas de Atuação
     const rawAreas = practiceAreas !== undefined ? practiceAreas : currentProf.practice_areas;

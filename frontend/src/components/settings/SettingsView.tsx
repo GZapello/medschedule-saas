@@ -47,8 +47,11 @@ import {
   Share2,
   MessageSquare,
   Copy,
-  Check
+  Check,
+  X,
+  RefreshCw
 } from 'lucide-react';
+import { Professional, Profession } from '../../types';
 
 export const COMMON_INSURANCE_PRESETS = [
   { name: 'Unimed', ansCode: '305146', phone: '0800 014 5555' },
@@ -115,6 +118,75 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
   const [activeTab, setActiveTab] = useState<'clinic' | 'document_templates' | 'insurances' | 'profile' | 'billing' | 'legal'>(
     isClinicAdmin ? 'clinic' : 'profile'
   );
+
+  // Perfil Profissional do Usuário Logado & Troca Única de Profissão
+  const [myProfessional, setMyProfessional] = useState<Professional | null>(null);
+  const [loadingMyProf, setLoadingMyProf] = useState<boolean>(false);
+  const [isProfessionModalOpen, setIsProfessionModalOpen] = useState<boolean>(false);
+  const [availableProfessions, setAvailableProfessions] = useState<Profession[]>([]);
+  const [selectedNewProfessionId, setSelectedNewProfessionId] = useState<string>('');
+  const [loadingAvailableProfessions, setLoadingAvailableProfessions] = useState<boolean>(false);
+  const [submittingProfessionChange, setSubmittingProfessionChange] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!currentUser?.professionalId) return;
+    let isMounted = true;
+    const fetchMyProf = async () => {
+      try {
+        setLoadingMyProf(true);
+        const data = await ApiClient.get<{ professional: Professional }>(`/v1/professionals/${currentUser.professionalId}`);
+        if (isMounted && data?.professional) {
+          setMyProfessional(data.professional);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar dados do profissional logado:', err);
+      } finally {
+        if (isMounted) setLoadingMyProf(false);
+      }
+    };
+    fetchMyProf();
+    return () => { isMounted = false; };
+  }, [currentUser?.professionalId]);
+
+  const handleOpenProfessionModal = async () => {
+    setIsProfessionModalOpen(true);
+    setSelectedNewProfessionId('');
+    if (availableProfessions.length === 0) {
+      try {
+        setLoadingAvailableProfessions(true);
+        const data = await ApiClient.get<any>('/v1/taxonomy/professions');
+        const list: Profession[] = Array.isArray(data) ? data : (data?.professions || []);
+        setAvailableProfessions(list);
+      } catch (err: any) {
+        showToast('Erro ao carregar catálogo de profissões', 'error');
+      } finally {
+        setLoadingAvailableProfessions(false);
+      }
+    }
+  };
+
+  const handleConfirmProfessionChange = async () => {
+    if (!selectedNewProfessionId) {
+      showToast('Selecione uma nova profissão', 'error');
+      return;
+    }
+    if (!currentUser?.professionalId) return;
+
+    try {
+      setSubmittingProfessionChange(true);
+      await ApiClient.put(`/v1/professionals/${currentUser.professionalId}`, {
+        professionId: selectedNewProfessionId
+      });
+      showToast('Profissão atualizada com sucesso!', 'success');
+      setIsProfessionModalOpen(false);
+      setMyProfessional(prev => prev ? { ...prev, profession_change_used: 1, profession_changed_at: new Date().toISOString() } : null);
+      await reloadSession();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao alterar profissão', 'error');
+    } finally {
+      setSubmittingProfessionChange(false);
+    }
+  };
 
   // Configurações da Clínica
   const [name, setName] = useState<string>('');
@@ -665,7 +737,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
     }
   ];
 
-  const cards = isClinicAdmin ? adminCards : staffCards;
+  const cards = isClinicAdmin
+    ? (currentUser?.professionalId ? [
+        adminCards[0],
+        {
+          id: 'profile_professional',
+          title: 'Meu Perfil Profissional',
+          desc: 'Consulte suas informações profissionais autorizadas, especialidades, registro e corrija sua profissão.',
+          icon: Briefcase,
+          iconBg: 'bg-teal-50',
+          iconColor: 'text-teal-600',
+          tags: ['Registro', 'Bio', 'Especialidades', 'Profissão']
+        },
+        ...adminCards.slice(1)
+      ] : adminCards)
+    : staffCards;
 
   const getSectionTitle = (sec: string) => {
     const found = [...adminCards, ...staffCards].find(c => c.id === sec);
@@ -905,7 +991,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
               <input
                 type="text"
                 disabled
-                value={currentUser?.name || ''}
+                value={myProfessional?.name || currentUser?.name || ''}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
               />
             </div>
@@ -914,7 +1000,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
               <input
                 type="text"
                 disabled
-                value={currentUser?.email || ''}
+                value={myProfessional?.email || currentUser?.email || ''}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
               />
             </div>
@@ -923,23 +1009,131 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
               <input
                 type="text"
                 disabled
-                value={(currentUser as any)?.professionName || (currentUser as any)?.profession_name || currentUser?.role || 'Profissional'}
+                value={myProfessional?.profession_name || (currentUser as any)?.professionName || (currentUser as any)?.profession_name || currentUser?.role || 'Profissional'}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
               />
+              {!Boolean(myProfessional?.profession_change_used ?? (currentUser as any)?.profession_change_used) && (
+                <div className="mt-1.5">
+                  <button
+                    type="button"
+                    onClick={handleOpenProfessionModal}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Errei minha profissão, preciso trocar</span>
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Registro / Conselho</label>
               <input
                 type="text"
                 disabled
-                value={`${(currentUser as any)?.registrationType || 'Conselho'}: ${(currentUser as any)?.registrationNumber || 'Pendente'}`}
+                value={`${myProfessional?.registration_type || (currentUser as any)?.registrationType || 'Conselho'}: ${myProfessional?.registration_number || (currentUser as any)?.registrationNumber || 'Pendente'}`}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-100 text-slate-600 cursor-not-allowed"
               />
             </div>
           </div>
-          <p className="text-slate-400 text-[11px] italic">
-            * Para alterações em dados de conselho profissional ou profissão, solicite ao Gestor da Clínica através da Ficha Única em Equipe & Acessos.
-          </p>
+        </div>
+      )}
+
+      {/* Modal: Corrigir minha profissão (Troca única) */}
+      {isProfessionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                  <Briefcase className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Corrigir minha profissão</h3>
+                  <p className="text-[11px] text-slate-500">Alteração única e definitiva</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsProfessionModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Você pode corrigir sua profissão apenas uma vez. Essa alteração modifica seu módulo profissional, recursos e áreas disponíveis no Zemda.
+            </p>
+
+            <div className="space-y-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100 text-xs">
+              <div>
+                <span className="text-slate-500 block text-[11px] font-semibold mb-0.5">Profissão atual:</span>
+                <span className="font-bold text-slate-800 text-xs bg-white px-2.5 py-1 rounded-lg border border-slate-200 inline-block">
+                  {myProfessional?.profession_name || (currentUser as any)?.professionName || (currentUser as any)?.profession_name || 'Profissional'}
+                </span>
+              </div>
+
+              <div>
+                <label className="text-slate-700 block text-[11px] font-semibold mb-1">
+                  Nova profissão:
+                </label>
+                {loadingAvailableProfessions ? (
+                  <div className="flex items-center gap-2 py-2 text-slate-500 text-xs">
+                    <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                    <span>Carregando catálogo de profissões...</span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedNewProfessionId}
+                    onChange={(e) => setSelectedNewProfessionId(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Selecione a nova profissão...</option>
+                    {availableProfessions
+                      .filter(p => p.id !== (myProfessional?.profession_id || (currentUser as any)?.professionId))
+                      .map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.displayOption || p.label || p.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 bg-amber-50 p-3 rounded-2xl border border-amber-200 text-amber-900 text-xs">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed">
+                Após confirmar, você não poderá alterar sua profissão novamente por este recurso.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsProfessionModalOpen(false)}
+                disabled={submittingProfessionChange}
+                className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmProfessionChange}
+                disabled={!selectedNewProfessionId || submittingProfessionChange}
+                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                {submittingProfessionChange ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Salvando...</span>
+                  </>
+                ) : (
+                  <span>Confirmar alteração</span>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

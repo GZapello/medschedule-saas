@@ -204,6 +204,14 @@ export class ProfessionalController {
       const isChangingProfession = Boolean(professionId && professionId !== currentProf.profession_id);
 
       if (isChangingProfession) {
+        // Apenas o próprio profissional pode alterar sua própria profissão (inclusive gestor com perfil profissional próprio)
+        if (!req.user || currentProf.user_id !== req.user.userId) {
+          res.status(403).json({
+            error: 'A profissão deve ser corrigida pelo próprio profissional.'
+          });
+          return;
+        }
+
         if (Boolean(currentProf.profession_change_used)) {
           res.status(403).json({
             error: 'A alteração de profissão já foi utilizada para este profissional e não é mais permitida.'

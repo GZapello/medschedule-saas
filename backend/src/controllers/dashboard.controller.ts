@@ -97,7 +97,10 @@ export class DashboardController {
       `);
       const totals = totalsStmt.get(tenantId, tenantId, tenantId) as any;
       if (req.user?.role === 'professional') {
-        totals.active_professionals = (db.prepare('SELECT COUNT(*) AS count FROM professionals WHERE tenant_id=? AND user_id=? AND active=1').get(tenantId, req.user.userId) as any).count;
+        const myActiveCount = (db.prepare('SELECT COUNT(*) AS count FROM professionals WHERE tenant_id=? AND user_id=? AND active=1').get(tenantId, req.user.userId) as any)?.count || 1;
+        totals.active_professionals = myActiveCount;
+        delete totals.active_services;
+        delete totals.active_rooms;
       }
 
       // 6. Taxa de ocupação estimada (baseada em agendamentos vs capacidade de 8 slots/dia por profissional)

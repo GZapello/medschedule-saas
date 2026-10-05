@@ -185,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'pending-exams',
           label: 'Exames a Receber',
           icon: ClipboardList,
-          visible: isClinicAdmin || isProfessional || isReceptionist || hasPermission('view_exams') || hasPermission('create_appointment')
+          visible: isClinicAdmin || hasCapability('CORE_EXAMS_RECEIVED') || hasCapability('CORE_EXAM_REQUEST') || hasPermission('view_exams')
         },
       ]
     },
@@ -209,7 +209,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'budgets',
           label: 'Orçamentos',
           icon: FileSpreadsheet,
-          visible: isClinicAdmin || isProfessional || hasPermission('view_budgets') || hasPermission('manage_budgets')
+          visible: isClinicAdmin || hasPermission('view_budgets') || hasPermission('manage_budgets')
         },
         {
           id: 'reports',

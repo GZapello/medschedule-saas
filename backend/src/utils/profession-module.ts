@@ -79,6 +79,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
   const regType = (normInput.registrationType || '').trim().toUpperCase();
 
   const combined = `${pId} ${pName} ${pSlug}`.toLowerCase();
+  const hasExplicitId = Boolean(pId && pId !== 'prof-outro');
 
   // =========================================================================
   // 0. PROFISSÕES E DOMÍNIOS DEFINITIVAMENTE FORA DO ESCOPO DE SAÚDE HUMANA
@@ -89,7 +90,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'veterinario' ||
     pSlug === 'medicina-veterinaria' ||
     combined.includes('veterin') ||
-    regType === 'CRMV' ||
+    (!hasExplicitId && regType === 'CRMV') ||
     pId === 'prof-advogado' ||
     pId === 'prof-contador' ||
     pId === 'prof-consultor' ||
@@ -110,8 +111,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('adestrador') ||
     combined.includes('professor particular') ||
     combined.includes('tutor escolar') ||
-    regType === 'OAB' ||
-    regType === 'CRC'
+    (!hasExplicitId && (regType === 'OAB' || regType === 'CRC'))
   ) {
     return {
       canonicalId: '',
@@ -133,7 +133,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pId === 'prof-biomedicina' ||
     pSlug === 'biomedicina' ||
     combined.includes('biomedic') ||
-    regType === 'CRBM'
+    (!hasExplicitId && regType === 'CRBM')
   ) {
     return {
       canonicalId: 'prof-biomedicina',
@@ -174,7 +174,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'enfermeiro' ||
     pSlug === 'enfermagem' ||
     combined.includes('enferm') ||
-    regType === 'COREN'
+    (!hasExplicitId && regType === 'COREN')
   ) {
     return {
       canonicalId: 'prof-enfermeiro',
@@ -193,7 +193,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pId === 'prof-farmacia' ||
     pSlug === 'farmacia' ||
     combined.includes('farmac') ||
-    regType === 'CRF'
+    (!hasExplicitId && regType === 'CRF')
   ) {
     return {
       canonicalId: 'prof-farmacia',
@@ -214,7 +214,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('serviço social') ||
     combined.includes('servico social') ||
     combined.includes('assistente social') ||
-    regType === 'CRESS'
+    (!hasExplicitId && regType === 'CRESS')
   ) {
     return {
       canonicalId: 'prof-servico-social',
@@ -419,7 +419,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'psicopedagogo' ||
     pSlug === 'psicopedagogia' ||
     combined.includes('psicopedag') ||
-    regType === 'ABPP'
+    (!hasExplicitId && regType === 'ABPP')
   ) {
     const isGeneralAlias = pId === 'prof-psicopedagogia' || pSlug === 'psicopedagogia';
     return {
@@ -452,7 +452,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     combined.includes('treinamento físico') ||
     combined.includes('musculação') ||
     combined.includes('musculacao') ||
-    regType === 'CREF'
+    (!hasExplicitId && regType === 'CREF')
   ) {
     const isGeneralAlias = pId === 'prof-educacao-fisica' || pSlug === 'educacao-fisica';
     return {
@@ -580,7 +580,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'medicina' ||
     combined.includes('médic') ||
     combined.includes('medic') ||
-    regType === 'CRM'
+    (!hasExplicitId && regType === 'CRM')
   ) {
     const isGeneralAlias = pId === 'prof-medicina' || pSlug === 'medicina';
     return {
@@ -654,7 +654,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'psicologia' ||
     combined.includes('psicólog') ||
     combined.includes('psicolog') ||
-    regType === 'CRP'
+    (!hasExplicitId && regType === 'CRP')
   ) {
     const isGeneralAlias = pId === 'prof-psicologia' || pSlug === 'psicologia';
     return {
@@ -678,7 +678,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'fonoaudiologo' ||
     pSlug === 'fonoaudiologia' ||
     combined.includes('fono') ||
-    regType === 'CRFA'
+    (!hasExplicitId && regType === 'CRFA')
   ) {
     const isGeneralAlias = pId === 'prof-fonoaudiologia' || pSlug === 'fonoaudiologia';
     return {
@@ -727,7 +727,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'nutricionista' ||
     pSlug === 'nutricao' ||
     combined.includes('nutri') ||
-    regType === 'CRN'
+    (!hasExplicitId && regType === 'CRN')
   ) {
     const isGeneralAlias = pId === 'prof-nutricao' || pSlug === 'nutricao';
     return {
@@ -831,7 +831,7 @@ export function resolveCanonicalProfession(input: string | ResolveProfessionInpu
     pSlug === 'odontologia' ||
     combined.includes('odonto') ||
     combined.includes('dentis') ||
-    regType === 'CRO'
+    (!hasExplicitId && regType === 'CRO')
   ) {
     const isGeneralAlias = pId === 'prof-odontologia' || pSlug === 'odontologia';
     return {
@@ -895,16 +895,16 @@ export function cleanPracticeAreasForNewProfession(newProfessionId: string, curr
   const rawAreas = currentPracticeAreas.split(/[,;\n]+/).map(a => a.trim()).filter(Boolean);
 
   const keywordsByModule: Record<ZemdaModule, string[]> = {
-    ZemdaFono: ['fono', 'audiologia', 'linguagem', 'voz', 'motricidade orofacial', 'disfagia'],
-    ZemdaTO: ['ocupacional', 'integração sensorial', 'avd', 'reabilitação física'],
-    ZemdaNutri: ['nutri', 'dieta', 'alimentar', 'emagrecimento', 'clínica e funcional'],
-    ZemdaPsico: ['psicolog', 'psicólog', 'tcc', 'psicanálise', 'terapia', 'psicoterapia'],
-    ZemdaPP: ['psicopedag', 'aprendizagem', 'dificuldades escolares'],
-    ZemdaFisio: ['fisio', 'reabilita', 'ortoped', 'ortopéd', 'traumato', 'pilates', 'cinesio'],
-    ZemdaOdonto: ['odonto', 'dentis', 'clareamento', 'ortodontia', 'endodontia', 'implante'],
-    ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'musculacao', 'treinamento', 'condicionamento físico'],
-    ZemdaMed: ['médic', 'medic', 'clínica médica', 'prescrição', 'soap', 'cid', 'neurologia', 'psiquiatria', 'pediatria', 'cardiologia', 'dermatologia'],
-    ZemdaEstetic: ['estet', 'estétic', 'facial', 'corporal', 'capilar', 'botox', 'preenchimento', 'bioestimulador']
+    ZemdaFono: ['fono', 'audiologia', 'linguagem', 'voz', 'motricidade orofacial', 'disfagia', 'audiometria', 'pa-fono'],
+    ZemdaTO: ['ocupacional', 'integração sensorial', 'avd', 'reabilitação física', 'terapia ocupacional', 'pa-to'],
+    ZemdaNutri: ['nutri', 'dieta', 'alimentar', 'emagrecimento', 'clínica e funcional', 'antropometria', 'cardápio', 'pa-nutri'],
+    ZemdaPsico: ['psicolog', 'psicólog', 'tcc', 'psicanálise', 'terapia', 'psicoterapia', 'psicológica', 'pa-psico'],
+    ZemdaPP: ['psicopedag', 'aprendizagem', 'dificuldades escolares', 'pa-pp'],
+    ZemdaFisio: ['fisio', 'reabilita', 'ortoped', 'ortopéd', 'traumato', 'pilates', 'cinesio', 'fisioterapia', 'pa-fisio'],
+    ZemdaOdonto: ['odonto', 'dentis', 'clareamento', 'ortodontia', 'endodontia', 'implante', 'periodontia', 'prótese dentária', 'pa-odonto'],
+    ZemdaPersonal: ['personal', 'personal trainer', 'musculação', 'musculacao', 'treinamento', 'condicionamento físico', 'educação física', 'educacao fisica', 'pa-personal'],
+    ZemdaMed: ['médic', 'medic', 'clínica médica', 'prescrição', 'soap', 'cid', 'neurologia', 'psiquiatria', 'pediatria', 'cardiologia', 'dermatologia', 'oftalmologia', 'ginecologia', 'urologia', 'otorrino', 'geriatria', 'endocrino', 'pa-med'],
+    ZemdaEstetic: ['estet', 'estétic', 'facial', 'corporal', 'capilar', 'botox', 'preenchimento', 'bioestimulador', 'harmonização', 'harmonizacao', 'pa-estetic']
   };
 
   const filtered = rawAreas.filter(area => {

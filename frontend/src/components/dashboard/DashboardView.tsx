@@ -43,6 +43,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const auth = useAuth();
   const { clientTermLabel } = auth;
+  const canCreatePatient = auth.isClinicAdmin || auth.hasPermission('create_patient') || auth.hasPermission('edit_patient');
+  const canCreateAppointment = auth.isClinicAdmin || auth.hasPermission('create_appointment');
   const { showToast } = useToast();
   const [loading, setLoading] = useState<boolean>(true);
   const [metrics, setMetrics] = useState<any>(null);
@@ -244,20 +246,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <button
-            onClick={onOpenNewPatient}
-            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all min-h-[36px] cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Novo {clientTermLabel}
-          </button>
-          <button
-            onClick={onOpenNewAppointment}
-            className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-all cursor-pointer min-h-[36px]"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Novo Agendamento
-          </button>
+          {canCreatePatient && (
+            <button
+              onClick={onOpenNewPatient}
+              className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all min-h-[36px] cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Novo {clientTermLabel}
+            </button>
+          )}
+          {canCreateAppointment && (
+            <button
+              onClick={onOpenNewAppointment}
+              className="flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs transition-all cursor-pointer min-h-[36px]"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Novo Agendamento
+            </button>
+          )}
         </div>
       </div>
 
@@ -378,12 +384,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="py-4 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">
               <CalendarIcon className="w-8 h-8 mx-auto mb-1.5 opacity-40 text-slate-400" />
               <p className="font-medium text-xs sm:text-sm">Nenhum atendimento encontrado com o filtro selecionado.</p>
-              <button
-                onClick={onOpenNewAppointment}
-                className="mt-2 text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
-              >
-                + Criar agendamento agora
-              </button>
+              {canCreateAppointment && (
+                <button
+                  onClick={onOpenNewAppointment}
+                  className="mt-2 text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
+                >
+                  + Criar agendamento agora
+                </button>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-slate-100 max-h-[320px] overflow-y-auto overflow-x-hidden pr-1.5 [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent]">
@@ -602,18 +610,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-2 pt-2 border-t border-slate-100 bg-slate-50 p-3 rounded-lg">
             <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1.5">Resumo Operacional</h4>
             <div className="space-y-1 text-xs text-slate-600">
-              <div className="flex justify-between">
-                <span>Profissionais Ativos:</span>
-                <span className="font-bold text-slate-900">{metrics?.totals?.active_professionals || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Serviços Configurados:</span>
-                <span className="font-bold text-slate-900">{metrics?.totals?.active_services || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Novos {clientTermLabel}s (mês):</span>
-                <span className="font-bold text-indigo-600">+{metrics?.monthly?.newPatients || 0}</span>
-              </div>
+              {auth.currentUser?.role === 'professional' ? (
+                <>
+                  <div className="flex justify-between">
+                    <span>Meus Atendimentos (mês):</span>
+                    <span className="font-bold text-slate-900">{metrics?.monthly?.totalAppointments || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Finalizados (mês):</span>
+                    <span className="font-bold text-slate-900">{metrics?.monthly?.completed || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Novos {clientTermLabel}s (mês):</span>
+                    <span className="font-bold text-indigo-600">+{metrics?.monthly?.newPatients || 0}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span>Profissionais Ativos:</span>
+                    <span className="font-bold text-slate-900">{metrics?.totals?.active_professionals || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Serviços Configurados:</span>
+                    <span className="font-bold text-slate-900">{metrics?.totals?.active_services || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Novos {clientTermLabel}s (mês):</span>
+                    <span className="font-bold text-indigo-600">+{metrics?.monthly?.newPatients || 0}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
