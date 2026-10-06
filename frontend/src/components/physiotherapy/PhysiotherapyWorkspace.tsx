@@ -1,3 +1,4 @@
+import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { ClinicalPainScale } from '../clinical/ClinicalPainScale';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { PostureGait } from '../clinical/PostureGait';
@@ -574,6 +575,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} sourceModule="ZemdaFisio"/>
       {completion.dialog}
 
       {/* CABEÇALHO DO MÓDULO ZEMDAFISIO */}

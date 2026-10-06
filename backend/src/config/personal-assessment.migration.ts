@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { REFERENCES } from '../services/personal-assessment-calculation.service';
 export const ASSESSMENT_COLUMNS: Record<string,string> = {
+  appointment_id:'TEXT', profession_id:'TEXT', assessment_type:'TEXT', mobility_json:'TEXT', pain_json:'TEXT', functional_json:'TEXT', gait_json:'TEXT',
   tav_estimated_value:'REAL',tav_estimated_unit:'TEXT',tav_estimation_protocol:'TEXT',tav_estimation_reference:'TEXT',tav_estimation_classification:'TEXT',
   tav_measured_value:'REAL',tav_measured_method:'TEXT',tav_measured_equipment:'TEXT',tav_measured_unit:'TEXT',
   hba1c_pct:'REAL',uric_acid_mg_dl:'REAL',glucose_is_fasting:'INTEGER',tav_protocol_race_code:'TEXT',

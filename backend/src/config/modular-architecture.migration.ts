@@ -571,6 +571,20 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   };
 
   // Regras padrão de cada profissão (DEFAULT, OPTIONAL, HIDDEN)
+  // Shared assessment distribution. Only global capability rules are configured;
+  // no patient records, optional selections or attachments are rewritten.
+  const sharedRules: [string,string[],string[]][] = [
+    ['prof-fisioterapeuta',['PHOTO_MONITORING'],[]],
+    ['prof-nutricionista',[],['PHOTO_MONITORING']],
+    ['prof-instrutor-pilates',['PHOTO_MONITORING','FUNCTIONAL_TESTS'],[]],
+    ['prof-esteticista',['ANTHROPOMETRY'],[]],
+    ['prof-personal-trainer',['POSTURE_GAIT','MOBILITY_ASSESSMENT','MUSCLE_STRENGTH','PAIN_ASSESSMENT','FUNCTIONAL_ASSESSMENT','FUNCTIONAL_TESTS','PHOTO_MONITORING'],[]]
+  ];
+  for(const [profession,defaults,optionals] of sharedRules) {
+    if(!existingProfIds.has(profession))continue;
+    for(const cap of defaults)rawDb.prepare(`INSERT INTO profession_capabilities(profession_id,capability_id,rule) VALUES (?,?,'DEFAULT') ON CONFLICT(profession_id,capability_id) DO UPDATE SET rule='DEFAULT'`).run(profession,cap);
+    for(const cap of optionals)insertProfCap.run(profession,cap,'OPTIONAL');
+  }
   // 1. Fisioterapia
   const fisioDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_AI', 'CORE_TIMELINE', 'BODY_MAP', 'PAIN_ASSESSMENT', 'MOBILITY_ASSESSMENT', 'MUSCLE_STRENGTH', 'FUNCTIONAL_ASSESSMENT', 'POSTURE_GAIT', 'FUNCTIONAL_TESTS', 'HOME_EXERCISES'];
   const fisioOptionals = ['ANTHROPOMETRY', 'BODY_COMPOSITION', 'PHYSICAL_ASSESSMENT', 'ADL_ASSESSMENT'];

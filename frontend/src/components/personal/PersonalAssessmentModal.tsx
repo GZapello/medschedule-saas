@@ -1,3 +1,4 @@
+import { fieldCapability, projectClinicalData } from '../../shared/clinical-assessments/policy';
 import {PersonalAssessmentIndicator,IndicatorDetails} from './PersonalAssessmentIndicator';
 import { PersonalTechnicalFields } from './PersonalTechnicalFields';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
@@ -39,7 +40,10 @@ interface PersonalAssessmentModalProps {
   studentsList?: Student[];
   assessmentToEdit?: any;
   postureOnly?: boolean;
-  sourceModule?: 'ZemdaPersonal' | 'ZemdaFisio';
+  sourceModule?: string;
+  patientId?: string;
+  appointmentId?: string;
+  allowedCapabilities?: string[];
   clientTermLabel?: string;
 }
 
@@ -48,18 +52,25 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   onClose,
   onSaved,
   student,
+  patientId,
+  appointmentId,
+  allowedCapabilities,
   studentsList = [],
   assessmentToEdit,
   postureOnly = false,
   sourceModule = 'ZemdaPersonal',
   clientTermLabel: propClientTermLabel
 }) => {
-  const effectiveTermLabel = propClientTermLabel || (postureOnly ? 'Paciente' : 'Aluno');
+  const can = (cap: string) => allowedCapabilities === undefined || allowedCapabilities.includes(cap);
+  const shared = allowedCapabilities !== undefined;
+  const assessmentApi = shared ? '/v1/clinical-assessments' : '/v1/personal/assessments';
+  const preparePayload = (payload: any) => shared ? projectClinicalData({...payload, appointment_id: appointmentId}, allowedCapabilities!) : payload;
+  const effectiveTermLabel = propClientTermLabel || (shared || postureOnly ? 'Paciente' : 'Aluno');
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'anthropometry' | 'composition' | 'skinfolds' | 'cardio_tests' | 'photos_notes'>('anthropometry');
+  const [activeTab, setActiveTab] = useState<'anthropometry' | 'composition' | 'skinfolds' | 'cardio_tests' | 'photos_notes' | 'clinical'>('anthropometry');
 
-  const [selectedStudentId, setSelectedStudentId] = useState(student?.id || '');
+  const [selectedStudentId, setSelectedStudentId] = useState(patientId || student?.id || '');
   const [selectedStudent, setSelectedStudent] = useState<Student | any | null>(student || null);
   const [assessmentDate, setAssessmentDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -155,6 +166,26 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const [photoLeft, setPhotoLeft] = useState('');
   const [photoLeftFileId, setPhotoLeftFileId] = useState('');
   const [notes, setNotes] = useState('');
+  const [clinicalFields, setClinicalFields] = useState<Record<string,string>>({});
+  useEffect(() => {
+    const fields: Record<string,string> = {};
+    for (const key of ['mobility_json','pain_json','functional_json','gait_json']) {
+      try { fields[key] = JSON.parse(assessmentToEdit?.[key] || '{}').notes || ''; } catch { fields[key]=''; }
+    }
+    setClinicalFields(fields);
+  }, [isOpen, patientId, assessmentToEdit?.id]);
+  const availableTabs = [
+    {id:'anthropometry',label:shared?'Antropometria e medidas':'1. Antropometria & Perímetros',enabled:can('ANTHROPOMETRY')},
+    {id:'composition',label:shared?'Composição corporal · TAV/eVAT · VAI':'2. Composição & TAV',enabled:can('BODY_COMPOSITION')},
+    {id:'skinfolds',label:shared?'Dobras':'3. Dobras Cutâneas',enabled:can('ANTHROPOMETRY')},
+    {id:'cardio_tests',label:shared?(can('MUSCLE_STRENGTH') || can('FUNCTIONAL_TESTS') || can('MOBILITY_ASSESSMENT') ? 'Força e testes funcionais' : can('MEDICAL_VITAL_SIGNS') ? 'Sinais vitais' : 'Dados bioquímicos para VAI'):'4. Cardio & Testes 1RM',enabled:can('BODY_COMPOSITION') || can('MUSCLE_STRENGTH') || can('FUNCTIONAL_TESTS') || can('MOBILITY_ASSESSMENT') || can('MEDICAL_VITAL_SIGNS')},
+    {id:'clinical',label:'Mobilidade, dor e marcha',enabled:shared && ['MOBILITY_ASSESSMENT','PAIN_ASSESSMENT','FUNCTIONAL_ASSESSMENT','POSTURE_GAIT'].some(can)},
+    {id:'photos_notes',label:!shared?'5. Fotos & Parecer':can('POSTURE_GAIT') ? 'Postura, fotos e observações' : can('PHOTO_MONITORING') ? 'Fotos e observações' : 'Observações',enabled:true}
+  ].filter(tab=>tab.enabled);
+  useEffect(() => {
+    if(shared && !postureOnly) setActiveTab(availableTabs[0].id as typeof activeTab);
+  }, [isOpen, patientId, allowedCapabilities?.join(',')]);
+
   useClinicalFormReset((assessmentToEdit?.patient_id || student?.id || selectedStudentId) + ':' + (assessmentToEdit?.id || 'new') + ':' + isOpen, [
     [weight, setWeight],
     [height, setHeight],
@@ -228,7 +259,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
   const [uploadingRight,setUploadingRight] = useState(false);
   const [uploadingLeft,setUploadingLeft] = useState(false);
   const photosUploading = uploadingFront || uploadingBack || uploadingRight || uploadingLeft;
-  useEffect(() => { if(isOpen) { const saved=readPosture(assessmentToEdit?.posture_json); setPosture(saved || (postureOnly ? emptyPosture() : null)); setPostureMode(Boolean(saved) || postureOnly); if(postureOnly)setActiveTab('photos_notes'); } }, [isOpen,assessmentToEdit?.id]);
+  useEffect(() => { if(isOpen) { const saved=can('POSTURE_GAIT') ? readPosture(assessmentToEdit?.posture_json) : null; setPosture(saved || (postureOnly ? emptyPosture() : null)); setPostureMode(Boolean(saved) || postureOnly); if(postureOnly)setActiveTab('photos_notes'); } }, [isOpen,assessmentToEdit?.id]);
 
   const autosavePayload = React.useMemo(() => ({
     weight,
@@ -399,12 +430,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     patientId: selectedStudentId,
     payload: autosavePayload,
     onRestoreDraft: handleRestoreDraft,
-    enabled: isOpen && !!selectedStudentId && !postureOnly
+    enabled: isOpen && !!selectedStudentId && !postureOnly && !shared
   });
 
   // Carregar protocolos TAV na abertura
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && can('BODY_COMPOSITION')) {
       loadTavProtocols();
     }
   }, [isOpen]);
@@ -530,7 +561,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
     setCalculationPreview(null);
     if(!isOpen || postureOnly || !selectedStudentId)return;
     let active=true;
-    const timer=setTimeout(()=>{ApiClient.post<any>('/v1/personal/assessments/preview',JSON.parse(previewKey)).then(r=>{if(active)setCalculationPreview(r)}).catch(()=>{if(active)setCalculationPreview(null)});},250);
+    const timer=setTimeout(()=>{ApiClient.post<any>(`${assessmentApi}/preview`,preparePayload(JSON.parse(previewKey))).then(r=>{if(active)setCalculationPreview(shared ? projectClinicalData(r,allowedCapabilities!) : r)}).catch(()=>{if(active)setCalculationPreview(null)});},250);
     return ()=>{active=false;clearTimeout(timer)};
   },[previewKey,isOpen,postureOnly,selectedStudentId]);
   const w=Number(weight) || 0,h=Number(height) || 0;
@@ -580,7 +611,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
       showToast(`Selecione o ${effectiveTermLabel.toLowerCase()} para a avaliação`, 'error');
       return;
     }
-    if ((!w || !h) && !posture) {
+    if (!shared && (!w || !h) && !posture) {
       showToast('Peso e altura são obrigatórios', 'error');
       return;
     }
@@ -692,12 +723,13 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
         notes,
         photos,
         posture: posture || undefined,
-        source_module: sourceModule
+        source_module: sourceModule,
+        ...Object.fromEntries(Object.entries(clinicalFields).map(([key,notes])=>[key,JSON.stringify({...(() => {try{return JSON.parse(assessmentToEdit?.[key] || '{}');}catch{return {};}})(),notes})]))
       };
 
       if (assessmentToEdit?.id) {
-        await ApiClient.put(`/v1/personal/assessments/${assessmentToEdit.id}`, postureOnly ? { assessment_date: assessmentDate, posture: posture || undefined, photos, notes, source_module: sourceModule } : payload);
-        showToast(postureOnly ? 'Avaliação postural atualizada com sucesso!' : 'Avaliação física atualizada com sucesso!', 'success');
+        await ApiClient.put(`${assessmentApi}/${assessmentToEdit.id}`, preparePayload(postureOnly ? { assessment_date: assessmentDate, posture: posture || undefined, photos, notes, source_module: sourceModule } : payload));
+        showToast(postureOnly ? 'Avaliação postural atualizada com sucesso!' : shared ? 'Avaliação clínica atualizada com sucesso!' : 'Avaliação física atualizada com sucesso!', 'success');
       } else {
         const createPayload = postureOnly ? {
           patient_id: selectedStudentId,
@@ -707,8 +739,8 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           notes,
           source_module: sourceModule
         } : payload;
-        await ApiClient.post('/v1/personal/assessments', createPayload);
-        showToast(postureOnly ? 'Avaliação postural registrada com sucesso!' : 'Avaliação física completa registrada com sucesso!', 'success');
+        await ApiClient.post(assessmentApi, preparePayload(createPayload));
+        showToast(postureOnly ? 'Avaliação postural registrada com sucesso!' : shared ? 'Avaliação clínica registrada com sucesso!' : 'Avaliação física completa registrada com sucesso!', 'success');
       }
       if(!postureOnly) await autosave.clearDraft();
       onSaved();
@@ -734,15 +766,15 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-800">
-                {postureOnly ? 'Avaliação Postural' : 'Avaliação Física Completa & Composição Corporal'}
+                {postureOnly ? 'Avaliação Postural' : shared ? 'Avaliação Clínica' : 'Avaliação Física Completa & Composição Corporal'}
               </h3>
               <p className="text-xs text-slate-500">
-                {postureOnly ? 'Fotos, marcações e observações por região.' : 'Antropometria, Composição, TAV, Dobras, Cardiovascular, Força 1RM e Fotos.'}
+                {shared ? 'Recursos disponíveis para seu atendimento.' : postureOnly ? 'Fotos, marcações e observações por região.' : 'Antropometria, Composição, TAV, Dobras, Cardiovascular, Força 1RM e Fotos.'}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {!postureOnly && <ClinicalAutosaveIndicator
+            {!postureOnly && !shared && <ClinicalAutosaveIndicator
               status={autosave.autosaveStatus}
               lastSavedTime={autosave.lastSavedTime}
             />}
@@ -760,15 +792,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           <div>
             <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">{effectiveTermLabel} *</label>
             <PatientSearchSelect
-              isStudent={!postureOnly}
+              isStudent={!postureOnly && !shared}
               clientTermLabel={effectiveTermLabel}
               value={selectedStudentId}
+              selectedPatient={shared ? {...currentStudent,id:selectedStudentId,full_name:currentStudent?.full_name || currentStudent?.name} : undefined}
               onChange={(id, stud) => {
                 if(id!==selectedStudentId){setPosture(postureMode?emptyPosture():null);setPhotoFrontFileId('');setPhotoBackFileId('');setPhotoRightFileId('');setPhotoLeftFileId('');setPhotoFront('');setPhotoBack('');setPhotoRight('');setPhotoLeft('');}
                 setSelectedStudentId(id);
                 setSelectedStudent((stud as any) || null);
               }}
-              disabled={!!student || postureBusy || saving || photosUploading}
+              disabled={shared || !!student || postureBusy || saving || photosUploading}
               placeholder={`Buscar ${effectiveTermLabel.toLowerCase()} pelo nome...`}
             />
           </div>
@@ -794,7 +827,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           </div>
         </div>
 
-        {!postureOnly && <>
+        {!postureOnly && !shared && <>
         {/* Mini KPI Preview Flutuante */}
         <div className="bg-gradient-to-r from-purple-950 via-indigo-950 to-slate-900 text-white px-6 py-2.5 flex items-center justify-around text-xs flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -831,86 +864,16 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {calculationPreview?.values?.vai_value!=null && <div className="text-xs"><span className="text-purple-300">VAI: </span><strong>{Number(calculationPreview.values.vai_value).toLocaleString('pt-BR',{maximumFractionDigits:2})}</strong><span className="text-[10px] text-slate-300"> · Adimensional</span></div>}
         </div>
 
-        {/* Barra de Navegação das 5 Abas */}
-        <div className="flex items-center gap-1 px-6 border-b border-slate-200 bg-white overflow-x-auto py-2">
-          <button
-            type="button"
-            disabled={photosUploading || postureBusy}
-            onClick={() => setActiveTab('anthropometry')}
-            className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
-              activeTab === 'anthropometry'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Ruler className="w-4 h-4" />
-            1. Antropometria & Perímetros
-          </button>
-
-          <button
-            type="button"
-            disabled={photosUploading || postureBusy}
-            onClick={() => setActiveTab('composition')}
-            className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
-              activeTab === 'composition'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Scale className="w-4 h-4" />
-            2. Composição & TAV
-          </button>
-
-          <button
-            type="button"
-            disabled={photosUploading || postureBusy}
-            onClick={() => setActiveTab('skinfolds')}
-            className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
-              activeTab === 'skinfolds'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            3. Dobras Cutâneas
-          </button>
-
-          <button
-            type="button"
-            disabled={photosUploading || postureBusy}
-            onClick={() => setActiveTab('cardio_tests')}
-            className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
-              activeTab === 'cardio_tests'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Heart className="w-4 h-4" />
-            4. Cardio & Testes 1RM
-          </button>
-
-          <button
-            type="button"
-            disabled={photosUploading || postureBusy}
-            onClick={() => setActiveTab('photos_notes')}
-            className={`px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all whitespace-nowrap ${
-              activeTab === 'photos_notes'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Camera className="w-4 h-4" />
-            5. Fotos & Parecer
-          </button>
-        </div>
-
         </>}
+        {!postureOnly && <div className="flex gap-2 px-6 py-2 border-b overflow-x-auto">
+          {availableTabs.map(tab=><button type="button" key={tab.id} disabled={photosUploading || postureBusy} onClick={()=>setActiveTab(tab.id as typeof activeTab)} className={`px-3 py-2 text-xs rounded-xl whitespace-nowrap ${activeTab===tab.id?'bg-teal-600 text-white':'bg-slate-100 text-slate-700'}`}>{tab.label}</button>)}
+        </div>}
         {/* Formulário Principal */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-6">
           {/* ========================================================
               ABA 1: ANTROPOMETRIA & PERÍMETROS COMPLETOS (COM D/E)
              ======================================================== */}
-          {activeTab === 'anthropometry' && (
+          {activeTab === 'anthropometry' && can('ANTHROPOMETRY') && (
             <div className="space-y-6 animate-fadeIn">
               {/* Peso, Altura e Índices de Risco */}
               <div>
@@ -1239,7 +1202,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {/* ========================================================
               ABA 2: COMPOSIÇÃO CORPORAL & MÓDULO TAV DEDICADO
              ======================================================== */}
-          {activeTab === 'composition' && (
+          {activeTab === 'composition' && can('BODY_COMPOSITION') && (
             <div className="space-y-6 animate-fadeIn">
               {/* Método de Avaliação de Composição */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
@@ -1470,7 +1433,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {/* ========================================================
               ABA 3: PROTOCOLOS & 9 DOBRAS CUTÂNEAS (MM)
              ======================================================== */}
-          {activeTab === 'skinfolds' && (
+          {activeTab === 'skinfolds' && can('ANTHROPOMETRY') && (
             <div className="space-y-6 animate-fadeIn">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div>
@@ -1615,11 +1578,11 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
           {/* ========================================================
               ABA 4: CARDIOVASCULAR & TESTES DE FORÇA 1RM / RESISTÊNCIA
              ======================================================== */}
-          {!postureOnly && ['skinfolds','composition','cardio_tests'].includes(activeTab) && <PersonalTechnicalFields value={technical} onChange={setTechnical} tab={activeTab} preview={calculationPreview}/>}
+          {!postureOnly && ['skinfolds','composition','cardio_tests'].includes(activeTab) && <PersonalTechnicalFields allowedCapabilities={allowedCapabilities} value={technical} onChange={setTechnical} tab={activeTab} preview={calculationPreview}/>}
           {activeTab === 'cardio_tests' && (
             <div className="space-y-6 animate-fadeIn">
               {/* Avaliação Cardiovascular */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              {can('MEDICAL_VITAL_SIGNS') && (              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                   <Heart className="w-4 h-4 text-rose-600" />
                   <span>Avaliação Cardiovascular & Hemodinâmica</span>
@@ -1665,10 +1628,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     />
                   </div>
                 </div>
-              </div>
+              </div>)}
 
               {/* Capacidade Cardiorrespiratória & VO2 Máx */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              {can('FUNCTIONAL_TESTS') && (              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                   <Activity className="w-4 h-4 text-emerald-600" />
                   <span>Cardiorrespiratório — VO₂ Máximo</span>
@@ -1718,10 +1681,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     />
                   </div>
                 </div>
-              </div>
+              </div>)}
 
               {/* Testes de Força 1RM Dinâmicos (Fórmula Epley) */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              {can('MUSCLE_STRENGTH') && (              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
@@ -1782,12 +1745,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     </div>
                   ))}
                 </div>
-              </div>
+              </div>)}
 
               {/* Resistência Muscular & Flexibilidade */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Resistência Muscular */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                {can('FUNCTIONAL_TESTS') && (                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                     Testes de Resistência Muscular
                   </h4>
@@ -1833,10 +1796,10 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       />
                     </div>
                   </div>
-                </div>
+                </div>)}
 
                 {/* Flexibilidade (Banco de Wells) */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                {can('MOBILITY_ASSESSMENT') && (                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
                     Flexibilidade — Banco de Wells
                   </h4>
@@ -1856,7 +1819,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                       Medido na escala padrão do Banco de Wells com pés apoiados na marca de 23 cm ou 0 cm conforme protocolo.
                     </p>
                   </div>
-                </div>
+                </div>)}
               </div>
             </div>
           )}
@@ -1866,17 +1829,17 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
              ======================================================== */}
           {activeTab === 'photos_notes' && (
             <div className="space-y-6 animate-fadeIn">
-              {!postureOnly && (
+              {!postureOnly && can('POSTURE_GAIT') && (
                 <label className="flex items-center gap-2 text-sm font-semibold text-indigo-800">
                   <input type="checkbox" checked={postureMode} disabled={postureBusy} onChange={e=>{setPostureMode(e.target.checked);if(e.target.checked&&!posture)setPosture(emptyPosture());}} />
                   Modo Avaliação Postural
                 </label>
               )}
-              {postureMode && posture && <Suspense fallback={<p className="text-xs">Carregando ferramentas posturais…</p>}><PersonalPostureEditor key={[selectedStudentId,photoFrontFileId,photoBackFileId,photoRightFileId,photoLeftFileId].join(':')} value={posture} onChange={setPosture} onBusy={setPostureBusy} patientId={selectedStudentId} photos={[
+              {can('POSTURE_GAIT') && postureMode && posture && <Suspense fallback={<p className="text-xs">Carregando ferramentas posturais…</p>}><PersonalPostureEditor key={[selectedStudentId,photoFrontFileId,photoBackFileId,photoRightFileId,photoLeftFileId].join(':')} value={posture} onChange={setPosture} onBusy={setPostureBusy} patientId={selectedStudentId} photos={[
                 {view:'front',fileId:photoFrontFileId,url:photoFront},{view:'back',fileId:photoBackFileId,url:photoBack},
                 {view:'right',fileId:photoRightFileId,url:photoRight},{view:'left',fileId:photoLeftFileId,url:photoLeft}
               ]} /></Suspense>}
-              <div className="space-y-3">
+              {can('PHOTO_MONITORING') && (              <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                     <Camera className="w-4 h-4 text-purple-600" />
@@ -1980,12 +1943,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                     }}
                   />
                 </div>
-              </div>
+              </div>)}
 
               {/* Parecer Técnico do Treinador */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Parecer Técnico e Recomendações do Treinador
+                  {shared ? 'Observações clínicas' : 'Parecer Técnico e Recomendações do Treinador'}
                 </label>
                 <textarea
                   rows={4}
@@ -1998,6 +1961,12 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
             </div>
           )}
 
+          {activeTab === 'clinical' && <div className="space-y-4">
+            {(['mobility_json','pain_json','functional_json','gait_json'] as const).filter(key=>can(fieldCapability(key)!)).map(key=><label key={key} className="block text-sm font-semibold">
+              {{mobility_json:'Mobilidade',pain_json:'Dor',functional_json:'Avaliação funcional',gait_json:'Postura e marcha'}[key]}
+              <textarea className="block w-full border rounded-xl p-3 mt-2" rows={4} value={clinicalFields[key] || ''} onChange={event=>setClinicalFields({...clinicalFields,[key]:event.target.value})}/>
+            </label>)}
+          </div>}
           {/* Footer com Botões */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <div className="text-[11px] text-slate-400">
@@ -2018,7 +1987,7 @@ export const PersonalAssessmentModal: React.FC<PersonalAssessmentModalProps> = (
                 className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded-xl flex items-center gap-2 shadow-sm transition-colors"
               >
                 <Save className="w-4 h-4" />
-                {saving ? 'Gravando Avaliação...' : postureOnly ? 'Salvar Avaliação Postural' : 'Salvar Avaliação Física Completa'}
+                {saving ? 'Gravando Avaliação...' : postureOnly ? 'Salvar Avaliação Postural' : shared ? 'Salvar Avaliação Clínica' : 'Salvar Avaliação Física Completa'}
               </button>
             </div>
           </div>

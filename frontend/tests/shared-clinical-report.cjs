@@ -1,0 +1,12 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),esbuild=require('esbuild'),React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
+const out=path.resolve(__dirname,'../../tmp/personal-report-tests');fs.mkdirSync(out,{recursive:true});
+esbuild.buildSync({entryPoints:[path.resolve(__dirname,'../src/components/personal/PersonalAssessmentReport.tsx')],bundle:true,platform:'node',format:'cjs',outfile:path.join(out,'shared-report.cjs'),external:['react','react-dom'],define:{'import.meta.env':'{}'},jsx:'automatic'});
+process.env.NODE_PATH=path.resolve(__dirname,'../node_modules');require('node:module').Module._initPaths();
+const {PersonalAssessmentReport}=require(path.join(out,'shared-report.cjs'));
+const assessment={id:'a',assessment_date:'2026-10-06',weight:70,height:170,body_fat_classification:'private-fat-result',body_fat_percentage:20,strength_tests_json:JSON.stringify([{exercise_name:'private-strength-result',reps:5}]),pain_json:JSON.stringify({notes:'private-pain-result'}),mobility_json:JSON.stringify({notes:'mobility-result'}),notes:'General clinical notes'};
+const data={assessment,student:{full_name:'Paciente'},professional:{name:'Profissional'},evolution_history:[assessment],photos:[{id:'photo',file_id:'private-photo-result',photo_url:''}]};
+const render=caps=>renderToStaticMarkup(React.createElement(PersonalAssessmentReport,{data,clinic:{name:'Clínica'},allowedCapabilities:caps}));
+const nutrition=render(['ANTHROPOMETRY','BODY_COMPOSITION']);assert.ok(nutrition.includes('private-fat-result'));assert.ok(!/private-strength-result|private-pain-result|private-photo-result/.test(nutrition));
+const physio=render(['MOBILITY_ASSESSMENT','MUSCLE_STRENGTH']);assert.ok(physio.includes('mobility-result')&&physio.includes('private-strength-result'));assert.ok(!/private-fat-result|private-pain-result|private-photo-result|DOBRAS E COMPOSIÇÃO/.test(physio));
+const pain=render(['PAIN_ASSESSMENT']);assert.ok(pain.includes('private-pain-result'));assert.ok(!/private-strength-result|private-fat-result|mobility-result/.test(pain));
+console.log(JSON.stringify({checks:6,report:'Capability-filtered raw and historical report data'}));

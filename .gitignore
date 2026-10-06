@@ -42,3 +42,4 @@ ExerciseGymGifsDB/
 # Synthetic personal-assessment audit and print artifacts
 /tmp/personal-audit/
 /tmp/personal-report-tests/
+/tmp/shared-clinical-browser/

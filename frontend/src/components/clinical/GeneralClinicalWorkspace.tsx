@@ -1,3 +1,4 @@
+import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ApiClient } from '../../api/client';
@@ -452,6 +453,7 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
           </div>
         </div>
       </header>
+      <ClinicalAssessmentsPanel patientId={patient?.id || initialPatientId || appointment?.patient_id || ''} patient={patient} appointmentId={initialAppointmentId || appointment?.id} sourceModule="general"/>
 
       {/* Navegação de Abas Dinâmicas baseadas em Capabilities */}
       <div className="bg-white border-b border-slate-200 px-4 sm:px-6">

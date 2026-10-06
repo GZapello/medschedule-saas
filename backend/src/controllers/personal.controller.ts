@@ -1,3 +1,6 @@
+import { fieldCapability } from '../shared/clinical-assessments/policy';
+import { authorizeAssessment } from '../shared/clinical-assessments/access';
+import { CapabilityService } from '../services/capability.service';
 import { PREDICTED_TAV_PROTOCOL, normalizeMeasuredTavInput, classifyTav as classifyMeasuredTav, calculateAssessment, normalizeLegacyAssessmentForReport, referenceSex, numberOrNull } from '../services/personal-assessment-calculation.service';
 import { ASSESSMENT_COLUMNS } from '../config/personal-assessment.migration';
 import { exerciseAnimation, getExerciseMaxCompletedLoad } from '../services/exercise-media';
@@ -183,10 +186,16 @@ export function hasPersonalAccess(req: Request): boolean {
   return false;
 }
 
+export function hasFullAssessmentAccess(req: Request): boolean {
+  if(!req.user || !req.tenantId || !hasPersonalAccess(req))return false;
+  const context=CapabilityService.computeUserCapabilities(req.user.userId,req.tenantId);
+  return context.professionId==='prof-personal-trainer' || req.user.role==='clinic_admin' && context.professionId==='prof-outro-saude';
+}
+
 export function hasPostureAccess(req: Request): boolean {
   if (!req.user || !req.tenantId) return false;
   if (req.user.role === 'superadmin') return false;
-  return hasPersonalAccess(req) || isPhysiotherapistOrClinicManager(req);
+  return hasPersonalAccess(req) || ['professional','clinic_admin'].includes(req.user.role) && ['ANTHROPOMETRY','BODY_COMPOSITION','POSTURE_GAIT','MOBILITY_ASSESSMENT','MUSCLE_STRENGTH','PAIN_ASSESSMENT','FUNCTIONAL_ASSESSMENT','FUNCTIONAL_TESTS','PHOTO_MONITORING'].some(cap=>CapabilityService.hasCapability(req.user!.userId,req.tenantId!,cap));
 }
 
 /**
@@ -857,8 +866,9 @@ export class PersonalController {
   // PROTOCOLOS & CLASSIFICAÇÃO DE TAV
   // ==========================================
   static async listTavProtocols(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req),'BODY_COMPOSITION')) return;
     try {
-      if (!hasPersonalAccess(req)) {
+      if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
         return;
       }
@@ -1021,8 +1031,9 @@ export class PersonalController {
   }
 
   static async classifyTav(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req),'BODY_COMPOSITION')) return;
     try {
-      if (!hasPersonalAccess(req)) {
+      if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
         return;
       }
@@ -1048,6 +1059,7 @@ export class PersonalController {
   // AVALIAÇÕES FÍSICAS & COMPOSIÇÃO CORPORAL
   // ==========================================
   static async listAssessments(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     try {
       if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado' });
@@ -1075,6 +1087,7 @@ export class PersonalController {
   }
 
   static async getAssessment(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     try {
       if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado' });
@@ -1110,12 +1123,14 @@ export class PersonalController {
   }
 
   static async previewAssessment(req: Request,res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     if(!hasPostureAccess(req)) {res.status(403).json({error:'Acesso não autorizado'});return;}
     const patient=db.prepare('SELECT * FROM patients WHERE id=? AND tenant_id=?').get(req.body.patient_id,req.tenantId);
     if(!patient){res.status(404).json({error:'Aluno não encontrado'});return;}
     res.json(calculateAssessment({...req.body,assessment_date:req.body.assessment_date || new Date().toISOString().slice(0,10)},patient,assessmentTavContext(req.body,req.tenantId!)));
   }
   static async assessmentReportData(req: Request,res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     try {
       if(!hasPostureAccess(req)){res.status(403).json({error:'Acesso não autorizado'});return;}
       const tenant=req.tenantId;
@@ -1133,6 +1148,7 @@ export class PersonalController {
   }
 
   static async createAssessment(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     try {
       if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado' });
@@ -1245,6 +1261,7 @@ export class PersonalController {
       db.prepare(`UPDATE personal_assessments SET ${Object.keys(extra).map(k=>k+' = ?').join(', ')} WHERE id=? AND tenant_id=?`).run(...Object.values(extra),assessmentId,tenantId);
 
       // Atualiza peso atual e altura no perfil do aluno
+      if (hasPersonalAccess(req)) {
       db.prepare(`
         INSERT INTO personal_student_profiles (id, tenant_id, patient_id, height, current_weight, updated_at)
         VALUES (?, ?, ?, ?, ?, datetime('now'))
@@ -1253,6 +1270,7 @@ export class PersonalController {
           current_weight = COALESCE(excluded.current_weight, personal_student_profiles.current_weight),
           updated_at = datetime('now')
       `).run('psp-' + uuidv4().slice(0, 8), tenantId, b.patient_id, height || null, weight || null);
+      }
 
       // Only the permanent R2 attachment ID is persisted. The frontend requests
       // a fresh signed URL from /v1/files/:id/url when it needs to render it.
@@ -1260,6 +1278,7 @@ export class PersonalController {
         saveAssessmentPhotos(assessmentId, b.patient_id, tenantId, assessmentDate, b.photos);
       }
 
+      db.prepare('UPDATE personal_assessments SET appointment_id=?,profession_id=?,assessment_type=?,mobility_json=?,pain_json=?,functional_json=?,gait_json=? WHERE id=? AND tenant_id=?').run(b.appointment_id || null,b.profession_id || null,b.assessment_type || 'clinical',b.mobility_json || null,b.pain_json || null,b.functional_json || null,b.gait_json || null,assessmentId,tenantId);
       if (postureJson !== undefined) db.prepare('UPDATE personal_assessments SET posture_json = ? WHERE id = ? AND tenant_id = ?').run(postureJson, assessmentId, tenantId);
       })();
 
@@ -1281,8 +1300,9 @@ export class PersonalController {
         ClinicalRecordService.recordClinicalEvent({
           tenantId,
           patientId: b.patient_id,
-          professionalId: b.professional_id || null,
-          moduleType: 'ZemdaPersonal',
+          professionalId,
+          moduleType: sourceModule,
+          appointmentId: b.appointment_id || null,
           sourceId: assessmentId,
           sourceType: 'personal_assessment',
           title: 'Avaliação Física e Cineantropometria',
@@ -1311,6 +1331,7 @@ export class PersonalController {
         console.warn('Aviso ao registrar avaliação física no prontuário:', recErr);
       }
 
+
       logAudit(req, 'CREATE_ASSESSMENT', 'personal_assessments', assessmentId, { patient_id: b.patient_id, bodyFatPct, weight, tavVal });
       res.status(201).json({
         id: assessmentId,
@@ -1334,6 +1355,7 @@ export class PersonalController {
   }
 
   static async updateAssessment(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     try {
       if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado' });
@@ -1353,7 +1375,7 @@ export class PersonalController {
       validatePosturePhotoAccess(db, tenantId, existing.patient_id, postureJson, b.photos);
 
       const columns = new Set((db.prepare('PRAGMA table_info(personal_assessments)').all() as any[]).map(c=>c.name));
-      const forbidden=new Set(['id','patient_id','tenant_id','professional_id','created_at','updated_at','calculation_version','calculation_metadata_json','anthropometric_sex_at_assessment','age_at_assessment','tav_estimated_value','tav_estimated_unit','tav_estimation_protocol','tav_estimation_reference','tav_estimation_classification']);
+      const forbidden=new Set(['id','patient_id','tenant_id','professional_id','created_at','updated_at','calculation_version','calculation_metadata_json','profession_id','appointment_id','source_module','anthropometric_sex_at_assessment','age_at_assessment','tav_estimated_value','tav_estimated_unit','tav_estimation_protocol','tav_estimation_reference','tav_estimation_classification']);
       const edits:Record<string,any>={};
       for(const [k,v] of Object.entries(b)) if(columns.has(k) && !forbidden.has(k) && k !== 'posture_json') edits[k]=v;
       for(const [key,jsonKey] of [['strength_tests','strength_tests_json'],['muscular_endurance_tests','muscular_endurance_tests_json'],['flexibility_tests','flexibility_tests_json'],['raw_composition_data','raw_composition_data_json']]) if(b[key] !== undefined) edits[jsonKey]=JSON.stringify(b[key]);
@@ -1373,7 +1395,7 @@ export class PersonalController {
           if(saved.classifications?.predictedTav) calculated.classifications.predictedTav=saved.classifications.predictedTav;
           calculated.values.calculation_metadata_json=JSON.stringify({...calculated.metadata,classifications:calculated.classifications,visceralAdiposity:calculated.visceralAdiposity});
         }
-        Object.assign(edits,Object.fromEntries(Object.entries(calculated.values).filter(([k])=>columns.has(k))));
+        Object.assign(edits,Object.fromEntries(Object.entries(calculated.values).filter(([k])=>columns.has(k) && (!fieldCapability(k) || ((req as any).clinicalAssessmentCapabilities || []).includes(fieldCapability(k))))));
       }
       if(!existing.calculation_version) for(const k of ['body_fat_percentage','fat_mass_kg','lean_mass_kg','muscle_mass_kg','bmr_kcal','bmi','whr','whtr']) if(edits[k]===null) delete edits[k];
       if(Object.keys(edits).length) db.prepare(`UPDATE personal_assessments SET ${Object.keys(edits).map(k=>k+'=?').join(',')},updated_at=datetime('now') WHERE id=? AND tenant_id=?`).run(...Object.values(edits),id,tenantId);
@@ -1408,7 +1430,8 @@ export class PersonalController {
             tenantId,
             patientId: updatedAssessment.patient_id,
             professionalId: updatedAssessment.professional_id || null,
-            moduleType: 'ZemdaPersonal',
+            moduleType: updatedAssessment.source_module || 'ZemdaPersonal',
+            appointmentId: updatedAssessment.appointment_id || null,
             sourceId: String(id),
             sourceType: 'personal_assessment',
             title: 'Avaliação Física e Cineantropometria',
@@ -1434,6 +1457,7 @@ export class PersonalController {
   }
 
   static async deleteAssessment(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     try {
       if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado' });
@@ -1459,6 +1483,7 @@ export class PersonalController {
   }
 
   static async compareAssessments(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     try {
       if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado' });
@@ -1603,8 +1628,9 @@ export class PersonalController {
   }
 
   static async getEvolutionData(req: Request, res: Response): Promise<void> {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req))) return;
     try {
-      if (!hasPersonalAccess(req)) {
+      if (!hasPostureAccess(req)) {
         res.status(403).json({ error: 'Acesso não autorizado ao ZemdaPersonal' });
         return;
       }

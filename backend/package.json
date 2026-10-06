@@ -15,7 +15,8 @@
     "exercises:audit": "node audit-and-sync-exercise-images.cjs",
     "exercises:photos": "node import-exercise-photos.cjs",
     "exercises:fallbacks": "npm run build && node build-exercise-fallbacks.cjs",
-    "test:personal-assessment": "npm run build && node run-tests.cjs test-personal-calculation.cjs test-personal-report.cjs test-personal-posture.cjs test-personal-expansion-and-students.cjs test-zemda-personal-and-body.cjs"
+    "test:personal-assessment": "npm run build && node run-tests.cjs test-personal-calculation.cjs test-personal-report.cjs test-personal-posture.cjs test-personal-expansion-and-students.cjs test-zemda-personal-and-body.cjs",
+    "test:clinical-assessments": "npm run build && node run-tests.cjs test-shared-clinical-assessments.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1134.0",

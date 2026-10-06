@@ -1,3 +1,4 @@
+import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
 import { ClinicalAutosaveIndicator } from '../clinical/ClinicalAutosaveIndicator';
@@ -657,6 +658,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50" data-testid="zemda-estetic-workspace">
+      <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} sourceModule="ZemdaEstetic"/>
       <ClinicalDraftRecoveryModal isOpen={autosave.conflictModalOpen} moduleName="ZemdaEstetic"
         onClose={() => autosave.resolveConflict('local')} onSelectVersion={autosave.resolveConflict} />
       {finishAppointment && <FinishConsultationModal appointment={finishAppointment}

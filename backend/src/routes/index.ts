@@ -622,6 +622,17 @@ api.post('/v1/body-assessments/therapeutic-plans', requireTenant, requireRole('c
 // ==========================================
 // MÓDULO ZEMDAPERSONAL (TREINAMENTO & PERSONAL TRAINER)
 // ==========================================
+// Shared clinical resources reuse the Personal engine; no workout/module access is granted.
+api.get('/v1/clinical-assessments/patients/:studentId', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.listAssessments);
+api.get('/v1/clinical-assessments/patients/:studentId/evolution', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getEvolutionData);
+api.post('/v1/clinical-assessments/preview', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.previewAssessment);
+api.get('/v1/clinical-assessments/:id/report-data', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.assessmentReportData);
+api.get('/v1/clinical-assessments/:id/compare/:compareId', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.compareAssessments);
+api.get('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getAssessment);
+api.post('/v1/clinical-assessments', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.createAssessment);
+api.put('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.updateAssessment);
+api.delete('/v1/clinical-assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.deleteAssessment);
+
 api.get('/v1/personal/dashboard', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.getDashboard);
 api.get('/v1/personal/search', requireTenant, requireRole('clinic_admin', 'professional'), PersonalController.smartSearch);
 

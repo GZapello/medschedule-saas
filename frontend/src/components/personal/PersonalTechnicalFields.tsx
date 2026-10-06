@@ -7,7 +7,9 @@ export const AnthropometricSexField = ({value,onChange}: {value:string,onChange:
     <option value="">Não informado</option><option value="male">Homem</option><option value="female">Mulher</option><option value="not_informed">Prefere não informar</option>
   </select>
 </div>;
-export function PersonalTechnicalFields({value,onChange,tab,preview}: {value:any,onChange:(v:any)=>void,tab:string,preview:any}) {
+export function PersonalTechnicalFields({value,onChange,tab,preview,allowedCapabilities}: {value:any,onChange:(v:any)=>void,tab:string,preview:any,allowedCapabilities?:string[]}) {
+  const can=(cap:string)=>allowedCapabilities===undefined || allowedCapabilities.includes(cap);
+  if(tab==='cardio_tests' && !can('BODY_COMPOSITION'))return null;
   const change=(k:string,v:any)=>onChange({...value,[k]:v});
   const input=(key:string,label:string,type='number')=><div key={key}><label className="block text-xs font-semibold text-slate-700 mb-1">{label}</label><input type={type} min={type==='number'?0:undefined} step="any" value={value[key] ?? ''} onChange={e=>change(key,type==='number'?(e.target.value===''?null:Number(e.target.value)):e.target.value)} className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none" /></div>;
   return <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-4 mt-4">

@@ -1,3 +1,4 @@
+import { fieldCapability } from '../../shared/clinical-assessments/policy';
 import {IndicatorDetails,assessmentIndicators,indicatorKey} from './PersonalAssessmentIndicator';
 import { dateLabel } from './posture';
 import React, { useState, useEffect, lazy, Suspense, useRef } from 'react';
@@ -32,6 +33,7 @@ interface PersonalAssessmentComparisonModalProps {
   initialCurrentId?: string;
   initialPreviousId?: string;
   postureOnly?: boolean;
+  allowedCapabilities?: string[];
 }
 
 export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentComparisonModalProps> = ({
@@ -41,8 +43,11 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
   assessmentsList,
   initialCurrentId,
   initialPreviousId,
-  postureOnly = false
+  postureOnly = false,
+  allowedCapabilities
 }) => {
+  const can = (cap:string) => allowedCapabilities === undefined || allowedCapabilities.includes(cap);
+  const assessmentApi = allowedCapabilities ? '/v1/clinical-assessments' : '/v1/personal/assessments';
   const { showToast } = useToast();
 
   const [currentId, setCurrentId] = useState(initialCurrentId || '');
@@ -87,7 +92,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
     try {
       setLoading(true);
       const data = await ApiClient.get<AssessmentComparison>(
-        `/v1/personal/assessments/${curId}/compare/${prevId}${activeCategory === 'posture' ? '?posture_baseline=1' : ''}`
+        `${assessmentApi}/${curId}/compare/${prevId}${activeCategory === 'posture' ? '?posture_baseline=1' : ''}`
       );
       if (request === requestVersion.current) setComparison(data);
     } catch (err) {
@@ -161,6 +166,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
 
   // Filtro de métricas por categoria
   const filteredMetrics = (comparison?.metrics || []).filter((m) => {
+    const cap=fieldCapability(m.field); if(cap && !can(cap))return false;
     if (activeCategory === 'all') return true;
     if (activeCategory === 'composition') {
       return [
@@ -212,7 +218,7 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
                 {postureOnly ? 'Comparativo de Avaliação Postural' : 'Comparativo de Avaliações Físicas (Anterior × Atual)'}
               </h3>
               <p className="text-xs text-slate-500">
-                {postureOnly ? 'Paciente: ' : 'Aluno: '}<strong className="text-slate-700">{student?.name || (student as any)?.full_name || '—'}</strong> • {postureOnly ? 'Evolução postural comparativa e referência inicial.' : 'Variações absolutas e percentuais.'}
+                {postureOnly || allowedCapabilities ? 'Paciente: ' : 'Aluno: '}<strong className="text-slate-700">{student?.name || (student as any)?.full_name || '—'}</strong> • {postureOnly ? 'Evolução postural comparativa e referência inicial.' : 'Variações absolutas e percentuais.'}
               </p>
             </div>
           </div>
@@ -303,49 +309,49 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
               >
                 Todas as Métricas
               </button>
-              <button
+              {(can('BODY_COMPOSITION')) && (<button
                 onClick={() => setActiveCategory('composition')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
                   activeCategory === 'composition' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 Composição & TAV
-              </button>
-              <button
+              </button>)}
+              {(can('ANTHROPOMETRY')) && (<button
                 onClick={() => setActiveCategory('perimeters')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
                   activeCategory === 'perimeters' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 Perímetros (cm)
-              </button>
-              <button
+              </button>)}
+              {(can('ANTHROPOMETRY')) && (<button
                 onClick={() => setActiveCategory('skinfolds')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
                   activeCategory === 'skinfolds' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 Dobras Cutâneas (mm)
-              </button>
-              <button
+              </button>)}
+              {(can('MEDICAL_VITAL_SIGNS') || can('FUNCTIONAL_TESTS') || can('MOBILITY_ASSESSMENT')) && (<button
                 onClick={() => setActiveCategory('cardio')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
                   activeCategory === 'cardio' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 Cardio & Funcional
-              </button>
-              <button
+              </button>)}
+              {(can('PHOTO_MONITORING')) && (<button
                 onClick={() => setActiveCategory('photos')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-colors whitespace-nowrap ${
                   activeCategory === 'photos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 Fotos Comparativas
-              </button>
+              </button>)}
             </div>
 
-            <button type="button" onClick={() => setActiveCategory('posture')} className="text-xs font-bold text-indigo-700 px-6 py-3 border-b text-left">Avaliação Postural • referência inicial e evolução</button>
+            {can('POSTURE_GAIT') && <button type="button" onClick={() => setActiveCategory('posture')} className="text-xs font-bold text-indigo-700 px-6 py-3 border-b text-left">Avaliação Postural • referência inicial e evolução</button>}
           </>
         ) : (
           <div className="px-6 py-2.5 bg-indigo-50/60 border-b border-indigo-100 flex items-center justify-between">
@@ -576,6 +582,17 @@ export const PersonalAssessmentComparisonModal: React.FC<PersonalAssessmentCompa
               )}
             </>
           )}
+          {allowedCapabilities && comparison && activeCategory==='all' && <div className="space-y-3 mt-4">
+            {Object.entries({mobility_json:'Mobilidade',pain_json:'Dor',functional_json:'Avaliação funcional',gait_json:'Postura e marcha'}).filter(([key])=>can(fieldCapability(key)!)).map(([key,label])=>{
+              const read=(assessment:any)=>{try{return JSON.parse(assessment?.[key] || '{}').notes || '';}catch{return '';}};
+              const previous=read(comparison.previous_assessment),current=read(comparison.current_assessment);
+              if(!previous && !current)return null;
+              return <section key={key} className="border border-slate-200 rounded-xl p-4"><h4 className="text-sm font-semibold mb-2">{label}</h4><div className="grid sm:grid-cols-2 gap-4 text-sm">
+                <div><p className="text-xs text-slate-500 mb-1">Anterior · {dateLabel(comparison.previous_assessment.assessment_date)}</p><p className="whitespace-pre-wrap">{previous || 'Não registrado'}</p></div>
+                <div><p className="text-xs text-slate-500 mb-1">Atual · {dateLabel(comparison.current_assessment.assessment_date)}</p><p className="whitespace-pre-wrap">{current || 'Não registrado'}</p></div>
+              </div></section>;
+            })}
+          </div>}
         </div>
 
         {/* Footer */}

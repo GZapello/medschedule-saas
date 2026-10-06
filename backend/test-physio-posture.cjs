@@ -79,6 +79,10 @@ const posture = {
   // Paciente
   db.prepare("INSERT INTO patients(id, tenant_id, full_name, phone) VALUES('pat-1', 'physio-tenant', 'Paciente Fisioterapia', '11988887777')").run();
 
+  // Shared assessments require an actual care relationship with this patient.
+  db.prepare("INSERT INTO services(id,tenant_id,name) VALUES('posture-service','physio-tenant','Avaliação')").run();
+  db.prepare("INSERT INTO appointments(id,tenant_id,appointment_number,patient_id,professional_id,service_id,start_time,end_time) VALUES('posture-appt','physio-tenant','posture-appt','pat-1','pro-physio','posture-service','2026-03-10T12:00:00','2026-03-10T13:00:00')").run();
+
   const physioAuth = { userId: 'physio-user', role: 'professional' };
   const psicoAuth = { userId: 'psico-user', role: 'professional' };
   const superAdminAuth = { userId: 'super-user', role: 'superadmin' };

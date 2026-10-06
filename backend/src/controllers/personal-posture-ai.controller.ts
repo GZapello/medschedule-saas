@@ -3,7 +3,8 @@ import crypto from 'crypto';
 import sharp from 'sharp';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { db } from '../config/database';
-import { hasPostureAccess } from './personal.controller';
+import { authorizeAssessment } from '../shared/clinical-assessments/access';
+import { hasFullAssessmentAccess, hasPostureAccess } from './personal.controller';
 import { r2StorageService } from '../services/r2-storage.service';
 import { POSTURE_REGIONS, POSTURE_VIEWS } from '../services/personal-posture.service';
 import { logAudit } from '../middlewares/audit.middleware';
@@ -106,6 +107,7 @@ export function getPostureAIConfiguration(): PostureAIConfigurationStatus {
 
 export class PersonalPostureAIController {
   static status(req: Request, res: Response) {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req),'POSTURE_GAIT')) return;
     if (!hasPostureAccess(req)) {
       res.status(403).json({ error: 'Acesso não autorizado', code: 'POSTURE_AI_FORBIDDEN' });
       return;
@@ -115,6 +117,7 @@ export class PersonalPostureAIController {
   }
 
   static async analyze(req: Request, res: Response) {
+    if (!authorizeAssessment(req,res,hasFullAssessmentAccess(req),'POSTURE_GAIT')) return;
     const startTime = Date.now();
     let currentStep = 'AUTH_CHECK';
 

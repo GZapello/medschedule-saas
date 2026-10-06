@@ -1,3 +1,4 @@
+import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -921,6 +922,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} sourceModule="ZemdaNutri"/>
       {completion.dialog}
 
       {/* CABEÇALHO DO MÓDULO ZEMDANUTRI */}
