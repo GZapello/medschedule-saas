@@ -15,6 +15,7 @@ import { hasPsychologyAccess } from './psychology.controller';
 import { isMedicalProfessionalOrClinicManager } from './medical.controller';
 import { isUserPersonalTrainer } from './personal.controller';
 import { getEsteticAccess } from './estetic.controller';
+import { persistEsteticCompletion } from './estetic-records';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 
 export class DocumentsController {
@@ -700,6 +701,10 @@ export class DocumentsController {
         .run(targetModule, appointmentId, tenantId);
 
       if (!saved) {
+      if (targetModule === 'ZemdaEstetic' && evolution?.moduleData) {
+        const esteticSnapshot = typeof evolution.moduleData === 'string' ? JSON.parse(evolution.moduleData) : evolution.moduleData;
+        persistEsteticCompletion(req, getEsteticAccess, esteticSnapshot, appt);
+      }
 
       // 1. Grava evolução do prontuário, se preenchida
       if (evolution && evolution.clinicalEvolution && evolution.clinicalEvolution.trim()) {
@@ -1194,6 +1199,10 @@ export class DocumentsController {
         timestamp: new Date().toISOString()
       });
 
+      if (typeof err.status === 'number' && err.status >= 400 && err.status < 500) {
+        res.status(err.status).json({ error: err.message, field: err.field, stage: currentStage });
+        return;
+      }
       // Resposta clara, segura e amigável ao profissional
       res.status(500).json({
         error: 'Não foi possível finalizar o atendimento. Nenhuma informação foi perdida. Tente novamente ou entre em contato com o suporte.',

@@ -431,10 +431,56 @@ EsteticController.getAssessments({
   query: { patientId: patientId1 }
 }, resIsol);
 
-assert.strictEqual(resIsol.statusCode, 200);
-assert.strictEqual(resIsol.body.length, 0, 'Clínica Beta NÃO deve ver avaliações da Clínica Alpha');
+assert([403, 404].includes(resIsol.statusCode), 'Clínica Beta não pode acessar paciente de outra clínica');
 console.log('  [PASS] Isolamento absoluto entre clínicas confirmado.');
 
 console.log('\n==================================================');
 console.log('TODOS OS 6 TESTES DE BACKEND PASSARAM COM SUCESSO!');
 console.log('==================================================\n');
+
+console.log('--- Regressões da auditoria funcional ---');
+const callEstetic = (method, body = {}, params = {}, query = {}, user = userEstetId) => {
+  const res = mockRes();
+  EsteticController[method]({ user: { userId: user, role: 'professional' }, tenantId: t1, body, params, query }, res);
+  return res;
+};
+const quantityBefore = () => db.prepare('SELECT quantity FROM inventory_items WHERE id = ?').get(itemId).quantity;
+const input = { patientId: patientId1, area: 'FACIAL', procedureName: 'Procedimento auditado', region: 'Fronte', productId: itemId, quantity: 2, unit: 'UI', deductInventory: true, datePerformed: '2026-10-01', postInstructions: 'Orientações completas', clientRequestId: 'audit-idempotency' };
+const stockBefore = quantityBefore();
+const created = callEstetic('createProcedure', input); assert.equal(created.statusCode, 201);
+const repeated = callEstetic('createProcedure', input); assert.equal(repeated.body.id, created.body.id); assert.equal(quantityBefore(), stockBefore - 2);
+const auditProc = db.prepare('SELECT * FROM estetic_procedures WHERE id = ?').get(created.body.id);
+assert.equal(auditProc.date_performed, '2026-10-01'); assert.equal(auditProc.post_instructions, 'Orientações completas'); assert.equal(auditProc.batch_lot, 'LOTE-BTX-9942');
+const edited = callEstetic('updateProcedure', { quantity: 3 }, {id: created.body.id}); assert.equal(edited.statusCode, 200); assert.equal(quantityBefore(), stockBefore - 3);
+const unchanged = callEstetic('updateProcedure', { quantity: 3 }, {id: created.body.id}); assert.equal(unchanged.statusCode, 200); assert.equal(quantityBefore(), stockBefore - 3);
+assert.equal(callEstetic('updateProcedure', {unit: 'ml'}, {id:created.body.id}).statusCode, 400);
+const insufficient = callEstetic('createProcedure', {...input, clientRequestId:'audit-insufficient', quantity:9999}); assert.equal(insufficient.statusCode,400); assert.equal(quantityBefore(),stockBefore-3);
+const missing = callEstetic('createProcedure', {...input, clientRequestId:'audit-missing', region:' '}); assert.equal(missing.statusCode,400); assert.equal(missing.body.field,'region');
+assert.equal(callEstetic('createProcedure', {...input, clientRequestId:'audit-bad-date', datePerformed:'2026-02-31'}).statusCode,400);
+assert.equal(callEstetic('createProcedure', {...input, clientRequestId:'audit-bad-patient', patientId:'missing-patient'}).statusCode,404);
+db.exec("CREATE TRIGGER fail_estetic_test BEFORE INSERT ON estetic_procedures WHEN NEW.procedure_name = 'FAIL-PROC' BEGIN SELECT RAISE(ABORT,'synthetic persistence failure'); END");
+assert.equal(callEstetic('createProcedure', {...input, clientRequestId:'audit-rollback', procedureName:'FAIL-PROC'}).statusCode,500); assert.equal(quantityBefore(),stockBefore-3);
+db.exec('DROP TRIGGER fail_estetic_test');
+assert.equal(callEstetic('deleteProcedure', {}, {id:created.body.id}).statusCode,200); assert.equal(quantityBefore(),stockBefore);
+assert.equal(callEstetic('deleteProcedure', {}, {id:created.body.id}).statusCode,404); assert.equal(quantityBefore(),stockBefore);
+const scheduled = callEstetic('createReturn',{patientId:patientId1,area:'FACIAL',scheduledDate:'2026-11-01',status:'AGENDADO'}); assert.equal(scheduled.statusCode,201);
+assert.equal(callEstetic('updateReturn',{status:'COMPARECEU',actualDate:'2026-11-01',returnAssessment:'Reavaliação'}, {id:scheduled.body.id}).statusCode,200);
+assert.equal(db.prepare('SELECT actual_date FROM estetic_returns WHERE id=?').get(scheduled.body.id).actual_date,'2026-11-01');
+assert.equal(callEstetic('updateReturn',{status:'INEXISTENTE'}, {id:scheduled.body.id}).statusCode,400);
+assert.equal(callEstetic('deleteReturn',{}, {id:scheduled.body.id}).statusCode,200);
+const assessmentUpdate = callEstetic('updateAssessment',{chiefComplaint:'Queixa revisada',specificData:{fitzpatrick:'IV',clinicalConduct:'Conduta revisada'}},{id:assessmentId}); assert.equal(assessmentUpdate.statusCode,200);
+assert.equal(db.prepare('SELECT chief_complaint FROM estetic_assessments WHERE id=?').get(assessmentId).chief_complaint,'Queixa revisada');
+const forbidden = callEstetic('updateAssessment',{area:'CORPORAL'}, {id:assessmentId}, {}, userDentistId); assert.equal(forbidden.statusCode,403);
+console.log('PASS: idempotência, edição, estorno único, rollback, validações específicas, datas, retornos e autorização de áreas.');
+
+const deniedReception = mockRes(); EsteticController.getConfig({user:{userId:userEstetId,role:'receptionist'},tenantId:t1,query:{}},deniedReception); assert.equal(deniedReception.statusCode,403);
+const deniedRoot = mockRes(); EsteticController.getConfig({user:{userId:userEstetId,role:'superadmin'},tenantId:t1,query:{}},deniedRoot); assert.equal(deniedRoot.statusCode,403);
+const corporal = callEstetic('createAssessment',{patientId:patientId1,area:'CORPORAL',chiefComplaint:'Corporal isolada'}); assert.equal(corporal.statusCode,201);
+const scoped = callEstetic('getAssessments',{}, {}, {patientId:patientId1,area:'TODOS'},userDentistId); assert.equal(scoped.statusCode,200); assert(scoped.body.every(row=>row.area==='FACIAL'));
+assert.equal(callEstetic('deleteAssessment',{}, {id:corporal.body.id},{},userDentistId).statusCode,403);
+const photoBody = {patientId:patientId1,area:'FACIAL',fileUrl:'https://example.test/synthetic.png',photoType:'ANTES',photoDate:'2026-10-01'};
+const duplicatePhotoA=callEstetic('createPhoto',photoBody),duplicatePhotoB=callEstetic('createPhoto',photoBody); assert.equal(duplicatePhotoA.body.id,duplicatePhotoB.body.id);
+assert.equal(callEstetic('createEvolution',{patientId:patientId2,area:'FACIAL',evolutionText:'Sem mistura',procedureId:procId}).statusCode,404);
+const sameClinicPatient = 'audit-second-patient'; db.prepare("INSERT INTO patients(id,tenant_id,full_name,phone) VALUES(?,?,?,?)").run(sameClinicPatient,t1,'Segundo paciente da auditoria','11999990002');
+assert.equal(callEstetic('createEvolution',{patientId:sameClinicPatient,area:'FACIAL',evolutionText:'Sem mistura',procedureId:procId}).statusCode,400);
+console.log('PASS: recepção, SuperAdmin real, leituras sem filtro de área, exclusão não autorizada, fotos duplicadas e vínculos entre pacientes.');

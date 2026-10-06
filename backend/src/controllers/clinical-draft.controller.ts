@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { getEsteticAccess } from './estetic.controller';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { hasClinicalAccess } from './clinical.controller';
@@ -60,6 +61,8 @@ export function validateModuleAccess(req: Request, moduleType: string, patientId
   const norm = normalizeModule(moduleType);
 
   switch (norm) {
+    case 'estetic':
+      return getEsteticAccess(req).allowed;
     case 'medical':
       return isMedicalProfessionalOrClinicManager(req) && hasClinicalAccess(req, patientId);
     case 'fono':

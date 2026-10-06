@@ -191,6 +191,7 @@ export class ApiClient {
     if (!response.ok) {
       let errorMsg = `Erro ${response.status}: ${response.statusText}`;
       let errorCode: string | undefined = undefined;
+      let errorField: string | undefined;
       try {
         const text = await response.text();
         if (isJson) {
@@ -198,6 +199,7 @@ export class ApiClient {
             const errorData = JSON.parse(text);
             if (errorData.error) errorMsg = errorData.error;
             if (errorData.code) errorCode = errorData.code;
+            if (typeof errorData.field === 'string') errorField = errorData.field;
           } catch {
             errorMsg = text.trim() || errorMsg;
           }
@@ -215,6 +217,7 @@ export class ApiClient {
       } catch (_) {}
       const err: any = new Error(errorMsg);
       err.code = errorCode;
+      err.field = errorField;
       err.status = response.status;
       err.contentType = contentType;
       err.requestUrl = requestUrl;

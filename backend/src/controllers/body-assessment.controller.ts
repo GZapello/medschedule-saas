@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { getEsteticAccess } from './estetic.controller';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { parseAnatomicalDocument, validateAnatomicalDocument, stampAnatomicalDocument } from '../services/anatomical-document';
@@ -79,15 +80,16 @@ export class BodyAssessmentController {
         SELECT ba.*, p.name as professional_name
         FROM body_assessments ba
         LEFT JOIN professionals p ON p.id = ba.professional_id
-        WHERE ba.appointment_id = ? AND ba.tenant_id = ?
+        WHERE ba.appointment_id = ? AND ba.tenant_id = ? AND (? IS NULL OR ba.module = ?)
         ORDER BY ba.created_at DESC LIMIT 1
-      `).get(appointmentId, tenantId) as any;
+      `).get(appointmentId, tenantId, req.query?.module || null, req.query?.module || null) as any;
 
       if (!assessment) {
         res.json({ assessment: null, markers: [], drawings: {} });
         return;
       }
 
+      if (String(assessment.module).startsWith('estetic') && !getEsteticAccess(req, String(assessment.module).split(':')[1]).allowed) { res.status(403).json({ error: 'Área estética não autorizada.' }); return; }
       const markers = db.prepare(`
         SELECT * FROM body_markers
         WHERE assessment_id = ? AND tenant_id = ?
@@ -160,7 +162,9 @@ export class BodyAssessmentController {
       `).all(patientId, tenantId);
 
       logAudit(req, 'LIST_BODY_ASSESSMENTS', 'body_assessments', patientId);
-      res.json(assessments);
+      const requestedModule = req.query?.module as string | undefined;
+      const aesthetic = getEsteticAccess(req);
+      res.json(assessments.filter((row: any) => (!requestedModule || row.module === requestedModule) && (!String(row.module).startsWith('estetic') || (aesthetic.allowed && (!String(row.module).includes(':') || aesthetic.allowedAreas.includes(String(row.module).split(':')[1]))))));
     } catch (err: any) {
       console.error('[BodyAssessmentController.listByPatient] Erro:', err);
       res.status(500).json({ error: 'Erro ao consultar histórico de mapas corporais' });
@@ -198,6 +202,7 @@ export class BodyAssessmentController {
         return;
       }
 
+      if (String(assessment.module).startsWith('estetic') && !getEsteticAccess(req, String(assessment.module).split(':')[1]).allowed) { res.status(403).json({ error: 'Área estética não autorizada.' }); return; }
       const markers = db.prepare(`
         SELECT * FROM body_markers
         WHERE assessment_id = ? AND tenant_id = ?
@@ -276,6 +281,10 @@ export class BodyAssessmentController {
         if (prof) resolvedProfId = prof.id;
       }
 
+      if (String(module).startsWith('estetic')) {
+        const auth = getEsteticAccess(req, String(module).split(':')[1]);
+        if (!auth.allowed) { res.status(403).json({error: auth.reason}); return; }
+      }
       const dateStr = assessmentDate || new Date().toISOString().split('T')[0];
 
       // Verifica se já existe por appointment_id ou por id
@@ -283,10 +292,10 @@ export class BodyAssessmentController {
       if (customId) {
         existing = db.prepare('SELECT * FROM body_assessments WHERE id = ? AND tenant_id = ?').get(customId, tenantId);
       } else if (appointmentId) {
-        existing = db.prepare('SELECT * FROM body_assessments WHERE appointment_id = ? AND tenant_id = ?').get(appointmentId, tenantId);
+        existing = module?.startsWith('estetic:') ? db.prepare('SELECT * FROM body_assessments WHERE appointment_id = ? AND tenant_id = ? AND module = ?').get(appointmentId, tenantId, module) : db.prepare('SELECT * FROM body_assessments WHERE appointment_id = ? AND tenant_id = ?').get(appointmentId, tenantId);
       }
 
-      if (existing && existing.patient_id !== patientId) {
+      if (existing && (existing.patient_id !== patientId || (String(module).startsWith('estetic:') && existing.module !== module))) {
         res.status(409).json({error:'A avaliação pertence a outro paciente'});return;
       }
       if(customId && !existing && db.prepare('SELECT id FROM body_assessments WHERE id=?').get(customId)) {

@@ -18,7 +18,12 @@ export function useAnatomicalAssessment(options: {onAssessmentSaved?:(id:string)
     setLoading(true);setLoadError(false);setStatus('idle');
     (async()=>{
       try{
-        const data=options.initialAssessmentId ? await ApiClient.get<any>(`/v1/body-assessments/${options.initialAssessmentId}`) : options.appointmentId ? await ApiClient.get<any>(`/v1/body-assessments/appointment/${options.appointmentId}`) : {};
+        let restoredId = options.initialAssessmentId;
+        if (!restoredId && !options.appointmentId && options.module.startsWith('estetic:')) {
+          const history = await ApiClient.get<any[]>(`/v1/body-assessments/patient/${options.patientId}?module=${encodeURIComponent(options.module)}`);
+          restoredId = history[0]?.id;
+        }
+        const data=restoredId ? await ApiClient.get<any>(`/v1/body-assessments/${restoredId}`) : options.appointmentId ? await ApiClient.get<any>(`/v1/body-assessments/appointment/${options.appointmentId}?module=${encodeURIComponent(options.module)}`) : {};
         if(version!==epoch.current)return;
         if(data.assessment?.patient_id && data.assessment.patient_id!==options.patientId)throw Error('A avaliação pertence a outro paciente.');
         idRef.current=data.assessment?.id || options.initialAssessmentId;
@@ -28,7 +33,7 @@ export function useAnatomicalAssessment(options: {onAssessmentSaved?:(id:string)
       finally{if(version===epoch.current)setLoading(false);}
     })();
     return ()=>{if(timer.current)clearTimeout(timer.current);epoch.current++;};
-  },[options.patientId,options.initialAssessmentId,options.appointmentId]);
+  },[options.patientId,options.initialAssessmentId,options.appointmentId,options.module]);
 
   const save=(manual=false)=>{
     if(options.readOnly)return Promise.resolve(true);

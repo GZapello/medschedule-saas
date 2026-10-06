@@ -34,3 +34,8 @@ app.post('/__e2e/verified-email', (req, res) => {
   res.json({ token });
 });
 app.post('/__e2e/failure/:id', (_req, res) => res.status(503).json({ error: 'CLINICAL_SECRET_MUST_NOT_APPEAR_IN_TELEMETRY' }));
+
+for (const suffix of ['A','B']) db.prepare("INSERT INTO patients(id,tenant_id,full_name,phone) VALUES(?,'test-clinic',?,'11999990001')").run('pat-estetic-'+suffix,'Estética paciente '+suffix);
+db.prepare("INSERT INTO inventory_items(id,tenant_id,name,category,quantity,unit,batch_number,expiration_date,active) VALUES('estetic-stock','test-clinic','Produto sintético','consumable',20,'ml','LOTE-E2E','2028-01-01',1)").run();
+
+require('../../backend/dist/services/capability.service').CapabilityService.setUserPracticeAreas('estetic','test-clinic',['pa-estet-facial','pa-estet-corporal','pa-estet-capilar']);

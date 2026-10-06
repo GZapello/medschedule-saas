@@ -168,6 +168,22 @@ export function migrateEstetic(rawDb: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_estetic_photos_patient ON estetic_photos(tenant_id, patient_id, area, photo_date);
   `);
 
+  // Campos apresentados no workspace; migração aditiva preserva registros anteriores.
+  const fields: Record<string, Record<string, string>> = {
+    estetic_plans: { objectives: 'TEXT', appointment_id: 'TEXT' },
+    estetic_procedures: { date_performed: 'TEXT', post_instructions: 'TEXT', inventory_deducted: 'INTEGER DEFAULT 0', deducted_quantity: 'REAL DEFAULT 0' },
+    estetic_evolutions: { evolution_date: 'TEXT' },
+    estetic_returns: { appointment_id: 'TEXT', scheduled_date: 'TEXT', actual_date: 'TEXT', status: "TEXT DEFAULT 'AGENDADO'", touchup_required: 'INTEGER', touchup_description: 'TEXT' },
+    estetic_photos: { photo_type: "TEXT DEFAULT 'ACOMPANHAMENTO'" }
+  };
+  for (const [table, columns] of Object.entries(fields)) {
+    for (const [column, definition] of Object.entries(columns)) addColIfMissing(table, column, definition);
+  }
+  for (const table of ['estetic_assessments', 'estetic_plans', 'estetic_procedures', 'estetic_evolutions', 'estetic_returns', 'estetic_photos']) {
+    addColIfMissing(table, 'client_request_id', 'TEXT');
+    rawDb.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_${table}_request ON ${table}(tenant_id, client_request_id) WHERE client_request_id IS NOT NULL;`);
+  }
+
   // 3. Área de Atuação Capilar no Catálogo Geral (se ausente)
   const capilarExists = rawDb.prepare("SELECT id FROM practice_areas WHERE id = 'pa-estet-capilar'").get();
   if (!capilarExists) {

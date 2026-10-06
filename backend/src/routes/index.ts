@@ -961,4 +961,14 @@ api.delete('/v1/estetic/photos/:id', requireTenant, requireRole('clinic_admin', 
 api.get('/v1/estetic/before-after', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getBeforeAfter);
 api.get('/v1/estetic/history', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.getHistory);
 
+api.patch('/v1/estetic/plans/:id/item-status', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updatePlanItem);
+api.put('/v1/estetic/assessments/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateAssessment);
+api.put('/v1/estetic/procedures/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateProcedure);
+api.put('/v1/estetic/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateEvolution);
+api.delete('/v1/estetic/evolutions/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deleteEvolution);
+api.patch('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateReturn);
+api.put('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updateReturn);
+api.delete('/v1/estetic/returns/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.deleteReturn);
+api.put('/v1/estetic/photos/:id', requireTenant, requireRole('clinic_admin', 'professional'), EsteticController.updatePhoto);
+
 export default api;

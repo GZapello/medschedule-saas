@@ -80,7 +80,7 @@ export const ZemdaBodyWorkspace: React.FC<ZemdaBodyWorkspaceProps> = ({
   const handleClearAllRegions=()=>{if(!readOnly && confirm('Desmarcar todas as regiões desta base e vista?'))state.update({selectedRegions:[]});};
   const handleModelChange=(sex:'female'|'male')=>{setFocusedRegion('');state.navigate(mapType,sex,layer.view);};
   const handleManualSave=()=>state.save(true);
-  const openHistory=async()=>{try{if(!await state.save())return;setHistory(await ApiClient.get<any[]>(`/v1/body-assessments/patient/${patientId}`));}catch{showToast('Não foi possível carregar o histórico.','error');}};
+  const openHistory=async()=>{try{if(!await state.save())return;setHistory(await ApiClient.get<any[]>(`/v1/body-assessments/patient/${patientId}${module.startsWith('estetic:') ? `?module=${encodeURIComponent(module)}` : ''}`));}catch{showToast('Não foi possível carregar o histórico.','error');}};
   if(loadError)return <p role="alert" className="p-6 text-rose-700">Não foi possível carregar o mapa. Feche e reabra para tentar novamente; nenhum dado foi alterado.</p>;
 
   if (loading) {

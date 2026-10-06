@@ -8,7 +8,7 @@ import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryMod
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { ClinicalBooleanSelect } from '../clinical/ClinicalBooleanSelect';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
   Activity,
@@ -47,6 +47,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { ApiClient } from '../../api/client';
+import { esteticPayload, loadEsteticPatient } from './estetic-api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { PatientSearchSelect, PatientSearchResult } from '../common/PatientSearchSelect';
@@ -55,6 +56,9 @@ import { ZemdaBodyModal } from '../zemda-body/ZemdaBodyModal';
 import { ZemdaBodyWorkspace } from '../zemda-body/ZemdaBodyWorkspace';
 
 export type EsteticArea = 'FACIAL' | 'CORPORAL' | 'CAPILAR';
+
+const assessmentLabels: Record<string, string> = { fitzpatrick: 'Fototipo', glogau: 'Glogau', dynamicLines: 'Linhas dinâmicas', staticLines: 'Linhas estáticas', flaccidityRegions: 'Regiões com flacidez', volumeLossRegions: 'Perda de volume', targetRegions: 'Regiões avaliadas', bodyAlterationType: 'Alteração corporal', celluliteGrade: 'Grau de celulite', stretchMarks: 'Estrias', circumferences: 'Circunferências', habits: 'Hábitos', physicalActivity: 'Atividade física', waterIntake: 'Ingestão de água', smoking: 'Tabagismo', hairLossPattern: 'Padrão de queda', hairLossScale: 'Escala de queda', scalpCondition: 'Couro cabeludo', oiliness: 'Oleosidade', flaking: 'Descamação', erythema: 'Eritema', sensitivity: 'Sensibilidade', pullTest: 'Teste de tração', fiberDensity: 'Densidade dos fios', familyHistory: 'Histórico familiar', previousTreatments: 'Tratamentos anteriores', contraindications: 'Contraindicações', allergies: 'Alergias', currentMedications: 'Medicações', clinicalConduct: 'Conduta', observations: 'Observações', cintura: 'Cintura', abdomen: 'Abdômen', quadril: 'Quadril', coxaDir: 'Coxa direita', coxaEsq: 'Coxa esquerda', bracoDir: 'Braço direito', bracoEsq: 'Braço esquerdo' };
+const formatAssessmentValue = (value: any): string => Array.isArray(value) ? value.join(', ') : typeof value === 'object' ? Object.entries(value).filter(([, entry]) => entry !== '' && entry != null).map(([key, entry]) => `${assessmentLabels[key] || key}: ${formatAssessmentValue(entry)}`).join(' • ') : String(value);
 
 interface ZemdaEsteticWorkspaceProps {
   initialPatientId?: string;
@@ -82,6 +86,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
   // Paciente selecionado
   const [selectedPatientId, setSelectedPatientId] = useState<string>(initialPatientId || '');
   const [selectedPatient, setSelectedPatient] = useState<PatientSearchResult | null>(null);
+
+  const [directEncounter, setDirectEncounter] = useState<{ patientId: string; id: string } | null>(null);
+  const encounterId = initialAppointmentId || (directEncounter?.patientId === selectedPatientId ? directEncounter.id : undefined);
 
   // Navegação por abas
   const [activeTab, setActiveTab] = useState<
@@ -124,6 +131,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
   // Formulário de Nova Avaliação
   const [assessmentForm, setAssessmentForm] = useState({
+    assessmentDate: new Date().toISOString().slice(0, 10),
     complaint: '',
     expectations: '',
     // Facial
@@ -156,6 +164,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     observations: ''
   });
   const [isSavingAssessment, setIsSavingAssessment] = useState(false);
+  const [comparisonIds, setComparisonIds] = useState<string[]>([]);
+  const [showComparison, setShowComparison] = useState(false);
   const [selectedAssessmentDetail, setSelectedAssessmentDetail] = useState<any | null>(null);
 
   // Formulário de Novo Plano
@@ -191,6 +201,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     post_instructions: '',
     deduct_inventory: false,
     inventory_item_id: '',
+    plan_id: '',
     plan_item_id: ''
   });
 
@@ -220,50 +231,133 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     actual_date: '',
     area: 'FACIAL' as EsteticArea,
     procedure_id: '',
-    status: 'AGENDADO' as 'AGENDADO' | 'COMPARECEU' | 'RETOQUE_REALIZADO' | 'ALTA_CICLO',
+    status: 'AGENDADO' as 'AGENDADO' | 'COMPARECEU' | 'RETOQUE_REALIZADO' | 'ALTA_CICLO' | 'CANCELADO',
     evaluation_notes: '',
     touchup_required: undefined as boolean | undefined,
     touchup_description: ''
   });
 
-  const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
+  const isCurrentPatientContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
     [assessmentForm, setAssessmentForm],
     [planForm, setPlanForm],
     [procedureForm, setProcedureForm],
     [evolutionForm, setEvolutionForm],
     [returnForm, setReturnForm],
+    [photoForm, setPhotoForm],
   ]);
 
+  const currentArea = useRef(activeArea); currentArea.current = activeArea;
+  const isCurrentClinicalContext = () => isCurrentPatientContext() && currentArea.current === activeArea;
   const [finishAppointment, setFinishAppointment] = useState<any>(null);
-  const clinicalPayload = { assessmentForm, planForm, procedureForm, evolutionForm, returnForm };
+  const defaults = useRef(structuredClone({ assessmentForm, planForm, procedureForm, evolutionForm, returnForm, photoForm }));
+  const [areaDrafts, setAreaDrafts] = useState<Record<string, any>>({});
+  const [recordIds, setRecordIds] = useState<Record<string, Record<string, string>>>({});
+  const [sessionRecordIds, setSessionRecordIds] = useState<Record<string, Record<string, string[]>>>({});
+  const forms = { assessmentForm, planForm, procedureForm, evolutionForm, returnForm, photoForm };
+  const clinicalPayload = { ...forms, activeArea, recordIds, sessionRecordIds, areas: { ...areaDrafts, [activeArea]: forms } };
+  const restoreForms = (draft: any, area: EsteticArea) => {
+    const value = { ...structuredClone(defaults.current), ...draft };
+    setAssessmentForm(value.assessmentForm);
+    setPlanForm({ ...value.planForm, area }); setProcedureForm({ ...value.procedureForm, area });
+    setEvolutionForm({ ...value.evolutionForm, area }); setReturnForm({ ...value.returnForm, area }); setPhotoForm({ ...value.photoForm, area });
+  };
+  const [editing, setEditing] = useState<{ kind: string; id: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ kind: string; id: string } | null>(null);
+  const [invalidField, setInvalidField] = useState('');
+  const [savingRecord, setSavingRecord] = useState(false);
+  const saveBusy = useRef(false);
+  const requestIds = useRef<Record<string, string>>({});
+  const mapSave = useRef<(() => Promise<boolean>) | null>(null);
+  const closeRecordModals = () => { setIsNewPlanModalOpen(false); setIsNewProcedureModalOpen(false); setIsNewEvolutionModalOpen(false); setIsNewReturnModalOpen(false); setIsNewPhotoModalOpen(false); setLightboxPhoto(null); setSelectedAssessmentDetail(null); setIsZemda360ModalOpen(false); setEditing(null); setPendingDelete(null); };
+  useLayoutEffect(() => { setComparisonIds([]); setShowComparison(false); setAreaDrafts({}); setRecordIds({}); setSessionRecordIds({}); requestIds.current = {}; closeRecordModals(); restoreForms({}, activeArea); mapSave.current = null; }, [selectedPatientId, initialAppointmentId]);
+  const changeArea = async (area: EsteticArea) => {
+    if (saveBusy.current || (activeTab === 'zemda360' && mapSave.current && !await mapSave.current())) return;
+    setAreaDrafts(previous => ({ ...previous, [activeArea]: forms }));
+    restoreForms(areaDrafts[area] || {}, area);
+    setComparisonIds([]); setShowComparison(false); closeRecordModals(); requestIds.current = {}; setActiveArea(area);
+  };
   const autosave = useClinicalAutosave({
-    moduleType: 'ZemdaEstetic', patientId: selectedPatientId, appointmentId: initialAppointmentId,
+    moduleType: 'ZemdaEstetic', patientId: selectedPatientId, appointmentId: encounterId,
     payload: clinicalPayload,
     onRestoreDraft: draft => {
-      if (draft.assessmentForm) setAssessmentForm(previous => ({ ...previous, ...draft.assessmentForm }));
-      if (draft.planForm) setPlanForm(previous => ({ ...previous, ...draft.planForm }));
-      if (draft.procedureForm) setProcedureForm(previous => ({ ...previous, ...draft.procedureForm }));
-      if (draft.evolutionForm) setEvolutionForm(previous => ({ ...previous, ...draft.evolutionForm }));
-      if (draft.returnForm) setReturnForm(previous => ({ ...previous, ...draft.returnForm }));
+      const area = ['FACIAL', 'CORPORAL', 'CAPILAR'].includes(draft.activeArea) ? draft.activeArea as EsteticArea : activeArea;
+      setRecordIds(draft.recordIds || {}); setSessionRecordIds(draft.sessionRecordIds || {});
+      setAreaDrafts(draft.areas || {}); setActiveArea(area);
+      restoreForms(draft.areas?.[area] || draft, area);
     }
   });
+  const changeTab = async (tab: typeof activeTab) => {
+    if (saveBusy.current || (activeTab === 'zemda360' && mapSave.current && !await mapSave.current())) return;
+    setActiveTab(tab);
+  };
+  const saveRecord = async (kind: string, body: any) => {
+    if (saveBusy.current) throw new Error('Aguarde o registro em andamento.');
+    saveBusy.current = true; setSavingRecord(true); setInvalidField('');
+    const update = editing?.kind === kind ? editing.id : kind === 'assessments' ? recordIds[activeArea]?.assessments : undefined;
+    requestIds.current[kind] ||= crypto.randomUUID();
+    try {
+      const payload = esteticPayload(kind, { ...body, clientRequestId: requestIds.current[kind] });
+      const result = update ? await ApiClient.put<any>(`/v1/estetic/${kind}/${update}`, payload) : await ApiClient.post<any>(`/v1/estetic/${kind}`, payload);
+      if (isCurrentClinicalContext()) {
+        setRecordIds(previous => ({ ...previous, [activeArea]: { ...previous[activeArea], [kind]: result.id } }));
+        setSessionRecordIds(previous => ({ ...previous, [activeArea]: { ...previous[activeArea], [kind]: [...new Set([...(previous[activeArea]?.[kind] || []), result.id])] } }));
+        setEditing(null); delete requestIds.current[kind];
+      }
+      return result;
+    } catch (error: any) { if (isCurrentClinicalContext()) setInvalidField(error.field || ''); throw error; } finally { saveBusy.current = false; setSavingRecord(false); }
+  };
+  const editRecord = (kind: string, row: any) => {
+    setEditing({ kind, id: row.id });
+    setRecordIds(previous => ({ ...previous, [activeArea]: { ...previous[activeArea], [kind]: row.id } }));
+    const merge = (base: any) => Object.fromEntries(Object.entries(base).map(([key, value]) => [key, row[key] == null ? value : key === 'quantity' ? String(row[key]) : row[key]]));
+    if (kind === 'assessments') { setAssessmentForm({ ...defaults.current.assessmentForm, ...row.specificData, complaint: row.complaint || '', expectations: row.expectations || '', assessmentDate: row.assessment_date || new Date().toISOString().slice(0, 10) }); setActiveTab('assessment'); }
+    if (kind === 'plans') { setPlanForm(merge(defaults.current.planForm) as any); setIsNewPlanModalOpen(true); }
+    if (kind === 'procedures') { setProcedureForm(merge(defaults.current.procedureForm) as any); setIsNewProcedureModalOpen(true); }
+    if (kind === 'evolutions') { setEvolutionForm(merge(defaults.current.evolutionForm) as any); setIsNewEvolutionModalOpen(true); }
+    if (kind === 'returns') { setReturnForm({ ...merge(defaults.current.returnForm), touchup_required: row.touchup_required == null ? undefined : Boolean(row.touchup_required) } as any); setIsNewReturnModalOpen(true); }
+    if (kind === 'photos') { setPhotoForm(merge(defaults.current.photoForm) as any); setIsNewPhotoModalOpen(true); }
+  };
+  const cancelEdit = () => {
+    if (!editing) return;
+    const initial = structuredClone(defaults.current);
+    if (editing.kind === 'assessments') setAssessmentForm(initial.assessmentForm);
+    if (editing.kind === 'plans') setPlanForm({ ...initial.planForm, area: activeArea });
+    if (editing.kind === 'procedures') setProcedureForm({ ...initial.procedureForm, area: activeArea });
+    if (editing.kind === 'evolutions') setEvolutionForm({ ...initial.evolutionForm, area: activeArea });
+    if (editing.kind === 'returns') setReturnForm({ ...initial.returnForm, area: activeArea });
+    if (editing.kind === 'photos') setPhotoForm({ ...initial.photoForm, area: activeArea });
+    setEditing(null); setInvalidField('');
+  };
+  const recordActions = (kind: string, row: any) => <div className="flex gap-2 text-xs" data-testid={`record-actions-${row.id}`}><button type="button" className="px-2 py-1 rounded-lg border bg-white" onClick={() => editRecord(kind, row)}>Editar</button><button type="button" className="px-2 py-1 rounded-lg border bg-white text-red-700" onClick={() => setPendingDelete({ kind, id: row.id })}>Excluir</button>{kind === 'returns' && row.status === 'AGENDADO' && <button type="button" className="px-2 py-1 rounded-lg border bg-white" onClick={async () => { try { await ApiClient.patch(`/v1/estetic/returns/${row.id}`, { status: 'CANCELADO' }); if (isCurrentClinicalContext()) await loadPatientData(selectedPatientId, activeArea); } catch (error: any) { showToast(error.message, 'error'); } }}>Cancelar retorno</button>}</div>;
   useEffect(() => { setFinishAppointment(null); }, [selectedPatientId, initialAppointmentId]);
   const [appointmentCompleted, setAppointmentCompleted] = useState(false);
   const openingFinish = useRef(false);
   const directAppointmentId = useRef<string>();
   useEffect(() => { setAppointmentCompleted(false); directAppointmentId.current = undefined; }, [initialAppointmentId, selectedPatientId]);
+  useEffect(() => {
+    if (!selectedPatientId || initialAppointmentId) return;
+    let cancelled = false;
+    resolveConsultationAppointment({ patientId: selectedPatientId, moduleType: 'ZemdaEstetic' }).then(id => {
+      if (cancelled) return;
+      directAppointmentId.current = id; setDirectEncounter({ patientId: selectedPatientId, id });
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
+    }).catch((error: any) => { if (!cancelled) showToast(error.message || 'Não foi possível abrir o contexto do atendimento.', 'error'); });
+    return () => { cancelled = true; };
+  }, [selectedPatientId, initialAppointmentId]);
   const requestFinish = async () => {
     if (!selectedPatientId) { showToast('Selecione um paciente para finalizar o atendimento.', 'info'); return; }
-    if (appointmentCompleted || openingFinish.current) return;
+    if (appointmentCompleted || openingFinish.current || saveBusy.current) return;
     openingFinish.current = true;
     try {
-      let appointmentId = initialAppointmentId || directAppointmentId.current;
+      let appointmentId = encounterId || directAppointmentId.current;
       if (!appointmentId) {
         appointmentId = await resolveConsultationAppointment({ patientId: selectedPatientId, moduleType: 'ZemdaEstetic' });
         if (!isCurrentClinicalContext()) return;
         directAppointmentId.current = appointmentId;
         window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
       }
+      if (mapSave.current && !await mapSave.current()) throw new Error('Salve o mapa antes de finalizar.');
+      await autosave.forceSaveDraft();
       const { appointment } = await ApiClient.get<any>(`/v1/appointments/${appointmentId}`);
       if (!isCurrentClinicalContext()) return;
       if (appointment.status === 'completed') { setAppointmentCompleted(true); showToast('Este atendimento já foi finalizado.', 'info'); return; }
@@ -284,7 +378,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
           }
         }
         if (res.catalog) setCatalog(res.catalog);
-        if (res.inventoryItems) setInventoryItems(res.inventoryItems);
+        if (res.inventory) setInventoryItems(res.inventory);
       } catch (err: any) {
         console.error('Erro ao carregar configurações do ZemdaEstetic:', err);
       }
@@ -301,47 +395,46 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     setReturnForm(prev => ({ ...prev, area: activeArea }));
   }, [activeArea]);
 
+  const dataRequest = useRef(0);
+  const [dataError, setDataError] = useState('');
+  useEffect(() => { setSelectedPatientId(initialPatientId || ''); }, [initialPatientId]);
+
   // Carrega dados completos do paciente quando mudar paciente ou área
   const loadPatientData = async (patientId: string, area: EsteticArea) => {
-    if (!patientId) return;
+    if (!patientId || !isCurrentClinicalContext()) return;
+    const request = ++dataRequest.current;
     setLoadingOverview(true);
     try {
-      const [ov, assRes, plRes, prRes, evRes, retRes, phRes, baRes, hisRes] = await Promise.all([
-        ApiClient.get<any>(`/v1/estetic/patient-overview/${patientId}?area=${area}`).catch(() => null),
-        ApiClient.get<any>(`/v1/estetic/assessments/patient/${patientId}?area=${area}`).catch(() => ({ assessments: [] })),
-        ApiClient.get<any>(`/v1/estetic/plans/patient/${patientId}?area=${area}`).catch(() => ({ plans: [] })),
-        ApiClient.get<any>(`/v1/estetic/procedures/patient/${patientId}?area=${area}`).catch(() => ({ procedures: [] })),
-        ApiClient.get<any>(`/v1/estetic/evolutions/patient/${patientId}?area=${area}`).catch(() => ({ evolutions: [] })),
-        ApiClient.get<any>(`/v1/estetic/returns/patient/${patientId}?area=${area}`).catch(() => ({ returns: [] })),
-        ApiClient.get<any>(`/v1/estetic/photos/patient/${patientId}?area=${area}`).catch(() => ({ photos: [] })),
-        ApiClient.get<any>(`/v1/estetic/before-after/patient/${patientId}?area=${area}`).catch(() => ({ pairs: [] })),
-        ApiClient.get<any>(`/v1/estetic/history/patient/${patientId}?area=${area}`).catch(() => ({ timeline: [] }))
-      ]);
-      if (!isCurrentClinicalContext()) return;
-
-      setOverviewData(ov);
-      setAssessments(assRes?.assessments || []);
-      setPlans(plRes?.plans || []);
-      setProcedures(prRes?.procedures || []);
-      setEvolutions(evRes?.evolutions || []);
-      setReturnsList(retRes?.returns || []);
-      setPhotos(phRes?.photos || []);
-      setBeforeAfterPairs(baRes?.pairs || []);
-      setTimeline(hisRes?.timeline || []);
+      const [data, config] = await Promise.all([loadEsteticPatient(patientId, area), ApiClient.get<any>('/v1/estetic/config')]);
+      if (!isCurrentClinicalContext() || request !== dataRequest.current) return;
+      setInventoryItems(config.inventory || []);
+      setOverviewData(data.overview);
+      setAssessments(data.assessments);
+      setPlans(data.plans);
+      setProcedures(data.procedures);
+      setEvolutions(data.evolutions);
+      setReturnsList(data.returns);
+      setPhotos(data.photos);
+      setBeforeAfterPairs(data.pairs);
+      setTimeline(data.timeline);
+      setDataError('');
     } catch (err) {
-      console.error('Erro ao buscar registros estéticos do paciente:', err);
+      if (request === dataRequest.current) { setDataError('Não foi possível carregar os registros. Tente novamente.'); showToast((err as Error).message || 'Erro ao carregar registros.', 'error'); }
     } finally {
-      setLoadingOverview(false);
+      if (request === dataRequest.current) setLoadingOverview(false);
     }
   };
 
   useEffect(() => {
+    ++dataRequest.current;
+    setOverviewData(null); setAssessments([]); setPlans([]); setProcedures([]); setEvolutions([]); setReturnsList([]); setPhotos([]); setBeforeAfterPairs([]); setTimeline([]); setSelectedPatient(null);
     if (selectedPatientId) {
       loadPatientData(selectedPatientId, activeArea);
     }
   }, [selectedPatientId, activeArea]);
 
-  const handleSelectPatient = (patientId: string, patient?: PatientSearchResult | null) => {
+  const handleSelectPatient = async (patientId: string, patient?: PatientSearchResult | null) => {
+    if (saveBusy.current || (activeTab === 'zemda360' && mapSave.current && !await mapSave.current())) return;
     setSelectedPatientId(patientId);
     setSelectedPatient(patient || null);
     if (onSelectPatient) onSelectPatient(patientId);
@@ -379,14 +472,16 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         familyHistory: assessmentForm.familyHistory
       };
 
-      await ApiClient.post('/v1/estetic/assessments', {
+      const savedAssessment = await saveRecord('assessments', {
         patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
         area: activeArea,
+        assessmentDate: assessmentForm.assessmentDate,
         complaint: assessmentForm.complaint,
         expectations: assessmentForm.expectations,
         phototype: assessmentForm.fitzpatrick,
         skin_type: activeArea === 'FACIAL' ? `Fototipo ${assessmentForm.fitzpatrick} • Glogau ${assessmentForm.glogau}` : undefined,
-        area_specific_data_json: areaData,
+        specificData: { ...assessmentForm, ...areaData },
         previous_treatments: assessmentForm.previousTreatments,
         contraindications: assessmentForm.contraindications,
         allergies: assessmentForm.allergies,
@@ -394,7 +489,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         clinical_conduct: assessmentForm.clinicalConduct,
         observations: assessmentForm.observations
       });
+      if (!isCurrentClinicalContext()) return;
 
+      setEditing({ kind: 'assessments', id: savedAssessment.id });
       showToast(`Avaliação estética (${activeArea}) salva com sucesso!`, 'success');
       loadPatientData(selectedPatientId, activeArea);
       // Limpa ou preserva campos conforme conveniência
@@ -410,14 +507,16 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     e.preventDefault();
     if (!selectedPatientId) return;
     try {
-      await ApiClient.post('/v1/estetic/plans', {
+      await saveRecord('plans', {
         patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
         area: planForm.area,
         title: planForm.title || `Planejamento ${planForm.area} - ${new Date().toLocaleDateString('pt-BR')}`,
         objectives: planForm.objectives,
         notes: planForm.notes,
         items: planForm.items.filter(i => i.procedure_name.trim().length > 0)
       });
+      if (!isCurrentClinicalContext()) return;
       showToast('Plano de tratamento cadastrado com sucesso!', 'success');
       setIsNewPlanModalOpen(false);
       setPlanForm({
@@ -449,8 +548,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     e.preventDefault();
     if (!selectedPatientId) return;
     try {
-      await ApiClient.post('/v1/estetic/procedures', {
+      await saveRecord('procedures', {
         patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
         procedure_name: procedureForm.procedure_name,
         area: procedureForm.area,
         target_region: procedureForm.target_region,
@@ -458,15 +558,17 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         product_applied: procedureForm.product_applied,
         lot_number: procedureForm.lot_number,
         expiry_date: procedureForm.expiry_date,
-        quantity: procedureForm.quantity === '' ? undefined : Number(procedureForm.quantity),
+        quantity: procedureForm.quantity === '' ? undefined : Number(procedureForm.quantity.replace(',', '.')),
         unit: procedureForm.unit,
         technique_notes: procedureForm.technique_notes,
         adverse_reactions: procedureForm.adverse_reactions,
         post_instructions: procedureForm.post_instructions,
         deduct_inventory: procedureForm.deduct_inventory,
         inventory_item_id: procedureForm.inventory_item_id || undefined,
+        plan_id: procedureForm.plan_id || undefined,
         plan_item_id: procedureForm.plan_item_id || undefined
       });
+      if (!isCurrentClinicalContext()) return;
 
       showToast('Procedimento estético registrado com sucesso!', 'success');
       setIsNewProcedureModalOpen(false);
@@ -485,7 +587,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         post_instructions: '',
         deduct_inventory: false,
         inventory_item_id: '',
-        plan_item_id: ''
+        plan_id: '',
+    plan_item_id: ''
       });
       loadPatientData(selectedPatientId, activeArea);
     } catch (err: any) {
@@ -501,8 +604,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       return;
     }
     try {
-      await ApiClient.post('/v1/estetic/photos', {
+      await saveRecord('photos', {
         patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
         photo_url: photoForm.photo_url,
         photo_type: photoForm.photo_type,
         view_angle: photoForm.view_angle,
@@ -510,6 +614,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         taken_at: photoForm.taken_at,
         notes: photoForm.notes
       });
+      if (!isCurrentClinicalContext()) return;
       showToast('Fotografia clínica anexada com sucesso!', 'success');
       setIsNewPhotoModalOpen(false);
       setPhotoForm({
@@ -530,9 +635,10 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
   const handlePhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) { showToast('Selecione uma imagem PNG, JPEG ou WebP de até 5 MB.', 'error'); return; }
     const reader = new FileReader();
     reader.onload = (event) => {
-      if (event.target?.result) {
+      if (isCurrentClinicalContext() && event.target?.result) {
         setPhotoForm(prev => ({ ...prev, photo_url: event.target!.result as string }));
       }
     };
@@ -544,8 +650,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     e.preventDefault();
     if (!selectedPatientId) return;
     try {
-      await ApiClient.post('/v1/estetic/evolutions', {
+      await saveRecord('evolutions', {
         patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
         area: evolutionForm.area,
         evolution_date: evolutionForm.evolution_date,
         biological_response: evolutionForm.biological_response,
@@ -553,6 +660,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         conduct: evolutionForm.conduct,
         procedure_id: evolutionForm.procedure_id || undefined
       });
+      if (!isCurrentClinicalContext()) return;
       showToast('Evolução clínica registrada!', 'success');
       setIsNewEvolutionModalOpen(false);
       setEvolutionForm({
@@ -574,8 +682,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
     e.preventDefault();
     if (!selectedPatientId) return;
     try {
-      await ApiClient.post('/v1/estetic/returns', {
+      await saveRecord('returns', {
         patient_id: selectedPatientId,
+        appointmentId: encounterId || directAppointmentId.current,
         area: returnForm.area,
         procedure_id: returnForm.procedure_id || undefined,
         scheduled_date: returnForm.scheduled_date,
@@ -585,6 +694,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         touchup_required: returnForm.touchup_required === undefined ? undefined : returnForm.touchup_required ? 1 : 0,
         touchup_description: returnForm.touchup_description
       });
+      if (!isCurrentClinicalContext()) return;
       showToast('Retorno estético agendado/registrado!', 'success');
       setIsNewReturnModalOpen(false);
       setReturnForm({
@@ -658,7 +768,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50" data-testid="zemda-estetic-workspace">
-      <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} sourceModule="ZemdaEstetic"/>
+      {encounterId && <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={encounterId} sourceModule="ZemdaEstetic"/>}
       <ClinicalDraftRecoveryModal isOpen={autosave.conflictModalOpen} moduleName="ZemdaEstetic"
         onClose={() => autosave.resolveConflict('local')} onSelectVersion={autosave.resolveConflict} />
       {finishAppointment && <FinishConsultationModal appointment={finishAppointment}
@@ -667,6 +777,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         onClose={() => setFinishAppointment(null)}
         onCompleted={() => { setAppointmentCompleted(true); void autosave.clearDraft(); }}
         onFinished={() => { setFinishAppointment(null); onFinishConsultation?.(); }} />}
+      {showComparison && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"><div role="dialog" aria-label="Comparação de avaliações" className="bg-white rounded-2xl p-5 max-h-[85vh] overflow-auto w-full max-w-3xl"><button type="button" className="mb-3 border rounded-lg p-2" onClick={() => setShowComparison(false)}>Fechar comparação</button><table className="w-full text-xs"><thead><tr><th>Campo</th>{comparisonIds.map(id => <th key={id}>{assessments.find(row => row.id === id)?.assessment_date}</th>)}</tr></thead><tbody>{Object.keys(defaults.current.assessmentForm).filter(key => key !== 'assessmentDate').map(key => <tr key={key}><th className="text-left border p-2">{assessmentLabels[key] || ({ complaint: 'Queixa principal', expectations: 'Expectativas' } as Record<string,string>)[key] || key}</th>{comparisonIds.map(id => <td key={id} className="border p-2">{formatAssessmentValue(assessments.find(row => row.id === id)?.specificData?.[key] ?? '') || 'Não informado'}</td>)}</tr>)}</tbody></table></div></div>}
+      {pendingDelete && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center"><div role="dialog" aria-label="Excluir registro" className="bg-white p-6 rounded-2xl space-y-4"><p>Excluir este registro? {pendingDelete.kind === 'procedures' && 'A baixa de estoque será estornada.'}</p><div className="flex gap-3"><button type="button" onClick={() => setPendingDelete(null)}>Voltar</button><button type="button" disabled={savingRecord} onClick={async () => { setSavingRecord(true); try { await ApiClient.delete(`/v1/estetic/${pendingDelete.kind}/${pendingDelete.id}`); if (isCurrentClinicalContext()) { if (pendingDelete.kind === 'assessments' && recordIds[activeArea]?.assessments === pendingDelete.id) { setAssessmentForm(structuredClone(defaults.current.assessmentForm)); setEditing(null); } setRecordIds(previous => ({ ...previous, [activeArea]: Object.fromEntries(Object.entries(previous[activeArea] || {}).filter(([, id]) => id !== pendingDelete.id)) })); setPendingDelete(null); await loadPatientData(selectedPatientId, activeArea); showToast('Registro excluído.', 'success'); } } catch (error: any) { showToast(error.message, 'error'); } finally { setSavingRecord(false); } }}>Confirmar exclusão</button></div></div></div>}
+      {dataError && <div role="alert" className="m-4 p-3 rounded-xl bg-red-50 text-red-800">{dataError} <button type="button" onClick={() => loadPatientData(selectedPatientId, activeArea)}>Tentar novamente</button></div>}
       {/* 1. CABEÇALHO PROFISSIONAL COM SELETOR DE ÁREA E AÇÕES RÁPIDAS */}
       <ProfessionalModuleHeader
         icon={Sparkles}
@@ -687,7 +800,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           {selectedPatientId && <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />}
           {selectedPatientId && !appointmentCompleted && (
-            <ClinicalFinishButton onClick={requestFinish} disabled={false} />
+            <ClinicalFinishButton onClick={requestFinish} disabled={savingRecord} />
           )}
           {/* SELETOR DE ÁREA DE ATUAÇÃO (FACIAL, CORPORAL, CAPILAR) */}
           <div className="relative">
@@ -716,7 +829,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       disabled={!isAllowed}
                       onClick={() => {
                         if (isAllowed) {
-                          setActiveArea(area);
+                          changeArea(area);
                           setIsAreaDropdownOpen(false);
                         }
                       }}
@@ -781,7 +894,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
               <button
                 type="button"
-                onClick={() => setIsZemda360ModalOpen(true)}
+                onClick={async () => { if (!mapSave.current || await mapSave.current()) setIsZemda360ModalOpen(true); }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
               >
                 <Activity className="w-3.5 h-3.5" />
@@ -857,7 +970,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     type="button"
                     data-active={isActive ? 'true' : 'false'}
                     data-tour={`tab-${tab.id}`}
-                    onClick={() => tab.id === 'finish' ? void requestFinish() : setActiveTab(tab.id as any)}
+                    onClick={() => tab.id === 'finish' ? void requestFinish() : void changeTab(tab.id as any)}
                     className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                       isActive
                         ? areaTheme.activeTab
@@ -959,7 +1072,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                               )}
                               <button
                                 type="button"
-                                onClick={() => setActiveTab('assessment')}
+                                onClick={() => changeTab('assessment')}
                                 className="text-xs font-bold text-rose-600 hover:text-rose-700 ml-auto cursor-pointer"
                               >
                                 Ver Detalhes Completos →
@@ -972,7 +1085,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                             <div className="mt-3">
                               <button
                                 type="button"
-                                onClick={() => setActiveTab('assessment')}
+                                onClick={() => changeTab('assessment')}
                                 className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors cursor-pointer"
                               >
                                 Iniciar Avaliação Estética
@@ -1073,7 +1186,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                           </div>
                           <button
                             type="button"
-                            onClick={() => setActiveTab('photos')}
+                            onClick={() => changeTab('photos')}
                             className="text-xs font-bold text-sky-600 hover:text-sky-700 cursor-pointer"
                           >
                             Ver Todas
@@ -1139,6 +1252,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     </div>
 
                     <form onSubmit={handleSaveAssessment} className="space-y-6">
+                      <div className="flex gap-3 items-center"><label className="text-xs font-bold">Data da avaliação<input aria-label="Data da avaliação" type="date" required value={assessmentForm.assessmentDate} onChange={event => setAssessmentForm({ ...assessmentForm, assessmentDate: event.target.value })} className="ml-2 p-2 border rounded-xl" /></label><button type="button" className="text-xs font-bold p-2 border rounded-xl" onClick={() => { setAssessmentForm(structuredClone(defaults.current.assessmentForm)); setEditing(null); setRecordIds(previous => ({ ...previous, [activeArea]: Object.fromEntries(Object.entries(previous[activeArea] || {}).filter(([kind]) => kind !== 'assessments')) })); }}>Nova avaliação</button></div>
+
                       {/* Queixa Principal e Expectativa */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -1569,8 +1684,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                           <span>Registro clínico de responsabilidade profissional estrita.</span>
                         </div>
                         <button
-                          type="submit"
-                          disabled={isSavingAssessment}
+                          type="submit" disabled={savingRecord || isSavingAssessment}
                           className={`px-6 py-2.5 rounded-xl text-white text-xs font-bold shadow-md cursor-pointer transition-colors flex items-center gap-2 ${
                             activeArea === 'FACIAL'
                               ? 'bg-rose-600 hover:bg-rose-700'
@@ -1592,6 +1706,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       <h3 className="text-sm font-bold text-slate-900 mb-4">
                         Histórico de Avaliações do Paciente ({activeArea})
                       </h3>
+                      <button type="button" disabled={comparisonIds.length !== 2} className="text-xs font-bold p-2 border rounded-xl mb-3" onClick={() => setShowComparison(true)}>Comparar avaliações selecionadas</button>
                       <div className="space-y-3">
                         {assessments.map(ass => (
                           <div
@@ -1623,6 +1738,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                             >
                               Ver Ficha
                             </button>
+                            {recordActions('assessments', ass)}
+                            <label className="text-xs flex gap-1"><input type="checkbox" aria-label={`Comparar avaliação ${ass.assessment_date}`} checked={comparisonIds.includes(ass.id)} onChange={event => setComparisonIds(previous => event.target.checked ? [...previous.slice(-1), ass.id] : previous.filter(id => id !== ass.id))} />Comparar</label>
                           </div>
                         ))}
                       </div>
@@ -1648,7 +1765,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => setActiveTab('before_after')}
+                          onClick={() => changeTab('before_after')}
                           className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
                         >
                           <ArrowLeftRight className="w-3.5 h-3.5" />
@@ -1725,6 +1842,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                 >
                                   Ampliar
                                 </button>
+                                {recordActions('photos', ph)}
                               </div>
                             </div>
                           </div>
@@ -1783,6 +1901,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
 
                           return (
                             <div key={plan.id} className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                              {recordActions('plans', plan)}
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                                 <div>
                                   <div className="flex items-center gap-2">
@@ -1868,6 +1987,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                                 procedure_name: item.procedure_name,
                                                 target_region: item.target_region || '',
                                                 area: plan.area,
+                                                plan_id: plan.id,
                                                 plan_item_id: item.id
                                               }));
                                               setIsNewProcedureModalOpen(true);
@@ -1937,6 +2057,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                             key={proc.id}
                             className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4"
                           >
+                            {recordActions('procedures', proc)}
                             <div className="space-y-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-extrabold text-slate-900 text-sm">{proc.procedure_name}</span>
@@ -1994,7 +2115,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
               )}
 
               {/* ABA 6: ZEMDA360 (MAPEAMENTO ANATÔMICO INTEGRADO) */}
-              {activeTab === 'zemda360' && (
+              {activeTab === 'zemda360' && !isZemda360ModalOpen && (
                 <div className="space-y-6 animate-in fade-in duration-150">
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
                     <div className="flex items-center justify-between mb-4">
@@ -2009,7 +2130,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => setIsZemda360ModalOpen(true)}
+                        onClick={async () => { if (!mapSave.current || await mapSave.current()) setIsZemda360ModalOpen(true); }}
                         className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1.5 cursor-pointer"
                       >
                         <Maximize2 className="w-4 h-4" />
@@ -2023,7 +2144,9 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                         key={`${selectedPatientId}:${activeArea}`}
                         patientId={selectedPatientId}
                         initialMapType={areaTheme.mapType}
-                        module="estetic"
+                        module={`estetic:${activeArea}`}
+                        appointmentId={encounterId || directAppointmentId.current}
+                        registerSave={save => { mapSave.current = save; }}
                       />
                     </div>
                   </div>
@@ -2073,6 +2196,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       <div className="space-y-4">
                         {evolutions.map(ev => (
                           <div key={ev.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3">
+                            {recordActions('evolutions', ev)}
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-slate-900 text-sm">
@@ -2161,6 +2285,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                             key={ret.id}
                             className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
                           >
+                            {recordActions('returns', ret)}
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
                                 <span className="font-bold text-slate-900">
@@ -2202,7 +2327,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                                     try {
                                       await ApiClient.patch(`/v1/estetic/returns/${ret.id}`, {
                                         status: 'COMPARECEU',
-                                        actual_date: new Date().toISOString().slice(0, 10)
+                                        actualDate: new Date().toISOString().slice(0, 10)
                                       });
                                       showToast('Presença confirmada!', 'success');
                                       loadPatientData(selectedPatientId, activeArea);
@@ -2395,10 +2520,10 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       {/* Modal: Novo Plano de Tratamento */}
       {isNewPlanModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
+          <div role="dialog" aria-label="Planejamento estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Novo Plano de Tratamento Estético</h3>
-              <button onClick={() => setIsNewPlanModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button onClick={() => { cancelEdit(); setIsNewPlanModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2409,6 +2534,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <input
                   type="text"
                   value={planForm.title}
+                      aria-label="Título" name="title" aria-invalid={invalidField === 'title'} style={{ borderColor: invalidField === 'title' ? '#dc2626' : undefined }}
                   onChange={e => setPlanForm({ ...planForm, title: e.target.value })}
                   placeholder="Ex: Protocolo de Harmonização Facial 2026"
                   className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2421,6 +2547,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <textarea
                   rows={2}
                   value={planForm.objectives}
+                      aria-label="Objetivos" name="objectives" aria-invalid={invalidField === 'objectives'} style={{ borderColor: invalidField === 'objectives' ? '#dc2626' : undefined }}
                   onChange={e => setPlanForm({ ...planForm, objectives: e.target.value })}
                   placeholder="Defina os objetivos principais deste tratamento..."
                   className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2529,13 +2656,13 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
-                  onClick={() => setIsNewPlanModalOpen(false)}
+                  onClick={() => { cancelEdit(); setIsNewPlanModalOpen(false); }}
                   className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
+                  type="submit" disabled={savingRecord}
                   className="px-4 py-2 rounded-xl bg-sky-600 text-white font-bold hover:bg-sky-700 shadow-md"
                 >
                   Salvar Planejamento
@@ -2549,10 +2676,10 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       {/* Modal: Registrar Procedimento Realizado */}
       {isNewProcedureModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
+          <div role="dialog" aria-label="Procedimento estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Registrar Procedimento Estético Realizado</h3>
-              <button onClick={() => setIsNewProcedureModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button onClick={() => { cancelEdit(); setIsNewProcedureModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2564,6 +2691,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                   <input
                     type="text"
                     value={procedureForm.procedure_name}
+                      aria-label="Procedimento" name="procedure_name" aria-invalid={invalidField === 'procedure_name'} style={{ borderColor: invalidField === 'procedure_name' ? '#dc2626' : undefined }}
                     onChange={e => setProcedureForm({ ...procedureForm, procedure_name: e.target.value })}
                     placeholder="Ex: Toxina Botulínica, Preenchimento Malar..."
                     className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2575,6 +2703,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                   <input
                     type="text"
                     value={procedureForm.target_region}
+                      aria-label="Região anatômica" name="target_region" aria-invalid={invalidField === 'region'} style={{ borderColor: invalidField === 'region' ? '#dc2626' : undefined }}
                     onChange={e => setProcedureForm({ ...procedureForm, target_region: e.target.value })}
                     placeholder="Ex: Fronte e Glabela, Malar D/E..."
                     className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2594,6 +2723,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     <input
                       type="text"
                       value={procedureForm.product_applied}
+                      aria-label="Produto aplicado" name="product_applied" aria-invalid={invalidField === 'product_name'} style={{ borderColor: invalidField === 'product_name' ? '#dc2626' : undefined }}
                       onChange={e => setProcedureForm({ ...procedureForm, product_applied: e.target.value })}
                       placeholder="Ex: Botox 100U, Juvederm Voluma 1ml..."
                       className="w-full p-2 rounded-lg border border-slate-200 bg-white"
@@ -2605,6 +2735,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       <input
                         type="text"
                         value={procedureForm.lot_number}
+                      aria-label="Lote" name="lot_number" aria-invalid={invalidField === 'batch_lot'} style={{ borderColor: invalidField === 'batch_lot' ? '#dc2626' : undefined }}
                         onChange={e => setProcedureForm({ ...procedureForm, lot_number: e.target.value })}
                         placeholder="Ex: L123456"
                         className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono"
@@ -2615,6 +2746,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       <input
                         type="date"
                         value={procedureForm.expiry_date}
+                      aria-label="Validade" name="expiry_date" aria-invalid={invalidField === 'expiry_date'} style={{ borderColor: invalidField === 'expiry_date' ? '#dc2626' : undefined }}
                         onChange={e => setProcedureForm({ ...procedureForm, expiry_date: e.target.value })}
                         className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono"
                       />
@@ -2628,6 +2760,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     <input
                       type="text"
                       value={procedureForm.quantity}
+                      aria-label="Quantidade aplicada" name="quantity" aria-invalid={invalidField === 'quantity'} style={{ borderColor: invalidField === 'quantity' ? '#dc2626' : undefined }}
                       onChange={e => setProcedureForm({ ...procedureForm, quantity: e.target.value })}
                       className="w-full p-2 rounded-lg border border-slate-200 bg-white"
                     />
@@ -2636,6 +2769,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     <label className="block font-medium text-slate-600 mb-1">Unidade</label>
                     <select
                       value={procedureForm.unit}
+                      aria-label="Unidade" name="unit" aria-invalid={invalidField === 'unit'} style={{ borderColor: invalidField === 'unit' ? '#dc2626' : undefined }}
                       onChange={e => setProcedureForm({ ...procedureForm, unit: e.target.value })}
                       className="w-full p-2 rounded-lg border border-slate-200 bg-white"
                     ><option value="">Não avaliado</option>
@@ -2651,6 +2785,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                     <input
                       type="date"
                       value={procedureForm.date_performed}
+                      aria-label="Data de realização" name="date_performed" aria-invalid={invalidField === 'date_performed'} style={{ borderColor: invalidField === 'date_performed' ? '#dc2626' : undefined }}
                       onChange={e => setProcedureForm({ ...procedureForm, date_performed: e.target.value })}
                       className="w-full p-2 rounded-lg border border-slate-200 bg-white font-mono"
                     />
@@ -2674,13 +2809,14 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                       <div className="mt-2">
                         <select
                           value={procedureForm.inventory_item_id}
-                          onChange={e => setProcedureForm({ ...procedureForm, inventory_item_id: e.target.value })}
+                      aria-label="Insumo do estoque" name="inventory_item_id" aria-invalid={invalidField === 'productId'} style={{ borderColor: invalidField === 'productId' ? '#dc2626' : undefined }}
+                          onChange={e => { const item = inventoryItems.find(entry => entry.id === e.target.value); setProcedureForm({ ...procedureForm, inventory_item_id: e.target.value, product_applied: item?.name || procedureForm.product_applied, lot_number: item?.batch_number || '', expiry_date: item?.expiration_date?.slice(0, 10) || '', unit: item?.unit || procedureForm.unit }); }}
                           className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
                         >
                           <option value="">Selecione o insumo do estoque...</option>
                           {inventoryItems.map(inv => (
                             <option key={inv.id} value={inv.id}>
-                              {inv.name} (Saldo atual: {inv.current_stock || 0} {inv.unit || 'un'})
+                              {inv.name} (Saldo atual: {inv.quantity || 0} {inv.unit || 'un'})
                             </option>
                           ))}
                         </select>
@@ -2695,21 +2831,23 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <textarea
                   rows={2}
                   value={procedureForm.post_instructions}
+                      aria-label="Orientações pós-procedimento" name="post_instructions" aria-invalid={invalidField === 'post_instructions'} style={{ borderColor: invalidField === 'post_instructions' ? '#dc2626' : undefined }}
                   onChange={e => setProcedureForm({ ...procedureForm, post_instructions: e.target.value })}
                   className="w-full p-2.5 rounded-xl border border-slate-200"
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3"><label className="font-bold text-slate-700">Técnica e conduta<textarea aria-label="Técnica e conduta" rows={2} value={procedureForm.technique_notes} onChange={event => setProcedureForm({ ...procedureForm, technique_notes: event.target.value })} className="w-full p-2 border rounded-xl" /></label><label className="font-bold text-slate-700">Intercorrências<textarea aria-label="Intercorrências" rows={2} value={procedureForm.adverse_reactions} onChange={event => setProcedureForm({ ...procedureForm, adverse_reactions: event.target.value })} className="w-full p-2 border rounded-xl" /></label></div>
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
-                  onClick={() => setIsNewProcedureModalOpen(false)}
+                  onClick={() => { cancelEdit(); setIsNewProcedureModalOpen(false); }}
                   className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
+                  type="submit" disabled={savingRecord}
                   className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-md"
                 >
                   Registrar Procedimento
@@ -2723,10 +2861,10 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       {/* Modal: Anexar Foto Clínica */}
       {isNewPhotoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
+          <div role="dialog" aria-label="Fotografia clínica" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Anexar Fotografia Clínica</h3>
-              <button onClick={() => setIsNewPhotoModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button onClick={() => { cancelEdit(); setIsNewPhotoModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2747,6 +2885,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <input
                   type="url"
                   value={photoForm.photo_url}
+                      aria-label="URL da fotografia" name="photo_url" aria-invalid={invalidField === 'file_url'} style={{ borderColor: invalidField === 'file_url' ? '#dc2626' : undefined }}
                   onChange={e => setPhotoForm({ ...photoForm, photo_url: e.target.value })}
                   placeholder="https://exemplo.com/foto.jpg"
                   className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2764,6 +2903,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                   <label className="block font-bold text-slate-700 mb-1">Tipo de Foto</label>
                   <select
                     value={photoForm.photo_type}
+                      aria-label="Tipo de fotografia" name="photo_type" aria-invalid={invalidField === 'photo_type'} style={{ borderColor: invalidField === 'photo_type' ? '#dc2626' : undefined }}
                     onChange={e => setPhotoForm({ ...photoForm, photo_type: e.target.value as any })}
                     className="w-full p-2 rounded-lg border border-slate-200 bg-white"
                   >
@@ -2777,6 +2917,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                   <label className="block font-bold text-slate-700 mb-1">Ângulo / Vista</label>
                   <select
                     value={photoForm.view_angle}
+                      aria-label="Ângulo" name="view_angle" aria-invalid={invalidField === 'view_type'} style={{ borderColor: invalidField === 'view_type' ? '#dc2626' : undefined }}
                     onChange={e => setPhotoForm({ ...photoForm, view_angle: e.target.value })}
                     className="w-full p-2 rounded-lg border border-slate-200 bg-white"
                   >
@@ -2795,6 +2936,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <input
                   type="text"
                   value={photoForm.notes}
+                      aria-label="Observações" name="notes" aria-invalid={invalidField === 'notes'} style={{ borderColor: invalidField === 'notes' ? '#dc2626' : undefined }}
                   onChange={e => setPhotoForm({ ...photoForm, notes: e.target.value })}
                   placeholder="Ex: Foto 15 dias pós-toxina..."
                   className="w-full p-2 rounded-lg border border-slate-200"
@@ -2804,13 +2946,13 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
-                  onClick={() => setIsNewPhotoModalOpen(false)}
+                  onClick={() => { cancelEdit(); setIsNewPhotoModalOpen(false); }}
                   className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
+                  type="submit" disabled={savingRecord}
                   className="px-4 py-2 rounded-xl bg-sky-600 text-white font-bold hover:bg-sky-700 shadow-md"
                 >
                   Salvar Foto
@@ -2824,10 +2966,10 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       {/* Modal: Nova Evolução */}
       {isNewEvolutionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 animate-in zoom-in-95">
+          <div role="dialog" aria-label="Evolução estética" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Registrar Evolução Clínica</h3>
-              <button onClick={() => setIsNewEvolutionModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button onClick={() => { cancelEdit(); setIsNewEvolutionModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2838,6 +2980,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <input
                   type="date"
                   value={evolutionForm.evolution_date}
+                      aria-label="Data da evolução" name="evolution_date" aria-invalid={invalidField === 'evolution_date'} style={{ borderColor: invalidField === 'evolution_date' ? '#dc2626' : undefined }}
                   onChange={e => setEvolutionForm({ ...evolutionForm, evolution_date: e.target.value })}
                   className="w-full p-2 rounded-lg border border-slate-200 bg-white"
                 />
@@ -2848,6 +2991,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <textarea
                   rows={2}
                   value={evolutionForm.biological_response}
+                      aria-label="Resposta biológica" name="biological_response" aria-invalid={invalidField === 'evolution_text'} style={{ borderColor: invalidField === 'evolution_text' ? '#dc2626' : undefined }}
                   onChange={e => setEvolutionForm({ ...evolutionForm, biological_response: e.target.value })}
                   placeholder="Acomodação do produto, redução de edema, cicatrização..."
                   className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2860,6 +3004,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <textarea
                   rows={2}
                   value={evolutionForm.patient_feedback}
+                      aria-label="Relato do paciente" name="patient_feedback" aria-invalid={invalidField === 'observed_response'} style={{ borderColor: invalidField === 'observed_response' ? '#dc2626' : undefined }}
                   onChange={e => setEvolutionForm({ ...evolutionForm, patient_feedback: e.target.value })}
                   placeholder="Sensações relatadas, nível de satisfação, queixas..."
                   className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2871,6 +3016,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                 <textarea
                   rows={2}
                   value={evolutionForm.conduct}
+                      aria-label="Conduta" name="conduct" aria-invalid={invalidField === 'conduct'} style={{ borderColor: invalidField === 'conduct' ? '#dc2626' : undefined }}
                   onChange={e => setEvolutionForm({ ...evolutionForm, conduct: e.target.value })}
                   placeholder="Orientações prestadas, prescrição tópica ou conduta clínica..."
                   className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2880,13 +3026,13 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
-                  onClick={() => setIsNewEvolutionModalOpen(false)}
+                  onClick={() => { cancelEdit(); setIsNewEvolutionModalOpen(false); }}
                   className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
+                  type="submit" disabled={savingRecord}
                   className="px-4 py-2 rounded-xl bg-sky-600 text-white font-bold hover:bg-sky-700 shadow-md"
                 >
                   Salvar Evolução
@@ -2900,10 +3046,10 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
       {/* Modal: Agendar / Registrar Retorno */}
       {isNewReturnModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 animate-in zoom-in-95">
+          <div role="dialog" aria-label="Retorno estético" className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 space-y-4 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="font-bold text-slate-900 text-base">Agendar / Registrar Retorno Clínico</h3>
-              <button onClick={() => setIsNewReturnModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button onClick={() => { cancelEdit(); setIsNewReturnModalOpen(false); }} className="p-1 text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -2915,6 +3061,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                   <input
                     type="date"
                     value={returnForm.scheduled_date}
+                      aria-label="Data prevista" name="scheduled_date" aria-invalid={invalidField === 'scheduled_date'} style={{ borderColor: invalidField === 'scheduled_date' ? '#dc2626' : undefined }}
                     onChange={e => setReturnForm({ ...returnForm, scheduled_date: e.target.value })}
                     className="w-full p-2 rounded-lg border border-slate-200 bg-white"
                     required
@@ -2924,22 +3071,26 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                   <label className="block font-bold text-slate-700 mb-1">Status</label>
                   <select
                     value={returnForm.status}
-                    onChange={e => setReturnForm({ ...returnForm, status: e.target.value as any })}
+                      aria-label="Status" name="status" aria-invalid={invalidField === 'status'} style={{ borderColor: invalidField === 'status' ? '#dc2626' : undefined }}
+                    onChange={e => setReturnForm({ ...returnForm, status: e.target.value as any, actual_date: ['AGENDADO', 'CANCELADO'].includes(e.target.value) ? returnForm.actual_date : returnForm.actual_date || new Date().toISOString().slice(0, 10) })}
                     className="w-full p-2 rounded-lg border border-slate-200 bg-white"
                   ><option value="">Não avaliado</option>
                     <option value="AGENDADO">Agendado</option>
                     <option value="COMPARECEU">Compareceu</option>
                     <option value="RETOQUE_REALIZADO">Retoque Realizado</option>
                     <option value="ALTA_CICLO">Alta do Ciclo</option>
+                    <option value="CANCELADO">Cancelado</option>
                   </select>
                 </div>
               </div>
 
+              {returnForm.status !== 'AGENDADO' && returnForm.status !== 'CANCELADO' && <label className="block font-bold text-slate-700">Data do comparecimento<input aria-label="Data do comparecimento" type="date" value={returnForm.actual_date} onChange={event => setReturnForm({ ...returnForm, actual_date: event.target.value })} className="block w-full p-2 rounded-lg border border-slate-200" /></label>}
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Avaliação do Resultado no Retorno</label>
                 <textarea
                   rows={2}
                   value={returnForm.evaluation_notes}
+                      aria-label="Avaliação do retorno" name="evaluation_notes" aria-invalid={invalidField === 'return_assessment'} style={{ borderColor: invalidField === 'return_assessment' ? '#dc2626' : undefined }}
                   onChange={e => setReturnForm({ ...returnForm, evaluation_notes: e.target.value })}
                   placeholder="Avaliação da simetria, acomodação e resposta estética..."
                   className="w-full p-2.5 rounded-xl border border-slate-200"
@@ -2957,6 +3108,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
                   <input
                     type="text"
                     value={returnForm.touchup_description}
+                      aria-label="Descrição do retoque" name="touchup_description" aria-invalid={invalidField === 'touchup_description'} style={{ borderColor: invalidField === 'touchup_description' ? '#dc2626' : undefined }}
                     onChange={e => setReturnForm({ ...returnForm, touchup_description: e.target.value })}
                     placeholder="Descreva o retoque (ex: 2U fronte esquerda)..."
                     className="w-full p-2 rounded-lg border border-slate-200 bg-white text-xs"
@@ -2967,13 +3119,13 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
-                  onClick={() => setIsNewReturnModalOpen(false)}
+                  onClick={() => { cancelEdit(); setIsNewReturnModalOpen(false); }}
                   className="px-4 py-2 rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 font-bold"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
+                  type="submit" disabled={savingRecord}
                   className="px-4 py-2 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-700 shadow-md"
                 >
                   Salvar Retorno
@@ -2990,7 +3142,8 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         onClose={() => setIsZemda360ModalOpen(false)}
         patientId={selectedPatientId}
         patientName={overviewData?.patient?.full_name}
-        module="estetic"
+        module={`estetic:${activeArea}`}
+        appointmentId={encounterId || directAppointmentId.current}
         initialMapType={areaTheme.mapType}
       />
 
@@ -3044,6 +3197,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
             </div>
 
             <div className="space-y-3 text-xs">
+              {Object.entries(selectedAssessmentDetail.specificData || {}).filter(([key, value]) => !['complaint','expectations'].includes(key) && value != null && value !== '' && (!Array.isArray(value) || value.length)).map(([key, value]) => <div key={key}><span className="font-bold text-slate-500">{assessmentLabels[key] || key}</span><p className="whitespace-pre-wrap">{formatAssessmentValue(value)}</p></div>)}
               <div>
                 <span className="font-bold text-slate-500 uppercase">Queixa Principal:</span>
                 <p className="text-slate-900 font-medium mt-0.5">{selectedAssessmentDetail.complaint}</p>

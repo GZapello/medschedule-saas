@@ -7,11 +7,12 @@ export async function login(page: Page, account = 'fisio') {
   await page.addLocatorHandler(page.locator('[aria-labelledby=welcome-modal-title]'), async modal => {
     await modal.getByRole('button', { name: 'Não mostrar novamente', exact: true }).click();
   });
-  await page.goto('/login');
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await page.locator('input[type=email]').fill(`${account}@test.invalid`);
   await page.locator('input[type=password]').fill(password);
   await page.getByRole('button', { name: 'Entrar no Sistema', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'HOJE', exact: true })).toBeVisible();
+  if (account === 'estetic') await expect(page.getByRole('button', { name: 'ZemdaEstetic (Estética)', exact: true })).toBeVisible();
+  else await expect(page.getByRole('heading', { name: 'HOJE', exact: true })).toBeVisible();
 
   if (await page.getByRole('checkbox', { name: /Li e aceito os Termos/ }).count()) {
   await page.getByRole('checkbox', { name: /Li e aceito os Termos/ }).check();
