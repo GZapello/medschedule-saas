@@ -14,6 +14,9 @@ COPY backend/src/seo/seoRoutes.ts ../backend/src/seo/seoRoutes.ts
 COPY backend/src/seo/seoPresentation.ts ../backend/src/seo/seoPresentation.ts
 COPY backend/src/types/registration-professions.ts ../backend/src/types/registration-professions.ts
 COPY backend/src/utils/profession-module.ts ../backend/src/utils/profession-module.ts
+# Política compartilhada importada pelo frontend (TypeScript e dados).
+COPY backend/src/shared/clinical-assessments/policy.ts ../backend/src/shared/clinical-assessments/policy.ts
+COPY backend/src/shared/clinical-assessments/policy.json ../backend/src/shared/clinical-assessments/policy.json
 COPY frontend/ ./
 RUN npm run build
 
