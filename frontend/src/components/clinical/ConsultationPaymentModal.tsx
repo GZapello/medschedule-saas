@@ -18,6 +18,9 @@ export function ConsultationPaymentModal({ appointmentId, initialPayment, onFini
       const result = await ApiClient.post(`/v1/appointments/${appointmentId}/finish`, {
         payment: { amount: status === 'exempt' ? 0 : Number(amount.replace(',', '.')), paymentMethod: method, status, notes }
       });
+      window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: 'completed' } }));
+      window.dispatchEvent(new Event('refresh-appointments'));
+      window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
       onFinished(result);
     } catch (err: any) { setError(err.message || 'Não foi possível registrar o recebimento.'); }
     finally { setSaving(false); }
@@ -25,7 +28,7 @@ export function ConsultationPaymentModal({ appointmentId, initialPayment, onFini
   return <div className="fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="receipt-title">
     <form onSubmit={confirm} className="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-xl">
       <h2 id="receipt-title" className="text-xl font-bold">Recebimento do atendimento</h2>
-      <p className="text-sm text-slate-600">Prontuário salvo. Confirme o recebimento para finalizar a consulta e atualizar o Financeiro da clínica.</p>
+      <p className="text-sm text-slate-600">Prontuário salvo. Confirme o recebimento para finalizar a consulta e atualizar o Financeiro da clínica. Você também pode registrar como pendente.</p>
       <label className="block text-sm">Valor do atendimento (R$)
         <input aria-label="Valor do atendimento" inputMode="decimal" required={status !== 'exempt'} disabled={status === 'exempt'} value={amount} onChange={e => setAmount(e.target.value)} className="block w-full border rounded-lg p-2" />
       </label>

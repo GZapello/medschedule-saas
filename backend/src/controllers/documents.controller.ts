@@ -632,7 +632,12 @@ export class DocumentsController {
         }
       }
 
-      const saveOnly = req.body.saveOnly === true;
+      let saveOnly = req.body.saveOnly === true;
+      // Reuse a settled receipt instead of requesting a second payment.
+      if (saveOnly) {
+        const settledPayment = db.prepare("SELECT id FROM payments WHERE appointment_id=? AND tenant_id=? AND status IN ('paid','exempt') LIMIT 1").get(appointmentId, tenantId);
+        if (settledPayment) saveOnly = false;
+      }
       const clinicalPayload = JSON.stringify({ evolution, certificate, prescription, examRequest, returnAppointment, referral });
       if (saveOnly && saved?.payload_json && saved.payload_json !== clinicalPayload) {
         res.status(409).json({ error: 'O prontuário desta consulta já foi salvo. Retome o recebimento pela agenda. Alterações clínicas devem ser registradas no prontuário.' });

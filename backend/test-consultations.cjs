@@ -184,6 +184,17 @@ let server;
   const manualRecord=db.prepare('SELECT module_data_json FROM records WHERE appointment_id=?').get(manualContext.data.appointmentId);
   assert.deepEqual(JSON.parse(manualRecord.module_data_json).mealPlanData.meals,meals);
   console.log('PASS manual and catalog foods persist together with quantity, unit, notes and totals');
+  // A settled appointment receipt must be reused without a second payment step.
+  const prepaidContext=await call('/v1/clinical/consultations/start',{patientId:'pat-nutri',moduleType:'ZemdaNutri',walkIn:true},nutriLogin.data.token);
+  const prepaidId=prepaidContext.data.appointmentId;
+  db.prepare("INSERT INTO payments (id,tenant_id,appointment_id,patient_id,amount,payment_method,status) VALUES ('prepaid-receipt','test-clinic',?,'pat-nutri',175,'pix','paid')").run(prepaidId);
+  const prepaidFinish=await call(`/v1/appointments/${prepaidId}/finish`,{saveOnly:true,evolution:{clinicalEvolution:'Atendimento já pago',moduleType:'ZemdaNutri'}},nutriLogin.data.token);
+  assert.equal(prepaidFinish.status,200,JSON.stringify(prepaidFinish));
+  assert.equal(prepaidFinish.data.awaitingPayment,undefined);
+  assert.equal(db.prepare('SELECT status FROM appointments WHERE id=?').get(prepaidId).status,'completed');
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM payments WHERE appointment_id=?').get(prepaidId).n,1);
+  assert.equal(db.prepare('SELECT amount FROM payments WHERE appointment_id=?').get(prepaidId).amount,175);
+  console.log('PASS prepaid consultation reuses settled payment and skips receipt request');
   db.prepare("UPDATE tenants SET manager_profession=NULL, manager_practice_areas=NULL WHERE id='test-clinic'").run();
   const adminOnly=await call('/v1/auth/login',{email:'manager@test.invalid',password});
   for(const [,,,,flag] of modules)assert.equal(adminOnly.data.user[flag],false,'Manager role alone must not grant clinical access');

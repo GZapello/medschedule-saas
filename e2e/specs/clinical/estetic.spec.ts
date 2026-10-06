@@ -24,7 +24,28 @@ test('Estetic salva rascunho e exige revisão antes de gravar a finalização', 
   await review.getByRole('button', { name: 'Voltar e editar' }).click();
   await expect(review).toHaveCount(0);
   await page.getByRole('button', { name: 'Concluir Atendimento', exact: true }).click();
+  await page.route('**/api/v1/appointments/*/finish', route => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Falha sintética ao salvar' }) }), { times: 1 });
   await review.getByRole('button', { name: 'Finalizar atendimento', exact: true }).click();
+  await expect(page.getByText('Falha sintética ao salvar', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Recebimento do atendimento' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Concluir Atendimento', exact: true }).click();
+  await review.getByRole('button', { name: 'Finalizar atendimento', exact: true }).click();
+  const payment = page.getByRole('dialog', { name: 'Recebimento do atendimento' });
+  await expect(payment).toBeVisible();
+  await expect(payment.getByLabel('Valor do atendimento')).toHaveValue('150');
+  const savedState = await request.get('/api/v1/appointments/apt-estetic/completion', { headers });
+  expect((await savedState.json()).awaitingPayment).toBe(true);
+  await payment.getByLabel('Forma de pagamento').selectOption('cash');
+  await payment.getByLabel('Status do recebimento').selectOption('paid');
+  await payment.getByRole('button', { name: 'Confirmar e finalizar', exact: true }).click();
+  await expect(payment).toHaveCount(0);
+  const finishedState = await request.get('/api/v1/appointments/apt-estetic/completion', { headers });
+  const finished = await finishedState.json();
+  expect(finished.alreadyCompleted).toBe(true);
+  expect(finished.payment.status).toBe('paid');
+  expect(finished.payment.payment_method).toBe('cash');
+  const retry = await request.post('/api/v1/appointments/apt-estetic/finish', { headers, data: { payment: { amount: 150, paymentMethod: 'cash', status: 'paid' } } });
+  expect((await retry.json()).alreadyCompleted).toBe(true);
   await expect.poll(async () => {
     const response = await request.get('/api/v1/clinical-records/patient/pat-estetic', { headers });
     return JSON.stringify(await response.json());

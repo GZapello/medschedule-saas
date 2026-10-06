@@ -409,9 +409,14 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
       }
 
       setSubmitting(true);
-      const res = await ApiClient.post<any>('/v1/appointments/' + appointment.id + '/finish', payload);
+      const res = await ApiClient.post<any>('/v1/appointments/' + appointment.id + '/finish', { ...payload, saveOnly: true });
       if (res.alreadyCompleted) throw new Error('Este atendimento já foi finalizado. Consulte o prontuário.');
       completedRef.current = true;
+      if (res.awaitingPayment) {
+        setReceipt(res);
+        showToast('Dados salvos. Confirme o recebimento do atendimento.', 'success');
+        return;
+      }
       onCompleted?.();
 
       localStorage.removeItem(DRAFT_KEY);
@@ -446,6 +451,7 @@ export const FinishConsultationModal: React.FC<FinishConsultationModalProps> = (
 
   if (receipt) return <ConsultationPaymentModal appointmentId={appointment.id} initialPayment={receipt.payment}
     onClose={onClose} onFinished={(result) => {
+      onCompleted?.();
       localStorage.removeItem(DRAFT_KEY);
       localStorage.removeItem(`zemda_quick_consult_${appointment.id}`);
       setReceipt(null);

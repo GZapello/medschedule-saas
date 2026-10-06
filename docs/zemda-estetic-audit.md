@@ -43,3 +43,7 @@ node frontend/tests/docker-build.cjs
 - Build isolado: compilação somente com os arquivos disponibilizados pelo estágio frontend do Dockerfile, cobrindo a falha anterior de importação no Railway.
 
 O teste de rollback gera intencionalmente um erro de persistência no log; a asserção verifica que nenhum movimento parcial de estoque permaneceu.
+
+### Recebimento após finalização
+
+O ZemdaEstetic já utilizava `FinishConsultationModal`, mas esse modal enviava a finalização sem `saveOnly` e ignorava `awaitingPayment` na resposta. Assim, o backend encerrava diretamente com um lançamento pendente/isento e a interface pulava o recebimento. O modal compartilhado agora salva o prontuário e abre `ConsultationPaymentModal` somente após a confirmação do backend. A conclusão financeira usa o mesmo atendimento e publica os eventos globais de atualização. Pagamento já pago/isento é reaproveitado pelo backend sem uma segunda solicitação. O fluxo existente mantém o atendimento aguardando recebimento até registrar pago, pendente ou isento; “Continuar depois” permite retomá-lo sem duplicar o prontuário.

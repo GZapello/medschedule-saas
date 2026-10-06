@@ -176,6 +176,13 @@ test('Sidebar: pacientes A e B, áreas, CRUD, estoque, mapas, F5 e finalização
     await page.getByRole('button', { name: 'Finalizar atendimento', exact: true }).click();
     await page.getByRole('button', { name: 'Concluir Atendimento', exact: true }).click();
     await page.getByRole('dialog', { name: 'Resumo do atendimento' }).getByRole('button', { name: 'Finalizar atendimento', exact: true }).click();
+    const payment = page.getByRole('dialog', { name: 'Recebimento do atendimento' });
+    await expect(payment).toBeVisible();
+    await payment.getByLabel('Valor do atendimento').fill('180');
+    await payment.getByLabel('Forma de pagamento').selectOption('pix');
+    await payment.getByLabel('Status do recebimento').selectOption(suffix === 'A' ? 'pending' : 'paid');
+    await payment.getByRole('button', { name: 'Confirmar e finalizar', exact: true }).click();
+    await expect(payment).toHaveCount(0);
     await expect.poll(async () => (await records('assessments', patient, 'CORPORAL')).length).toBe(1);
     expect(await records('assessments', patient)).toHaveLength(1);
     expect(await records('procedures', patient)).toHaveLength(1);
