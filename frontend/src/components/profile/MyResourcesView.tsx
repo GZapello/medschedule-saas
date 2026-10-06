@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { PracticeArea, Capability, ComputedUserCapabilities, MedicalTreeResponse, MedicalSpecialtyItem } from '../../types/capabilities';
 
-export const MyResourcesView: React.FC = () => {
+interface MyResourcesViewProps { areasOnly?: boolean; onAreasSaved?: () => Promise<void>; onSavingChange?: (saving: boolean) => void }
+export const MyResourcesView: React.FC<MyResourcesViewProps> = ({ areasOnly = false, onAreasSaved, onSavingChange }) => {
   const { currentUser, reloadSession } = useAuth();
   const { showToast } = useToast();
 
@@ -46,7 +47,7 @@ export const MyResourcesView: React.FC = () => {
   const [selectedMedicalSpecialties, setSelectedMedicalSpecialties] = useState<string[]>([]);
   const [selectedMedicalPracticeAreas, setSelectedMedicalPracticeAreas] = useState<string[]>([]);
   const [expandedMedicalSpecialties, setExpandedMedicalSpecialties] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'resources' | 'areas'>('resources');
+  const [activeTab, setActiveTab] = useState<'resources' | 'areas'>(areasOnly ? 'areas' : 'resources');
 
   const loadData = async () => {
     try {
@@ -73,6 +74,8 @@ export const MyResourcesView: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => { onSavingChange?.(saving); }, [saving, onSavingChange]);
 
   const handleToggleOptional = (capId: string) => {
     setSelectedOptionals(prev =>
@@ -112,8 +115,10 @@ export const MyResourcesView: React.FC = () => {
       });
       setSelectedAreas(res.practiceAreaIds);
       await reloadSession();
-      showToast('Áreas de atuação e abordagens atualizadas com sucesso!', 'success');
+      if (!areasOnly) showToast('Áreas de atuação e abordagens atualizadas com sucesso!', 'success');
       await loadData();
+      await onAreasSaved?.();
+      if (areasOnly) showToast('Especialidades atualizadas com sucesso.', 'success');
     } catch (err: any) {
       console.error('Erro ao salvar áreas:', err);
       showToast(err.message || 'Erro ao atualizar áreas de atuação', 'error');
@@ -134,8 +139,10 @@ export const MyResourcesView: React.FC = () => {
         practiceAreaIds: selectedMedicalPracticeAreas
       });
       await reloadSession();
-      showToast('Especialidades e áreas médicas atualizadas com sucesso!', 'success');
+      if (!areasOnly) showToast('Especialidades e áreas médicas atualizadas com sucesso!', 'success');
       await loadData();
+      await onAreasSaved?.();
+      if (areasOnly) showToast('Especialidades atualizadas com sucesso.', 'success');
     } catch (err: any) {
       console.error('Erro ao salvar hierarquia médica:', err);
       showToast(err.message || 'Erro ao atualizar especialidades e áreas médicas', 'error');
@@ -200,7 +207,7 @@ export const MyResourcesView: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header com identidade da profissão e módulo */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950 p-6 sm:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
+      {!areasOnly && <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950 p-6 sm:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -246,9 +253,9 @@ export const MyResourcesView: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
+      </div>}
 
-      {activeTab === 'resources' ? (
+      {activeTab === 'resources' && !areasOnly ? (
         <div className="space-y-6">
           {/* Seção 1: Recursos Opcionais Compatíveis (Ativáveis pelo profissional) */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">

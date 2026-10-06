@@ -8,6 +8,7 @@ import { openCookiePreferencesModal } from '../../utils/cookieConsent';
 import { UnifiedTeamManagement } from './UnifiedTeamManagement';
 import { ServicesView } from '../services/ServicesView';
 import { MyResourcesView } from '../profile/MyResourcesView';
+import { ProfileSpecialties } from '../profile/ProfileSpecialties';
 import { ImportDataView } from '../import/ImportDataView';
 import { ProfessionalPayrollView } from '../payroll/ProfessionalPayrollView';
 import {
@@ -1110,6 +1111,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
                 </button>
               </div>
             </div>
+            <ProfileSpecialties />
           </div>
         </div>
       )}
