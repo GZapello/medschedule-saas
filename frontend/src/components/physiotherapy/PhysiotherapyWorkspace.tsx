@@ -504,7 +504,6 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
 
   // 14. Finalização Canônica do Atendimento Fisioterapêutico
   const handleFinishConsultation = async () => {
-    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para finalizar o atendimento', 'info');
       return;
@@ -606,9 +605,9 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onFinishConsultation={() => setActiveTab('finish')}
+            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
             finishLabel="Finalizar Atendimento"
-            showFinish={!!initialAppointmentId}
+            showFinish={!completion.isCompleted}
             isSubmitting={saving}
             tools={[
               {
@@ -651,7 +650,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
               { id: 'goals', label: '11. Metas', icon: Target },
               { id: 'external_tests', label: '12. Testes Externos', icon: FileText },
               { id: 'home_exercises', label: '13. Exercícios em Casa', icon: Dumbbell },
-              ...(initialAppointmentId ? [{ id: 'finish', label: '14. Finalização', icon: CheckCircle2 }] : [])
+              { id: 'finish', label: '14. Finalização', icon: CheckCircle2 }
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1795,7 +1794,7 @@ export const PhysiotherapyWorkspace: React.FC<PhysiotherapyWorkspaceProps> = ({
                     <span>Gerar Acompanhamento para o Paciente</span>
                   </button>
 
-                  {initialAppointmentId && (<button
+                  {selectedPatientId && !completion.isCompleted && (<button
                     type="button"
                     disabled={saving || !clinicalEvolution.trim()}
                     onClick={handleFinishConsultation}

@@ -1230,6 +1230,9 @@ export class PsychologyController {
         signatureHash, nowIso, userId || null, signerName, signerReg, nowIso, userId || null
       );
 
+      db.prepare('UPDATE records SET module_data_json = ?, clinical_data_json = ? WHERE id = ? AND tenant_id = ?')
+        .run(JSON.stringify(req.body.moduleData || req.body), JSON.stringify(req.body), recordId, tenantId);
+
       if (appointmentId) {
         db.prepare(`
           UPDATE appointments SET
@@ -1254,6 +1257,9 @@ export class PsychologyController {
           userId || resolvedProfId || 'prof-psico'
         );
       }
+
+      db.prepare("DELETE FROM psychology_drafts WHERE tenant_id = ? AND patient_id = ? AND professional_id = ? AND (appointment_id = ? OR appointment_id IS NULL OR appointment_id = '' OR appointment_id = 'none')")
+        .run(tenantId, patientId, resolvedProfId, appointmentId || 'none');
 
       logPsychologyAudit(req, patientId, 'finish_consultation', 'psychology_sessions', sessionId, `Atendimento concluído e selado com hash ${signatureHash.slice(0, 10)}`);
 

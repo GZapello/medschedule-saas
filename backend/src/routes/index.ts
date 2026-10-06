@@ -533,8 +533,8 @@ api.get('/v1/psychopedagogy/learning-domains/:patientId', requireTenant, require
 api.post('/v1/psychopedagogy/domains', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveDomain);
 api.get('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listSessions);
 api.post('/v1/psychopedagogy/sessions', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSession);
-api.post('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSession);
 api.post('/v1/psychopedagogy/sessions/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.finishSession);
+api.post('/v1/psychopedagogy/sessions/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.saveSession);
 api.post('/v1/psychopedagogy/consultations/finish', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.finishSession);
 api.get('/v1/psychopedagogy/plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listPlans);
 api.get('/v1/psychopedagogy/intervention-plans/:patientId', requireTenant, requireRole('clinic_admin', 'professional'), PsychopedagogyController.listPlans);

@@ -39,6 +39,7 @@ ApiClient.get=async (url:string):Promise<any>=>{
   if(url==='/v1/professionals/professional')return professional;
   if(url==='/v1/patients/patient')return patient;
   if(url.startsWith('/v1/patients?')||url==='/v1/patients')return [patient];
+  if(url.startsWith('/v1/nutrition/foods'))return [{id:'rice',name:'Arroz TACO',source:'TACO',energy_kcal:100,protein_g:3,carbohydrate_g:20,lipid_g:1}];
   if(url.includes('/draft/'))return {};
   if(url.includes('/psychology/profile/'))return {patient,sessions:[],documents:[]};
   if(url==='/v1/personal/students/patient')return {student:patient,workouts:[]};

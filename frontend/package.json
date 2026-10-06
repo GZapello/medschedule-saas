@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test:personal-report": "node tests/personal-report.cjs && node tests/personal-report-browser.cjs && node tests/personal-modal-browser.cjs && node tests/personal-visceral-browser.cjs && node tests/personal-evolution.cjs",
-    "test:clinical-assessments": "npm run build && node tests/shared-clinical-assessments-browser.cjs && node tests/shared-clinical-report.cjs"
+    "test:clinical-assessments": "npm run build && node tests/shared-clinical-assessments-browser.cjs && node tests/shared-clinical-report.cjs",
+    "test:clinical-completion": "npm run build && node tests/consultation-completion-browser.cjs && node tests/manual-food-and-sidebar-browser.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",

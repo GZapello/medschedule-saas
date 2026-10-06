@@ -643,7 +643,6 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
 
   // Finalizar Consulta de Fono de Forma Atômica
   const handleFinishConsultation = async () => {
-    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para finalizar o atendimento', 'info');
       return;
@@ -787,9 +786,9 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               autosaveStatus={autosave.autosaveStatus}
               lastSavedTime={autosave.lastSavedTime}
               onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-              onFinishConsultation={() => setActiveTab('finish')}
+              onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
               finishLabel="Finalizar Atendimento"
-            showFinish={!!initialAppointmentId}
+            showFinish={!completion.isCompleted}
               isSubmitting={saving}
               tools={fonoQuickTools}
               toolsVariant="sky"
@@ -815,7 +814,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
               { id: 'home_program', label: 'Casa & Escola', icon: BookOpen },
               { id: 'treatment_plans', label: 'Plano Terapêutico', icon: Target },
               { id: 'complementary', label: 'Testes Complementares', icon: FileText },
-              ...(initialAppointmentId ? [{ id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }] : [])
+              { id: 'finish', label: 'Finalizar Atendimento', icon: CheckCircle2 }
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === (tab.id as any);
@@ -1785,7 +1784,7 @@ export const SpeechTherapyWorkspace: React.FC<SpeechTherapyWorkspaceProps> = ({
                     <span>Gerar Orientações do Paciente (PDF)</span>
                   </button>
 
-                  {initialAppointmentId && (<button
+                  {selectedPatientId && !completion.isCompleted && (<button
                     type="button"
                     disabled={saving}
                     onClick={handleFinishConsultation}

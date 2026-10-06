@@ -118,6 +118,72 @@ let server;
   assert.equal(db.prepare("SELECT status FROM appointments WHERE id='apt-general'").get().status,'completed');
   assert.equal(db.prepare("SELECT clinical_evolution FROM records WHERE appointment_id='apt-general'").get().clinical_evolution,'Evolução geral');
   console.log('PASS general consultation save and completion; complementary Body round trips and legacy recovery');
+  for (const [key,,module] of modules) {
+    const login=await call('/v1/auth/login',{email:`${key}@test.invalid`,password});
+    const token=login.data.token;
+    const body={patientId:'pat-'+key,moduleType:module,walkIn:true,professionalId:'pro-fono'};
+    const starts=await Promise.all(Array.from({length:4},()=>call('/v1/clinical/consultations/start',body,token)));
+    starts.forEach(result=>assert.ok([200,201].includes(result.status),JSON.stringify(result)));
+    assert.equal(new Set(starts.map(result=>result.data.appointmentId)).size,1,'Concurrent sidebar starts reuse one encounter');
+    const id=starts[0].data.appointmentId;
+    assert.equal(db.prepare('SELECT professional_id FROM appointments WHERE id=?').get(id).professional_id,'pro-'+key,'Sidebar binds authenticated professional');
+    assert.equal(db.prepare("SELECT COUNT(*) n FROM appointments WHERE patient_id=? AND professional_id=? AND status='in_progress'").get('pat-'+key,'pro-'+key).n,1);
+    const finished=await call('/v1/appointments/'+id+'/finish',{evolution:{moduleType:module,clinicalEvolution:'Atendimento direto '+key,moduleData:{notes:'Dados diretos'}},payment:{amount:0,status:'exempt',paymentMethod:'other'}},token);
+    assert.equal(finished.status,200,JSON.stringify(finished));
+    assert.equal(db.prepare('SELECT status FROM appointments WHERE id=?').get(id).status,'completed');
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM records WHERE appointment_id=?').get(id).n,1);
+    const foreignPatient=await call('/v1/clinical/consultations/start',{...body,patientId:'missing-patient'},token);
+    assert.equal(foreignPatient.status,404);
+    console.log('PASS',module,'sidebar concurrent reuse, ownership, snapshot and completion');
+  }
+  for (const [key,name,module,endpoint] of [
+    ['med','Medicina','ZemdaMed','/v1/medical/finish-consultation'],
+    ['psico','Psicologia','ZemdaPsico','/v1/psychology/consultations/finish'],
+    ['pp','Psicopedagogia','ZemdaPP','/v1/psychopedagogy/sessions/finish'],
+    ['personal','Educação Física','ZemdaPersonal',null],
+    ['estetic','Estética','ZemdaEstetic',null]
+  ]) {
+    db.prepare("INSERT INTO users (id,tenant_id,name,email,password_hash,role,status) VALUES (?,'test-clinic',?,?,?,'professional','active')").run(key,name,`${key}@test.invalid`,bcrypt.hashSync(password,4));
+    db.prepare("INSERT INTO clinic_users (id,tenant_id,user_id,role,status) VALUES (?,'test-clinic',?,'professional','active')").run('cu-'+key,key);
+    const profession=db.prepare('SELECT id FROM professions WHERE name LIKE ? LIMIT 1').get('%'+name+'%');
+    db.prepare(`INSERT INTO professionals (id,tenant_id,user_id,name,profession_id,practice_areas,zemda_${key}_enabled) VALUES (?,'test-clinic',?,?,?,?,1)`).run('pro-'+key,key,name,profession?.id||null,name);
+    db.prepare("INSERT INTO patients (id,tenant_id,full_name,phone) VALUES (?,'test-clinic',?,'11999990000')").run('pat-'+key,'Paciente '+key);
+    const login=await call('/v1/auth/login',{email:`${key}@test.invalid`,password});assert.equal(login.status,200,JSON.stringify(login));
+    const token=login.data.token;
+    const start=await call('/v1/clinical/consultations/start',{patientId:'pat-'+key,moduleType:module,walkIn:true},token);
+    assert.ok([200,201].includes(start.status),JSON.stringify(start));
+    const id=start.data.appointmentId;
+    const clinical={patientId:'pat-'+key,appointmentId:id,moduleType:module,clinicalEvolution:'Evolução direta '+key,conducts:'Conduta direta',moduleData:{notes:'Todos os dados '+key,zero:0},sessionNumber:1,modality:'presential'};
+    const body=endpoint?clinical:{evolution:clinical,payment:{amount:0,status:'exempt',paymentMethod:'other'}};
+    const finish=await call(endpoint||'/v1/appointments/'+id+'/finish',body,token);
+    assert.ok([200,201].includes(finish.status),JSON.stringify(finish));
+    assert.equal(db.prepare('SELECT status FROM appointments WHERE id=?').get(id).status,'completed');
+    const record=db.prepare('SELECT * FROM records WHERE appointment_id=?').get(id);
+    assert.equal(record.professional_id,'pro-'+key);
+    if(key==='pp'||key==='psico') assert.equal(JSON.parse(record.module_data_json).notes,'Todos os dados '+key);
+    console.log('PASS',module,'direct creation, module endpoint, professional and longitudinal record');
+  }
+  const nutriLogin=await call('/v1/auth/login',{email:'nutri@test.invalid',password});
+  const meals=[{mealName:'Almoço',mealTime:'12:00',items:[
+    {food:'Alimento TACO',portion:'100g',grams:100,source:'TACO',calories:100,carb:20,protein:3,fat:1},
+    {food:'Receita manual',portion:'2 colher',quantity:2,unit:'colher',grams:0,source:'manual',calories:180,carb:12.5,protein:8,fat:11,notes:'Preparação caseira'}
+  ]}];
+  const plan=await call('/v1/nutrition/meal-plans',{patientId:'pat-nutri',title:'Plano misto',meals,totalCalories:999,totalCarbs:999,totalProtein:999,totalFat:999},nutriLogin.data.token);
+  assert.equal(plan.status,201,JSON.stringify(plan));
+  const plans=await call('/v1/nutrition/meal-plans/pat-nutri',null,nutriLogin.data.token);
+  const restored=plans.data.find(item=>item.id===plan.data.id);
+  assert.deepEqual(restored.meals,meals);
+  assert.equal(restored.total_calories,280);
+  assert.equal(restored.total_carbs,32.5);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM nutrition_food_database WHERE name='Receita manual'").get().n,0,'Manual entry does not modify food catalog');
+  const invalid=await call('/v1/nutrition/meal-plans',{patientId:'pat-nutri',title:'Inválido',meals:[{items:[{...meals[0].items[1],calories:-1}]}]},nutriLogin.data.token);
+  assert.equal(invalid.status,400);
+  const manualContext=await call('/v1/clinical/consultations/start',{patientId:'pat-nutri',moduleType:'ZemdaNutri',walkIn:true},nutriLogin.data.token);
+  const manualFinish=await call('/v1/nutrition/consultations/finish',{patientId:'pat-nutri',appointmentId:manualContext.data.appointmentId,clinicalEvolution:'Plano com inclusão manual',mealPlanData:{meals}},nutriLogin.data.token);
+  assert.equal(manualFinish.status,200,JSON.stringify(manualFinish));
+  const manualRecord=db.prepare('SELECT module_data_json FROM records WHERE appointment_id=?').get(manualContext.data.appointmentId);
+  assert.deepEqual(JSON.parse(manualRecord.module_data_json).mealPlanData.meals,meals);
+  console.log('PASS manual and catalog foods persist together with quantity, unit, notes and totals');
   db.prepare("UPDATE tenants SET manager_profession=NULL, manager_practice_areas=NULL WHERE id='test-clinic'").run();
   const adminOnly=await call('/v1/auth/login',{email:'manager@test.invalid',password});
   for(const [,,,,flag] of modules)assert.equal(adminOnly.data.user[flag],false,'Manager role alone must not grant clinical access');

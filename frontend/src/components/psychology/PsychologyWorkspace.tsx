@@ -1,5 +1,6 @@
+import { ClinicalFinishButton } from '../clinical/ClinicalFinishButton';
 import { PSYCHOLOGY_FIELDS } from '../../services/transcriptionProvider';
-import { useClinicalReview } from '../clinical/useClinicalReview';
+import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiClient } from '../../api/client';
@@ -862,17 +863,15 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   // FLUXO OBRIGATÓRIO: CONCLUIR E SELAR ATENDIMENTO (Selamento Criptográfico SHA-256)
   const handleQuickFinishClick = async () => {
-    if (!initialAppointmentId) return;
-    if (!selectedPatientId) return;
+    if (!selectedPatientId) { showToast('Selecione um paciente para finalizar o atendimento.', 'info'); return; }
     if (isDirty) {
       await performSaveDraft();
     }
     setShowFinishConfirmModal(true);
   };
 
-  const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
+  const completion = useConsultationCompletion(undefined, selectedPatientId + ':' + (initialAppointmentId || ''), { showPostCompletion: false });
   const confirmAndFinishConsultation = async () => {
-    if (!initialAppointmentId) return;
     if (!selectedPatientId) return;
 
     if (!currentSession.clinicalEvolution || !currentSession.clinicalEvolution.trim()) {
@@ -888,6 +887,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
       await performSaveDraft();
 
       const finalPayload = {
+        moduleData: { currentSession, anamnese, mentalState, riskAssessment, newAssessment, newInstrument, newScreening, newGoal },
         patientId: selectedPatientId,
         appointmentId: initialAppointmentId,
         sessionNumber: currentSession.sessionNumber,
@@ -904,13 +904,16 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
         nextSessionPlan: currentSession.nextSessionPlan,
         sessionRiskNotes: currentSession.sessionRiskNotes
       };
-      if (!await review.confirm({ ...finalPayload, patientName: selectedPatient?.full_name || selectedPatient?.name, professionalName: currentUser?.name, moduleType: 'ZemdaPsico' })) return;
-      const res: any = await ApiClient.post('/v1/psychology/consultations/finish', finalPayload);
+      const res: any = await completion.complete('/v1/psychology/consultations/finish', { ...finalPayload, patientName: selectedPatient?.full_name || selectedPatient?.name, professionalName: currentUser?.name, moduleType: 'ZemdaPsico' });
+      if (!res) return;
+      setCompletionSuccessData(res);
 
       setShowFinishConfirmModal(false);
       setIsDirty(false);
       setAutosaveStatus('saved');
-      setCompletionSuccessData(res);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      localStorage.removeItem(`zemda_psico_draft_${selectedPatientId}_${initialAppointmentId || 'none'}`);
+
       showToast('Atendimento de Psicologia finalizado e selado com SHA-256!', 'success');
       loadPatientProfile(selectedPatientId);
     } catch (err: any) {
@@ -961,7 +964,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
 
   const hasAssessmentBasis = assessmentsList.length > 0 || !!mentalState.criticalJudgment;
 
-  return <>{review.dialog}{(
+  return <>{completion.dialog}{(
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {/* CABEÇALHO DO MÓDULO ZEMDAPSICO */}
       <ProfessionalModuleHeader
@@ -1050,17 +1053,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
           Emitir Documento CFP
         </button>
 
-        {initialAppointmentId && (<button
-          type="button"
-          data-tour="clinical-finish"
-          onClick={handleQuickFinishClick}
-          disabled={!selectedPatientId || saving}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-          title="Finalizar atendimento, selar evolução com SHA-256 e emitir documentos"
-        >
-          <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-          Finalizar Atendimento
-        </button>)}
+        {selectedPatientId && !completion.isCompleted && (<ClinicalFinishButton onClick={handleQuickFinishClick} disabled={saving} />)}
       </ProfessionalModuleHeader>
 
       {/* NAVEGAÇÃO POR ABAS PADRONIZADA (Trilha Horizontal com Scroll Suave) */}
@@ -1375,7 +1368,7 @@ export const PsychologyWorkspace: React.FC<PsychologyWorkspaceProps> = ({
                       <span>Ao concluir, a evolução será selada com SHA-256 e protegida contra alterações.</span>
                     </div>
 
-                    {initialAppointmentId && <button
+                    {selectedPatientId && <button
                       type="submit"
                       disabled={saving || !currentSession.clinicalEvolution.trim()}
                       className="px-6 py-3 bg-gradient-to-r from-teal-700 to-slate-900 hover:from-teal-800 hover:to-black text-white font-extrabold rounded-xl text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"

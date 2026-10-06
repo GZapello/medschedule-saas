@@ -276,6 +276,10 @@ export class MedicalController {
         profId = req.body.professionalId;
       }
 
+      if (appointmentId) {
+        profId = db.prepare('SELECT professional_id FROM appointments WHERE id = ? AND tenant_id = ? AND patient_id = ?').get(appointmentId, tenantId, patientId)?.professional_id || profId;
+      }
+
       const creatorName = req.user?.name || req.user?.email || 'Médico(a)';
       const recordId = 'rec-med-' + uuidv4().slice(0, 8);
       const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());

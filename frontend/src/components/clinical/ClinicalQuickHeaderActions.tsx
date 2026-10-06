@@ -1,5 +1,6 @@
+import { ClinicalFinishButton } from './ClinicalFinishButton';
 import React from 'react';
-import { FileText, CheckCircle2 } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { ClinicalAutosaveIndicator } from './ClinicalAutosaveIndicator';
 import { AutosaveStatus } from '../../hooks/useClinicalAutosave';
 import { ClinicalQuickToolsMenu, ClinicalQuickToolItem } from './ClinicalQuickToolsMenu';
@@ -28,7 +29,7 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
   onFinishConsultation,
   autosaveStatus,
   lastSavedTime,
-  finishLabel = 'Finalizar Atendimento',
+  finishLabel = 'Finalizar atendimento',
   showFinish = true,
   showPreviousRecords = true,
   isSubmitting = false,
@@ -79,17 +80,7 @@ export const ClinicalQuickHeaderActions: React.FC<ClinicalQuickHeaderActionsProp
 
       {/* Acesso 2: Finalizar Atendimento Rápido */}
       {showFinish && onFinishConsultation && (
-        <button
-          type="button"
-          data-tour="clinical-finish"
-          disabled={isSubmitting}
-          onClick={onFinishConsultation}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-500/20 transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-          title="Finalizar atendimento, gravar evolução oficial e arquivar prontuário"
-        >
-          <CheckCircle2 className="w-4 h-4 text-white" />
-          <span>{isSubmitting ? 'Finalizando...' : finishLabel}</span>
-        </button>
+        <ClinicalFinishButton onClick={onFinishConsultation} disabled={isSubmitting} label={isSubmitting ? 'Finalizando...' : finishLabel} />
       )}
     </div>
   );

@@ -1,16 +1,30 @@
+import { resolveConsultationAppointment } from './resolveConsultationAppointment';
 import { useClinicalReview } from './useClinicalReview';
 import React, { useState, useRef, useEffect } from 'react';
 import { ApiClient } from '../../api/client';
 import { ConsultationPaymentModal } from './ConsultationPaymentModal';
 import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
 import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
-import { CheckCircle2, FileText, Printer, X, Eye } from 'lucide-react';
+import { CheckCircle2, Printer, Eye } from 'lucide-react';
 
-export function useConsultationCompletion(onFinished?: () => void, contextKey?: string) {
+export function useConsultationCompletion(onFinished?: () => void, contextKey?: string, options?: { showPostCompletion?: boolean }) {
   const review = useClinicalReview(contextKey);
   const inFlight = useRef(false);
   const completed = useRef(false);
-  useEffect(() => { completed.current = false; }, [contextKey]);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const directAppointment = useRef<string>();
+  const currentContext = useRef(contextKey);
+  currentContext.current = contextKey;
+  useEffect(() => {
+    completed.current = false;
+    setIsCompleted(false);
+    directAppointment.current = undefined;
+    setReceipt(null);
+    setLastPayload(null);
+    setShowPostConsultationModal(false);
+    setShowFollowUpDocModal(false);
+    setShowRecordsModal(false);
+  }, [contextKey]);
   const [receipt, setReceipt] = useState<any>(null);
   const [lastPayload, setLastPayload] = useState<any>(null);
 
@@ -19,25 +33,31 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
   const [showFollowUpDocModal, setShowFollowUpDocModal] = useState<boolean>(false);
   const [showRecordsModal, setShowRecordsModal] = useState<boolean>(false);
 
-  const save = async (endpoint: string, payload: any) => {
-    if (!payload.appointmentId || inFlight.current || completed.current) return false;
+  const complete = async (endpoint: string, payload: any) => {
+    if (!payload.patientId) throw new Error('Selecione um paciente para finalizar o atendimento.');
+    if (inFlight.current || completed.current) return null;
+    const context = contextKey;
     inFlight.current = true;
     try {
-      if (!await review.confirm(payload)) return false;
-      setLastPayload(payload);
-      const appointmentId = payload.appointmentId;
+      if (!await review.confirm(payload)) return null;
+      const appointmentId = await resolveConsultationAppointment({ ...payload, appointmentId: payload.appointmentId || directAppointment.current });
+      if (currentContext.current !== context) return null;
+      directAppointment.current = appointmentId;
+      setLastPayload({ ...payload, appointmentId });
 
       const result = await ApiClient.post<any>(endpoint, { ...payload, appointmentId });
       if (result.alreadyCompleted) {
         throw new Error('Este atendimento já foi finalizado. Abra o prontuário para consultar o histórico.');
       }
+      if (currentContext.current !== context) return null;
       completed.current = true;
+      setIsCompleted(true);
       setReceipt({ ...result, appointmentId });
-      setShowPostConsultationModal(true);
+      setShowPostConsultationModal(options?.showPostCompletion !== false);
       window.dispatchEvent(new CustomEvent('appointment-updated', { detail: { appointmentId, status: 'completed' } }));
       window.dispatchEvent(new Event('refresh-appointments'));
       window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
-      return true;
+      return result;
     } finally {
       inFlight.current = false;
     }
@@ -120,10 +140,11 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
           onClose={() => setShowFollowUpDocModal(false)}
           patientId={lastPayload.patientId}
           patientName={lastPayload.patientName || 'Paciente'}
-          appointmentId={receipt?.appointmentId}
+          appointmentId={receipt?.appointmentId || lastPayload.appointmentId}
           professionalName={lastPayload.professionalName}
           moduleType={lastPayload.moduleType}
           initialGuidelines={lastPayload.guidelines || lastPayload.generalGuidelines}
+          mealPlanText={lastPayload.mealPlanText}
         />
       )}
 
@@ -138,5 +159,5 @@ export function useConsultationCompletion(onFinished?: () => void, contextKey?: 
     </>
   );
 
-  return { save, dialog };
+  return { isCompleted, complete, save: async (endpoint: string, payload: any) => !!await complete(endpoint, payload), dialog };
 }

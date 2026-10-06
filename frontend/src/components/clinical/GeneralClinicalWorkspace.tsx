@@ -1,3 +1,5 @@
+import { ClinicalFinishButton } from './ClinicalFinishButton';
+import { resolveConsultationAppointment } from './resolveConsultationAppointment';
 import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -273,14 +275,22 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
 
   // Salvar registro oficial no prontuário
   const handleSaveRecord = async (isFinish: boolean = false) => {
-    if (isFinish && (!initialAppointmentId || appointmentCompleted)) return;
+    if (isFinish && appointmentCompleted) return;
+    if (isFinish && !(patient?.id || initialPatientId || appointment?.patient_id)) { showToast('Selecione um paciente para finalizar o atendimento.', 'info'); return; }
     if (!clinicalEvolution.trim() && !chiefComplaint.trim()) {
       showToast('Preencha a queixa ou a evolução antes de salvar o prontuário.', 'error');
       return;
     }
 
     if (isFinish) {
-      setShowFinishModal(true);
+      try {
+        setSavingRecord(true);
+        const id = await resolveConsultationAppointment({ patientId: patient?.id || initialPatientId || appointment?.patient_id, appointmentId: initialAppointmentId || appointment?.id, moduleType: 'general' });
+        const result = await ApiClient.get<any>('/v1/appointments/' + id);
+        setAppointment(result.appointment);
+        setShowFinishModal(true);
+      } catch (error: any) { showToast(error.message || 'Erro ao abrir finalização.', 'error'); }
+      finally { setSavingRecord(false); }
       return;
     }
     try {
@@ -442,14 +452,7 @@ export const GeneralClinicalWorkspace: React.FC<GeneralClinicalWorkspaceProps> =
               <Save className="w-4 h-4" /> Salvar Evolução
             </button>
 
-            {initialAppointmentId && !appointmentCompleted && (<button
-              type="button"
-              disabled={savingRecord}
-              onClick={() => handleSaveRecord(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl transition-all shadow-xs hover:shadow-md cursor-pointer disabled:opacity-50"
-            >
-              <CheckCircle2 className="w-4 h-4" /> Finalizar Atendimento
-            </button>)}
+            {!appointmentCompleted && (<ClinicalFinishButton onClick={() => handleSaveRecord(true)} disabled={savingRecord} />)}
           </div>
         </div>
       </header>

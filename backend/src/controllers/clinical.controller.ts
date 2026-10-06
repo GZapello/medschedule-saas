@@ -918,7 +918,7 @@ export class ClinicalController {
       }
 
       let effectiveModule = moduleType;
-      if (!effectiveModule || !isPrimaryClinicalModule(effectiveModule)) {
+      if (!effectiveModule || (effectiveModule !== 'general' && !isPrimaryClinicalModule(effectiveModule))) {
         const resolved = resolveClinicalModule({ professional_id: profId }, tenantId);
         if (resolved && isPrimaryClinicalModule(resolved)) {
           effectiveModule = resolved;
@@ -927,6 +927,7 @@ export class ClinicalController {
         }
       }
 
+      db.transaction(() => {
       // 1. Verifica se já existe um atendimento in_progress para este paciente na clínica
       const existingInProgress = db.prepare(`
         SELECT a.*, p.name as professional_name, s.name as service_name, pat.full_name as patient_name
@@ -954,7 +955,7 @@ export class ClinicalController {
       }
 
       // 2. Verifica se existe agendamento hoje (scheduled ou confirmed) para este paciente
-      const today = new Date().toISOString().slice(0, 10);
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
       const todayAppt = db.prepare(`
         SELECT a.*, p.name as professional_name, s.name as service_name, pat.full_name as patient_name
         FROM appointments a
@@ -1036,6 +1037,7 @@ export class ClinicalController {
         appointment: createdAppt,
         created: true
       });
+      })();
     } catch (err: any) {
       console.error('[ClinicalController.startConsultation] Erro:', err);
       res.status(500).json({ error: 'Erro ao iniciar atendimento canônico' });

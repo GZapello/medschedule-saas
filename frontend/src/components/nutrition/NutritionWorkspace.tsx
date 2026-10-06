@@ -1,3 +1,4 @@
+import { ManualMealFoodModal } from './ManualMealFoodModal';
 import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -70,6 +71,10 @@ export interface FoodItem {
 }
 
 export interface MealPlanFoodItem {
+  source?: string;
+  quantity?: number;
+  unit?: string;
+  notes?: string;
   food: string;
   portion: string;
   grams: number;
@@ -78,6 +83,7 @@ export interface MealPlanFoodItem {
   protein: number;
   fat: number;
   substitutions?: {
+    source?: string;
     food: string;
     portion: string;
     calories: number;
@@ -203,6 +209,8 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
   const [searchingFood, setSearchingFood] = useState<boolean>(false);
   const [selectedMealIndexForAdd, setSelectedMealIndexForAdd] = useState<number>(0);
   const [portionGramsInput, setPortionGramsInput] = useState<number>(100);
+  const [manualFoodTarget, setManualFoodTarget] = useState<{ mealIndex: number; itemIndex?: number } | null>(null);
+  useEffect(() => { setManualFoodTarget(null); }, [selectedPatientId, initialAppointmentId]);
   const [addingFoodTarget, setAddingFoodTarget] = useState<FoodItem | null>(null);
   const [addingAsSubstitutionToItemIndex, setAddingAsSubstitutionToItemIndex] = useState<number | null>(null);
 
@@ -593,6 +601,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       if (!parentItem.substitutions) parentItem.substitutions = [];
       parentItem.substitutions.push({
         food: addingFoodTarget.name,
+        source: addingFoodTarget.source,
         portion: `${grams}g`,
         calories: cal,
         carb: cho,
@@ -604,6 +613,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
       // Adiciona como item principal
       targetMeal.items.push({
         food: addingFoodTarget.name,
+        source: addingFoodTarget.source,
         portion: `${grams}g`,
         grams,
         calories: cal,
@@ -822,6 +832,12 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
         calorieTarget: planForm.calorieTarget ? parseInt(planForm.calorieTarget) : null,
         waterTargetMl: planForm.waterTargetMl ? parseInt(planForm.waterTargetMl) : null,
         generalGuidelines: planForm.generalGuidelines,
+        guidelines: planForm.generalGuidelines,
+        appointmentId: initialAppointmentId || null,
+        totalCalories: planTotals.calories,
+        totalCarbs: planTotals.carb,
+        totalProtein: planTotals.protein,
+        totalFat: planTotals.fat,
         meals: planForm.meals
       });
       showToast('Plano alimentar salvo com sucesso no banco de dados!', 'success');
@@ -856,7 +872,6 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
 
   // 10. Finalização Canônica do Atendimento
   const handleFinishConsultation = async () => {
-    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para finalizar o atendimento', 'info');
       return;
@@ -892,7 +907,9 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           notes: anthroForm.notes
         } : null,
         calculationsData: calculatedEnergy,
-        mealPlanData: planForm,
+        mealPlanData: { ...planForm, totalCalories: planTotals.calories, totalCarbs: planTotals.carb, totalProtein: planTotals.protein, totalFat: planTotals.fat },
+        mealPlanText: generatedMealPlanText,
+        guidelines: planForm.generalGuidelines,
         anamnesisData,
         bioimpedanceData: bioForm,
         recallData: recallForm
@@ -910,18 +927,29 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
   const generatedMealPlanText = useMemo(() => {
     return planForm.meals.map(m => {
       const itemsList = m.items.map(it => {
-        let text = `• ${it.food} (${it.portion}) - ${it.calories} kcal`;
+        let text = `• ${it.food} (${it.portion}) - ${it.calories} kcal | CHO: ${it.carb}g | PTN: ${it.protein}g | LIP: ${it.fat}g`;
+        if (it.notes) text += `\n  ${it.notes}`;
         if (it.substitutions && it.substitutions.length > 0) {
           text += '\n  ↳ Opções de substituição: ' + it.substitutions.map(s => `${s.food} (${s.portion})`).join(' ou ');
         }
         return text;
       }).join('\n');
-      return `[ ${m.mealName.toUpperCase()} - ${m.mealTime} ]\n${itemsList}`;
-    }).join('\n\n');
-  }, [planForm.meals]);
+      const totals = m.items.reduce((sum, item) => ({ calories: sum.calories + (item.calories || 0), carb: sum.carb + (item.carb || 0), protein: sum.protein + (item.protein || 0), fat: sum.fat + (item.fat || 0) }), { calories: 0, carb: 0, protein: 0, fat: 0 });
+      return `[ ${m.mealName.toUpperCase()} - ${m.mealTime} ]\n${itemsList}\nTotal: ${totals.calories} kcal | CHO: ${totals.carb}g | PTN: ${totals.protein}g | LIP: ${totals.fat}g`;
+    }).join('\n\n') + `\n\nTOTAL DIÁRIO: ${planTotals.calories} kcal | CHO: ${planTotals.carb}g | PTN: ${planTotals.protein}g | LIP: ${planTotals.fat}g`;
+  }, [planForm.meals, planTotals]);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
+      {manualFoodTarget && planForm.meals[manualFoodTarget.mealIndex] && <ManualMealFoodModal
+        item={manualFoodTarget.itemIndex === undefined ? undefined : planForm.meals[manualFoodTarget.mealIndex].items[manualFoodTarget.itemIndex]}
+        onClose={() => setManualFoodTarget(null)}
+        onSave={item => {
+          setPlanForm(previous => ({ ...previous, meals: previous.meals.map((meal, index) => index !== manualFoodTarget.mealIndex ? meal : {
+            ...meal, items: manualFoodTarget.itemIndex === undefined ? [...meal.items, item] : meal.items.map((existing, itemIndex) => itemIndex === manualFoodTarget.itemIndex ? item : existing)
+          }) }));
+          setManualFoodTarget(null);
+        }} />}
       <ClinicalAssessmentsPanel patientId={selectedPatientId} patient={selectedPatient} appointmentId={initialAppointmentId} sourceModule="ZemdaNutri"/>
       {completion.dialog}
 
@@ -953,9 +981,9 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onFinishConsultation={() => setActiveTab('finish')}
+            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
             finishLabel="Finalizar Atendimento"
-            showFinish={!!initialAppointmentId}
+            showFinish={!completion.isCompleted}
             isSubmitting={saving}
             tools={[
               {
@@ -985,7 +1013,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
               { id: 'meal_plans', label: '7. Plano Alimentar Builder', icon: Utensils },
               { id: 'goals', label: '8. Metas', icon: Target },
               { id: 'tests', label: '9. Testes Externos', icon: FileText },
-              ...(initialAppointmentId ? [{ id: 'finish', label: '10. Finalização', icon: CheckCircle2 }] : [])
+              { id: 'finish', label: '10. Finalização', icon: CheckCircle2 }
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -2062,6 +2090,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                             <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg">
                               {Math.round(mealKcal)} kcal (CHO: {Math.round(mealCho)}g | PTN: {Math.round(mealPtn)}g | LIP: {Math.round(mealLip)}g)
                             </span>
+                            <button type="button" aria-label={`Adicionar alimento manual em ${meal.mealName}`} title="Adicionar alimento manual" onClick={() => setManualFoodTarget({ mealIndex: mIdx })} className="p-1.5 border border-emerald-200 rounded-lg text-emerald-700 hover:bg-emerald-50"><Plus className="w-4 h-4" /></button>
                             <button
                               type="button"
                               onClick={() => handleRemoveMeal(mIdx)}
@@ -2077,7 +2106,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                         <div className="space-y-2">
                           {meal.items.length === 0 ? (
                             <p className="text-xs text-slate-400 italic py-2">
-                              Nenhum alimento nesta refeição. Pesquise na tabela TACO/TBCA acima para inserir itens.
+                              Nenhum alimento nesta refeição. Pesquise na TACO/TBCA ou use + para adicionar manualmente.
                             </p>
                           ) : (
                             meal.items.map((item, iIdx) => (
@@ -2104,6 +2133,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                                     >
                                       + Substituição
                                     </button>
+                                    {item.source === 'manual' && <button type="button" aria-label={`Editar ${item.food}`} title="Editar alimento" onClick={() => setManualFoodTarget({ mealIndex: mIdx, itemIndex: iIdx })} className="text-slate-400 hover:text-emerald-700 p-0.5"><Edit2 className="w-3.5 h-3.5" /></button>}
                                     <button
                                       type="button"
                                       onClick={() => handleRemoveFoodItem(mIdx, iIdx)}
@@ -2115,6 +2145,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                                   </div>
                                 </div>
 
+                                {item.notes && <p className="text-xs text-slate-500">{item.notes}</p>}
                                 {/* Substituições */}
                                 {item.substitutions && item.substitutions.length > 0 && (
                                   <div className="pl-4 border-l-2 border-teal-300 space-y-1 mt-1">
@@ -2246,7 +2277,7 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
                     <span>Gerar Acompanhamento para o Paciente</span>
                   </button>
 
-                  {initialAppointmentId && (<button
+                  {selectedPatientId && !completion.isCompleted && (<button
                     type="button"
                     disabled={saving || !consultationEvolution.trim()}
                     onClick={handleFinishConsultation}
@@ -2386,6 +2417,8 @@ export const NutritionWorkspace: React.FC<NutritionWorkspaceProps> = ({
           patientId={selectedPatientId}
           patientName={selectedPatient?.full_name || 'Paciente'}
           moduleType="ZemdaNutri"
+          professionalName={currentUser?.name}
+          appointmentId={initialAppointmentId}
           initialGuidelines={planForm.generalGuidelines}
           mealPlanText={generatedMealPlanText}
         />

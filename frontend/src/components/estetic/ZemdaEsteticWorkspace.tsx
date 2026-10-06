@@ -1,3 +1,5 @@
+import { ClinicalFinishButton } from '../clinical/ClinicalFinishButton';
+import { resolveConsultationAppointment } from '../clinical/resolveConsultationAppointment';
 import { ClinicalAssessmentsPanel } from '../../shared/clinical-assessments/ClinicalAssessmentsPanel';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import { useClinicalAutosave } from '../../hooks/useClinicalAutosave';
@@ -251,15 +253,13 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
   const directAppointmentId = useRef<string>();
   useEffect(() => { setAppointmentCompleted(false); directAppointmentId.current = undefined; }, [initialAppointmentId, selectedPatientId]);
   const requestFinish = async () => {
-    if (!selectedPatientId || appointmentCompleted || openingFinish.current) return;
+    if (!selectedPatientId) { showToast('Selecione um paciente para finalizar o atendimento.', 'info'); return; }
+    if (appointmentCompleted || openingFinish.current) return;
     openingFinish.current = true;
     try {
       let appointmentId = initialAppointmentId || directAppointmentId.current;
       if (!appointmentId) {
-        const started = await ApiClient.post<any>('/v1/clinical/consultations/start', {
-          patientId: selectedPatientId, moduleType: 'ZemdaEstetic', walkIn: true
-        });
-        appointmentId = started.appointmentId;
+        appointmentId = await resolveConsultationAppointment({ patientId: selectedPatientId, moduleType: 'ZemdaEstetic' });
         if (!isCurrentClinicalContext()) return;
         directAppointmentId.current = appointmentId;
         window.dispatchEvent(new CustomEvent('zemda-appointment-updated'));
@@ -687,15 +687,7 @@ export const ZemdaEsteticWorkspace: React.FC<ZemdaEsteticWorkspaceProps> = ({
         <div className="flex items-center gap-2 flex-wrap">
           {selectedPatientId && <ClinicalAutosaveIndicator status={autosave.autosaveStatus} lastSavedTime={autosave.lastSavedTime} />}
           {selectedPatientId && !appointmentCompleted && (
-            <button
-              type="button"
-              data-tour="clinical-finish"
-              onClick={requestFinish}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Finalizar Atendimento</span>
-            </button>
+            <ClinicalFinishButton onClick={requestFinish} disabled={false} />
           )}
           {/* SELETOR DE ÁREA DE ATUAÇÃO (FACIAL, CORPORAL, CAPILAR) */}
           <div className="relative">

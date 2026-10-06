@@ -15,7 +15,7 @@ let browser;
   await open(`module=${module}`);assert.ok(await finish().isVisible(),module+' active');
   await open(`module=${module}&sidebar`);
   if(module==='ZemdaEstetic') assert.ok(await page.locator('[data-tour="tab-finish"]').count());
-  else assert.equal(await page.getByRole('button',{name:/finalizar atendimento|concluir atendimento/i}).count(),0,module+' sidebar');
+  else assert.ok(await finish().isVisible(),module+' sidebar');
   console.log('PASS',module,'active button and sidebar rule');
  }
  for(const module of ['ZemdaEstetic','ZemdaPersonal']) for(const source of ['dashboard','agenda']) {

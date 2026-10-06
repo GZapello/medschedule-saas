@@ -598,8 +598,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
   // Finalizar Atendimento Odontológico
   const handleFinishConsultation = async () => {
-    if (!initialAppointmentId) return;
-    if (!selectedPatientId) return;
+    if (!selectedPatientId) { alert('Selecione um paciente para finalizar o atendimento.'); return; }
     if (!consultationEvolution.trim()) {
       alert('Informe o resumo da evolução clínica realizada nesta consulta.');
       return;
@@ -690,7 +689,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
             onFinishConsultation={handleFinishConsultation}
             finishLabel="Finalizar Atendimento"
-            showFinish={!!initialAppointmentId}
+            showFinish={!completion.isCompleted}
             isSubmitting={saving}
             tools={[
               {
@@ -903,7 +902,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                 </div>
 
                 <div className="flex justify-end pt-2">
-                  {initialAppointmentId && (<button
+                  {selectedPatientId && !completion.isCompleted && (<button
                     type="button"
                     disabled={saving}
                     onClick={handleFinishConsultation}

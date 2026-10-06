@@ -584,6 +584,9 @@ export class PsychopedagogyController {
         req.user?.userId, req.user?.userId
       );
 
+      db.prepare('UPDATE records SET module_data_json = ?, clinical_data_json = ? WHERE id = ? AND tenant_id = ?')
+        .run(JSON.stringify(req.body.moduleData || req.body), JSON.stringify(req.body), recordId, tenantId);
+
       // Se houver appointmentId vinculado, finaliza o agendamento
       if (appointmentId) {
         try {
@@ -615,6 +618,7 @@ export class PsychopedagogyController {
         message: 'Atendimento psicopedagógico finalizado, assinado eletronicamente e selado com sucesso.'
       });
     } catch (err: any) {
+      console.error('[PsychopedagogyController.finishSession]', err);
       res.status(500).json({ error: err.message || 'Erro ao finalizar atendimento psicopedagógico.' });
     }
   }

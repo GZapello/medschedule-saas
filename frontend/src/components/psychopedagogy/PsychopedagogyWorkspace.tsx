@@ -1,4 +1,4 @@
-import { useClinicalReview } from '../clinical/useClinicalReview';
+import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import { useClinicalFormReset } from '../../hooks/useClinicalFormReset';
 import React, { useState, useEffect, useMemo } from 'react';
 import { ApiClient } from '../../api/client';
@@ -726,9 +726,8 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
   };
 
   // 9. Finalizar Atendimento Oficial (Grava evolução, sela e abre opções pós-consulta)
-  const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
+  const completion = useConsultationCompletion(undefined, selectedPatientId + ':' + (initialAppointmentId || ''), { showPostCompletion: false });
   const handleFinishConsultation = async () => {
-    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um aprendente para finalizar.', 'info');
       return;
@@ -741,6 +740,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
     try {
       setSaving(true);
       const finalPayload = {
+        moduleData: autosavePayload,
         patientId: selectedPatientId,
         professionalId: currentUser?.id,
         appointmentId: initialAppointmentId || null,
@@ -759,29 +759,14 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
           guidance_notes: finishForm.guidance_summary
         }
       };
-      if (!await review.confirm({ ...finalPayload, patientName: patientData?.full_name || patientData?.name, professionalName: currentUser?.name, moduleType: 'ZemdaPP' })) return;
-      let effectiveAppointmentId = initialAppointmentId;
-
-      // Se não houver appointmentId, inicia transparente via endpoint canônico
-      if (!effectiveAppointmentId) {
-        try {
-          const startRes = await ApiClient.post<any>('/v1/clinical/consultations/start', {
-            patientId: selectedPatientId,
-            professionalId: currentUser?.id,
-            serviceName: 'Atendimento Psicopedagógico (ZemdaPP)',
-            moduleType: 'ZemdaPP'
-          });
-          effectiveAppointmentId = startRes.appointmentId;
-        } catch (_) {}
-      }
-
-      finalPayload.appointmentId = effectiveAppointmentId || null;
-      const res = await ApiClient.post<any>('/v1/psychopedagogy/sessions/finish', finalPayload);
+      const res = await completion.complete('/v1/psychopedagogy/sessions/finish', { ...finalPayload, patientName: patientData?.full_name || patientData?.name, professionalName: currentUser?.name, moduleType: 'ZemdaPP' });
+      if (!res) return;
+      setPostConsultationReceipt(res);
+      setShowPostConsultationModal(true);
 
       await autosave.clearDraft();
       showToast('Atendimento psicopedagógico finalizado e selado com sucesso!', 'success');
-      setPostConsultationReceipt(res);
-      setShowPostConsultationModal(true);
+
       if (onFinishConsultation) onFinishConsultation();
     } catch (err: any) {
       showToast(err.message || 'Erro ao finalizar atendimento psicopedagógico.', 'error');
@@ -815,7 +800,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
   const selectedPatient = patientData;
 
-  return <>{review.dialog}{(
+  return <>{completion.dialog}{(
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       
       {/* 10. NOVO CABEÇALHO DO MÓDULO ZEMDAPP */}
@@ -852,9 +837,9 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setShowPreviousRecordsModal(true)}
-            onFinishConsultation={() => setActiveTab('finish')}
+            onFinishConsultation={() => selectedPatientId ? setActiveTab('finish') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
             finishLabel="Finalizar Atendimento"
-            showFinish={!!initialAppointmentId}
+            showFinish={!completion.isCompleted}
             isSubmitting={saving}
             tools={[
               {
@@ -892,7 +877,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
               { id: 'plans_goals', label: '5. Plano & Metas', icon: Target },
               { id: 'family_school', label: '6. Família & Escola', icon: School },
               { id: 'tests_attachments', label: '7. Testes & Anexos', icon: Layers },
-              ...(initialAppointmentId ? [{ id: 'finish', label: '8. Finalização', icon: CheckCircle2 }] : [])
+              { id: 'finish', label: '8. Finalização', icon: CheckCircle2 }
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -2571,7 +2556,7 @@ export const PsychopedagogyWorkspace: React.FC<PsychopedagogyWorkspaceProps> = (
 
                 {/* Botão de Finalização Principal */}
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-end">
-                  {initialAppointmentId && (<button
+                  {selectedPatientId && !completion.isCompleted && (<button
                     type="button"
                     onClick={handleFinishConsultation}
                     disabled={saving}

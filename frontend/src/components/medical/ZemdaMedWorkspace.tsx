@@ -1,4 +1,4 @@
-import { useClinicalReview } from '../clinical/useClinicalReview';
+import { useConsultationCompletion } from '../clinical/useConsultationCompletion';
 import { MedicalComparison } from './shared/MedicalComparison';
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { ClinicalSnapshot } from '../clinical/ClinicalSnapshot';
@@ -864,9 +864,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
   };
 
   // Finalizar Consulta Médica (Registrando no Prontuário Geral Selado)
-  const review = useClinicalReview(selectedPatientId + ':' + (initialAppointmentId || ""));
+  const completion = useConsultationCompletion(undefined, selectedPatientId + ':' + (initialAppointmentId || ''));
   const handleFinishConsultation = async () => {
-    if (!initialAppointmentId) return;
     if (!selectedPatientId) {
       showToast('Selecione um paciente para registrar o atendimento.', 'info');
       return;
@@ -924,8 +923,8 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
         clinicalEvolution: evolutionText,
         returnInDays
       };
-      if (!await review.confirm({ ...finalPayload, patientName: selectedPatient?.full_name || selectedPatient?.name, professionalName: currentUser?.name, moduleType: "ZemdaMed" })) return;
-      await ApiClient.post('/v1/medical/finish-consultation', finalPayload);
+      const result = await completion.complete('/v1/medical/finish-consultation', { ...finalPayload, patientName: selectedPatient?.full_name || selectedPatient?.name, professionalName: currentUser?.name, moduleType: "ZemdaMed" });
+      if (!result) return;
 
       showToast('Consulta médica finalizada com sucesso e registrada no prontuário do paciente!', 'success');
       await autosave.clearDraft();
@@ -968,7 +967,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
     { id: 'history', label: `Histórico (${consultationsHistory.length})`, icon: History }
   ];
 
-  return <>{review.dialog}{(
+  return <>{completion.dialog}{(
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       <ClinicalDraftRecoveryModal
         isOpen={autosave.conflictModalOpen}
@@ -1050,9 +1049,9 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
             autosaveStatus={autosave.autosaveStatus}
             lastSavedTime={autosave.lastSavedTime}
             onViewPreviousRecords={() => setActiveTab('history')}
-            onFinishConsultation={() => setActiveTab('conduct')}
+            onFinishConsultation={() => selectedPatientId ? setActiveTab('conduct') : showToast('Selecione um paciente para finalizar o atendimento.', 'info')}
             finishLabel="Finalizar Atendimento"
-            showFinish={!!initialAppointmentId}
+            showFinish={!completion.isCompleted}
             isSubmitting={isFinishing}
             toolsVariant="teal"
           />
@@ -1897,7 +1896,7 @@ export const ZemdaMedWorkspace: React.FC<ZemdaMedWorkspaceProps> = ({
                     </p>
                   </div>
 
-                  {initialAppointmentId && (<button
+                  {selectedPatientId && !completion.isCompleted && (<button
                     type="button"
                     onClick={handleFinishConsultation}
                     disabled={isFinishing || !selectedPatientId}

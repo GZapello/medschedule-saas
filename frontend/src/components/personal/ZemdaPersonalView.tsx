@@ -1,6 +1,8 @@
+import { ClinicalFinishButton } from '../clinical/ClinicalFinishButton';
+import { resolveConsultationAppointment } from '../clinical/resolveConsultationAppointment';
 import { FinishConsultationModal } from '../clinical/FinishConsultationModal';
 import { AnthropometricSexField } from './PersonalTechnicalFields';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useHorizontalTabScroll, HorizontalTabNav } from '../../hooks/useHorizontalTabScroll';
 import {
   Dumbbell,
@@ -47,16 +49,22 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
   lockStudentContext = false
 }) => {
   const { showToast } = useToast();
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || null);
+  const currentStudent = useRef(selectedStudentId);
+  currentStudent.current = selectedStudentId;
   const [finishAppointment, setFinishAppointment] = useState<any>(null);
   const [openingFinish, setOpeningFinish] = useState(false);
   const [appointmentCompleted, setAppointmentCompleted] = useState(false);
-  useEffect(() => { setFinishAppointment(null); setAppointmentCompleted(false); }, [initialAppointmentId, initialStudentId]);
+  useEffect(() => { setFinishAppointment(null); setAppointmentCompleted(false); }, [initialAppointmentId, selectedStudentId]);
   const requestFinish = async () => {
-    if (!initialAppointmentId || openingFinish || appointmentCompleted) return;
+    if (openingFinish || appointmentCompleted) return;
+    if (!selectedStudentId) { showToast('Selecione um aluno para finalizar o atendimento.', 'info'); return; }
     setOpeningFinish(true);
     try {
-      const { appointment } = await ApiClient.get<any>('/v1/appointments/' + initialAppointmentId);
-      if (appointment.patient_id !== initialStudentId) throw new Error('O agendamento pertence a outro aluno.');
+      const id = await resolveConsultationAppointment({ patientId: selectedStudentId, appointmentId: initialAppointmentId, moduleType: 'ZemdaPersonal' });
+      const { appointment } = await ApiClient.get<any>('/v1/appointments/' + id);
+      if (currentStudent.current !== selectedStudentId) return;
+      if (appointment.patient_id !== selectedStudentId) throw new Error('O agendamento pertence a outro aluno.');
       if (appointment.status === 'completed') { setAppointmentCompleted(true); showToast('Este atendimento já foi finalizado.', 'info'); return; }
       setFinishAppointment(appointment);
     } catch (error: any) { showToast(error.message || 'Não foi possível abrir a finalização.', 'error'); }
@@ -68,9 +76,6 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
 
   const tabScroll = useHorizontalTabScroll(currentTab);
   const { tabScrollProps } = tabScroll;
-
-  // Aluno atualmente selecionado para ver perfil detalhado
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || null);
 
   useEffect(() => {
     if (initialStudentId !== undefined) {
@@ -281,7 +286,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
     <div className="flex flex-col h-full bg-slate-50 text-slate-800">
       {/* CABEÇALHO DO MÓDULO ZEMDAPERSONAL */}
       {finishAppointment && <FinishConsultationModal appointment={finishAppointment}
-        clinicalData={{ moduleType: 'ZemdaPersonal', moduleData: { studentId: initialStudentId } }}
+        clinicalData={{ moduleType: 'ZemdaPersonal', moduleData: { studentId: selectedStudentId } }}
         onClose={() => setFinishAppointment(null)}
         onCompleted={() => { setAppointmentCompleted(true); }}
         onFinished={() => { setFinishAppointment(null); onFinishConsultation?.(); }} />}
@@ -294,7 +299,7 @@ export const ZemdaPersonalView: React.FC<ZemdaPersonalViewProps> = ({
         badgeVariant="bg-emerald-100 text-emerald-800 border-emerald-200"
         description="Gestão de alunos, dobras cutâneas (Pollock), periodização e mapa 3D de sobrecarga muscular."
       >
-      {initialAppointmentId && !appointmentCompleted && <button type="button" data-tour="clinical-finish" disabled={openingFinish} onClick={requestFinish} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold disabled:opacity-50"><CheckCircle2 className="w-4 h-4" />Finalizar Atendimento</button>}
+      {!appointmentCompleted && <ClinicalFinishButton onClick={requestFinish} disabled={openingFinish} />}
         {/* Barra de Busca Rápida Global */}
         <div className="relative flex-1 min-w-[220px] max-w-xs md:max-w-sm">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />

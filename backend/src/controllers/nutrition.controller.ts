@@ -1,3 +1,4 @@
+import { nutritionMealTotals } from '../utils/nutrition-meal-totals';
 import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
@@ -505,11 +506,15 @@ export class NutritionController {
         return;
       }
 
-      const { patientId, appointmentId, title, meals, totalCalories, totalProtein, totalCarbs, totalFat, guidelines, isActive = 1 } = req.body;
+      const { patientId, appointmentId, title, meals, guidelines, isActive = 1 } = req.body;
       if (!patientId || !title || !meals) {
         res.status(400).json({ error: 'patientId, title e meals são obrigatórios' });
         return;
       }
+
+      let totals;
+      try { totals = nutritionMealTotals(meals); }
+      catch (error: any) { res.status(400).json({ error: error.message }); return; }
 
       let profId: string | null = null;
       if (req.user?.role === 'professional') {
@@ -526,8 +531,8 @@ export class NutritionController {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, tenantId, patientId, profId, appointmentId || null,
-        title, JSON.stringify(meals), totalCalories || 0, totalProtein || 0, totalCarbs || 0, totalFat || 0,
-        guidelines || null, isActive ? 1 : 0
+        title, JSON.stringify(meals), totals.calories, totals.protein, totals.carbs, totals.fat,
+        guidelines || req.body.generalGuidelines || null, isActive ? 1 : 0
       );
 
       res.status(201).json({ id, message: 'Plano alimentar gerado com sucesso' });
