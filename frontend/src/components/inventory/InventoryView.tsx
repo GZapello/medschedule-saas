@@ -526,10 +526,11 @@ export const InventoryView: React.FC = () => {
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
                     <th className="p-4">Data / Hora</th>
-                    <th className="p-4">Item</th>
+                    <th className="p-4">Item / Lote</th>
                     <th className="p-4">Tipo</th>
                     <th className="p-4">Qtd</th>
                     <th className="p-4">Saldo Anterior → Novo</th>
+                    <th className="p-4">Origem / Paciente</th>
                     <th className="p-4">Motivo / Justificativa</th>
                     <th className="p-4">Responsável</th>
                   </tr>
@@ -544,7 +545,12 @@ export const InventoryView: React.FC = () => {
                         <td className="p-4 text-slate-500">
                           {new Date(m.created_at).toLocaleString('pt-BR')}
                         </td>
-                        <td className="p-4 font-bold text-slate-900">{m.item_name}</td>
+                        <td className="p-4 font-bold text-slate-900">
+                          <div>{m.item_name}</div>
+                          {m.batch && (
+                            <div className="text-[10px] font-normal text-slate-500">Lote: {m.batch}</div>
+                          )}
+                        </td>
                         <td className="p-4">
                           {isIn ? (
                             <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
@@ -566,13 +572,33 @@ export const InventoryView: React.FC = () => {
                         <td className="p-4 text-slate-600 font-medium">
                           {m.previous_quantity} → <strong className="text-slate-900">{m.new_quantity}</strong>
                         </td>
+                        <td className="p-4">
+                          {m.module_type ? (
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              m.module_type === 'ZemdaOdonto'
+                                ? 'bg-cyan-50 text-cyan-800 border-cyan-200'
+                                : m.module_type === 'ZemdaEstetic'
+                                ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}>
+                              {m.module_type}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">Manual</span>
+                          )}
+                          {m.patient_name && (
+                            <div className="text-[11px] text-slate-700 font-medium mt-0.5 truncate max-w-[150px]" title={m.patient_name}>
+                              Pac: {m.patient_name}
+                            </div>
+                          )}
+                        </td>
                         <td className="p-4 text-slate-600">
                           {m.reason || '—'}
                           {m.document_reference && (
                             <span className="text-[10px] text-slate-400 block">Doc/NF: {m.document_reference}</span>
                           )}
                         </td>
-                        <td className="p-4 text-slate-500">{m.user_name || 'Sistema'}</td>
+                        <td className="p-4 text-slate-500">{m.user_name || m.professional_name || 'Sistema'}</td>
                       </tr>
                     );
                   })}

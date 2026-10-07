@@ -30,6 +30,8 @@ import {
   FileCheck,
   DollarSign,
   Package,
+  Boxes,
+  Edit3,
   Camera,
   Scissors
 } from 'lucide-react';
@@ -52,6 +54,23 @@ import { ClinicalQuickHeaderActions, ClinicalQuickToolItem } from '../clinical/C
 import { ClinicalDraftRecoveryModal } from '../clinical/ClinicalDraftRecoveryModal';
 import { PatientSearchSelect } from '../common/PatientSearchSelect';
 import { ProfessionalModuleHeader } from '../common/ProfessionalModuleHeader';
+import { ClinicalInventorySelector, ClinicalInventorySelection } from '../clinical/ClinicalInventorySelector';
+
+export interface DentistryInventoryUsageItem {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  batchLot?: string;
+  expiryDate?: string;
+  toothNumber?: string | number;
+  region?: string;
+  procedureDescription?: string;
+  movementId?: string;
+  status: 'pending' | 'deducted';
+  currentStock?: number;
+}
 
 interface DentistryWorkspaceProps {
   initialPatientId?: string;
@@ -191,10 +210,34 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     expiryDate: '',
     notes: ''
   });
+  const [showHofInventoryPicker, setShowHofInventoryPicker] = useState<boolean>(false);
+  const [hofInventorySelection, setHofInventorySelection] = useState<ClinicalInventorySelection>({
+    productId: null,
+    productName: '',
+    quantity: 1,
+    unit: 'un',
+    withoutProduct: false
+  });
 
   // Finalização Rápida de Atendimento Odontológico
   const [consultationEvolution, setConsultationEvolution] = useState<string>('');
   const [consultationProcedures, setConsultationProcedures] = useState<string>('');
+
+  // Insumos Clínicos Utilizados nesta Consulta (ZemdaOdonto + Estoque Central)
+  const [inventoryUsages, setInventoryUsages] = useState<DentistryInventoryUsageItem[]>([]);
+  const [isAddingUsage, setIsAddingUsage] = useState<boolean>(false);
+  const [editingUsageId, setEditingUsageId] = useState<string | null>(null);
+  const [usageTooth, setUsageTooth] = useState<string>('');
+  const [usageProcedure, setUsageProcedure] = useState<string>('');
+  const [usageSelection, setUsageSelection] = useState<ClinicalInventorySelection>({
+    productId: null,
+    productName: '',
+    quantity: 1,
+    unit: 'un',
+    withoutProduct: false
+  });
+  const [usageError, setUsageError] = useState<string | null>(null);
+  const [refundingUsageId, setRefundingUsageId] = useState<string | null>(null);
 
   const isCurrentClinicalContext = useClinicalFormReset(selectedPatientId + ':' + (initialAppointmentId || ''), [
     [odontogramData, setOdontogramData],
@@ -209,6 +252,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     [hofForm, setHofForm],
     [consultationEvolution, setConsultationEvolution],
     [consultationProcedures, setConsultationProcedures],
+    [inventoryUsages, setInventoryUsages],
   ]);
 
 
@@ -223,7 +267,8 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     prostheticForm,
     hofForm,
     odontogramData,
-    pendingToothChanges
+    pendingToothChanges,
+    inventoryUsages
   }), [
     consultationEvolution,
     consultationProcedures,
@@ -234,7 +279,8 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     prostheticForm,
     hofForm,
     odontogramData,
-    pendingToothChanges
+    pendingToothChanges,
+    inventoryUsages
   ]);
 
   const handleRestoreDraft = (data: any) => {
@@ -249,6 +295,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     if (data.hofForm) setHofForm((prev: any) => ({ ...prev, ...data.hofForm }));
     if (data.odontogramData && Object.keys(data.odontogramData).length > 0) setOdontogramData(data.odontogramData);
     if (Array.isArray(data.pendingToothChanges)) setPendingToothChanges(data.pendingToothChanges);
+    if (Array.isArray(data.inventoryUsages)) setInventoryUsages(data.inventoryUsages);
   };
 
   const autosave = useClinicalAutosave({
@@ -258,6 +305,114 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     payload: autosavePayload,
     onRestoreDraft: handleRestoreDraft
   });
+
+  // Funções de Gestão de Insumos Clínicos
+  const handleOpenAddUsage = () => {
+    setEditingUsageId(null);
+    setUsageTooth('');
+    setUsageProcedure('');
+    setUsageSelection({
+      productId: null,
+      productName: '',
+      quantity: 1,
+      unit: 'un',
+      withoutProduct: false
+    });
+    setUsageError(null);
+    setIsAddingUsage(true);
+  };
+
+  const handleEditUsage = (item: DentistryInventoryUsageItem) => {
+    setEditingUsageId(item.id);
+    setUsageTooth(item.toothNumber ? String(item.toothNumber) : '');
+    setUsageProcedure(item.procedureDescription || '');
+    setUsageSelection({
+      productId: item.productId,
+      productName: item.productName,
+      batchLot: item.batchLot,
+      expiryDate: item.expiryDate,
+      quantity: item.quantity,
+      unit: item.unit,
+      withoutProduct: false
+    });
+    setUsageError(null);
+    setIsAddingUsage(true);
+  };
+
+  const handleSaveUsageItem = () => {
+    if (!usageSelection.productId || !usageSelection.productName) {
+      setUsageError('Selecione um insumo/produto do estoque da clínica.');
+      return;
+    }
+    const qty = Number(usageSelection.quantity);
+    if (!qty || qty <= 0) {
+      setUsageError('Informe uma quantidade válida maior que zero.');
+      return;
+    }
+
+    if (editingUsageId) {
+      setInventoryUsages(prev => prev.map(u => {
+        if (u.id === editingUsageId) {
+          return {
+            ...u,
+            productId: usageSelection.productId!,
+            productName: usageSelection.productName,
+            quantity: qty,
+            unit: usageSelection.unit || 'un',
+            batchLot: usageSelection.batchLot,
+            expiryDate: usageSelection.expiryDate,
+            toothNumber: usageTooth.trim() || undefined,
+            procedureDescription: usageProcedure.trim() || undefined,
+          };
+        }
+        return u;
+      }));
+    } else {
+      const newItem: DentistryInventoryUsageItem = {
+        id: 'usage-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+        productId: usageSelection.productId,
+        productName: usageSelection.productName,
+        quantity: qty,
+        unit: usageSelection.unit || 'un',
+        batchLot: usageSelection.batchLot,
+        expiryDate: usageSelection.expiryDate,
+        toothNumber: usageTooth.trim() || undefined,
+        procedureDescription: usageProcedure.trim() || undefined,
+        status: 'pending'
+      };
+      setInventoryUsages(prev => [...prev, newItem]);
+    }
+
+    setIsAddingUsage(false);
+    setEditingUsageId(null);
+    setUsageError(null);
+  };
+
+  const handleRemoveUsage = async (item: DentistryInventoryUsageItem) => {
+    if (item.status === 'deducted' && item.movementId) {
+      if (!window.confirm(`Deseja estornar a baixa de ${item.quantity} ${item.unit} de "${item.productName}" ao estoque central da clínica?`)) {
+        return;
+      }
+      try {
+        setRefundingUsageId(item.id);
+        await ApiClient.post('/v1/clinical-inventory/usage/refund', {
+          movementId: item.movementId,
+          reason: 'Remoção de insumo da consulta odontológica'
+        });
+        window.dispatchEvent(new CustomEvent('zemda-inventory-updated'));
+        setInventoryUsages(prev => prev.filter(u => u.id !== item.id));
+        setSuccessMsg(`Estorno de "${item.productName}" realizado com sucesso!`);
+        setTimeout(() => setSuccessMsg(null), 3000);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Erro ao estornar insumo');
+        setTimeout(() => setErrorMsg(null), 4000);
+      } finally {
+        setRefundingUsageId(null);
+      }
+    } else {
+      setInventoryUsages(prev => prev.filter(u => u.id !== item.id));
+    }
+  };
 
   // Ao selecionar paciente, carrega os dados do paciente e dados odontológicos
   useEffect(() => {
@@ -490,6 +645,19 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
     }
   };
 
+  const handleHofInventoryChange = (sel: ClinicalInventorySelection) => {
+    setHofInventorySelection(sel);
+    if (sel.productId && sel.productName) {
+      setHofForm(prev => ({
+        ...prev,
+        productBrand: sel.productName + (sel.brand ? ` (${sel.brand})` : ''),
+        lotNumber: sel.batchLot || '',
+        unitsQuantity: sel.quantity ? String(sel.quantity) : '1',
+        expiryDate: sel.expiryDate || prev.expiryDate || ''
+      }));
+    }
+  };
+
   // Salvar Procedimento HOF
   const handleSaveHof = async () => {
     if (!selectedPatientId) return;
@@ -499,9 +667,50 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         patientId: selectedPatientId,
         ...hofForm
       });
+
+      // Se utilizou produto do estoque central, vincula automaticamente aos insumos da consulta
+      if (hofInventorySelection.productId && Number(hofInventorySelection.quantity) > 0) {
+        setInventoryUsages(prev => {
+          const exists = prev.some(u => u.productId === hofInventorySelection.productId && u.procedureDescription?.includes(hofForm.procedureName));
+          if (exists) return prev;
+          return [
+            ...prev,
+            {
+              id: 'usage-hof-' + Date.now(),
+              productId: hofInventorySelection.productId!,
+              productName: hofInventorySelection.productName,
+              quantity: Number(hofInventorySelection.quantity),
+              unit: hofInventorySelection.unit || 'un',
+              batchLot: hofInventorySelection.batchLot,
+              expiryDate: hofInventorySelection.expiryDate,
+              region: hofForm.facialRegion || undefined,
+              procedureDescription: `HOF: ${hofForm.procedureName || 'Procedimento Facial'}`,
+              status: 'pending'
+            }
+          ];
+        });
+      }
+
       setSuccessMsg('Procedimento de Harmonização Orofacial registrado!');
       const res = await ApiClient.get<any[]>(`/v1/dentistry/hof/${selectedPatientId}`);
       setHofRecords(res || []);
+      setHofForm({
+        procedureName: '',
+        facialRegion: '',
+        productBrand: '',
+        lotNumber: '',
+        unitsQuantity: '',
+        expiryDate: '',
+        notes: ''
+      });
+      setHofInventorySelection({
+        productId: null,
+        productName: '',
+        quantity: 1,
+        unit: 'un',
+        withoutProduct: false
+      });
+      setShowHofInventoryPicker(false);
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao salvar HOF');
@@ -618,6 +827,20 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
         treatmentPlanData: planForm, prostheticData: prostheticForm, orthodonticData: orthoData, facialData: hofForm,
         odontogramData: odontogramData,
         toothChanges: pendingToothChanges,
+        inventoryUsages: inventoryUsages.map(u => ({
+          id: u.id,
+          productId: u.productId,
+          productName: u.productName,
+          quantity: u.quantity,
+          unit: u.unit,
+          batchLot: u.batchLot,
+          expiryDate: u.expiryDate,
+          toothNumber: u.toothNumber,
+          region: u.region,
+          procedureDescription: u.procedureDescription,
+          movementId: u.movementId,
+          status: u.status
+        })),
         isSealed: true
       })) return;
       await autosave.clearDraft();
@@ -899,6 +1122,201 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
                       className="w-full p-3 bg-white border border-cyan-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-cyan-500"
                     />
                   </div>
+                </div>
+
+                {/* CARD: INSUMOS UTILIZADOS NESTA CONSULTA */}
+                <div className="p-4 bg-white border border-cyan-200 rounded-2xl space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Boxes className="w-4 h-4 text-cyan-700" />
+                      <span className="text-xs font-black uppercase tracking-wider text-cyan-950">
+                        Insumos Utilizados Nesta Consulta
+                      </span>
+                      {inventoryUsages.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800">
+                          {inventoryUsages.length}
+                        </span>
+                      )}
+                    </div>
+                    {!isAddingUsage && (
+                      <button
+                        type="button"
+                        onClick={handleOpenAddUsage}
+                        className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Adicionar Insumo
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Formulário de Adicionar/Editar Insumo */}
+                  {isAddingUsage && (
+                    <div className="p-4 bg-cyan-50/50 border border-cyan-200 rounded-xl space-y-3 animate-in fade-in-50 duration-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-cyan-900">
+                          {editingUsageId ? 'Editar Insumo Utilizado' : 'Novo Insumo do Estoque'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingUsage(false);
+                            setEditingUsageId(null);
+                            setUsageError(null);
+                          }}
+                          className="text-slate-400 hover:text-slate-600 text-xs font-semibold cursor-pointer"
+                        >
+                          ✕ Fechar
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                            Dente / Elemento (opcional)
+                          </label>
+                          <input
+                            type="text"
+                            value={usageTooth}
+                            onChange={e => setUsageTooth(e.target.value)}
+                            placeholder="Ex: 16, 21, 36 ou Geral"
+                            className="w-full p-2 bg-white border border-cyan-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                            Procedimento Relacionado (opcional)
+                          </label>
+                          <input
+                            type="text"
+                            value={usageProcedure}
+                            onChange={e => setUsageProcedure(e.target.value)}
+                            placeholder="Ex: Restauração Resina, Anestesia Infiltrativa"
+                            className="w-full p-2 bg-white border border-cyan-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-cyan-500 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* ClinicalInventorySelector do estoque central da clínica */}
+                      <div>
+                        <ClinicalInventorySelector
+                          value={usageSelection}
+                          onChange={setUsageSelection}
+                          allowWithoutProduct={false}
+                          defaultCategory="Odontologia"
+                        />
+                      </div>
+
+                      {usageError && (
+                        <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-medium flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                          {usageError}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingUsage(false);
+                            setEditingUsageId(null);
+                            setUsageError(null);
+                          }}
+                          className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveUsageItem}
+                          className="px-4 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                        >
+                          {editingUsageId ? 'Atualizar Insumo' : 'Confirmar Insumo'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de Insumos Registrados */}
+                  {inventoryUsages.length === 0 && !isAddingUsage ? (
+                    <p className="text-xs text-slate-500 italic py-1">
+                      Nenhum insumo registrado nesta consulta.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {inventoryUsages.map(usage => (
+                        <div
+                          key={usage.id}
+                          className="p-3 bg-white border border-slate-200 hover:border-cyan-300 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-all shadow-xs"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900">{usage.productName}</span>
+                              {usage.status === 'deducted' && (
+                                <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[10px] font-bold">
+                                  Baixado
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2">
+                              <span>Lote: <strong>{usage.batchLot || 'S/L'}</strong></span>
+                              <span>•</span>
+                              <span>Validade: <strong>{usage.expiryDate ? new Date(usage.expiryDate + 'T00:00:00').toLocaleDateString('pt-BR') : 'Sem data'}</strong></span>
+                              <span>•</span>
+                              <span>Utilizado: <strong className="text-cyan-800">{usage.quantity} {usage.unit}</strong></span>
+                              {usage.toothNumber && (
+                                <>
+                                  <span>•</span>
+                                  <span className="bg-cyan-50 text-cyan-800 px-1.5 py-0.2 rounded font-semibold text-[10px]">
+                                    Dente {usage.toothNumber}
+                                  </span>
+                                </>
+                              )}
+                              {usage.procedureDescription && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-slate-600 italic">{usage.procedureDescription}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                            {usage.status !== 'deducted' && (
+                              <button
+                                type="button"
+                                onClick={() => handleEditUsage(usage)}
+                                className="px-2.5 py-1 text-slate-600 hover:text-cyan-700 hover:bg-cyan-50 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                Editar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={refundingUsageId === usage.id}
+                              onClick={() => handleRemoveUsage(usage)}
+                              className="px-2.5 py-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              {refundingUsageId === usage.id ? 'Estornando...' : 'Remover'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {!isAddingUsage && (
+                        <button
+                          type="button"
+                          onClick={handleOpenAddUsage}
+                          className="w-full py-2 border-2 border-dashed border-cyan-200 hover:border-cyan-400 hover:bg-cyan-50/50 rounded-xl text-xs font-bold text-cyan-800 flex items-center justify-center gap-1.5 transition-all cursor-pointer mt-2"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Adicionar outro insumo
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end pt-2">
@@ -1659,9 +2077,37 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
 
               {/* Registro HOF */}
               <div className="p-6 bg-white border border-slate-200 rounded-3xl space-y-4 shadow-sm">
-                <span className="text-xs font-black uppercase text-slate-700">
-                  Registrar Aplicação de Harmonização Orofacial
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase text-slate-700">
+                    Registrar Aplicação de Harmonização Orofacial
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowHofInventoryPicker(!showHofInventoryPicker)}
+                    className="text-xs font-bold text-cyan-700 hover:text-cyan-800 flex items-center gap-1.5 cursor-pointer bg-cyan-50 hover:bg-cyan-100 px-3 py-1.5 rounded-xl border border-cyan-200 transition-all"
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    {showHofInventoryPicker ? 'Ocultar Seleção do Estoque' : 'Puxar do Estoque Central da Clínica'}
+                  </button>
+                </div>
+
+                {showHofInventoryPicker && (
+                  <div className="p-4 bg-cyan-50/50 border border-cyan-200 rounded-2xl space-y-2 animate-in fade-in-50 duration-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-cyan-900 flex items-center gap-1.5">
+                        <Boxes className="w-4 h-4 text-cyan-700" />
+                        Selecione o Insumo/Produto no Estoque da Clínica
+                      </span>
+                      <span className="text-[11px] text-cyan-700">Preenche marca, lote e quantidade automaticamente</span>
+                    </div>
+                    <ClinicalInventorySelector
+                      value={hofInventorySelection}
+                      onChange={handleHofInventoryChange}
+                      allowWithoutProduct={false}
+                      defaultCategory="Geral"
+                    />
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>

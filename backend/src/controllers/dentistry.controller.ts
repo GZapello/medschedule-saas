@@ -6,6 +6,7 @@ import { hasClinicalAccess } from './clinical.controller';
 import { DocumentsController } from './documents.controller';
 import { ClinicalRecordService } from '../services/clinical-record.service';
 import { ServiceReminderService } from '../services/service-reminder.service';
+import { ClinicalInventoryService } from '../services/clinical-inventory.service';
 
 /**
  * Validação de acesso exclusivo para Odontologia (ZemdaOdonto)
@@ -1359,6 +1360,20 @@ export class DentistryController {
           }
         }
 
+        // 4b. Registra insumos utilizados na consulta odontológica
+        const rawUsages = req.body.inventoryUsages || odontoModuleData.inventoryUsages;
+        if (Array.isArray(rawUsages) && rawUsages.length > 0) {
+          ClinicalInventoryService.processConsultationUsages(tenantId!, {
+            usages: rawUsages,
+            moduleType: 'ZemdaOdonto',
+            sourceType: 'dentistry_usage',
+            appointmentId: appointmentId || null,
+            patientId: patientId,
+            professionalId: profId,
+            userId: req.user?.userId
+          });
+        }
+
         // 5. Marca agendamento como finalizado após todos os registros clínicos estarem garantidos
         if (appointmentId) {
           db.prepare(`UPDATE appointments SET status = 'completed', updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`).run(appointmentId, tenantId);
@@ -1387,7 +1402,11 @@ export class DentistryController {
       });
     } catch (err: any) {
       console.error('[DentistryController.finishConsultation] Erro:', err);
-      res.status(500).json({ error: 'Erro ao finalizar atendimento odontológico' });
+      if (typeof err.status === 'number' && err.status >= 400 && err.status < 500) {
+        res.status(err.status).json({ error: err.message, field: err.field });
+        return;
+      }
+      res.status(500).json({ error: err?.message || 'Erro ao finalizar atendimento odontológico' });
     }
   }
 

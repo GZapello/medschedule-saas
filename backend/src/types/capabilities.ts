@@ -21,7 +21,9 @@ export interface CapabilityItem {
     | 'PHYSICAL'
     | 'TRAINING'
     | 'ODONTO'
-    | 'MEDICAL';
+    | 'MEDICAL'
+    | 'CLINICAL'
+    | 'ESTETIC';
   name: string;
   description: string;
   commercialPlanRequired?: 'SOLO' | 'TEAM' | 'CLINIC';

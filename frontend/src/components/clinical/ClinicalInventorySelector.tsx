@@ -49,13 +49,17 @@ interface ClinicalInventorySelectorProps {
   onChange: (value: ClinicalInventorySelection) => void;
   disabled?: boolean;
   required?: boolean;
+  allowWithoutProduct?: boolean;
+  defaultCategory?: string;
 }
 
 export function ClinicalInventorySelector({
   value,
   onChange,
   disabled = false,
-  required = true
+  required = true,
+  allowWithoutProduct = true,
+  defaultCategory = 'Geral'
 }: ClinicalInventorySelectorProps) {
   const [items, setItems] = useState<ClinicalInventoryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -67,7 +71,7 @@ export function ClinicalInventorySelector({
   // Quick Add Form state
   const [quickAddForm, setQuickAddForm] = useState({
     name: '',
-    category: 'Estética',
+    category: defaultCategory,
     productType: '',
     brand: '',
     presentation: 'unidade',
@@ -246,19 +250,21 @@ export function ClinicalInventorySelector({
           Produto / Insumo utilizado {required && !value.withoutProduct && <span className="text-red-500">*</span>}
         </label>
 
-        <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors select-none">
-          <input
-            type="checkbox"
-            checked={value.withoutProduct}
-            onChange={e => handleWithoutProductToggle(e.target.checked)}
-            disabled={disabled}
-            className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
-          />
-          <span>Procedimento sem utilização de produto/insumo</span>
-        </label>
+        {allowWithoutProduct && (
+          <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 bg-white px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors select-none">
+            <input
+              type="checkbox"
+              checked={value.withoutProduct}
+              onChange={e => handleWithoutProductToggle(e.target.checked)}
+              disabled={disabled}
+              className="rounded text-teal-600 focus:ring-teal-500 w-3.5 h-3.5"
+            />
+            <span>Procedimento sem utilização de produto/insumo</span>
+          </label>
+        )}
       </div>
 
-      {value.withoutProduct ? (
+      {allowWithoutProduct && value.withoutProduct ? (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
           <span>Este procedimento não registrará baixa no estoque central da clínica.</span>

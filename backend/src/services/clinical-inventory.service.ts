@@ -50,7 +50,7 @@ export interface QuickAddItemInput {
 export interface DeductStockParams {
   itemId: string;
   quantity: number;
-  professionalId: string;
+  professionalId?: string | null;
   patientId?: string | null;
   appointmentId?: string | null;
   moduleType: string;
@@ -58,22 +58,23 @@ export interface DeductStockParams {
   sourceId: string;
   reason?: string;
   unit?: string;
-  batch?: string;
-  userId?: string;
+  batch?: string | null;
+  userId?: string | null;
 }
 
 export interface RefundStockParams {
-  itemId: string;
-  quantity: number;
-  professionalId?: string;
+  movementId?: string;
+  itemId?: string;
+  quantity?: number;
+  professionalId?: string | null;
   patientId?: string | null;
   appointmentId?: string | null;
   moduleType?: string;
   sourceType?: string;
   sourceId?: string;
   reason?: string;
-  batch?: string;
-  userId?: string;
+  batch?: string | null;
+  userId?: string | null;
 }
 
 export interface AdjustStockParams {
@@ -332,7 +333,7 @@ export class ClinicalInventoryService {
    * Localiza o item mesmo se desativado (active = 0) para integridade da clínica.
    */
   static refundStock(tenantId: string, params: RefundStockParams) {
-    const {
+    let {
       itemId,
       quantity,
       professionalId,
@@ -343,23 +344,51 @@ export class ClinicalInventoryService {
       sourceId,
       reason,
       batch,
-      userId
+      userId,
+      movementId: originalMovementId
     } = params;
 
+    // Se informado movementId diretamente, busca a movimentação de saída original
+    if (originalMovementId && (!itemId || !quantity)) {
+      const orig = db.prepare(`
+        SELECT * FROM inventory_movements 
+        WHERE id = ? AND tenant_id = ? AND movement_type = 'out'
+        LIMIT 1
+      `).get(originalMovementId, tenantId) as any;
+
+      if (!orig) {
+        throw new ClinicalInventoryError('Movimentação original de saída não encontrada para estorno.', 404, 'movementId');
+      }
+
+      itemId = orig.item_id;
+      quantity = orig.quantity;
+      professionalId = professionalId || orig.professional_id;
+      patientId = patientId || orig.patient_id;
+      appointmentId = appointmentId || orig.appointment_id;
+      moduleType = moduleType || orig.module_type;
+      sourceType = sourceType || orig.source_type;
+      sourceId = sourceId || orig.source_id;
+      batch = batch || orig.batch;
+    }
+
     const qty = Math.abs(Number(quantity));
-    if (isNaN(qty) || qty <= 0) return { success: true, message: 'Nenhuma quantidade a estornar.' };
+    if (isNaN(qty) || qty <= 0) return { success: true, message: 'Nenhuma quantidade a estornar.', restoredQuantity: 0 };
 
     // Idempotência de estorno: evita estornar a mesma exclusão mais de uma vez
     if (sourceType && sourceId) {
       const existingRefund = db.prepare(`
-        SELECT id FROM inventory_movements 
+        SELECT id, new_quantity FROM inventory_movements 
         WHERE tenant_id = ? AND source_type = ? AND source_id = ? AND movement_type = 'in' AND reason LIKE '%Estorno%'
         LIMIT 1
       `).get(tenantId, sourceType, sourceId) as any;
 
       if (existingRefund) {
-        return { success: true, movementId: existingRefund.id, alreadyRefunded: true };
+        return { success: true, movementId: existingRefund.id, alreadyRefunded: true, restoredQuantity: existingRefund.new_quantity };
       }
+    }
+
+    if (!itemId) {
+      throw new ClinicalInventoryError('Identificador do item não informado para estorno.', 400, 'itemId');
     }
 
     const item = db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ?').get(itemId, tenantId) as ClinicalInventoryItem | undefined;
@@ -390,7 +419,7 @@ export class ClinicalInventoryService {
       currentQty,
       nextQty,
       refundReason,
-      sourceId || appointmentId || null,
+      sourceId || appointmentId || originalMovementId || null,
       userId || null,
       professionalId || null,
       patientId || null,
@@ -406,8 +435,16 @@ export class ClinicalInventoryService {
       movementId,
       previousQuantity: currentQty,
       newQuantity: nextQty,
+      restoredQuantity: nextQty,
       item: { ...item, quantity: nextQty }
     };
+  }
+
+  /**
+   * Alias de conveniência para estorno de insumo/uso clínico.
+   */
+  static refundUsage(tenantId: string, params: RefundStockParams) {
+    return this.refundStock(tenantId, params);
   }
 
   /**
@@ -596,28 +633,146 @@ export class ClinicalInventoryService {
   }
 
   /**
-   * Consulta movimentações associadas a um atendimento, paciente ou procedimento.
+   * Processa a baixa de uma lista de insumos utilizados em uma consulta (ex.: ZemdaOdonto).
+   * Valida saldo de todos os itens antes de persistir, garantindo integridade atômica e mensagens claras.
    */
-  static getMovements(tenantId: string, filter: { appointmentId?: string; patientId?: string; sourceId?: string }) {
+  static processConsultationUsages(tenantId: string, params: {
+    usages: Array<{
+      id?: string;
+      productId?: string;
+      inventory_item_id?: string;
+      quantity: number | string;
+      unit?: string;
+      batchLot?: string;
+      batch?: string;
+      expiryDate?: string;
+      toothNumber?: string | number;
+      region?: string;
+      procedureDescription?: string;
+      productName?: string;
+      status?: string;
+    }>;
+    moduleType: string;
+    sourceType: string;
+    appointmentId?: string | null;
+    patientId?: string;
+    professionalId?: string | null;
+    userId?: string;
+  }) {
+    const { usages, moduleType, sourceType, appointmentId, patientId, professionalId, userId } = params;
+    if (!Array.isArray(usages) || usages.length === 0) return [];
+    const effectiveSourceType = sourceType || 'dentistry_usage';
+
+    // 1. Pré-validação estrita de todos os insumos antes de efetuar qualquer baixa
+    for (const u of usages) {
+      const itemId = u.productId || u.inventory_item_id;
+      if (!itemId) continue;
+      const qty = Number(u.quantity);
+      if (isNaN(qty) || qty <= 0) continue;
+
+      const item = db.prepare('SELECT id, name, quantity, unit, active FROM inventory_items WHERE id = ? AND tenant_id = ?').get(itemId, tenantId) as any;
+      if (!item) {
+        throw new ClinicalInventoryError(`Produto ou insumo não encontrado no estoque desta clínica: ${u.productName || itemId}.`, 404, 'productId');
+      }
+      if (item.active !== 1) {
+        throw new ClinicalInventoryError(`Não foi possível finalizar: ${item.name} está inativo no estoque.`, 400, 'productId');
+      }
+
+      // Se ainda não foi baixado anteriormente (idempotência)
+      const usageId = u.id || itemId;
+      const alreadyDeducted = db.prepare(`
+        SELECT id FROM inventory_movements 
+        WHERE tenant_id = ? AND source_type = ? AND source_id = ? AND movement_type = 'out'
+        LIMIT 1
+      `).get(tenantId, effectiveSourceType, usageId) as any;
+
+      if (!alreadyDeducted) {
+        const available = Number(item.quantity) || 0;
+        if (available < qty) {
+          throw new ClinicalInventoryError(
+            `Não foi possível finalizar: ${item.name} possui saldo de ${available} ${item.unit || 'unidades'}. Quantidade necessária: ${qty} ${item.unit || 'unidades'}.`,
+            400,
+            'quantity'
+          );
+        }
+      }
+    }
+
+    // 2. Executa as baixas com idempotência
+    const results = [];
+    for (const u of usages) {
+      const itemId = u.productId || u.inventory_item_id;
+      if (!itemId) continue;
+      const qty = Number(u.quantity);
+      if (isNaN(qty) || qty <= 0) continue;
+
+      const usageId = u.id || ('usage-' + uuidv4().slice(0, 8));
+      const procedureNote = [
+        u.toothNumber ? `Dente ${u.toothNumber}` : null,
+        u.region ? `Região ${u.region}` : null,
+        u.procedureDescription || null
+      ].filter(Boolean).join(' - ');
+
+      const reason = procedureNote
+        ? `Procedimento odontológico (${procedureNote}): ${u.productName || 'Insumo'}`
+        : `Procedimento odontológico: ${u.productName || 'Insumo'}`;
+
+      const res = this.deductStock(tenantId, {
+        itemId,
+        quantity: qty,
+        professionalId,
+        patientId,
+        appointmentId: appointmentId || null,
+        moduleType,
+        sourceType: effectiveSourceType,
+        sourceId: usageId,
+        reason,
+        unit: u.unit,
+        batch: u.batchLot || u.batch,
+        userId
+      });
+      results.push(res);
+    }
+
+    return results;
+  }
+
+  /**
+   * Consulta movimentações associadas a um atendimento, paciente, item ou procedimento.
+   */
+  static getMovements(tenantId: string, filter?: string | { appointmentId?: string; patientId?: string; sourceId?: string; itemId?: string }) {
     let query = `
-      SELECT m.*, i.name as item_name, i.unit as item_unit, i.brand as item_brand
+      SELECT m.*, i.name as item_name, i.unit as item_unit, i.brand as item_brand,
+             p.full_name as patient_name,
+             prof.name as professional_name
       FROM inventory_movements m
       LEFT JOIN inventory_items i ON i.id = m.item_id AND i.tenant_id = m.tenant_id
+      LEFT JOIN patients p ON p.id = m.patient_id AND p.tenant_id = m.tenant_id
+      LEFT JOIN professionals prof ON prof.id = m.professional_id AND prof.tenant_id = m.tenant_id
       WHERE m.tenant_id = ?
     `;
     const params: any[] = [tenantId];
 
-    if (filter.appointmentId) {
-      query += ' AND m.appointment_id = ?';
-      params.push(filter.appointmentId);
-    }
-    if (filter.patientId) {
-      query += ' AND m.patient_id = ?';
-      params.push(filter.patientId);
-    }
-    if (filter.sourceId) {
-      query += ' AND m.source_id = ?';
-      params.push(filter.sourceId);
+    if (typeof filter === 'string') {
+      query += ' AND m.item_id = ?';
+      params.push(filter);
+    } else if (filter) {
+      if (filter.itemId) {
+        query += ' AND m.item_id = ?';
+        params.push(filter.itemId);
+      }
+      if (filter.appointmentId) {
+        query += ' AND m.appointment_id = ?';
+        params.push(filter.appointmentId);
+      }
+      if (filter.patientId) {
+        query += ' AND m.patient_id = ?';
+        params.push(filter.patientId);
+      }
+      if (filter.sourceId) {
+        query += ' AND m.source_id = ?';
+        params.push(filter.sourceId);
+      }
     }
 
     query += ' ORDER BY m.created_at DESC';

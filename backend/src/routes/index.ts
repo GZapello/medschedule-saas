@@ -859,6 +859,7 @@ api.get('/v1/inventory/movements', requireTenant, requireRole('clinic_admin', 'r
 api.get('/v1/clinical-inventory/items', requireTenant, ClinicalInventoryController.listItems);
 api.post('/v1/clinical-inventory/items/quick-add', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalInventoryController.quickAdd);
 api.post('/v1/clinical-inventory/usage', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalInventoryController.recordUsage);
+api.post('/v1/clinical-inventory/usage/refund', requireTenant, requireRole('clinic_admin', 'professional'), ClinicalInventoryController.refundUsage);
 api.get('/v1/clinical-inventory/movements', requireTenant, ClinicalInventoryController.listMovements);
 
 // Orçamentos (Pacientes e Insumos/Fornecedores)

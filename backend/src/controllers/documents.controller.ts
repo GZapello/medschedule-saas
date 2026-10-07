@@ -18,6 +18,7 @@ import { isUserPersonalTrainer } from './personal.controller';
 import { getEsteticAccess } from './estetic.controller';
 import { persistEsteticCompletion } from './estetic-records';
 import { resolveCanonicalProfession } from '../utils/profession-module';
+import { ClinicalInventoryService } from '../services/clinical-inventory.service';
 
 export class DocumentsController {
   static consultationStatus(req: Request, res: Response): void {
@@ -734,6 +735,21 @@ export class DocumentsController {
       if (targetModule === 'ZemdaEstetic' && evolution?.moduleData) {
         const esteticSnapshot = typeof evolution.moduleData === 'string' ? JSON.parse(evolution.moduleData) : evolution.moduleData;
         persistEsteticCompletion(req, getEsteticAccess, esteticSnapshot, appt);
+      }
+
+      // Processa insumos clínicos utilizados na consulta (ZemdaOdonto e afins)
+      const snapshot = typeof evolution?.moduleData === 'string' ? JSON.parse(evolution.moduleData) : { ...evolution?.moduleData };
+      const rawUsages = snapshot?.inventoryUsages || evolution?.inventoryUsages || req.body?.inventoryUsages;
+      if (Array.isArray(rawUsages) && rawUsages.length > 0) {
+        ClinicalInventoryService.processConsultationUsages(tenantId!, {
+          usages: rawUsages,
+          moduleType: targetModule || 'ZemdaOdonto',
+          sourceType: 'dentistry_usage',
+          appointmentId: appointmentId,
+          patientId: appt.patient_id,
+          professionalId: resolvedProfId,
+          userId: req.user?.userId
+        });
       }
 
       // 1. Grava evolução do prontuário, se preenchida

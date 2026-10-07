@@ -87,6 +87,34 @@ export class ClinicalInventoryController {
   }
 
   /**
+   * POST /v1/clinical-inventory/usage/refund
+   * Estorno de consumo clínico previamente registrado.
+   */
+  static refundUsage(req: Request, res: Response): void {
+    try {
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+
+      const result = ClinicalInventoryService.refundStock(tenantId, {
+        ...req.body,
+        userId: req.user?.userId
+      });
+
+      res.status(200).json(result);
+    } catch (err: any) {
+      if (err instanceof ClinicalInventoryError) {
+        res.status(err.status).json({ error: err.message, field: err.field });
+        return;
+      }
+      console.error('[ClinicalInventoryController.refundUsage] Erro:', err);
+      res.status(500).json({ error: 'Erro ao estornar uso de estoque.' });
+    }
+  }
+
+  /**
    * GET /v1/clinical-inventory/movements
    * Consulta movimentações associadas a um atendimento ou procedimento.
    */

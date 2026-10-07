@@ -227,7 +227,8 @@ function seedCapabilities(rawDb: DatabaseSync): void {
     { id: 'CLINICAL_EVOLUTION', category: 'CLINICAL', name: 'Evolução Clínica Geral', description: 'Registro longitudinal de consultas, condutas e orientações' },
     { id: 'THERAPEUTIC_GOALS', category: 'CLINICAL', name: 'Metas Terapêuticas', description: 'Definição e acompanhamento de metas e objetivos terapêuticos' },
     { id: 'GESTATIONAL_FOLLOWUP', category: 'MATERNAL', name: 'Acompanhamento Gestacional e Parto', description: 'Plano de parto, IG, DPP, amamentação e puerpério' },
-    { id: 'PHOTO_MONITORING', category: 'CLINICAL', name: 'Acompanhamento Fotográfico / Lesões', description: 'Registro fotográfico evolutivo de feridas, podologia ou estética' }
+    { id: 'PHOTO_MONITORING', category: 'CLINICAL', name: 'Acompanhamento Fotográfico / Lesões', description: 'Registro fotográfico evolutivo de feridas, podologia ou estética' },
+    { id: 'CLINICAL_INVENTORY_USAGE', category: 'CLINICAL', name: 'Consumo de Insumos Clínicos', description: 'Pode registrar consumo clínico de produtos/insumos do estoque da clínica' }
   ];
 
   const stmt = rawDb.prepare(`
@@ -651,7 +652,7 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   personalHiddens.forEach(c => insertProfCap.run('prof-personal-trainer', c, 'HIDDEN'));
 
   // 8. Odontologia
-  const odontoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_PRESCRIPTIONS', 'CORE_AI', 'CORE_TIMELINE', 'ODONTO_SPECIFIC'];
+  const odontoDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_PRESCRIPTIONS', 'CORE_AI', 'CORE_TIMELINE', 'ODONTO_SPECIFIC', 'CLINICAL_INVENTORY_USAGE'];
   const odontoOptionals = ['BODY_MAP', 'PAIN_ASSESSMENT', 'ANTHROPOMETRY'];
   const odontoHiddens = ['TRAINING_PRESCRIBE', 'AUDIOLOGY', 'PHYSICAL_ASSESSMENT', 'LEARNING_ASSESSMENT'];
   odontoDefaults.forEach(c => insertProfCap.run('prof-dentista', c, 'DEFAULT'));
@@ -747,7 +748,7 @@ function seedCapabilitiesMatrix(rawDb: DatabaseSync): void {
   acupHiddens.forEach(c => insertProfCap.run('prof-acupuntura', c, 'HIDDEN'));
 
   // 20. Estética
-  const estetDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'PHOTO_MONITORING', 'BODY_MAP'];
+  const estetDefaults = ['CORE_SCHEDULE', 'CORE_PATIENTS', 'CORE_RECORDS', 'CORE_DOCUMENTS', 'CORE_TIMELINE', 'CORE_AI', 'CLINICAL_EVOLUTION', 'PHOTO_MONITORING', 'BODY_MAP', 'CLINICAL_INVENTORY_USAGE'];
   const estetOptionals = ['ANTHROPOMETRY', 'BODY_COMPOSITION', 'THERAPEUTIC_GOALS'];
   const estetHiddens = ['ODONTO_SPECIFIC', 'FONO_SPECIFIC', 'AUDIOLOGY', 'TRAINING_PRESCRIBE', 'NUTRITION_SPECIFIC', 'MEDICAL_BASE', 'MEDICAL_NEURO'];
   estetDefaults.forEach(c => insertProfCap.run('prof-esteticista', c, 'DEFAULT'));

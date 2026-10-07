@@ -478,6 +478,12 @@ export interface InventoryMovement {
   document_reference?: string;
   user_id?: string;
   user_name?: string;
+  module_type?: string;
+  batch?: string;
+  patient_id?: string;
+  patient_name?: string;
+  professional_id?: string;
+  professional_name?: string;
   created_at: string;
 }
 

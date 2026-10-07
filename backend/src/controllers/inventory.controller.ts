@@ -298,11 +298,16 @@ export class InventoryController {
         SELECT 
           m.id, m.tenant_id, m.item_id, m.movement_type, m.quantity, m.previous_quantity,
           m.new_quantity, m.reason, m.document_reference, m.created_at,
+          m.module_type, m.batch, m.professional_id, m.patient_id, m.appointment_id,
           i.name as item_name, i.unit,
-          u.name as user_name
+          u.name as user_name,
+          COALESCE(p.full_name, p.name) as patient_name,
+          prof.name as professional_name
         FROM inventory_movements m
         JOIN inventory_items i ON i.id = m.item_id
         LEFT JOIN users u ON u.id = m.user_id
+        LEFT JOIN patients p ON p.id = m.patient_id
+        LEFT JOIN professionals prof ON prof.id = m.professional_id
         WHERE m.tenant_id = ?
       `;
       const params: any[] = [tenantId];

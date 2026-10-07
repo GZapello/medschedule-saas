@@ -2935,6 +2935,28 @@ export function initializeDatabase(): void {
   seedNutritionFoodDatabase(rawDb);
   migrateClinicBooking(rawDb);
   repairLegacyPhotoUrls(rawDb);
+  migrateClinicalInventoryUsageCapability(rawDb);
+}
+
+function migrateClinicalInventoryUsageCapability(rawDb: any): void {
+  try {
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO capabilities (id, category, name, description, active)
+      VALUES ('CLINICAL_INVENTORY_USAGE', 'CLINICAL', 'Consumo de Insumos Clínicos', 'Pode registrar consumo clínico de produtos/insumos do estoque da clínica', 1)
+    `).run();
+
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO profession_capabilities (profession_id, capability_id, rule)
+      VALUES ('prof-dentista', 'CLINICAL_INVENTORY_USAGE', 'DEFAULT')
+    `).run();
+
+    rawDb.prepare(`
+      INSERT OR IGNORE INTO profession_capabilities (profession_id, capability_id, rule)
+      VALUES ('prof-esteticista', 'CLINICAL_INVENTORY_USAGE', 'DEFAULT')
+    `).run();
+  } catch (e) {
+    console.warn('[Migration] Aviso ao semear capability CLINICAL_INVENTORY_USAGE:', e);
+  }
 }
 
 function repairLegacyPhotoUrls(rawDb: any): void {
