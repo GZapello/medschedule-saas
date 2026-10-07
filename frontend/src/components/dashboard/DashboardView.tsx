@@ -94,7 +94,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
       await ApiClient.put(`/v1/appointments/${appointmentId}/status`, payload);
       const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
-      const chosenModule = selectedModule || (appt?.clinical_module !== 'general' && appt?.clinical_module !== 'ZemdaBody' && appt?.clinical_module !== 'Zemda360' ? appt?.clinical_module : undefined) || 'general';
+      const chosenModule = selectedModule || appt?.service_clinical_module || (appt?.clinical_module !== 'general' && appt?.clinical_module !== 'ZemdaBody' && appt?.clinical_module !== 'Zemda360' ? appt?.clinical_module : undefined) || 'general';
       setActiveConsultationModule(chosenModule);
       setQuickConsultAppt({
         ...appt,
@@ -120,15 +120,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       if (newStatus === 'in_progress') {
         const appt = metrics?.today?.appointments?.find((a: any) => a.id === appointmentId);
         const autoModule = getModuleForProfession(auth);
+        const serviceModule = appt?.service_clinical_module;
         const existingModule = appt?.clinical_module;
 
-        // Se já tiver módulo PRIMÁRIO gravado e válido, mantém o módulo para respeitar a imutabilidade
+        // 1. Prioridade máxima: módulo clínico do serviço vinculado
+        if (serviceModule && serviceModule !== 'general' && serviceModule !== 'ZemdaBody' && serviceModule !== 'Zemda360') {
+          executeStartConsultation(appointmentId, serviceModule);
+          return;
+        }
+
+        // 2. Se já tiver módulo PRIMÁRIO gravado e válido, mantém o módulo para respeitar a imutabilidade
         if (existingModule && existingModule !== 'general' && existingModule !== 'ZemdaBody' && existingModule !== 'Zemda360') {
           executeStartConsultation(appointmentId, existingModule);
           return;
         }
 
-        // Se for 'general', 'Zemda360', 'ZemdaBody' ou null, promove com segurança para o módulo da profissão do usuário logado
+        // 3. Fallback: promove com segurança para o módulo da profissão do usuário logado
         const chosenModule = (autoModule && autoModule !== 'general') ? autoModule : (existingModule || autoModule || 'general');
         executeStartConsultation(appointmentId, chosenModule);
         return;

@@ -267,6 +267,7 @@ api.post('/v1/taxonomy/specialties', requireRole('superadmin'), TaxonomyControll
 // Profissionais
 api.get('/v1/professionals', requireTenant, ProfessionalController.list);
 api.get('/v1/professionals/:id', requireTenant, ProfessionalController.getById);
+api.get('/v1/professionals/:id/modules', requireTenant, ProfessionalController.getModules);
 api.post('/v1/professionals', requireTenant, requireRole('clinic_admin'), ProfessionalController.create);
 api.put('/v1/professionals/:id', requireTenant, requireRole('clinic_admin', 'professional'), ProfessionalController.update);
 api.put('/v1/professionals/:id/schedules', requireTenant, requireRole('clinic_admin'), ProfessionalController.updateSchedules);

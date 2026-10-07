@@ -162,6 +162,7 @@ export interface Professional {
   phone?: string;
   schedules?: any[];
   blockedTimes?: any[];
+  available_modules?: Array<{ code: string; label: string }>;
 }
 
 export interface StaffMember {
@@ -208,6 +209,7 @@ export interface Service {
   reminder_enabled?: number;
   reminder_value?: number | null;
   reminder_unit?: 'DAYS' | 'MONTHS' | 'YEARS';
+  clinical_module?: string;
 }
 
 export interface ServiceReminder {
@@ -311,6 +313,8 @@ export interface Appointment {
   patient_notes?: string;
   internal_notes?: string;
   cancellation_reason?: string;
+  clinical_module?: string;
+  service_clinical_module?: string;
   payment_status?: 'paid' | 'pending' | 'partial' | 'cancelled';
   payment_amount?: number;
   payment_method?: string;

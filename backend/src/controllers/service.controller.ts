@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logAudit } from '../middlewares/audit.middleware';
+import { getAvailableModulesForProfessional, isPrimaryClinicalModule } from '../utils/clinical-module';
 
 export class ServiceController {
   static list(req: Request, res: Response): void {
@@ -20,6 +21,7 @@ export class ServiceController {
           s.duration_minutes, s.buffer_minutes, s.price, s.modality, s.active,
           s.min_lead_time_hours, s.max_advance_days, s.cancellation_policy,
           s.reminder_enabled, s.reminder_value, s.reminder_unit,
+          s.clinical_module,
           p.name as professional_name,
           COALESCE(prof.name, p.profession_name) as profession_name,
           spec.name as specialty_name, spec.color as specialty_color
@@ -57,7 +59,7 @@ export class ServiceController {
       const {
         professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
-        reminderEnabled, reminderValue, reminderUnit
+        reminderEnabled, reminderValue, reminderUnit, clinicalModule
       } = req.body;
 
       if (!name || !name.trim()) {
@@ -76,14 +78,30 @@ export class ServiceController {
         return;
       }
 
+      // Validação de segurança: módulo de atendimento permitido para o profissional
+      const availableModules = getAvailableModulesForProfessional(professionalId, tenantId);
+      let targetModule: string | null = null;
+
+      if (clinicalModule) {
+        const isAllowed = availableModules.some(m => m.code === clinicalModule);
+        if (!isAllowed) {
+          res.status(400).json({ error: `O módulo "${clinicalModule}" não é permitido para este profissional.` });
+          return;
+        }
+        targetModule = clinicalModule;
+      } else {
+        // Se profissional possui apenas 1 módulo disponível, seleciona-o automaticamente
+        targetModule = availableModules.length === 1 ? availableModules[0].code : (availableModules[0]?.code || null);
+      }
+
       const id = 'srv-' + uuidv4().slice(0, 8);
       const insertStmt = db.prepare(`
         INSERT INTO services (
           id, tenant_id, professional_id, specialty_id, name, description, duration_minutes,
           buffer_minutes, price, modality, active, min_lead_time_hours, max_advance_days, cancellation_policy,
-          reminder_enabled, reminder_value, reminder_unit
+          reminder_enabled, reminder_value, reminder_unit, clinical_module
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertStmt.run(
@@ -102,7 +120,8 @@ export class ServiceController {
         cancellationPolicy || null,
         reminderEnabled ? 1 : 0,
         reminderEnabled && reminderValue ? Number(reminderValue) : null,
-        reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS'
+        reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
+        targetModule
       );
 
       try {
@@ -112,8 +131,8 @@ export class ServiceController {
         `).run('ps-' + uuidv4().slice(0, 8), professionalId, id, price ? Number(price) : null, durationMinutes ? Number(durationMinutes) : null);
       } catch (_) {}
 
-      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name });
-      res.status(201).json({ id, name, message: 'Serviço criado com sucesso' });
+      logAudit(req, 'CREATE_SERVICE', 'services', id, { name, price, professionalId, professionalName: prof.name, clinicalModule: targetModule });
+      res.status(201).json({ id, name, clinical_module: targetModule, message: 'Serviço criado com sucesso' });
     } catch (err: any) {
       console.error('[ServiceController.create] Erro:', err);
       res.status(500).json({ error: 'Erro ao criar serviço' });
@@ -129,7 +148,7 @@ export class ServiceController {
         return;
       }
 
-      const existing = db.prepare('SELECT id, name, professional_id FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
+      const existing = db.prepare('SELECT id, name, professional_id, clinical_module FROM services WHERE id = ? AND tenant_id = ?').get(id, tenantId) as any;
       if (!existing) {
         res.status(404).json({ error: 'Serviço não encontrado' });
         return;
@@ -138,13 +157,24 @@ export class ServiceController {
       const {
         professionalId, specialtyId, name, description, durationMinutes, bufferMinutes,
         price, modality, active, minLeadTimeHours, maxAdvanceDays, cancellationPolicy,
-        reminderEnabled, reminderValue, reminderUnit
+        reminderEnabled, reminderValue, reminderUnit, clinicalModule
       } = req.body;
 
       if (professionalId) {
         const prof = db.prepare('SELECT id FROM professionals WHERE id = ? AND tenant_id = ?').get(professionalId, tenantId);
         if (!prof) {
           res.status(400).json({ error: 'Profissional selecionado não encontrado na clínica' });
+          return;
+        }
+      }
+
+      // Validação de módulo clínico no update se fornecido
+      const targetProfId = professionalId || existing.professional_id;
+      if (clinicalModule !== undefined && clinicalModule !== null && clinicalModule !== '') {
+        const availableModules = getAvailableModulesForProfessional(targetProfId, tenantId);
+        const isAllowed = availableModules.some(m => m.code === clinicalModule);
+        if (!isAllowed) {
+          res.status(400).json({ error: `O módulo "${clinicalModule}" não é permitido para este profissional.` });
           return;
         }
       }
@@ -166,6 +196,7 @@ export class ServiceController {
           reminder_enabled = CASE WHEN ? = 1 THEN ? ELSE reminder_enabled END,
           reminder_value = CASE WHEN ? = 1 THEN ? ELSE reminder_value END,
           reminder_unit = CASE WHEN ? = 1 THEN ? ELSE reminder_unit END,
+          clinical_module = CASE WHEN ? = 1 THEN ? ELSE clinical_module END,
           updated_at = datetime('now')
         WHERE id = ? AND tenant_id = ?
       `);
@@ -186,6 +217,7 @@ export class ServiceController {
         reminderEnabled !== undefined ? 1 : 0, reminderEnabled ? 1 : 0,
         reminderValue !== undefined ? 1 : 0, reminderEnabled && reminderValue ? Number(reminderValue) : null,
         reminderUnit !== undefined ? 1 : 0, reminderEnabled && reminderUnit ? String(reminderUnit).toUpperCase() : 'DAYS',
+        clinicalModule !== undefined ? 1 : 0, clinicalModule || null,
         id,
         tenantId
       );

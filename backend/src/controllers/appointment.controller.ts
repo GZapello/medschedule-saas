@@ -179,6 +179,8 @@ export class AppointmentController {
           a.id, a.tenant_id, a.appointment_number, a.patient_id, a.professional_id,
           a.service_id, a.room_id, a.start_time, a.end_time, a.status, a.modality,
           a.patient_notes, a.internal_notes, a.cancellation_reason, a.created_at,
+          a.clinical_module,
+          s.clinical_module as service_clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone, pat.email as patient_email,
           pat.is_child as patient_is_child,
           p.name as professional_name, p.photo_url as professional_photo,
@@ -243,6 +245,7 @@ export class AppointmentController {
       const stmt = db.prepare(`
         SELECT 
           a.*,
+          s.clinical_module as service_clinical_module,
           pat.full_name as patient_name, pat.phone as patient_phone, pat.email as patient_email,
           pat.birth_date as patient_birth_date, pat.cpf as patient_cpf, pat.is_child as patient_is_child,
           p.name as professional_name, p.registration_number,
@@ -493,11 +496,19 @@ export class AppointmentController {
       // Resolução antecipada do módulo clínico e profissão do agendamento
       let initialClinicalModule: string | null = null;
       let resolvedProfessionId: string | null = null;
-      if (professionalId) {
-        const resolvedModule = resolveClinicalModule({ professional_id: professionalId }, tenantId);
+      if (serviceId) {
+        const srv = db.prepare('SELECT clinical_module FROM services WHERE id = ? AND tenant_id = ?').get(serviceId, tenantId) as { clinical_module?: string } | undefined;
+        if (srv?.clinical_module && isPrimaryClinicalModule(srv.clinical_module)) {
+          initialClinicalModule = srv.clinical_module;
+        }
+      }
+      if (!initialClinicalModule && professionalId) {
+        const resolvedModule = resolveClinicalModule({ professional_id: professionalId, service_id: serviceId }, tenantId);
         if (isPrimaryClinicalModule(resolvedModule)) {
           initialClinicalModule = resolvedModule;
         }
+      }
+      if (professionalId) {
         const profRow = db.prepare('SELECT profession_id FROM professionals WHERE (id = ? OR user_id = ?) AND tenant_id = ?').get(professionalId, professionalId, tenantId) as { profession_id?: string } | undefined;
         if (profRow?.profession_id) {
           resolvedProfessionId = profRow.profession_id;
@@ -601,7 +612,7 @@ export class AppointmentController {
         return;
       }
 
-      const current = db.prepare('SELECT id, patient_id, status, clinical_module, professional_id, profession_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { patient_id: string; status: string; clinical_module?: string; professional_id?: string; profession_id?: string } | undefined;
+      const current = db.prepare('SELECT id, patient_id, status, clinical_module, professional_id, profession_id, service_id FROM appointments WHERE id = ? AND tenant_id = ?').get(id, tenantId) as { patient_id: string; status: string; clinical_module?: string; professional_id?: string; profession_id?: string; service_id?: string } | undefined;
       if (!current) {
         res.status(404).json({ error: 'Agendamento não encontrado' });
         return;

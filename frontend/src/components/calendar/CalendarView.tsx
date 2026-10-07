@@ -507,7 +507,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
         payload.clinicalModule = selectedModule;
       }
       await ApiClient.put(`/v1/appointments/${appointment.id}/status`, payload);
-      const chosenModule = selectedModule || (appointment as any).clinical_module || 'general';
+      const chosenModule = selectedModule || (appointment as any).service_clinical_module || (appointment as any).clinical_module || 'general';
       setAppointments(prev => prev.map(a => a.id === appointment.id ? { ...a, status: 'in_progress' as any, clinical_module: chosenModule } : a));
       setActiveConsultationModule(chosenModule);
       setActiveConsultationAppt({
@@ -531,15 +531,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ onOpenNewAppointment
     }
 
     const autoModule = getModuleForProfession(auth);
+    const serviceModule = (appointment as any).service_clinical_module;
     const existingModule = (appointment as any).clinical_module;
 
-    // Se já tiver módulo PRIMÁRIO gravado e válido, mantém o módulo para respeitar a imutabilidade
+    // 1. Prioridade máxima: módulo clínico do serviço vinculado
+    if (serviceModule && serviceModule !== 'general' && serviceModule !== 'ZemdaBody' && serviceModule !== 'Zemda360') {
+      executeStartConsultation(appointment, serviceModule);
+      return;
+    }
+
+    // 2. Se já tiver módulo PRIMÁRIO gravado e válido, mantém o módulo para respeitar a imutabilidade
     if (existingModule && existingModule !== 'general' && existingModule !== 'ZemdaBody' && existingModule !== 'Zemda360') {
       executeStartConsultation(appointment, existingModule);
       return;
     }
 
-    // Se o agendamento estava com 'general', 'Zemda360', 'ZemdaBody' ou null, promove com segurança para o módulo da profissão do usuário logado
+    // 3. Fallback: promove com segurança para o módulo da profissão do usuário logado
     const chosenModule = (autoModule && autoModule !== 'general') ? autoModule : (existingModule || autoModule || 'general');
     executeStartConsultation(appointment, chosenModule);
   };

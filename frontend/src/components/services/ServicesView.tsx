@@ -15,8 +15,157 @@ import {
   AlertTriangle,
   User,
   Users,
-  Bell
+  Bell,
+  Layers
 } from 'lucide-react';
+
+export const CLINICAL_MODULE_LABELS: Record<string, string> = {
+  ZemdaMed: 'Medicina (ZemdaMed)',
+  ZemdaOdonto: 'Odontologia (ZemdaOdonto)',
+  ZemdaEstetic: 'Estética (ZemdaEstetic)',
+  ZemdaFisio: 'Fisioterapia (ZemdaFisio)',
+  ZemdaNutri: 'Nutrição (ZemdaNutri)',
+  ZemdaPsico: 'Psicologia (ZemdaPsico)',
+  ZemdaFono: 'Fonoaudiologia (ZemdaFono)',
+  ZemdaTO: 'Terapia Ocupacional (ZemdaTO)',
+  ZemdaPP: 'Psicopedagogia (ZemdaPP)',
+  ZemdaPersonal: 'Personal Trainer (ZemdaPersonal)',
+  general: 'Geral'
+};
+
+export const getModulesForProfessional = (prof: Professional | undefined | null): Array<{ code: string; label: string }> => {
+  if (!prof) return [];
+  if (prof.available_modules && prof.available_modules.length > 0) {
+    return prof.available_modules;
+  }
+  const modules: Array<{ code: string; label: string }> = [];
+  const pName = (prof.profession_name || '').toLowerCase();
+  const pId = (prof.profession_id || '').toLowerCase();
+  const spec = ((prof as any).specialty_custom || '').toLowerCase();
+  const areas = (prof.practice_areas || '').toLowerCase();
+
+  let primary = 'ZemdaMed';
+  if (pId.includes('dent') || pName.includes('dent')) primary = 'ZemdaOdonto';
+  else if (pId.includes('fisio') || pName.includes('fisio')) primary = 'ZemdaFisio';
+  else if (pId.includes('nutri') || pName.includes('nutri')) primary = 'ZemdaNutri';
+  else if (pId.includes('psico') || pName.includes('psicó') || pName.includes('psico')) primary = 'ZemdaPsico';
+  else if (pId.includes('fono') || pName.includes('fono')) primary = 'ZemdaFono';
+  else if (pId.includes('terapia-ocupacional') || pName.includes('ocupacional')) primary = 'ZemdaTO';
+  else if (pId.includes('psicopedag') || pName.includes('psicopedag')) primary = 'ZemdaPP';
+  else if (pId.includes('personal') || pName.includes('personal') || pName.includes('educação física')) primary = 'ZemdaPersonal';
+  else if (pId.includes('estet') || pName.includes('estet')) primary = 'ZemdaEstetic';
+
+  modules.push({ code: primary, label: CLINICAL_MODULE_LABELS[primary] || primary });
+
+  // Checar se possui capacitação estética (HOF, especialização estética, permissão)
+  const hasEstetic =
+    (prof as any).zemda_estetic_enabled === 1 ||
+    spec.includes('estet') ||
+    spec.includes('harmoniz') ||
+    spec.includes('hof') ||
+    areas.includes('estet') ||
+    areas.includes('harmoniz') ||
+    areas.includes('hof');
+
+  if (hasEstetic && primary !== 'ZemdaEstetic') {
+    modules.push({ code: 'ZemdaEstetic', label: CLINICAL_MODULE_LABELS['ZemdaEstetic'] });
+  }
+
+  return modules;
+};
+
+export const getCompatibleSpecialties = (
+  allSpecialties: Specialty[],
+  prof: Professional | undefined | null,
+  moduleCode: string | null | undefined
+): Specialty[] => {
+  if (!allSpecialties || allSpecialties.length === 0) return [];
+  if (!prof && !moduleCode) return allSpecialties;
+
+  const targetModule = moduleCode || (prof ? getModulesForProfessional(prof)[0]?.code : null);
+
+  let filtered: Specialty[] = [];
+
+  if (targetModule === 'ZemdaEstetic') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      const sid = (s.id || '').toLowerCase();
+      const sname = (s.name || '').toLowerCase();
+      return (
+        pid === 'prof-esteticista' ||
+        sid.includes('estet') ||
+        sid.includes('hof') ||
+        sname.includes('estética') ||
+        sname.includes('estetica') ||
+        sname.includes('harmonização') ||
+        sname.includes('harmonizacao')
+      );
+    });
+  } else if (targetModule === 'ZemdaOdonto') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      const sid = (s.id || '').toLowerCase();
+      const isEsteticOnly = sid.includes('pa-odonto-estetica');
+      return pid === 'prof-dentista' && !isEsteticOnly;
+    });
+  } else if (targetModule === 'ZemdaFisio') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      return pid === 'prof-fisioterapeuta' || pid === 'prof-instrutor-pilates';
+    });
+  } else if (targetModule === 'ZemdaNutri') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      return pid === 'prof-nutricionista';
+    });
+  } else if (targetModule === 'ZemdaPsico') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      return pid === 'prof-psicologo' || pid === 'prof-psicoterapeuta' || pid === 'prof-psicanalista';
+    });
+  } else if (targetModule === 'ZemdaFono') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      return pid === 'prof-fonoaudiologo';
+    });
+  } else if (targetModule === 'ZemdaTO') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      return pid === 'prof-terapeuta-ocupacional';
+    });
+  } else if (targetModule === 'ZemdaPP') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      return pid === 'prof-psicopedagogo';
+    });
+  } else if (targetModule === 'ZemdaPersonal') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      return pid === 'prof-personal-trainer' || pid === 'prof-educacao-fisica';
+    });
+  } else if (targetModule === 'ZemdaMed') {
+    filtered = allSpecialties.filter(s => {
+      const pid = (s.profession_id || '').toLowerCase();
+      return pid === 'prof-medico' || pid === 'prof-psiquiatra';
+    });
+  } else if (prof?.profession_id) {
+    const rawPid = prof.profession_id.toLowerCase();
+    filtered = allSpecialties.filter(s => (s.profession_id || '').toLowerCase() === rawPid);
+  }
+
+  // Deduplicar especialidades por nome
+  const seenNames = new Set<string>();
+  const uniqueList: Specialty[] = [];
+  for (const s of filtered) {
+    const norm = s.name.trim().toLowerCase();
+    if (!seenNames.has(norm)) {
+      seenNames.add(norm);
+      uniqueList.push(s);
+    }
+  }
+
+  return uniqueList;
+};
 
 export const ServicesView: React.FC = () => {
   const { showToast } = useToast();
@@ -30,6 +179,7 @@ export const ServicesView: React.FC = () => {
   // Modal Novo Serviço
   const [showServiceModal, setShowServiceModal] = useState<boolean>(false);
   const [professionalId, setProfessionalId] = useState<string>('');
+  const [clinicalModule, setClinicalModule] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [specialtyId, setSpecialtyId] = useState<string>('');
   const [durationMinutes, setDurationMinutes] = useState<number>(50);
@@ -44,6 +194,7 @@ export const ServicesView: React.FC = () => {
   // Modal Editar Serviço
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editProfessionalId, setEditProfessionalId] = useState<string>('');
+  const [editClinicalModule, setEditClinicalModule] = useState<string>('');
   const [editName, setEditName] = useState<string>('');
   const [editSpecialtyId, setEditSpecialtyId] = useState<string>('');
   const [editDurationMinutes, setEditDurationMinutes] = useState<number>(50);
@@ -66,6 +217,30 @@ export const ServicesView: React.FC = () => {
   const [roomName, setRoomName] = useState<string>('');
   const [roomDesc, setRoomDesc] = useState<string>('');
 
+  const selectedProfForCreate = useMemo(() => {
+    return professionals.find(p => p.id === professionalId) || null;
+  }, [professionals, professionalId]);
+
+  const createAvailableModules = useMemo(() => {
+    return getModulesForProfessional(selectedProfForCreate);
+  }, [selectedProfForCreate]);
+
+  const createCompatibleSpecialties = useMemo(() => {
+    return getCompatibleSpecialties(specialties, selectedProfForCreate, clinicalModule);
+  }, [specialties, selectedProfForCreate, clinicalModule]);
+
+  const selectedProfForEdit = useMemo(() => {
+    return professionals.find(p => p.id === editProfessionalId) || null;
+  }, [professionals, editProfessionalId]);
+
+  const editAvailableModules = useMemo(() => {
+    return getModulesForProfessional(selectedProfForEdit);
+  }, [selectedProfForEdit]);
+
+  const editCompatibleSpecialties = useMemo(() => {
+    return getCompatibleSpecialties(specialties, selectedProfForEdit, editClinicalModule);
+  }, [specialties, selectedProfForEdit, editClinicalModule]);
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -82,6 +257,10 @@ export const ServicesView: React.FC = () => {
       setProfessionals(profList);
       if (profList.length > 0 && !professionalId) {
         setProfessionalId(profList[0].id);
+        const mods = getModulesForProfessional(profList[0]);
+        if (mods.length > 0) {
+          setClinicalModule(mods[0].code);
+        }
       }
     } catch (err: any) {
       showToast('Erro ao carregar serviços e salas', 'error');
@@ -93,6 +272,66 @@ export const ServicesView: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleSelectProfessional = (newProfId: string) => {
+    setProfessionalId(newProfId);
+    const prof = professionals.find(p => p.id === newProfId);
+    const mods = getModulesForProfessional(prof);
+    
+    let newMod = '';
+    if (mods.length === 1) {
+      newMod = mods[0].code;
+    } else if (mods.some(m => m.code === clinicalModule)) {
+      newMod = clinicalModule;
+    } else if (mods.length > 0) {
+      newMod = mods[0].code;
+    }
+    setClinicalModule(newMod);
+
+    const compatSpecs = getCompatibleSpecialties(specialties, prof, newMod);
+    if (!compatSpecs.some(s => s.id === specialtyId)) {
+      setSpecialtyId('');
+    }
+  };
+
+  const handleSelectModule = (newMod: string) => {
+    setClinicalModule(newMod);
+    const prof = professionals.find(p => p.id === professionalId);
+    const compatSpecs = getCompatibleSpecialties(specialties, prof, newMod);
+    if (!compatSpecs.some(s => s.id === specialtyId)) {
+      setSpecialtyId('');
+    }
+  };
+
+  const handleSelectEditProfessional = (newProfId: string) => {
+    setEditProfessionalId(newProfId);
+    const prof = professionals.find(p => p.id === newProfId);
+    const mods = getModulesForProfessional(prof);
+    
+    let newMod = '';
+    if (mods.length === 1) {
+      newMod = mods[0].code;
+    } else if (mods.some(m => m.code === editClinicalModule)) {
+      newMod = editClinicalModule;
+    } else if (mods.length > 0) {
+      newMod = mods[0].code;
+    }
+    setEditClinicalModule(newMod);
+
+    const compatSpecs = getCompatibleSpecialties(specialties, prof, newMod);
+    if (!compatSpecs.some(s => s.id === editSpecialtyId)) {
+      setEditSpecialtyId('');
+    }
+  };
+
+  const handleSelectEditModule = (newMod: string) => {
+    setEditClinicalModule(newMod);
+    const prof = professionals.find(p => p.id === editProfessionalId);
+    const compatSpecs = getCompatibleSpecialties(specialties, prof, newMod);
+    if (!compatSpecs.some(s => s.id === editSpecialtyId)) {
+      setEditSpecialtyId('');
+    }
+  };
 
   const handleCreateService = async () => {
     if (!name.trim() || !price) {
@@ -108,6 +347,7 @@ export const ServicesView: React.FC = () => {
     try {
       await ApiClient.post('/v1/services', {
         professionalId,
+        clinicalModule: clinicalModule || null,
         name: name.trim(),
         specialtyId: specialtyId || null,
         durationMinutes: Number(durationMinutes),
@@ -157,7 +397,22 @@ export const ServicesView: React.FC = () => {
 
   const handleOpenEdit = (s: Service) => {
     setEditingService(s);
-    setEditProfessionalId(s.professional_id || (professionals.length > 0 ? professionals[0].id : ''));
+    const profId = s.professional_id || (professionals.length > 0 ? professionals[0].id : '');
+    setEditProfessionalId(profId);
+    
+    const prof = professionals.find(p => p.id === profId);
+    const mods = getModulesForProfessional(prof);
+    
+    let targetMod = s.clinical_module || '';
+    if (!targetMod) {
+      if (mods.length === 1) {
+        targetMod = mods[0].code;
+      } else if (mods.length > 0) {
+        targetMod = mods[0].code;
+      }
+    }
+    setEditClinicalModule(targetMod);
+
     setEditName(s.name);
     setEditSpecialtyId(s.specialty_id || '');
     setEditDurationMinutes(s.duration_minutes || 50);
@@ -187,6 +442,7 @@ export const ServicesView: React.FC = () => {
       setUpdating(true);
       await ApiClient.put(`/v1/services/${editingService.id}`, {
         professionalId: editProfessionalId,
+        clinicalModule: editClinicalModule || null,
         name: editName.trim(),
         specialtyId: editSpecialtyId || null,
         durationMinutes: Number(editDurationMinutes),
@@ -276,10 +532,9 @@ export const ServicesView: React.FC = () => {
   }, [services, professionals, selectedProfFilter]);
 
   const handleOpenCreateModalForProf = (profId?: string | null) => {
-    if (profId) {
-      setProfessionalId(profId);
-    } else if (professionals.length > 0 && !professionalId) {
-      setProfessionalId(professionals[0].id);
+    const targetId = profId || (professionals.length > 0 ? professionals[0].id : '');
+    if (targetId) {
+      handleSelectProfessional(targetId);
     }
     setShowServiceModal(true);
   };
@@ -405,6 +660,12 @@ export const ServicesView: React.FC = () => {
                                     Inativo
                                   </span>
                                 )}
+                                {s.clinical_module && (
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full inline-flex items-center gap-1">
+                                    <Layers className="w-3 h-3 text-blue-600" />
+                                    {CLINICAL_MODULE_LABELS[s.clinical_module] || s.clinical_module}
+                                  </span>
+                                )}
                                 {s.specialty_name && (
                                   <span className="text-[10px] font-semibold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full inline-block">
                                     {s.specialty_name}
@@ -512,7 +773,7 @@ export const ServicesView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
                 <select
                   value={professionalId}
-                  onChange={e => setProfessionalId(e.target.value)}
+                  onChange={e => handleSelectProfessional(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
                   required
                 >
@@ -526,40 +787,67 @@ export const ServicesView: React.FC = () => {
               </div>
 
               <div>
+                <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Módulo do atendimento *</span>
+                  {createAvailableModules.length === 1 && (
+                    <span className="text-[10px] text-slate-400 font-normal">Módulo único do profissional</span>
+                  )}
+                </label>
+                <select
+                  value={clinicalModule}
+                  onChange={e => handleSelectModule(e.target.value)}
+                  disabled={createAvailableModules.length <= 1}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium disabled:opacity-80 disabled:cursor-not-allowed"
+                  required
+                >
+                  {createAvailableModules.length === 0 && (
+                    <option value="">Nenhum módulo clínico disponível</option>
+                  )}
+                  {createAvailableModules.map(m => (
+                    <option key={m.code} value={m.code}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Define qual workspace clínico abrirá ao iniciar o atendimento deste serviço.
+                </p>
+              </div>
+
+              <div>
                 <label className="block font-semibold text-slate-700 mb-1">Nome do Atendimento *</label>
                 <input
                   type="text"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  placeholder="Ex: Consulta Psicológica Inicial"
+                  placeholder="Ex: Consulta Odontológica Inicial"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Preço (R$) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={price}
-                    onChange={e => setPrice(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
-                  <select
-                    value={specialtyId}
-                    onChange={e => setSpecialtyId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
-                  >
-                    <option value="">Geral</option>
-                    {specialties.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
+                <select
+                  value={specialtyId}
+                  onChange={e => setSpecialtyId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                >
+                  <option value="">Geral / Sem Especialidade Específica</option>
+                  {createCompatibleSpecialties.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Preço (R$) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={price}
+                  onChange={e => setPrice(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -593,6 +881,7 @@ export const ServicesView: React.FC = () => {
                   <option value="both">Presencial ou Online</option>
                   <option value="presential">Apenas Presencial</option>
                   <option value="online">Apenas Online</option>
+                  <option value="home">Domiciliar</option>
                 </select>
               </div>
 
@@ -737,7 +1026,7 @@ export const ServicesView: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">Profissional Responsável *</label>
                 <select
                   value={editProfessionalId}
-                  onChange={e => setEditProfessionalId(e.target.value)}
+                  onChange={e => handleSelectEditProfessional(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium"
                   required
                 >
@@ -751,40 +1040,72 @@ export const ServicesView: React.FC = () => {
               </div>
 
               <div>
+                <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Módulo do atendimento *</span>
+                  {editAvailableModules.length === 1 && (
+                    <span className="text-[10px] text-slate-400 font-normal">Módulo único do profissional</span>
+                  )}
+                </label>
+                <select
+                  value={editClinicalModule}
+                  onChange={e => handleSelectEditModule(e.target.value)}
+                  disabled={editAvailableModules.length <= 1}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-medium disabled:opacity-80 disabled:cursor-not-allowed"
+                  required
+                >
+                  {editAvailableModules.length === 0 && (
+                    <option value="">Nenhum módulo clínico disponível</option>
+                  )}
+                  {editAvailableModules.map(m => (
+                    <option key={m.code} value={m.code}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Define qual workspace clínico abrirá ao iniciar o atendimento deste serviço.
+                </p>
+              </div>
+
+              <div>
                 <label className="block font-semibold text-slate-700 mb-1">Nome do Atendimento *</label>
                 <input
                   type="text"
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
-                  placeholder="Ex: Consulta Psicológica Inicial"
+                  placeholder="Ex: Consulta Odontológica Inicial"
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Preço (R$) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editPrice}
-                    onChange={e => setEditPrice(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
-                  <select
-                    value={editSpecialtyId}
-                    onChange={e => setEditSpecialtyId(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
-                  >
-                    <option value="">Geral</option>
-                    {specialties.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Especialidade</label>
+                <select
+                  value={editSpecialtyId}
+                  onChange={e => setEditSpecialtyId(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50"
+                >
+                  <option value="">Geral / Sem Especialidade Específica</option>
+                  {editSpecialtyId && !editCompatibleSpecialties.some(s => s.id === editSpecialtyId) && (
+                    <option value={editSpecialtyId}>
+                      {editingService?.specialty_name || 'Especialidade Atual'}
+                    </option>
+                  )}
+                  {editCompatibleSpecialties.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Preço (R$) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editPrice}
+                  onChange={e => setEditPrice(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

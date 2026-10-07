@@ -11,6 +11,7 @@ import { createDefaultSchedules } from '../utils/schedule-defaults';
 import { resolveProfessionModule, cleanPracticeAreasForNewProfession } from '../utils/profession-module';
 import { ProfessionTaxonomyService } from '../services/profession-taxonomy.service';
 import { REGISTRATION_PROFESSION_ALIASES } from '../types/registration-professions';
+import { getAvailableModulesForProfessional } from '../utils/clinical-module';
 
 export class ProfessionalController {
   static list(req: Request, res: Response): void {
@@ -74,6 +75,7 @@ export class ProfessionalController {
 
       const result = professionals.map((p: any) => ({
         ...p,
+        available_modules: getAvailableModulesForProfessional(p.id, tenantId),
         schedules: schedMap.get(p.id) || [],
         blockedTimes: blockMap.get(p.id) || []
       }));
@@ -731,6 +733,22 @@ export class ProfessionalController {
       if (respondBillingError(res, err)) return;
       console.error('[ProfessionalController.deleteBlockedTime] Erro:', err);
       res.status(500).json({ error: 'Erro ao remover bloqueio' });
+    }
+  }
+
+  static getModules(req: Request, res: Response): void {
+    try {
+      const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const tenantId = req.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ error: 'Tenant não informado' });
+        return;
+      }
+      const modules = getAvailableModulesForProfessional(id, tenantId);
+      res.json({ modules });
+    } catch (err: any) {
+      console.error('[ProfessionalController.getModules] Erro:', err);
+      res.status(500).json({ error: 'Erro ao obter módulos do profissional' });
     }
   }
 }

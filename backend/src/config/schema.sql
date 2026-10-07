@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS services (
   reminder_enabled INTEGER NOT NULL DEFAULT 0,
   reminder_value INTEGER,
   reminder_unit TEXT DEFAULT 'DAYS' CHECK(reminder_unit IN ('DAYS', 'MONTHS', 'YEARS')),
+  clinical_module TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,

@@ -516,6 +516,7 @@ export function initializeDatabase(): void {
     addColIfMissing('services', 'reminder_enabled', 'INTEGER NOT NULL DEFAULT 0');
     addColIfMissing('services', 'reminder_value', 'INTEGER');
     addColIfMissing('services', 'reminder_unit', "TEXT DEFAULT 'DAYS'");
+    addColIfMissing('services', 'clinical_module', 'TEXT');
 
     try {
       rawDb.exec(`
