@@ -2267,7 +2267,7 @@ export const DentistryWorkspace: React.FC<DentistryWorkspaceProps> = ({
           {/* ABA 8: IMPLANTES & CIRURGIA */}
           {/* ========================================================================= */}
           {activeTab === 'implants' && (
-            <DentalImplantsManager patientId={selectedPatientId} />
+            <DentalImplantsManager patientId={selectedPatientId} appointmentId={initialAppointmentId} />
           )}
 
           {/* ========================================================================= */}

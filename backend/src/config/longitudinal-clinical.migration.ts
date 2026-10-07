@@ -98,16 +98,22 @@ export function migrateLongitudinalClinical(rawDb: DatabaseSync): void {
       length TEXT,
       surgery_date TEXT,
       torque_ncm REAL,
+      stability_isq REAL,
+      bone_graft_used INTEGER DEFAULT 0,
+      graft_material TEXT,
       graft_type TEXT,
       biomaterial TEXT,
       membrane TEXT,
       healing_abutment TEXT,
+      expected_osseointegration_date TEXT,
       reopening_date TEXT,
       prosthetic_component TEXT,
       installed_prosthesis TEXT,
+      anvisa_registration TEXT,
       attachment_id TEXT,
+      appointment_id TEXT,
       notes TEXT,
-      status TEXT NOT NULL DEFAULT 'surgery_done',
+      status TEXT NOT NULL DEFAULT 'installed',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -310,4 +316,20 @@ export function migrateLongitudinalClinical(rawDb: DatabaseSync): void {
   addColumnIfNotExists('patients', 'clinical_notes', 'TEXT');
   addColumnIfNotExists('patients', 'important_alert', 'TEXT');
   addColumnIfNotExists('patients', 'notes', 'TEXT');
+
+  // Extensões para implantes odontológicos
+  addColumnIfNotExists('dental_implants', 'stability_isq', 'REAL');
+  addColumnIfNotExists('dental_implants', 'bone_graft_used', 'INTEGER DEFAULT 0');
+  addColumnIfNotExists('dental_implants', 'graft_material', 'TEXT');
+  addColumnIfNotExists('dental_implants', 'expected_osseointegration_date', 'TEXT');
+  addColumnIfNotExists('dental_implants', 'anvisa_registration', 'TEXT');
+  addColumnIfNotExists('dental_implants', 'appointment_id', 'TEXT');
+
+  try {
+    rawDb.exec('CREATE INDEX IF NOT EXISTS idx_dental_implants_appointment ON dental_implants(tenant_id, appointment_id)');
+  } catch (_) {}
+
+  try {
+    rawDb.exec("UPDATE dental_implants SET status = 'installed' WHERE status = 'surgery_done'");
+  } catch (_) {}
 }

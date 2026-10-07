@@ -1002,6 +1002,8 @@ export class AuthController {
           practiceAreas || null,
           practiceAreas || null
         );
+
+        createDefaultSchedules(db, tenantId, profId);
       }
 
       logAudit(req, 'REQUEST_CLINIC_ACCESS', 'users', userId, {
@@ -2251,6 +2253,8 @@ export class AuthController {
                   modFlags.zemda_med_enabled,
                   modFlags.zemda_estetic_enabled || 0
                 );
+
+                createDefaultSchedules(db, tenantId, createdProfId);
               } catch (err: any) {
                 console.error('[GoogleAuth.signup] Falha ao criar professional:', err.message || err);
                 throw err;

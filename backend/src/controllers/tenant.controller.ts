@@ -18,6 +18,7 @@ import { CapabilityService } from '../services/capability.service';
 import { MedicalTreeService } from '../services/medical-tree.service';
 import { resolveProfessionModule, resolveCanonicalProfession } from '../utils/profession-module';
 import { REGISTRATION_PROFESSIONS } from '../types/professions';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
 
 
 
@@ -380,6 +381,8 @@ export class TenantController {
             modFlags.zemda_personal_enabled,
             modFlags.zemda_med_enabled
           );
+
+          createDefaultSchedules(db, tenantId, createdProfId);
         }
 
         // 8. Marca cobrança obrigatória
@@ -992,6 +995,15 @@ export class TenantController {
         return;
       }
 
+      // Normalização de logo_url
+      let normalizedLogoUrl = tenant.logo_url;
+      if (normalizedLogoUrl && typeof normalizedLogoUrl === 'string') {
+        normalizedLogoUrl = normalizedLogoUrl.trim();
+        if (!normalizedLogoUrl.startsWith('http://') && !normalizedLogoUrl.startsWith('https://') && !normalizedLogoUrl.startsWith('data:') && !normalizedLogoUrl.startsWith('/')) {
+          normalizedLogoUrl = `/${normalizedLogoUrl}`;
+        }
+      }
+
       // Configurações adicionais
       const settingsStmt = db.prepare('SELECT setting_key, setting_value FROM settings WHERE tenant_id = ?');
       const settingsRows = settingsStmt.all(req.tenantId) as { setting_key: string; setting_value: string }[];
@@ -1005,6 +1017,7 @@ export class TenantController {
 
       res.json({
         ...tenant,
+        logo_url: normalizedLogoUrl,
         settings: settingsMap,
         receiptsConfigured: rec?.is_configured === 1
       });
@@ -1034,9 +1047,13 @@ export class TenantController {
         professionalBoard, professionalRegistry, email, phone, mobile, whatsapp, website, description,
         street, number, complement, neighborhood, city, state, zipCode, country,
         responsibleName, responsibleCpf, responsibleEmail, responsiblePhone, responsibleRole,
-        logoUrl, primaryColor, clientTermLabel, businessHoursJson, businessHours, settings,
+        logoUrl, logo_url, primaryColor, clientTermLabel, businessHoursJson, businessHours, settings,
         managerProfession, managerPracticeAreas
       } = req.body;
+
+      const incomingLogo = logo_url !== undefined ? logo_url : logoUrl;
+      const shouldUpdateLogo = incomingLogo !== undefined ? 1 : 0;
+      const normalizedLogo = incomingLogo ? String(incomingLogo).trim() : null;
 
       const rawBusinessHours = businessHoursJson 
         ? (typeof businessHoursJson === 'string' ? businessHoursJson : JSON.stringify(businessHoursJson))
@@ -1077,7 +1094,7 @@ export class TenantController {
           responsible_email = COALESCE(?, responsible_email),
           responsible_phone = COALESCE(?, responsible_phone),
           responsible_role = COALESCE(?, responsible_role),
-          logo_url = COALESCE(?, logo_url),
+          logo_url = CASE WHEN ? = 1 THEN ? ELSE logo_url END,
           primary_color = COALESCE(?, primary_color),
           client_term_label = COALESCE(?, client_term_label),
           business_hours_json = COALESCE(?, business_hours_json),
@@ -1117,7 +1134,8 @@ export class TenantController {
         responsibleEmail || null,
         responsiblePhone || null,
         responsibleRole || null,
-        logoUrl || null,
+        shouldUpdateLogo,
+        normalizedLogo,
         primaryColor || null,
         clientTermLabel || null,
         rawBusinessHours,
@@ -1159,7 +1177,8 @@ export class TenantController {
       }
 
       logAudit(req, 'UPDATE_TENANT_SETTINGS', 'tenants', req.tenantId);
-      res.json({ message: 'Configurações atualizadas com sucesso' });
+      const updatedTenant = db.prepare('SELECT logo_url FROM tenants WHERE id = ?').get(req.tenantId) as any;
+      res.json({ message: 'Configurações atualizadas com sucesso', logo_url: updatedTenant?.logo_url });
     } catch (err: any) {
       if (respondBillingError(res, err)) return;
       console.error('[TenantController.updateCurrent] Erro:', err);

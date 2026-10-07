@@ -43,11 +43,13 @@ import {
   Apple,
   Scale,
   Hand,
-  Brain
+  Brain,
+  Heart
 } from 'lucide-react';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { ReferralModal } from './ReferralModal';
 import { PatientPreviousRecordsModal } from './PatientPreviousRecordsModal';
+import { PatientFollowUpDocumentModal } from './PatientFollowUpDocumentModal';
 import { FinishConsultationModal } from './FinishConsultationModal';
 import { BodyPainMapCanvas } from '../physiotherapy/BodyPainMapCanvas';
 import { OdontogramCanvas, OdontogramData } from '../dentistry/OdontogramCanvas';
@@ -240,6 +242,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
   // Sub-modais
   const [showReferralModal, setShowReferralModal] = useState<boolean>(false);
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
+  const [showFollowUpDocModal, setShowFollowUpDocModal] = useState<boolean>(false);
   const [savingRecord, setSavingRecord] = useState<boolean>(false);
 
   const DRAFT_KEY = `zemda_quick_consult_${appointment.id}`;
@@ -1685,7 +1688,7 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             </button>
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2.5">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2">
             <button
               type="button"
               onClick={onClose}
@@ -1694,36 +1697,34 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
               Fechar
             </button>
 
-            {(isAppointmentPhysio || isAppointmentDentist || isAppointmentNutri || isAppointmentTO || isAppointmentFono) ? (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowFinishModal(true)}
-                  className="w-full sm:w-auto px-3.5 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 border border-teal-200 rounded-xl transition-colors cursor-pointer min-h-[40px]"
-                  title="Emitir atestados, prescrições ou encaminhamentos"
-                >
-                  Documentos / Atestado
-                </button>
-                <button
-                  type="button"
-                  disabled={savingRecord}
-                  onClick={handleFinalizeAttendance}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer disabled:opacity-50 min-h-[40px]"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{savingRecord ? 'Finalizando...' : 'Finalizar Atendimento'}</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowFinishModal(true)}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer min-h-[40px]"
-              >
-                <span>Finalizar Atendimento</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setShowFollowUpDocModal(true)}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-colors cursor-pointer min-h-[40px]"
+              title="Gerar documento de acompanhamento e orientações para o paciente"
+            >
+              <Heart className="w-3.5 h-3.5 text-teal-600" />
+              <span>Acompanhamento</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowFinishModal(true)}
+              className="w-full sm:w-auto px-3.5 py-2 text-xs font-semibold text-teal-700 hover:bg-teal-50 border border-teal-200 rounded-xl transition-colors cursor-pointer min-h-[40px]"
+              title="Emitir atestados, prescrições ou encaminhamentos"
+            >
+              Documentos / Atestado
+            </button>
+
+            <button
+              type="button"
+              disabled={savingRecord}
+              onClick={handleFinalizeAttendance}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 transition-all cursor-pointer disabled:opacity-50 min-h-[40px]"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{savingRecord ? 'Finalizando...' : 'Finalizar Atendimento'}</span>
+            </button>
           </div>
         </div>
 
@@ -1741,6 +1742,28 @@ export const QuickConsultationModal: React.FC<QuickConsultationModalProps> = ({
             setShowReferralModal(false);
             showToast('Encaminhamento interprofissional registrado com sucesso!', 'success');
           }}
+        />
+      )}
+
+      {/* MODAL DE ACOMPANHAMENTO DO PACIENTE (EMISSÃO DIRETA E INDEPENDENTE) */}
+      {showFollowUpDocModal && (
+        <PatientFollowUpDocumentModal
+          isOpen={showFollowUpDocModal}
+          onClose={() => setShowFollowUpDocModal(false)}
+          patientId={appointment.patient_id}
+          patientName={patientName}
+          appointmentId={appointment.id}
+          professionalName={appointment.professional_name || currentUser?.name}
+          professionalCouncil={currentUser?.registrationType ? `${currentUser.registrationType}: ${currentUser.registrationNumber || ''}` : undefined}
+          serviceName={appointment.service_name}
+          moduleType={effectiveModule}
+          professionId={currentUser?.canonicalProfessionId || currentUser?.professionId}
+          practiceAreaIds={currentUser?.practiceAreaIds}
+          capabilities={currentUser?.capabilities}
+          moduleData={
+            isAppointmentPhysio ? { conducts: conductsExercises, painScore, painLocation } :
+            undefined
+          }
         />
       )}
 

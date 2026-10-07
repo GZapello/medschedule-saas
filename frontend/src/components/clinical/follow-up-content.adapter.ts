@@ -13,6 +13,8 @@
  *   4. Anotações de sessões de psicologia ou testes psicológicos restritos
  */
 
+import { ApiClient } from '../../api/client';
+
 export interface FollowUpContentInput {
   moduleType?: string;
   professionId?: string;
@@ -171,16 +173,8 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
       }
     }
 
-    const defaultEsteticGuidelines =
-      '1. Evitar exposição solar direta e calor excessivo (banhos muito quentes, sauna) nas primeiras 48 a 72 horas.\n' +
-      '2. Aplicar protetor solar com FPS 30 ou superior a cada 3 horas durante o dia.\n' +
-      '3. Não massagear, comprimir ou manipular a área tratada sem orientação do profissional.\n' +
-      '4. Evitar a prática de exercícios físicos intensos nas primeiras 24 a 48 horas.\n' +
-      '5. Manter hidratação oral adequada ingerindo água regularmente.\n' +
-      '6. Em caso de dor persistente, vermelhidão excessiva, calor local intenso ou qualquer alteração na sensibilidade ou coloração da pele, entrar em contato imediatamente com o consultório.';
-
     const resolvedGuidelines = sanitizePatientFollowUpText(
-      initialGuidelines || extractedPostInstructions || defaultEsteticGuidelines
+      initialGuidelines || extractedPostInstructions || ''
     );
 
     return {
@@ -210,19 +204,15 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
       }
     }
 
-    const defaultNutriGuidelines =
-      'Seguir o plano alimentar estruturado, mantendo adequada hidratação ao longo do dia e respeitando os sinais de fome e saciedade. ' +
-      'Em caso de dúvidas sobre substituições de alimentos ou horários, consulte as opções combinadas em consulta.';
-
     const resolvedGuidelines = sanitizePatientFollowUpText(
-      initialGuidelines || moduleData?.planForm?.generalGuidelines || moduleData?.generalGuidelines || defaultNutriGuidelines
+      initialGuidelines || moduleData?.planForm?.generalGuidelines || moduleData?.generalGuidelines || ''
     );
 
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Orientações Nutricionais e Plano Alimentar',
       generalGuidelines: resolvedGuidelines,
-      mealPlanText: resolvedMealPlan,
+      mealPlanText: resolvedMealPlan || undefined,
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'ZemdaNutri'
     };
@@ -230,21 +220,16 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
 
   // 3. ZEMDAFISIO (Fisioterapia)
   if (isPhysioModule) {
-    const defaultPhysioGuidelines =
-      'Seguir a rotina de exercícios com os cuidados orientados em sessão. ' +
-      'Respeitar o limite de conforto muscular e articular (não realizar movimentos com dor aguda). ' +
-      'Manter boa postura nas atividades diárias e descanso nos intervalos prescritos.';
-
     const resolvedExercises = homeExercisesText || moduleData?.homeExercisesText || '';
     const resolvedGuidelines = sanitizePatientFollowUpText(
-      initialGuidelines || moduleData?.conducts || defaultPhysioGuidelines
+      initialGuidelines || moduleData?.conducts || ''
     );
 
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Prescrição de Exercícios Domiciliares e Reabilitação',
       generalGuidelines: resolvedGuidelines,
-      homeExercisesText: resolvedExercises,
+      homeExercisesText: resolvedExercises || undefined,
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'ZemdaFisio'
     };
@@ -252,26 +237,19 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
 
   // 4. ZEMDAFONO (Fonoaudiologia)
   if (isSpeechModule) {
-    const defaultFonoGuidelines =
-      'Realizar os exercícios miofuncionais, de estimulação auditiva ou de linguagem conforme orientado na consulta fonoaudiológica.';
-    const defaultFonoActivities =
-      '1. Manter boa hidratação ao longo do dia, ingerindo água em pequenos goles.\n' +
-      '2. Realizar os treinos vocais ou miofuncionais em ambiente tranquilo e em frente ao espelho.\n' +
-      '3. Anotar dúvidas e percepções do paciente para alinhamento no próximo atendimento.';
-
     const resolvedGuidelines = sanitizePatientFollowUpText(
-      initialGuidelines || moduleData?.conducts || moduleData?.consultationConducts || defaultFonoGuidelines
+      initialGuidelines || moduleData?.conducts || moduleData?.consultationConducts || ''
     );
 
     const resolvedActivities = sanitizePatientFollowUpText(
-      homeActivitiesText || moduleData?.treatmentPlanData?.homeSchoolGuidance || moduleData?.homeSchoolGuidance || defaultFonoActivities
+      homeActivitiesText || moduleData?.treatmentPlanData?.homeSchoolGuidance || moduleData?.homeSchoolGuidance || ''
     );
 
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Orientações Fonoaudiológicas e Treinos Domiciliares',
       generalGuidelines: resolvedGuidelines,
-      homeActivitiesText: resolvedActivities,
+      homeActivitiesText: resolvedActivities || undefined,
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'ZemdaFono'
     };
@@ -279,26 +257,19 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
 
   // 5. ZEMDATO (Terapia Ocupacional)
   if (isTOModule) {
-    const defaultTOGuidelines =
-      'Seguir os treinos de autonomia, adaptação e estímulo sensorial em rotina domiciliar conforme planejado em sessão.';
-    const defaultTOActivities =
-      '1. Utilizar os recursos de tecnologia assistiva indicados.\n' +
-      '2. Estimular a autonomia nas atividades diárias respeitando o tempo e o ritmo do paciente.\n' +
-      '3. Registrar em diário de bordo os momentos de maior facilidade ou desafio.';
-
     const resolvedGuidelines = sanitizePatientFollowUpText(
-      initialGuidelines || moduleData?.treatmentPlanData?.familyGuidelines || moduleData?.familyGuidelines || defaultTOGuidelines
+      initialGuidelines || moduleData?.treatmentPlanData?.familyGuidelines || moduleData?.familyGuidelines || ''
     );
 
     const resolvedActivities = sanitizePatientFollowUpText(
-      homeActivitiesText || moduleData?.treatmentPlanData?.interventions || moduleData?.interventions || defaultTOActivities
+      homeActivitiesText || moduleData?.treatmentPlanData?.interventions || moduleData?.interventions || ''
     );
 
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Orientações Terapêuticas e Rotina de Autonomia',
       generalGuidelines: resolvedGuidelines,
-      homeActivitiesText: resolvedActivities,
+      homeActivitiesText: resolvedActivities || undefined,
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'ZemdaTO'
     };
@@ -306,27 +277,18 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
 
   // 6. ZEMDAPERSONAL (Personal Trainer / Educação Física)
   if (isPersonalModule) {
-    const defaultPersonalGuidelines =
-      '1. Manter hidratação adequada antes, durante e após os treinos.\n' +
-      '2. Respeitar o tempo de recuperação muscular e o descanso noturno (mínimo de 7 a 8 horas de sono reparador).\n' +
-      '3. Realizar aquecimento e mobilidade articular prévios às cargas principais.\n' +
-      '4. Comunicar imediatamente qualquer dor aguda osteomuscular ou articular ao treinador.';
-
-    const defaultPersonalExercises =
-      'Seguir a programação de exercícios acordada em consultoria. Cargas, séries e intervalos devem respeitar a periodização estabelecida.';
-
     const resolvedGuidelines = sanitizePatientFollowUpText(
-      initialGuidelines || defaultPersonalGuidelines
+      initialGuidelines || ''
     );
     const resolvedExercises = sanitizePatientFollowUpText(
-      homeExercisesText || defaultPersonalExercises
+      homeExercisesText || ''
     );
 
     return {
       documentTitle: 'GUIA DO ALUNO • ORIENTAÇÕES DE TREINO',
       documentSubtitle: 'Diretrizes de Treinamento, Cuidados e Recuperação',
       generalGuidelines: resolvedGuidelines,
-      homeExercisesText: resolvedExercises,
+      homeExercisesText: resolvedExercises || undefined,
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'ZemdaPersonal'
     };
@@ -339,34 +301,19 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
       practiceAreaIds.includes('pa-odonto-estetica');
 
     if (isServiceAesthetic) {
-      const defaultOdontoEsteticGuidelines =
-        '1. Evitar exposição solar direta e calor excessivo nas primeiras 48 a 72 horas.\n' +
-        '2. Aplicar protetor solar diariamente na face.\n' +
-        '3. Não massagear ou pressionar as áreas aplicadas.\n' +
-        '4. Evitar esforço físico e atividade esportiva nas primeiras 48 horas.\n' +
-        '5. Em caso de dor atípica, inchaço progressivo ou calor intenso local, contatar o consultório imediatamente.';
-
       return {
         documentTitle: 'GUIA DO PACIENTE • CUIDADOS PÓS-PROCEDIMENTO',
         documentSubtitle: 'Orientações Pós-Procedimento Odontológico e Harmonização',
-        generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultOdontoEsteticGuidelines),
+        generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
         nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
         moduleBadge: 'ZemdaOdonto'
       };
     }
 
-    const defaultOdontoGuidelines =
-      '1. Repouso relativo no dia da intervenção, evitando esforço físico e exposição ao sol.\n' +
-      '2. Higienização bucal cuidadosa com escovação suave; evitar bochechos vigorosos nas primeiras 24 horas.\n' +
-      '3. Alimentação líquida ou pastosa morna a fria nas primeiras 24 a 48 horas.\n' +
-      '4. Compressas frias externas de 20 minutos intercaladas na face caso indicado.\n' +
-      '5. Tomar as medicações prescritas rigorosamente nos horários indicados.\n' +
-      '6. Em caso de sangramento persistente, dor intensa refratária ou febre, contatar o cirurgião-dentista imediatamente.';
-
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Orientações de Cuidados Pós-Procedimento Odontológico',
-      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultOdontoGuidelines),
+      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'ZemdaOdonto'
     };
@@ -374,33 +321,21 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
 
   // 8. ZEMDAMED (Medicina)
   if (isDoctorModule) {
-    const defaultMedGuidelines =
-      '1. Seguir rigorosamente as doses, horários e orientações das medicações prescritas na receita médica.\n' +
-      '2. Manter repouso e hidratação adequados.\n' +
-      '3. Observar sinais de alerta (febre alta persistente, falta de ar, dor súbita intensa ou piora do estado geral) e buscar atendimento de urgência caso ocorram.\n' +
-      '4. Manter o acompanhamento e retornar na data estipulada para reavaliação clínica.';
-
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Recomendações Médicas e Cuidados ao Paciente',
-      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultMedGuidelines),
-      nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote || 'Retorno conforme orientação médica e agendamento prévio.'),
+      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
+      nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote || ''),
       moduleBadge: 'ZemdaMed'
     };
   }
 
   // 9. ZEMDAPSICO (Psicologia)
   if (isPsicoModule) {
-    const defaultPsicoGuidelines =
-      '1. Manter a regularidade dos horários e da rotina diária acordada em sessão.\n' +
-      '2. Praticar os combinados e exercícios acordados (técnicas de respiração, diário reflexivo ou pausas planejadas).\n' +
-      '3. Reservar momentos de autocuidado e desconexão saudável ao longo da semana.\n' +
-      '4. Dúvidas, sentimentos ou percepções importantes podem ser anotados para discussão no próximo encontro.';
-
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Orientações Práticas e Continuidade do Cuidado',
-      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultPsicoGuidelines),
+      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'ZemdaPsico'
     };
@@ -408,20 +343,11 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
 
   // 10. ZEMDAPP (Psicopedagogia)
   if (isPPModule) {
-    const defaultPPGuidelines =
-      '1. Organizar um ambiente tranquilo, iluminado e sem distrações digitais para os momentos de estudo e tarefas.\n' +
-      '2. Estabelecer rotina diária com horários regulares e pausas curtas entre os blocos de estudo.\n' +
-      '3. Estimular a leitura compartilhada e jogos de raciocínio lúdicos em família.\n' +
-      '4. Celebrar as pequenas conquistas e valorizar o esforço contínuo no processo de aprendizagem.';
-
-    const defaultPPActivities =
-      'Realizar as atividades e estímulos propostos no caderno de orientações psicopedagógicas.';
-
     return {
       documentTitle: 'GUIA DO PACIENTE / RESPONSÁVEL',
       documentSubtitle: 'Orientações Psicopedagógicas e Rotina de Aprendizagem',
-      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultPPGuidelines),
-      homeActivitiesText: sanitizePatientFollowUpText(homeActivitiesText || defaultPPActivities),
+      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
+      homeActivitiesText: sanitizePatientFollowUpText(homeActivitiesText || ''),
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'ZemdaPP'
     };
@@ -429,61 +355,40 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
 
   // 11. PROFISSÕES GERAIS / INTEGRATIVAS (Árvore Clínica)
   if (profId === 'prof-doula') {
-    const defaultDoula =
-      '1. Praticar as técnicas de respiração, relaxamento e movimentação pélvica acordadas.\n' +
-      '2. Manter hidratação constante e alimentação leve.\n' +
-      '3. Aplicar medidas de alívio natural do desconforto (banhos mornos, massagens lombares, uso da bola de pilates).\n' +
-      '4. A equipe de apoio e a doula permanecem à disposição para suporte contínuo.';
-
     return {
       documentTitle: 'GUIA DA GESTANTE / PUÉRPERA',
       documentSubtitle: 'Orientações e Conforto Perinatal',
-      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultDoula),
+      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'Doula'
     };
   }
 
   if (profId === 'prof-acupuntura') {
-    const defaultAcupuntura =
-      '1. Evitar esforço físico extenuante e consumo de álcool nas primeiras 12 a 24 horas após a aplicação.\n' +
-      '2. Manter boa hidratação ao longo do dia para apoiar a circulação e os efeitos da sessão.\n' +
-      '3. É comum sentir sensação de relaxamento profundo ou leve sonolência após o atendimento.\n' +
-      '4. Registrar como se sentiu nos dias subsequentes para ajuste dos pontos na próxima sessão.';
-
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Orientações Pós-Sessão de Acupuntura',
-      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultAcupuntura),
+      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'Acupuntura'
     };
   }
 
   if (profId === 'prof-enfermeiro' || profId === 'prof-tec-enfermagem') {
-    const defaultEnfermagem =
-      '1. Manter os curativos secos e limpos conforme a técnica orientada.\n' +
-      '2. Observar sinais de alerta local (vermelhidão intensa, calor, dor acentuada ou secreção com odor).\n' +
-      '3. Seguir rigorosamente o cronograma de troca de curativos e cuidados de higiene.\n' +
-      '4. Em caso de dúvidas ou alterações súbitas, contatar imediatamente a equipe de enfermagem.';
-
     return {
       documentTitle: 'GUIA DO PACIENTE',
       documentSubtitle: 'Orientações e Cuidados de Enfermagem',
-      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultEnfermagem),
+      generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
       nextAppointmentNote: sanitizePatientFollowUpText(nextAppointmentNote),
       moduleBadge: 'Enfermagem'
     };
   }
 
   // DEFAULT GLOBAL
-  const defaultGlobal =
-    'Seguir as orientações terapêuticas combinadas em consulta. Em caso de dúvidas ou sintomas atípicos, entre em contato com a equipe.';
-
   return {
     documentTitle: 'GUIA DO PACIENTE',
     documentSubtitle: 'Acompanhamento Terapêutico e Cuidados Domiciliares',
-    generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || defaultGlobal),
+    generalGuidelines: sanitizePatientFollowUpText(initialGuidelines || ''),
     mealPlanText: mealPlanText || undefined,
     homeExercisesText: homeExercisesText || undefined,
     homeActivitiesText: homeActivitiesText || undefined,
@@ -491,3 +396,74 @@ export function buildPatientFollowUpContent(input: FollowUpContentInput): Follow
     moduleBadge: moduleType || undefined
   };
 }
+
+export interface PatientFollowUpContext {
+  moduleType: string;
+  patientId: string;
+  patientName: string;
+  professionalName: string;
+  professionalCouncil: string;
+  serviceName: string;
+  generalGuidelines: string;
+  mealPlanText: string;
+  homeExercisesText: string;
+  homeActivitiesText: string;
+  nextAppointmentNote: string;
+}
+
+/**
+ * Função compartilhada para obter contexto real de acompanhamento a partir de um atendimento
+ * Retorna somente dados apropriados para entrega ao paciente, campos sem informação retornam vazio.
+ */
+export async function getPatientFollowUpContext(appointmentId: string): Promise<PatientFollowUpContext> {
+  let appointment: any = null;
+  let clinicalRecord: any = null;
+
+  try {
+    const apptRes = await ApiClient.get<any>(`/v1/appointments/${appointmentId}`);
+    appointment = apptRes;
+  } catch (e) {
+    console.warn('[getPatientFollowUpContext] Erro ao buscar agendamento:', e);
+  }
+
+  try {
+    const recRes = await ApiClient.get<any>(`/v1/clinical-records/appointment/${appointmentId}`);
+    if (recRes) {
+      clinicalRecord = Array.isArray(recRes) ? recRes[0] : recRes;
+    }
+  } catch (e) {
+    // Registro pode não ter sido salvo ainda se o atendimento estiver em andamento
+  }
+
+  const moduleType = appointment?.clinical_module || appointment?.service?.module || '';
+  const patientId = appointment?.patient_id || '';
+  const patientName = appointment?.patient_name || '';
+  const professionalName = appointment?.professional_name || '';
+  const professionalCouncil = appointment?.professional_council || '';
+  const serviceName = appointment?.service_name || '';
+
+  const moduleData = clinicalRecord?.metadata || clinicalRecord?.module_data || null;
+  const initialGuidelines = clinicalRecord?.guidelines || clinicalRecord?.patient_guidelines || '';
+
+  const adapted = buildPatientFollowUpContent({
+    moduleType,
+    moduleData,
+    initialGuidelines,
+    serviceName
+  });
+
+  return {
+    moduleType,
+    patientId,
+    patientName,
+    professionalName,
+    professionalCouncil,
+    serviceName,
+    generalGuidelines: adapted.generalGuidelines || '',
+    mealPlanText: adapted.mealPlanText || '',
+    homeExercisesText: adapted.homeExercisesText || '',
+    homeActivitiesText: adapted.homeActivitiesText || '',
+    nextAppointmentNote: adapted.nextAppointmentNote || ''
+  };
+}
+

@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { GeminiService } from '../services/gemini.service';
 import { generateQrCodeDataUrl } from '../utils/qr-generator';
 import { ServiceReminderService } from '../services/service-reminder.service';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
 
 function getParam(param: any): string {
   if (Array.isArray(param)) return param[0] || '';
@@ -1087,7 +1088,7 @@ export class PsychologyController {
   // ==========================================================================
   static finishConsultation(req: Request, res: Response): void {
     try {
-      const tenantId = req.tenantId;
+      const tenantId = req.tenantId!;
       const userId = req.user?.userId;
       const {
         patientId: rawPatientId,
@@ -1178,6 +1179,7 @@ export class PsychologyController {
         `).run(
           newProfId, tenantId, userId || null, req.user?.name || 'Psicólogo Responsável', req.user?.email || 'psicologia@zemda.com.br'
         );
+        createDefaultSchedules(db, tenantId, newProfId);
         resolvedProfId = newProfId;
       }
 

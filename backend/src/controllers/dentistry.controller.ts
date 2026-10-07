@@ -1709,11 +1709,78 @@ export class DentistryController {
         FROM dental_implants i
         LEFT JOIN professionals p ON p.id = i.professional_id
         WHERE i.patient_id = ? AND i.tenant_id = ?
-        ORDER BY i.surgery_date DESC
+        ORDER BY i.surgery_date DESC, i.created_at DESC
       `).all(patientId, tenantId) as any[];
 
-      res.json(rows);
+      const normalized = rows.map((r: any) => {
+        let normalizedStatus = r.status;
+        if (normalizedStatus === 'surgery_done') normalizedStatus = 'installed';
+        if (!['planned', 'installed', 'osseointegrated', 'loaded', 'failed'].includes(normalizedStatus)) {
+          normalizedStatus = 'installed';
+        }
+
+        const toothNum = r.tooth_region ? (Number(r.tooth_region) || null) : null;
+        const brand = r.brand || '';
+        const model = r.model || '';
+        const diam = r.diameter ? Number(r.diameter) || null : null;
+        const len = r.length ? Number(r.length) || null : null;
+        const torque = r.torque_ncm ? Number(r.torque_ncm) || null : null;
+        const isq = r.stability_isq ? Number(r.stability_isq) || null : null;
+        const graft = Boolean(r.bone_graft_used);
+        const graftMat = r.graft_material || r.biomaterial || null;
+        const dateStr = r.surgery_date || (r.created_at ? r.created_at.split('T')[0] : '');
+        const lot = r.lot_number || r.batch_number || null;
+        const anvisa = r.anvisa_registration || null;
+
+        return {
+          ...r,
+          tooth_number: toothNum,
+          toothNumber: toothNum,
+          tooth_region: r.tooth_region,
+          toothRegion: r.tooth_region,
+          implant_brand: brand,
+          implantBrand: brand,
+          brand,
+          implant_model: model,
+          implantModel: model,
+          model,
+          implant_diameter: diam,
+          implantDiameter: diam,
+          diameter: diam,
+          implant_length: len,
+          implantLength: len,
+          length: len,
+          insertion_torque_ncm: torque,
+          insertionTorqueNcm: torque,
+          torque_ncm: torque,
+          torqueNcm: torque,
+          stability_isq: isq,
+          stabilityIsq: isq,
+          bone_graft_used: graft,
+          boneGraftUsed: graft,
+          graft_material: graftMat,
+          graftMaterial: graftMat,
+          installation_date: dateStr,
+          installationDate: dateStr,
+          surgery_date: dateStr,
+          surgeryDate: dateStr,
+          expected_osseointegration_date: r.expected_osseointegration_date || null,
+          expectedOsseointegrationDate: r.expected_osseointegration_date || null,
+          batch_number: lot,
+          batchNumber: lot,
+          lot_number: lot,
+          lotNumber: lot,
+          anvisa_registration: anvisa,
+          anvisaRegistration: anvisa,
+          appointment_id: r.appointment_id || null,
+          appointmentId: r.appointment_id || null,
+          status: normalizedStatus
+        };
+      });
+
+      res.json(normalized);
     } catch (err: any) {
+      console.error('[DentistryController.listImplants] Erro:', err);
       res.status(500).json({ error: 'Erro ao listar implantes' });
     }
   }
@@ -1722,19 +1789,51 @@ export class DentistryController {
     try {
       const tenantId = req.tenantId;
       if (!isDentistOrClinicManager(req)) {
-        res.status(403).json({ error: 'Acesso restrito' });
+        res.status(403).json({ error: 'Acesso restrito a dentistas ou gestores da clínica' });
         return;
       }
 
-      const {
-        patientId, toothRegion, brand, model, lotNumber, diameter, length,
-        surgeryDate, torqueNcm, graftType, biomaterial, membrane,
-        healingAbutment, reopeningDate, prostheticComponent, installedProsthesis,
-        attachmentId, notes, status = 'surgery_done'
-      } = req.body;
+      const body = req.body || {};
+      const patientId = body.patientId || body.patient_id;
+      const appointmentId = body.appointmentId || body.appointment_id || null;
+      const toothRegion = body.toothRegion || body.tooth_region || (body.toothNumber !== undefined ? String(body.toothNumber) : (body.tooth_number !== undefined ? String(body.tooth_number) : null));
+      const brand = body.implantBrand || body.implant_brand || body.brand;
+      const model = body.implantModel || body.implant_model || body.model || null;
+      const lotNumber = body.batchNumber || body.batch_number || body.lotNumber || body.lot_number || null;
+      const diameter = body.implantDiameter !== undefined ? String(body.implantDiameter) : (body.diameter !== undefined ? String(body.diameter) : null);
+      const length = body.implantLength !== undefined ? String(body.implantLength) : (body.length !== undefined ? String(body.length) : null);
+      const torqueNcm = body.insertionTorqueNcm !== undefined ? body.insertionTorqueNcm : (body.insertion_torque_ncm !== undefined ? body.insertion_torque_ncm : (body.torqueNcm !== undefined ? body.torqueNcm : body.torque_ncm));
+      const stabilityIsq = body.stabilityIsq !== undefined ? body.stabilityIsq : body.stability_isq;
+      const boneGraftUsed = body.boneGraftUsed !== undefined ? (body.boneGraftUsed ? 1 : 0) : (body.bone_graft_used ? 1 : 0);
+      const graftMaterial = body.graftMaterial || body.graft_material || body.biomaterial || null;
+      const graftType = body.graftType || body.graft_type || null;
+      const biomaterial = body.biomaterial || graftMaterial || null;
+      const membrane = body.membrane || null;
+      const healingAbutment = body.healingAbutment || body.healing_abutment || null;
+      const surgeryDate = body.installationDate || body.installation_date || body.surgeryDate || body.surgery_date || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const expectedOsseointegrationDate = body.expectedOsseointegrationDate || body.expected_osseointegration_date || null;
+      const reopeningDate = body.reopeningDate || body.reopening_date || null;
+      const prostheticComponent = body.prostheticComponent || body.prosthetic_component || null;
+      const installedProsthesis = body.installedProsthesis || body.installed_prosthesis || null;
+      const anvisaRegistration = body.anvisaRegistration || body.anvisa_registration || null;
+      const attachmentId = body.attachmentId || body.attachment_id || null;
+      const notes = body.notes || null;
 
-      if (!patientId || !toothRegion || !brand) {
-        res.status(400).json({ error: 'patientId, toothRegion e brand são obrigatórios' });
+      let rawStatus = body.status || 'installed';
+      if (rawStatus === 'surgery_done') rawStatus = 'installed';
+      const validStatuses = ['planned', 'installed', 'osseointegrated', 'loaded', 'failed'];
+      const status = validStatuses.includes(rawStatus) ? rawStatus : 'installed';
+
+      if (!patientId) {
+        res.status(400).json({ error: 'O paciente é obrigatório' });
+        return;
+      }
+      if (!toothRegion) {
+        res.status(400).json({ error: 'O dente ou região anatômica do implante é obrigatório' });
+        return;
+      }
+      if (!brand) {
+        res.status(400).json({ error: 'A marca do implante é obrigatória' });
         return;
       }
 
@@ -1745,27 +1844,57 @@ export class DentistryController {
       }
 
       const id = 'dimp-' + uuidv4().slice(0, 8);
-      const dateStr = surgeryDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 
       db.prepare(`
         INSERT INTO dental_implants (
-          id, tenant_id, patient_id, professional_id, tooth_region,
+          id, tenant_id, patient_id, professional_id, appointment_id, tooth_region,
           brand, model, lot_number, diameter, length, surgery_date,
-          torque_ncm, graft_type, biomaterial, membrane, healing_abutment,
-          reopening_date, prosthetic_component, installed_prosthesis,
-          attachment_id, notes, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          torque_ncm, stability_isq, bone_graft_used, graft_material, graft_type, biomaterial, membrane, healing_abutment,
+          expected_osseointegration_date, reopening_date, prosthetic_component, installed_prosthesis,
+          anvisa_registration, attachment_id, notes, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        id, tenantId, patientId, profId, toothRegion,
-        brand, model || null, lotNumber || null, diameter || null, length || null, dateStr,
-        torqueNcm ? Number(torqueNcm) : null, graftType || null, biomaterial || null, membrane || null, healingAbutment || null,
-        reopeningDate || null, prostheticComponent || null, installedProsthesis || null,
-        attachmentId || null, notes || null, status
+        id, tenantId, patientId, profId, appointmentId, String(toothRegion),
+        String(brand), model, lotNumber, diameter, length, surgeryDate,
+        torqueNcm ? Number(torqueNcm) : null,
+        stabilityIsq ? Number(stabilityIsq) : null,
+        boneGraftUsed,
+        graftMaterial,
+        graftType,
+        biomaterial,
+        membrane,
+        healingAbutment,
+        expectedOsseointegrationDate,
+        reopeningDate,
+        prostheticComponent,
+        installedProsthesis,
+        anvisaRegistration,
+        attachmentId,
+        notes,
+        status
       );
 
-      res.status(201).json({ id, message: 'Ficha de implante cadastrada com sucesso' });
+      res.status(201).json({
+        id,
+        status,
+        message: 'Ficha de implante cadastrada com sucesso',
+        implant: {
+          id,
+          patientId,
+          appointmentId,
+          toothRegion,
+          toothNumber: Number(toothRegion) || null,
+          brand,
+          implantBrand: brand,
+          model,
+          implantModel: model,
+          status,
+          installationDate: surgeryDate
+        }
+      });
     } catch (err: any) {
-      res.status(500).json({ error: 'Erro ao salvar implante' });
+      console.error('[DentistryController.saveImplant] Erro:', err);
+      res.status(500).json({ error: err.message || 'Erro ao salvar implante' });
     }
   }
 

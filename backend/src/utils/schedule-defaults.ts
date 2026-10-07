@@ -60,3 +60,28 @@ export function createDefaultSchedules(db: any, tenantId: string, professionalId
     0
   );
 }
+
+/**
+ * Backfill seguro e idempotente para profissionais ativos que não possuem nenhuma grade de horários configurada.
+ * Não altera nem sobrescreve profissionais que já possuem horários cadastrados.
+ */
+export function backfillMissingDefaultSchedules(db: any): number {
+  try {
+    const profsWithoutSched = db.prepare(`
+      SELECT p.id, p.tenant_id
+      FROM professionals p
+      WHERE p.active = 1
+        AND (SELECT COUNT(*) FROM schedules s WHERE s.tenant_id = p.tenant_id AND s.professional_id = p.id) = 0
+    `).all() as { id: string; tenant_id: string }[];
+
+    let createdCount = 0;
+    for (const prof of profsWithoutSched) {
+      createDefaultSchedules(db, prof.tenant_id, prof.id);
+      createdCount++;
+    }
+    return createdCount;
+  } catch (err) {
+    console.warn('[backfillMissingDefaultSchedules] Aviso ao executar backfill de horários:', err);
+    return 0;
+  }
+}

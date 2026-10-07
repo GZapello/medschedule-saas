@@ -178,11 +178,17 @@ export class StaffController {
 
       // Ativa registro profissional caso exista ou vincula se houver profissional com mesmo nome
       const profUpdated = db.prepare("UPDATE professionals SET active = 1 WHERE user_id = ? AND tenant_id = ?").run(id, tenantId);
-      if (profUpdated.changes === 0) {
+      if (profUpdated.changes > 0) {
+        const existingProf = db.prepare("SELECT id FROM professionals WHERE user_id = ? AND tenant_id = ?").get(id, tenantId) as any;
+        if (existingProf) {
+          createDefaultSchedules(db, tenantId!, existingProf.id);
+        }
+      } else {
         if (user.role === 'professional' || cu?.role === 'professional') {
           const unlinked = db.prepare("SELECT id FROM professionals WHERE tenant_id = ? AND (user_id IS NULL OR user_id = '') AND LOWER(name) = LOWER(?) LIMIT 1").get(tenantId, user.name) as any;
           if (unlinked) {
             db.prepare("UPDATE professionals SET user_id = ?, active = 1 WHERE id = ?").run(id, unlinked.id);
+            createDefaultSchedules(db, tenantId!, unlinked.id);
           } else {
             const profId = 'pro-' + uuidv4().slice(0, 8);
             db.prepare(`

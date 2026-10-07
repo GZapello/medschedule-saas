@@ -424,7 +424,7 @@ export const PatientFollowUpDocumentModal: React.FC<PatientFollowUpDocumentModal
                 rows={4}
                 value={generalGuidelines}
                 onChange={e => setGeneralGuidelines(e.target.value)}
-                placeholder="Instruções sobre cuidados, repouso, hidratação, uso de filtro solar..."
+                placeholder="Digite as orientações fornecidas ao paciente..."
                 className="w-full text-xs p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
               />
             </div>

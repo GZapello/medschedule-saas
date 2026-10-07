@@ -17,6 +17,7 @@ import { migrateEstetic } from './estetic.migration';
 import { migrateProfessionsNormalization } from './professions-normalization.migration';
 import { migrateProfessionalSlugs, migrateClinicBooking } from './slug-migration';
 import { dbPath } from './db-path';
+import { backfillMissingDefaultSchedules } from '../utils/schedule-defaults';
 
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
@@ -2936,6 +2937,7 @@ export function initializeDatabase(): void {
   migrateClinicBooking(rawDb);
   repairLegacyPhotoUrls(rawDb);
   migrateClinicalInventoryUsageCapability(rawDb);
+  backfillMissingDefaultSchedules(rawDb);
 }
 
 function migrateClinicalInventoryUsageCapability(rawDb: any): void {

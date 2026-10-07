@@ -600,6 +600,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ initialSection, onNa
       showToast('Dados da conta e estabelecimento salvos com sucesso!', 'success');
       refreshTenant();
       await reloadSession();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('zemda-clinic-updated', { detail: { logo_url: logoUrl } }));
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao salvar dados da conta', 'error');
     } finally {

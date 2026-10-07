@@ -122,8 +122,18 @@ export function useClinicDocumentData(initialData?: Partial<ClinicData> | null):
 
     fetchClinicCurrent();
 
+    const handleUpdate = () => {
+      fetchClinicCurrent();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('zemda-clinic-updated', handleUpdate);
+    }
+
     return () => {
       isMounted = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('zemda-clinic-updated', handleUpdate);
+      }
     };
   }, [currentTenant]);
 
@@ -196,6 +206,12 @@ export const ClinicDocumentHeader: React.FC<ClinicDocumentHeaderProps> = ({
     year: 'numeric'
   });
 
+  const [logoFailed, setLogoFailed] = useState<boolean>(false);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [clinic?.logo_url]);
+
   if (loading) {
     return (
       <div className={`border-b-2 border-slate-200 pb-4 p-4 rounded-xl bg-slate-50 flex items-center justify-center gap-3 text-slate-500 text-xs ${className}`}>
@@ -225,10 +241,11 @@ export const ClinicDocumentHeader: React.FC<ClinicDocumentHeaderProps> = ({
   return (
     <div className={`border-b-2 border-slate-800 pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${className}`}>
       <div className="flex items-start gap-4">
-        {clinic.logo_url ? (
+        {clinic.logo_url && !logoFailed ? (
           <img
             src={clinic.logo_url}
             alt={realClinicName}
+            onError={() => setLogoFailed(true)}
             className="w-16 h-16 object-contain rounded-xl border border-slate-100 p-1 bg-white shrink-0"
           />
         ) : (
@@ -461,7 +478,7 @@ export function generateClinicHeaderHtml(options: {
   });
 
   const logoHtml = clinic.logo_url
-    ? `<img src="${clinic.logo_url}" alt="${realName}" style="max-height: 65px; max-width: 140px; object-fit: contain; margin-right: 16px; border-radius: 8px;" />`
+    ? `<img src="${clinic.logo_url}" alt="${realName}" onerror="this.style.display='none'" style="max-height: 65px; max-width: 140px; object-fit: contain; margin-right: 16px; border-radius: 8px;" />`
     : '';
 
   return `

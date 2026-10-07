@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { logAudit } from '../middlewares/audit.middleware';
 import { ServiceReminderService } from '../services/service-reminder.service';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
 
 /**
  * Validação de acesso estrito ao prontuário psicopedagógico (ZemdaPP)
@@ -538,6 +539,7 @@ export class PsychopedagogyController {
         `).run(
           newProfId, tenantId, req.user?.userId || null, req.user?.name || 'Psicopedagogo Responsável', req.user?.email || 'psicopedagogia@zemda.com.br'
         );
+        createDefaultSchedules(db, tenantId, newProfId);
         resolvedProfessionalId = newProfId;
       }
 

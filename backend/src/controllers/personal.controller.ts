@@ -13,6 +13,7 @@ import { logAudit } from '../middlewares/audit.middleware';
 import { resolveCanonicalProfession } from '../utils/profession-module';
 import { isPhysiotherapistOrClinicManager } from './physiotherapy.controller';
 import { ClinicalRecordService } from '../services/clinical-record.service';
+import { createDefaultSchedules } from '../utils/schedule-defaults';
 
 /**
  * Validação estrita de profissão:
@@ -245,6 +246,7 @@ export function getProfessionalId(req: Request): string {
       resolution.canonicalName,
       resolution.flags.zemda_personal_enabled
     );
+    createDefaultSchedules(db, tenantId, profId);
     return profId;
   }
 
